@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore, type TreeSort } from '../lib/store';
+import { extendFileMenu } from '../lib/obsidian/menus';
 import { api, type TreeNode } from '../lib/api';
 import { findNode, pruneDescendants } from '../lib/tree';
 import { pathToUrl } from '../lib/urlsync';
@@ -285,11 +286,11 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
       openContextMenu({
         x: e.clientX,
         y: e.clientY,
-        items: [
+        items: extendFileMenu([
           { label: `Move ${sel.length} items to…`, onClick: doMoveMany },
           { label: '', separator: true },
           { label: `Delete ${sel.length} items`, danger: true, onClick: doDeleteMany },
-        ],
+        ], sel),
       });
       return;
     }
@@ -332,7 +333,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           { label: '', separator: true },
           { label: 'Delete', danger: true, onClick: doDelete },
         ];
-    openContextMenu({ x: e.clientX, y: e.clientY, items });
+    openContextMenu({ x: e.clientX, y: e.clientY, items: extendFileMenu(items,[node.path]) });
   };
 
   const onDragStart = (e: React.DragEvent) => {

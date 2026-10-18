@@ -20,20 +20,20 @@ export interface TreeNode {
  * Filled lazily during listTree(); the file watcher invalidates changed paths
  * (see invalidateStat), so steady-state tree fetches do zero extra syscalls.
  */
-const statCache = new Map<string, { m: number; c: number }>();
+const statCache = new Map<string, { m: number; c: number; size: number }>();
 
 export function invalidateStat(rel: string): void {
   statCache.delete(rel);
 }
 
-async function fileStat(abs: string, rel: string): Promise<{ m: number; c: number }> {
+async function fileStat(abs: string, rel: string): Promise<{ m: number; c: number; size: number }> {
   const hit = statCache.get(rel);
   if (hit) return hit;
-  let v = { m: 0, c: 0 };
+  let v = { m: 0, c: 0, size: 0 };
   try {
     const st = await fs.stat(abs);
     // birthtime can be 0 on some Linux filesystems → fall back to mtime.
-    v = { m: st.mtimeMs, c: st.birthtimeMs || st.mtimeMs };
+    v = { m: st.mtimeMs, c: st.birthtimeMs || st.mtimeMs, size: st.size };
   } catch { /* file vanished mid-walk — leave zeros */ }
   statCache.set(rel, v);
   return v;
@@ -119,8 +119,8 @@ export async function listTree(): Promise<TreeNode> {
             return { name: e.name, path: rel, type: 'folder', children: await walk(abs) };
           }
           if (e.isFile()) {
-            const { m, c } = await fileStat(abs, rel);
-            return { name: e.name, path: rel, type: 'file', ext: path.extname(e.name).toLowerCase(), mtime: m, ctime: c };
+            const { m, c, size } = await fileStat(abs, rel);
+            return { name: e.name, path: rel, type: 'file', ext: path.extname(e.name).toLowerCase(), mtime: m, ctime: c, size };
           }
           return null;
         }),

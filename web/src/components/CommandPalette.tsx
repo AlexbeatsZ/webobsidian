@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { pluginCommands, pluginRevision, subscribePlugins, runPluginCommand, sharedApp } from '../lib/plugins';
 import { useStore } from '../lib/store';
 import { api, type TreeNode } from '../lib/api';
 
@@ -43,6 +44,7 @@ export default function CommandPalette() {
   const notify = useStore((s) => s.notify);
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
+  const pluginVersion = useSyncExternalStore(subscribePlugins,pluginRevision);
 
   const files = useMemo(() => flatten(tree), [tree]);
 
@@ -82,11 +84,12 @@ export default function CommandPalette() {
       .filter((f) => !lc || f.title.toLowerCase().includes(lc) || f.path.toLowerCase().includes(lc))
       .slice(0, 40)
       .map((f) => ({ id: `f:${f.path}`, title: f.title, hint: f.path, run: () => openFile(f.path) }));
-    const cmdItems = commands.filter((c) => !lc || c.title.toLowerCase().includes(lc));
+    const extras: Cmd[] = [...pluginCommands.values()].map(c => ({id:c.id,title:`${sharedApp.plugins.manifests[c.id.split(':')[0]]?.name ?? c.id.split(':')[0]}: ${c.name}`,run:() => { runPluginCommand(c.id); }}));
+    const cmdItems = [...commands,...extras].filter((c) => !lc || c.title.toLowerCase().includes(lc));
     if (isCmd) return cmdItems;
     if (mode === 'files') return fileItems;
     return [...cmdItems.slice(0, 3), ...fileItems];
-  }, [q, mode, files, commands, openFile]);
+  }, [q, mode, files, commands, openFile, pluginVersion]);
 
   useEffect(() => setSel(0), [q, open]);
   useEffect(() => {

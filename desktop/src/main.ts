@@ -19,6 +19,7 @@ const LOG_FILE = () => path.join(app.getPath('userData'), 'logs', 'server.log');
 
 interface DesktopConfig {
   vaultPath?: string;
+  trustedPlugins?: boolean;
   /** Random per-install password — passed to the server as WEBOBSIDIAN_PASSWORD. */
   secret: string;
 }
@@ -26,6 +27,7 @@ interface DesktopConfig {
 let serverProc: ChildProcess | null = null;
 let serverPort = 0;
 let mainWindow: BrowserWindow | null = null;
+let desktopConfig: DesktopConfig | undefined;
 
 async function readConfig(): Promise<DesktopConfig> {
   try {
@@ -284,8 +286,13 @@ function createWindow(): void {
     } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
+      // Native Obsidian plugins have the same machine access as the user.
+      // Keep the restricted host by default; trust is a per-install choice.
+      contextIsolation: !desktopConfig?.trustedPlugins,
+      nodeIntegration: !!desktopConfig?.trustedPlugins,
+      sandbox: !desktopConfig?.trustedPlugins,
+      webviewTag: !!desktopConfig?.trustedPlugins,
+      additionalArguments: desktopConfig?.trustedPlugins ? [`--webobsidian-native-vault=${encodeURIComponent(desktopConfig.vaultPath ?? '')}`] : [],
     },
   });
 
@@ -294,11 +301,25 @@ function createWindow(): void {
   if (process.platform !== 'darwin') mainWindow.setMenuBarVisibility(false);
 
   mainWindow.loadURL(baseUrl(serverPort));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const target = new URL(url);
+    if (target.origin !== baseUrl(serverPort) || !(target.pathname === '/' || target.pathname.startsWith('/note/'))) {
+      event.preventDefault(); if (/^https?:/.test(url)) void shell.openExternal(url);
+    }
+  });
+  mainWindow.webContents.on('will-redirect', (event, url) => {
+    const target = new URL(url);
+    if (target.origin !== baseUrl(serverPort) || !(target.pathname === '/' || target.pathname.startsWith('/note/'))) event.preventDefault();
+  });
+  mainWindow.webContents.on('will-attach-webview', (event, preferences, params) => {
+    if (!/^https?:\/\//i.test(params.src)) { event.preventDefault(); return; }
+    delete preferences.preload;
+    preferences.nodeIntegration = false; preferences.contextIsolation = true; preferences.sandbox = true;
+  });
 
   // Open external links (http/https not on our origin) in the system browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(baseUrl(serverPort))) return { action: 'allow' };
-    shell.openExternal(url);
+    if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -325,6 +346,8 @@ function buildMenu(): void {
     {
       label: 'File',
       submenu: [
+        { label: 'Trust native plugins (next launch)', type: 'checkbox', checked: !!desktopConfig?.trustedPlugins,
+          click: async (item) => { const cfg = await readConfig(); cfg.trustedPlugins = item.checked; await writeConfig(cfg); } },
         { label: 'Switch Vault…', click: () => void switchVault() },
         {
           label: 'Open Vault Folder',
@@ -412,6 +435,16 @@ function registerTitleBar(): void {
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
+function registerNativePlugins(): void {
+  ipcMain.handle('desktop:plugin-request', async (event, options) => {
+    if (!desktopWindow(event) || !desktopConfig?.trustedPlugins) throw new Error('Native plugins are disabled');
+    const url = new URL(options.url);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('HTTP(S) URL required');
+    const response = await net.fetch(url.href, {method:options.method ?? 'GET',headers:options.headers,body:options.body,signal:AbortSignal.timeout(30000)});
+    const headers: Record<string,string> = {}; response.headers.forEach((value,key) => headers[key] = value);
+    return {status:response.status,headers,base64:Buffer.from(await response.arrayBuffer()).toString('base64')};
+  });
+}
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -426,10 +459,12 @@ if (!app.requestSingleInstanceLock()) {
     try {
       let cfg = await readConfig();
       cfg = await ensureVault(cfg);
+      desktopConfig = cfg;
       await writeConfig(cfg); // persist freshly-generated secret on first run
       await startServer(cfg);
       buildMenu();
       if (process.platform !== 'darwin') registerTitleBar();
+      registerNativePlugins();
       createWindow();
     } catch (err) {
       dialog.showErrorBox('WebObsidian failed to start', String(err instanceof Error ? err.stack ?? err.message : err));

@@ -1,0 +1,55 @@
+.plugin-elements {
+  display: contents;
+}
+.plugin-modal {
+  z-index: 1100;
+}
+.plugin-modal .modal {
+  max-height: 85vh;
+  overflow: auto;
+}
+.plugin-menu,
+.plugin-editor-suggest {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 6px 24px #0003;
+  border-radius: 6px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 6px;
+}
+.plugin-menu .menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 6px 10px;
+}
+.suggestion-item {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.suggestion-item:hover,
+.suggestion-item.is-selected,
+.plugin-menu .menu-item:hover {
+  background: var(--background-modifier-hover);
+}
+.setting-item-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.setting-item-heading {
+  font-weight: 600;
+}
+.plugin-code-block {
+  position: relative;
+  white-space: normal;
+}
+.plugin-notice {
+  z-index: 1200;
+}

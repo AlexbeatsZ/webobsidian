@@ -4,6 +4,7 @@ import { api, type TreeNode } from '../lib/api';
 import { useDocumentSession } from '../lib/useDocumentSession';
 import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { registerEditor } from '../lib/activeEditor';
+import { bindPluginEditor } from '../lib/plugins';
 import MarkdownView from './MarkdownView';
 import { analyzeMarkdown, fragmentRange } from '@webobsidian/markdown-core';
 
@@ -54,6 +55,10 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     onSearch={() => setLeftPanel('search')}
     onReady={(view) => {
       unregister.current?.();
-      unregister.current = view ? registerEditor(view, { undo: () => session.undo(), redo: () => session.redo() }) : undefined;
+      if (view) {
+        const stopEditor = registerEditor(view, { undo: () => session.undo(), redo: () => session.redo() });
+        const stopPlugins = bindPluginEditor(view, path ?? '');
+        unregister.current = () => { stopPlugins(); stopEditor(); };
+      } else unregister.current = undefined;
     }} />;
 }

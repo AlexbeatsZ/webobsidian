@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
 import { api } from '../lib/api';
 import Icon from './Icon';
+import PluginElements from './PluginElements';
+import { pluginRibbon } from '../lib/plugins';
 
 export default function Ribbon({ onTheme }: { onTheme: () => void }) {
   const setLeftPanel = useStore((s) => s.setLeftPanel);
@@ -62,6 +64,7 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
         <Icon name="command" size={18} />
       </button>
       <div className="spacer" />
+      <PluginElements items={pluginRibbon} />
       {gitEnabled && (
         <button title={syncing ? 'Syncing…' : 'Sync now'} onClick={sync} disabled={syncing}>
           <Icon name="refresh-cw" size={18} style={syncing ? { animation: 'spin 1s linear infinite' } : undefined} />

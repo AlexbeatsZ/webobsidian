@@ -229,6 +229,10 @@ export const api = {
 
   // plugins
   listPlugins: () => req<{ plugins: any[] }>('/api/plugins/'),
+  pluginData: (id: string) => req<{ data: any }>(`/api/plugins/${encodeURIComponent(id)}/data`),
+  pluginRequest: (options: any) => req<any>('/api/plugins/request', { method:'POST', body:JSON.stringify(options) }),
+  savePluginData: (id: string, data: unknown) => req<{ ok: true }>(`/api/plugins/${encodeURIComponent(id)}/data`, { method: 'PUT', body: JSON.stringify({ data }) }),
+  pluginAdapter: (op: string, path: string, body = {}) => req<any>('/api/plugins/adapter', { method: 'POST', body: JSON.stringify({ op, path, ...body }) }),
   installPlugin: (repo: string) =>
     req<{ plugin: any }>('/api/plugins/install', { method: 'POST', body: JSON.stringify({ repo }) }),
   setPluginEnabled: (id: string, enabled: boolean) =>

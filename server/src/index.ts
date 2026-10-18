@@ -76,7 +76,10 @@ async function main() {
         useDefaults: true,
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", (_req, res) => `'nonce-${(res as Response).locals.cspNonce}'`],
+          // Trusted community plugins (Templater/DataviewJS/Interactive JS)
+          // evaluate user scripts. Public shares retain the strict policy.
+          scriptSrc: ["'self'", (_req, res) => `'nonce-${(res as Response).locals.cspNonce}'`, (req) => req.url?.startsWith('/share/') ? '' : "'unsafe-eval'", (req) => req.url?.startsWith('/share/') ? '' : 'blob:'],
+          workerSrc: ["'self'", (req) => req.url?.startsWith('/share/') ? '' : 'blob:'],
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
           fontSrc: ["'self'", 'data:'],

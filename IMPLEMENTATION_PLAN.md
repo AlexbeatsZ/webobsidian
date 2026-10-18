@@ -28,13 +28,16 @@ Project direction: [PRD §1.4](PRD.md#14-本-fork-的目标与优先级) and
 
 - [x] Record the owner's goal: rebuild an Obsidian-like app that can be customized beyond plugin limitations.
 - [x] Document obsidian-typings as an internal-API reference and distinguish declarations from runtime behavior.
-- [ ] Identify the first concrete customization workflows, required plugins, and relevant Obsidian version.
-- [ ] Map the APIs required by those workflows to implemented, partial, and unsupported behavior.
-- [ ] Implement the selected core changes and any required compatibility adapters, then verify the workflows.
+- [x] Inventory current Manage/STEM plugin versions as the first compatibility targets; see plugin-compatibility.md.
+- [x] Map the current plugins to the host APIs, desktop-only capabilities and remaining private-API boundaries.
+- [x] Implement command/settings/vault/metadata/workspace/CM6/Markdown/lifecycle adapters and optional native desktop modules.
+- [ ] Owner's unified interactive acceptance of the final snapshot, especially LaTeX Suite input and complex custom modules.
 
-The historical Phase 8 checkboxes record the initial plugin infrastructure. The shim
-still contains empty implementations for commands, views, settings, persistence, and
-lifecycle cleanup; these checkboxes do not establish working plugin compatibility.
+The historical Phase 8 checkboxes record only the initial infrastructure. The new
+host replaces its empty methods with application services; see
+[plugin compatibility](docs/design/plugin-compatibility.md) for the original plugin
+versions, earlier isolated behavior checks and the final static-only verification
+boundary requested by the owner. Loaded plugins are not a claim of complete parity.
 
 ---
 

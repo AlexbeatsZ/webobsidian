@@ -31,6 +31,7 @@ export interface RenderContext {
   renderEmbed: (target: string, signal: AbortSignal) => Promise<EmbeddedNote | null>;
   embedTrail?: readonly string[];
   allowHtmlExecution?: boolean;
+  allowPlugins?: boolean;
   bindEditor?: (view: EditorView, commands: { undo: () => boolean; redo: () => boolean }) => () => void;
   mountFragment?: (host: HTMLElement, source: string, options: FragmentOptions) => () => void;
   reportError?: (message: string) => void;

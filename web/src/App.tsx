@@ -14,7 +14,7 @@ import VersionHistory from './components/VersionHistory';
 import TrashView from './components/TrashView';
 import ContextMenu from './components/ContextMenu';
 import FolderPicker from './components/FolderPicker';
-import { loadPlugins } from './lib/plugins';
+import { loadPlugins, sharedApp } from './lib/plugins';
 import { initUrlSync } from './lib/urlsync';
 import { useIsMobile } from './lib/useIsMobile';
 
@@ -103,7 +103,7 @@ export default function App() {
       const s = useStore.getState();
       if (k === 'p') { e.preventDefault(); setPalette(true, e.shiftKey ? 'commands' : 'commands'); }
       else if (k === 'o') { e.preventDefault(); setPalette(true, 'files'); }
-      else if (k === 's') { e.preventDefault(); save(); }
+      else if (k === 's') { e.preventDefault(); sharedApp.commands.executeCommandById('editor:save-file'); }
       else if (k === 'n') { e.preventDefault(); s.newNote(); }
       else if (k === 'e') { e.preventDefault(); s.setViewMode(s.viewMode === 'reading' ? 'live' : 'reading'); }
       else if (k === 'f' && e.shiftKey) { e.preventDefault(); s.setLeftPanel('search'); }

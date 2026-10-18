@@ -10,7 +10,7 @@ type Services = Pick<RenderContext, 'openMenu' | 'files' | 'reportError' | 'bind
 export function createVaultRenderContext(path: string, services: Services): RenderContext {
   let types = services.initialPropertyTypes ?? {};
   return {
-    ...services, sourcePath: path, allowHtmlExecution: true, openLink: target => services.openLink(target, path),
+    ...services, sourcePath: path, allowHtmlExecution: true, allowPlugins: true, openLink: target => services.openLink(target, path),
     rawUrl: target => api.rawUrl(target, path),
     tags: () => api.tags().then(r => r.tags.map(t => t.tag.replace(/^#/, ''))).catch(() => []),
     properties: () => api.properties().then(r => r.properties).catch(() => []),

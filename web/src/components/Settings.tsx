@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { pluginRevision, subscribePlugins, pluginTabs, pluginStatuses, setPluginEnabled, sharedApp } from '../lib/plugins';
 import { useStore } from '../lib/store';
 import { api } from '../lib/api';
 import Icon from './Icon';
@@ -10,6 +11,9 @@ export default function Settings() {
   const setOpen = useStore((s) => s.setSettings);
   const [section, setSection] = useState<Section>('vault');
   const [settings, setSettings] = useState<any>(null);
+  const [pluginTab, setPluginTab] = useState<string | null>(null);
+  useSyncExternalStore(subscribePlugins,pluginRevision);
+  useEffect(() => { const listener = (e: Event) => setPluginTab((e as CustomEvent<string>).detail); window.addEventListener('plugin-settings-open',listener); return () => window.removeEventListener('plugin-settings-open',listener); },[]);
 
   useEffect(() => {
     if (open) api.getSettings().then(setSettings).catch(() => {});
@@ -23,12 +27,13 @@ export default function Settings() {
         <div className="settings-layout">
           <div className="settings-nav">
             {(['vault', 'git', 'api', 'sharing', 'plugins', 'appearance', 'account', 'about'] as Section[]).map((s) => (
-              <button key={s} className={section === s ? 'active' : ''} onClick={() => setSection(s)}>
+              <button key={s} className={!pluginTab && section === s ? 'active' : ''} onClick={() => { setSection(s); setPluginTab(null); }}>
                 {labels[s]}
               </button>
             ))}
+            {[...pluginTabs].map(([id,tab]) => <button key={id} className={pluginTab === id ? 'active' : ''} onClick={() => setPluginTab(id)}>{tab.name}</button>)}
           </div>
-          <div className="settings-content">
+          <div className="settings-content" style={pluginTab ? {display:'none'} : undefined}>
             {settings && section === 'vault' && <VaultSettings s={settings} reload={() => api.getSettings().then(setSettings)} />}
             {settings && section === 'git' && <GitSettings s={settings} reload={() => api.getSettings().then(setSettings)} />}
             {section === 'api' && <ApiKeys />}
@@ -38,10 +43,17 @@ export default function Settings() {
             {section === 'account' && <AccountSettings s={settings} reload={() => api.getSettings().then(setSettings)} />}
             {section === 'about' && <About />}
           </div>
+          {pluginTab && <PluginSettingsTab id={pluginTab} />}
         </div>
       </div>
     </div>
   );
+}
+
+function PluginSettingsTab({id}: {id: string}) {
+  const host = useRef<HTMLDivElement>(null); const [error,setError] = useState('');
+  useEffect(() => { const tab = pluginTabs.get(id); if(!tab) return; setError(''); sharedApp.setting.activeTab = tab; host.current!.append(tab.containerEl); try { tab.display(); } catch(e) { setError(String(e)); } return () => { tab.hide(); tab.containerEl.remove(); if(sharedApp.setting.activeTab === tab) sharedApp.setting.activeTab = null; }; },[id]);
+  return <div className="settings-content"><div ref={host} />{error && <p role="alert">{error}</p>}</div>;
 }
 
 const labels: Record<Section, string> = {
@@ -349,6 +361,7 @@ function Shares() {
 }
 
 function Plugins() {
+  useSyncExternalStore(subscribePlugins,pluginRevision);
   const [plugins, setPlugins] = useState<any[]>([]);
   const [repo, setRepo] = useState('');
   const [msg, setMsg] = useState('');
@@ -376,15 +389,16 @@ function Plugins() {
             <div className="info">
               <div className="name">{p.name} <span style={{ color: 'var(--text-faint)' }}>v{p.version}</span></div>
               <div className="desc">{p.description}</div>
+              <div className="desc" role="status">{pluginStatuses.get(p.id)?.state ?? 'disabled'}{pluginStatuses.get(p.id)?.error ? `: ${pluginStatuses.get(p.id)!.error}` : ''}</div>
             </div>
             <label>
-              <input type="checkbox" checked={p.enabled} onChange={async (e) => { await api.setPluginEnabled(p.id, e.target.checked); load(); }} /> enabled
+              <input type="checkbox" checked={p.enabled} onChange={async (e) => { try { await setPluginEnabled(p.id, e.target.checked); await load(); } catch(error) { setMsg(String(error)); } }} /> enabled
             </label>
           </div>
         ))}
       </div>
       <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 14 }}>
-        Note: WebObsidian supports a subset of the Obsidian plugin API. Most metadata/markdown plugins work; plugins relying on Electron/Node internals may not.
+        Plugin status reports loading separately from workflow compatibility. Native Node/Electron modules require the desktop plugin host.
       </p>
     </div>
   );

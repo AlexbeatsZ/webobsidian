@@ -50,7 +50,7 @@ filesRouter.get(
       const resolved = resolveFile(rel, String(req.query.sourcePath ?? ''));
       if (resolved) rel = resolved;
     }
-    if (vault.isTextFile(rel)) {
+    if (vault.isTextFile(rel) && req.query.raw !== '1') {
       res.json({ path: rel, ...(await vault.readFileSnapshot(rel)), encoding: 'utf8' });
     } else {
       // Stream with Range support so embedded <video>/<audio> can seek.

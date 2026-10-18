@@ -8,6 +8,22 @@ pluginsRouter.use(requireAuth);
 
 pluginsRouter.get('/', asyncHandler(async (_req, res) => res.json({ plugins: await plugins.listInstalled() })));
 
+pluginsRouter.post('/adapter', asyncHandler(async (req, res) => {
+  if(typeof req.body?.path !== 'string' || typeof req.body?.op !== 'string') { res.status(400).json({ error: 'path and op required' }); return; }
+  res.json(await plugins.adapterOperation(req.body.op, req.body.path, req.body));
+}));
+pluginsRouter.post('/request', asyncHandler(async (req, res) => {
+  const options = req.body ?? {}; const url = new URL(options.url);
+  if (!['http:', 'https:'].includes(url.protocol)) { res.status(400).json({error:'HTTP(S) URL required'}); return; }
+  const response = await fetch(url,{method:options.method ?? 'GET',headers:options.headers,body:options.body,signal:AbortSignal.timeout(30000)});
+  const bytes = Buffer.from(await response.arrayBuffer());
+  res.json({status:response.status,headers:Object.fromEntries(response.headers),base64:bytes.toString('base64')});
+}));
+pluginsRouter.get('/:id/data', asyncHandler(async (req, res) => res.json({ data: await plugins.readPluginData(req.params.id) })));
+pluginsRouter.put('/:id/data', asyncHandler(async (req, res) => {
+  await plugins.writePluginData(req.params.id, req.body?.data ?? null); res.json({ ok: true });
+}));
+
 pluginsRouter.post(
   '/install',
   asyncHandler(async (req, res) => {

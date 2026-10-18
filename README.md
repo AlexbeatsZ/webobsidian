@@ -39,6 +39,14 @@ Community-plugin compatibility is selective and must be verified per workflow.
 See [project direction and reference boundaries](docs/design/product-direction.md)
 for the rationale, current implementation gaps, and proposed next steps.
 
+The plugin host now connects commands, settings, vault data, CM6 extensions and
+Markdown renderers to the application. It reads existing vault plugin enablement
+and settings without migrating the source vault. Native Node/Electron plugins
+require the desktop File menu's **Trust native plugins (next launch)** setting,
+which is off by default. See the [tested plugin versions, setup and remaining
+acceptance boundaries](docs/design/plugin-compatibility.md). Final interactive
+acceptance is reserved for the owner; API presence alone is not full compatibility.
+
 ## Rendering and source preservation
 
 Live editing, Reading, split panes, embedded notes, table cells, Canvas Markdown

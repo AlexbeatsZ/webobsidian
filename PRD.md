@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.8 · Cập nhật: 2026-10-18 · Trạng thái: Draft
+> Phiên bản: 1.9 · Cập nhật: 2026-10-18 · Trạng thái: Draft
+> Changelog 1.9 (plugin host): commands, settings/persistence, vault/metadata,
+> workspace/editor/CM6 extensions, Markdown processors and lifecycle cleanup;
+> optional trusted desktop Node/Web Viewer host. Scope and final static-only
+> verification boundary: [plugin compatibility](docs/design/plugin-compatibility.md).
 > Changelog 1.8 (rendering unification): source-preserving document sessions;
 > one instance-scoped client engine for Live/Reading/splits/tables/embeds/Canvas;
 > inclusive br source boundaries; local YAML/JSON/table patches; full-document
@@ -132,8 +136,8 @@
 - 参考 [obsidian-typings](https://github.com/obsidian-typings/obsidian-typings)
   理解未公开 API、对象关系和插件依赖；类型定义与辅助工具不等于完整运行时实现。
 - 保留现有 Markdown、附件与 Canvas 数据，分别评估文件格式、配置语义和插件行为的兼容性。
-- 当前插件 shim 中仍有命令、视图、设置和生命周期等空实现；可加载不代表功能已兼容。
-- 首批个性化功能、目标插件和 Obsidian 参考版本尚待明确，本次不启动核心重构。
+- 现用 Manage / STEM 插件已盘点并作为首批兼容对象；命令、设置、生命周期和 CM6 等入口已接入宿主。
+- 可加载不代表完整兼容；原生能力需启用可信桌面模式，最终用户工作流验收见插件兼容文档。
 
 设计依据、源码现状和后续顺序见 [项目定位与参考边界](docs/design/product-direction.md)。
 
@@ -285,9 +289,10 @@ webobsidian/
 
 ### FR-8 · Community plugins
 - Đọc danh sách plugin từ `.obsidian/plugins/*` (manifest.json, main.js).
-- Plugin loader nạp `main.js` trong sandbox với **Obsidian API shim** (App, Vault, Workspace, Plugin, Notice, Setting…).
+- Plugin loader evaluates trusted CommonJS `main.js` against the host API; this is not a security sandbox. Native Node modules require explicit desktop trust.
 - Browse & cài plugin từ community list (qua GitHub releases) — tải về thư mục plugins.
-- Bật/tắt plugin; lưu trạng thái trong settings.
+- Read and update vault `.obsidian/community-plugins.json`; keep each plugin's `data.json`; runtime enable/disable cleans registrations.
+- Detailed APIs, existing-plugin versions, verification status and unsupported internals: [plugin compatibility](docs/design/plugin-compatibility.md).
 
 ### FR-9 · Docker
 - `Dockerfile` multi-stage (build web + server → image gọn).

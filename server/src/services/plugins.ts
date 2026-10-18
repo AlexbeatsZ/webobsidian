@@ -1,7 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { getVaultRoot } from './vault.js';
+import { resolveInVault } from './vault.js';
 import { getSettings, updateSettings } from './settings.js';
+import { writeTextFile } from './textFile.js';
 
 /**
  * Obsidian community plugin support (PRD FR-8).
@@ -29,8 +30,7 @@ export interface InstalledPlugin extends PluginManifest {
 }
 
 async function pluginsDir(): Promise<string> {
-  const root = await getVaultRoot();
-  return path.join(root, '.obsidian', 'plugins');
+  return resolveInVault('.obsidian/plugins');
 }
 
 /**
@@ -49,6 +49,11 @@ function assertSafeId(id: string): string {
 export async function listInstalled(): Promise<InstalledPlugin[]> {
   const dir = await pluginsDir();
   const s = await getSettings();
+  // A fork reads the existing vault's enablement without rewriting it on startup.
+  let enabled = s.plugins.enabled;
+  try { enabled = JSON.parse(await fs.readFile(await resolveInVault('.obsidian/community-plugins.json'), 'utf8')); }
+  catch (e: any) { if (e.code !== 'ENOENT') throw e; }
+  if (!Array.isArray(enabled) || !enabled.every(id => typeof id === 'string')) throw new Error('Invalid community-plugins.json');
   let entries: string[] = [];
   try {
     entries = (await fs.readdir(dir, { withFileTypes: true }))
@@ -60,13 +65,14 @@ export async function listInstalled(): Promise<InstalledPlugin[]> {
   const out: InstalledPlugin[] = [];
   for (const id of entries) {
     try {
-      const manifestRaw = await fs.readFile(path.join(dir, id, 'manifest.json'), 'utf8');
+      assertSafeId(id);
+      const manifestRaw = await getPluginAsset(id, 'manifest.json');
       const manifest = JSON.parse(manifestRaw) as PluginManifest;
-      const hasStyles = await fileExists(path.join(dir, id, 'styles.css'));
+      const hasStyles = await fileExists(await resolveInVault(`.obsidian/plugins/${id}/styles.css`));
       out.push({
         ...manifest,
-        id: manifest.id || id,
-        enabled: s.plugins.enabled.includes(manifest.id || id),
+        id,
+        enabled: enabled.includes(id),
         hasStyles,
         dir: `.obsidian/plugins/${id}`,
       });
@@ -82,18 +88,77 @@ export async function getPluginAsset(
   asset: 'main.js' | 'styles.css' | 'manifest.json',
 ): Promise<string> {
   assertSafeId(id);
-  const dir = await pluginsDir();
-  return fs.readFile(path.join(dir, id, asset), 'utf8');
+  return fs.readFile(await resolveInVault(`.obsidian/plugins/${id}/${asset}`), 'utf8');
 }
 
-export async function setEnabled(id: string, enabled: boolean): Promise<void> {
+let enableQueue = Promise.resolve();
+export function setEnabled(id: string, enabled: boolean): Promise<void> {
+  const operation = enableQueue.catch(() => {}).then(() => updateEnabled(id, enabled));
+  enableQueue = operation;
+  return operation;
+}
+async function updateEnabled(id: string, enabled: boolean): Promise<void> {
   assertSafeId(id);
+  const installed = await listInstalled();
+  if (!installed.some(p => p.id === id)) throw Object.assign(new Error('Plugin not installed'), { status: 404 });
+  const ids = new Set(installed.filter(p => p.enabled).map(p => p.id));
+  // Preserve missing plugin IDs in the original enablement file as well.
+  try { for (const entry of JSON.parse(await fs.readFile(await resolveInVault('.obsidian/community-plugins.json'), 'utf8'))) ids.add(entry); }
+  catch (e: any) { if (e.code !== 'ENOENT') throw e; }
+  if (enabled) ids.add(id); else ids.delete(id);
+  const target = await resolveInVault('.obsidian/community-plugins.json');
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await writeTextFile(target, JSON.stringify([...ids], null, 2));
   await updateSettings((d) => {
     const set = new Set(d.plugins.enabled);
     if (enabled) set.add(id);
     else set.delete(id);
     d.plugins.enabled = [...set];
   });
+}
+
+export async function readPluginData(id: string): Promise<unknown> {
+  assertSafeId(id);
+  try { return JSON.parse(await fs.readFile(await resolveInVault(`.obsidian/plugins/${id}/data.json`), 'utf8')); }
+  catch (e: any) { if (e.code === 'ENOENT') return null; throw e; }
+}
+const dataWrites = new Map<string, Promise<void>>();
+export async function writePluginData(id: string, data: unknown): Promise<void> {
+  assertSafeId(id);
+  const target = await resolveInVault(`.obsidian/plugins/${id}/data.json`);
+  const operation = (dataWrites.get(target) ?? Promise.resolve()).catch(() => {}).then(async () => {
+    const tmp = target + '.webobsidian-tmp';
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(tmp, JSON.stringify(data, null, 2));
+    await fs.rename(tmp, target);
+  });
+  dataWrites.set(target, operation);
+  try { await operation; } finally { if (dataWrites.get(target) === operation) dataWrites.delete(target); }
+}
+
+/** Adapter operations remain vault-scoped, including hidden plugin/config files. */
+export async function adapterOperation(op: string, rel: string, body: any = {}) {
+  if (/^(?:[a-z]:|[/\\])|(?:^|[/\\])\.\.(?:[/\\]|$)/i.test(rel)) throw Object.assign(new Error('Invalid vault-relative path'), { status: 400 });
+  const target = await resolveInVault(rel);
+  switch (op) {
+    case 'read': return { content: await fs.readFile(target, 'utf8') };
+    case 'readBinary': return { base64: (await fs.readFile(target)).toString('base64') };
+    case 'write': case 'writeBinary': {
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, op === 'writeBinary' ? Buffer.from(body.base64, 'base64') : String(body.content)); return { ok: true };
+    }
+    case 'exists': return { exists: await fs.access(target).then(() => true, () => false) };
+    case 'stat': {
+      const st = await fs.stat(target).catch((e: any) => { if(e.code === 'ENOENT') return null; throw e; });
+      return { stat: st ? { type: st.isDirectory() ? 'folder' : 'file', ctime: st.birthtimeMs, mtime: st.mtimeMs, size: st.size } : null };
+    }
+    case 'list': {
+      const entries = await fs.readdir(target, { withFileTypes: true });
+      return { files: entries.filter(e => e.isFile()).map(e => path.posix.join(rel,e.name)), folders: entries.filter(e => e.isDirectory() && e.name !== '.git').map(e => path.posix.join(rel,e.name)) };
+    }
+    case 'mkdir': await fs.mkdir(target, { recursive: true }); return { ok: true };
+    default: throw Object.assign(new Error('Unsupported adapter operation'), { status: 400 });
+  }
 }
 
 /**
