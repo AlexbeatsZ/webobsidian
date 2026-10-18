@@ -141,7 +141,7 @@ export const api = {
     if (!res.ok) throw new ApiError((await res.json().catch(() => ({}))).error ?? 'Upload failed', res.status);
     return res.json() as Promise<{ ok: true; path: string; size: number }>;
   },
-  rawUrl: (path: string) => `/api/files/content?path=${encodeURIComponent(path)}`,
+  rawUrl: (path: string, sourcePath = '') => `/api/files/content?path=${encodeURIComponent(path)}&sourcePath=${encodeURIComponent(sourcePath)}`,
 
   // search & links
   // limit omitted → server returns every match (panel renders them incrementally)
@@ -167,8 +167,8 @@ export const api = {
     }),
   backlinks: (path: string) =>
     req<{ backlinks: string[] }>(`/api/backlinks?path=${encodeURIComponent(path)}`),
-  resolve: (target: string) =>
-    req<{ path: string | null }>(`/api/resolve?target=${encodeURIComponent(target)}`),
+  resolve: (target: string, sourcePath = '') =>
+    req<{ path: string | null; status?: string; fragment?: string; candidates?: string[]; normalizedTarget?: string }>(`/api/resolve?target=${encodeURIComponent(target)}&sourcePath=${encodeURIComponent(sourcePath)}`),
   graph: () =>
     req<{
       nodes: { id: string; label: string; kind: 'note' | 'attachment' | 'unresolved'; tags: string[] }[];

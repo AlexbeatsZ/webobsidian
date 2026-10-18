@@ -11,6 +11,12 @@ import { syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { openLightbox } from './imageLightbox';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
+import { syntaxModel, blockModel } from './syntaxModel';
+import { compositionSelection } from './inlineHtml';
+import { sourceButton, sourceIsOpen, sourceOwns, forceRendered, toggleSourceRegion } from './sourceControls';
+import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
+export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
+import { canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, type RenderMenuItem as LpMenuItem } from './renderContext';
 
 /**
@@ -191,11 +197,11 @@ function writeImageWidth(view: EditorView, wrap: HTMLElement, width: number): vo
 
 class ImageWidget extends WidgetType {
   /** `width`/`height` from the Obsidian size param `![[img|300]]` / `![[img|300x200]]`. */
-  constructor(readonly src: string, readonly alt: string, readonly width?: number, readonly height?: number) {
+  constructor(readonly src: string, readonly alt: string, readonly width?: number, readonly height?: number, readonly ro = false) {
     super();
   }
   eq(o: ImageWidget) {
-    return o.src === this.src && o.width === this.width && o.height === this.height;
+    return o.src === this.src && o.width === this.width && o.height === this.height && o.ro === this.ro;
   }
   toDOM(view: EditorView) {
     const wrap = document.createElement('span');
@@ -370,23 +376,26 @@ function ensureKatex() {
 }
 
 class MathWidget extends WidgetType {
-  constructor(readonly tex: string, readonly display: boolean) {
+  constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }) {
     super();
   }
   eq(o: MathWidget) {
-    return o.tex === this.tex && o.display === this.display;
+    return o.tex === this.tex && o.display === this.display && o.range?.from === this.range?.from && o.range?.to === this.range?.to;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const span = document.createElement('span');
     span.className = 'cm-math-rendered' + (this.display ? ' math-block' : ' math-inline');
-    span.textContent = this.tex; // shown until KaTeX loads
+    const body = document.createElement('span');
+    body.textContent = this.tex;
+    span.appendChild(body); // shown until KaTeX loads
     void ensureKatex().then((katex) => {
       try {
-        katex.render(this.tex, span, { throwOnError: false, displayMode: this.display });
+        katex.render(this.tex, body, { throwOnError: false, displayMode: this.display });
       } catch {
         /* keep raw tex */
       }
     });
+    if (this.range && !view.state.readOnly) span.appendChild(sourceButton(view, this.range, 'formula'));
     return span;
   }
   ignoreEvent() {
@@ -476,7 +485,7 @@ function ensureMermaid() {
   if (!mermaidPromise) {
     mermaidPromise = import('mermaid').then((m) => {
       m.default.initialize({
-        startOnLoad: false,
+        startOnLoad: false, securityLevel: 'strict',
         theme: document.querySelector('.theme-dark') ? 'dark' : 'default',
       });
       return m.default;
@@ -487,74 +496,64 @@ function ensureMermaid() {
 let mermaidSeq = 0;
 
 class MermaidWidget extends WidgetType {
-  constructor(readonly code: string) {
+  constructor(readonly code: string, readonly range?: { from: number; to: number }) {
     super();
   }
   eq(o: MermaidWidget) {
-    return o.code === this.code;
+    return o.code === this.code && o.range?.from === this.range?.from && o.range?.to === this.range?.to;
   }
   ignoreEvent() {
     return true;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const div = document.createElement('div');
     div.className = 'mermaid cm-mermaid';
-    div.textContent = '…';
+    const body = document.createElement('div');
+    body.textContent = '…'; div.appendChild(body);
     void ensureMermaid()
       .then((mermaid) => mermaid.render(`cm-mmd-${++mermaidSeq}`, this.code))
       .then(({ svg }) => {
-        div.innerHTML = svg;
+        body.innerHTML = svg;
       })
       .catch((err) => {
         div.classList.add('mod-error');
-        div.textContent = String(err?.message ?? err);
+        body.textContent = String(err?.message ?? err);
         // mermaid leaves an orphaned error element in <body> on parse failure
         document.getElementById(`dcm-mmd-${mermaidSeq}`)?.remove();
       });
+    if (this.range && !view.state.readOnly) div.appendChild(sourceButton(view, this.range, 'diagram'));
     return div;
   }
 }
 
 function buildMermaid(state: EditorState): DecorationSet {
   if (!state.field(livePreviewState, false)) return Decoration.none;
-  const doc = state.doc;
+  const ro = state.field(livePreviewReadonly, false) ?? false;
   const ranges: Range<Decoration>[] = [];
-  for (let n = 1; n <= doc.lines; n++) {
-    const line = doc.line(n);
-    const open = line.text.match(/^\s*(`{3,}|~{3,})\s*mermaid\s*$/i);
-    if (!open) continue;
-    let end = -1;
-    for (let j = n + 1; j <= doc.lines; j++) {
-      if (doc.line(j).text.trim().startsWith(open[1][0].repeat(3))) {
-        end = j;
-        break;
-      }
-    }
-    if (end < 0) continue;
-    const from = line.from;
-    const to = doc.line(end).to;
-    const ro = state.field(livePreviewReadonly, false) ?? false;
-    let touched = false;
-    if (!ro)
-      for (const r of state.selection.ranges) {
-        if (r.empty && r.from <= to && r.to >= from) {
-          touched = true;
-          break;
-        }
-      }
-    if (!touched) {
-      const code = end > n + 1 ? doc.sliceString(doc.line(n + 1).from, doc.line(end - 1).to) : '';
-      ranges.push(Decoration.replace({ widget: new MermaidWidget(code), block: true }).range(from, to));
-    }
-    n = end;
+  for (const block of state.field(blockModel).containers) {
+    if (block.kind !== 'code' || block.language.toLowerCase() !== 'mermaid' || sourceIsOpen(state, block)) continue;
+    if (!forceRendered(state, block) && caretTouches(block, state.field(compositionSelection).selection.ranges, ro)) continue;
+    ranges.push(Decoration.replace({ widget: new MermaidWidget(block.body, block), block: true }).range(block.from, block.to));
   }
   return Decoration.set(ranges, true);
 }
 
+function buildMathBlocks(state: EditorState): DecorationSet {
+  if (!state.field(livePreviewState, false)) return Decoration.none;
+  const ro = state.field(livePreviewReadonly, false) ?? false;
+  return Decoration.set(state.field(blockModel).math.filter((block) =>
+    !sourceIsOpen(state, block) && (forceRendered(state, block) || !caretTouches(block, state.field(compositionSelection).selection.ranges, ro))
+  ).map((block) => Decoration.replace({ widget: new MathWidget(block.tex, true, block), block: true }).range(block.from, block.to)), true);
+}
+export const mathBlockField = StateField.define<DecorationSet>({
+  create: buildMathBlocks, update: (_value, transaction) => buildMathBlocks(transaction.state),
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 export const mermaidField = StateField.define<DecorationSet>({
   create: (state) => buildMermaid(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly))) {
+    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))) {
       return buildMermaid(tr.state);
     }
     return value.map(tr.changes);
@@ -677,7 +676,7 @@ export const htmlPreviewField = StateField.define<DecorationSet>({
   update(value, tr) {
     if (
       tr.docChanged ||
-      tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleHtmlRender))
+      tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(toggleHtmlRender))
     ) {
       return buildHtmlPreview(tr.state);
     }
@@ -719,37 +718,17 @@ function isCalloutFolded(state: EditorState, titleFrom: number, foldChar: string
 
 function buildCalloutFolds(state: EditorState): DecorationSet {
   if (!state.field(livePreviewState, false)) return Decoration.none;
-  const doc = state.doc;
+  const ro = state.field(livePreviewReadonly, false) ?? false;
+  const claimed: { from: number; to: number }[] = [];
   const ranges: Range<Decoration>[] = [];
-  let prevIsQuote = false;
-  for (let n = 1; n <= doc.lines; n++) {
-    const line = doc.line(n);
-    const isQuote = QUOTE_LINE_RE.test(line.text);
-    if (isQuote && !prevIsQuote) {
-      const cm = line.text.replace(QUOTE_MARKERS_RE, '').match(CALLOUT_RE);
-      if (cm && cm[2] && isCalloutFolded(state, line.from, cm[2])) {
-        let last = n;
-        while (last < doc.lines && QUOTE_LINE_RE.test(doc.line(last + 1).text)) last++;
-        if (last > n) {
-          const to = doc.line(last).to;
-          // reveal while the caret is inside the callout (never in readonly)
-          const ro = state.field(livePreviewReadonly, false) ?? false;
-          let touched = false;
-          if (!ro)
-            for (const r of state.selection.ranges) {
-              if (r.from <= to && r.to >= line.from) {
-                touched = true;
-                break;
-              }
-            }
-          if (!touched) ranges.push(Decoration.replace({ block: true }).range(line.to, to));
-          n = last;
-          prevIsQuote = false;
-          continue;
-        }
-      }
-    }
-    prevIsQuote = isQuote;
+  for (const block of state.field(blockModel).containers) {
+    if (block.kind !== 'callout' || !block.fold || !isCalloutFolded(state, block.from, block.fold) || sourceIsOpen(state, block)) continue;
+    if (caretTouches(block, state.field(compositionSelection).selection.ranges, ro)) continue;
+    if (block.bodyFrom >= block.to) continue;
+    const from = Math.max(block.from, block.bodyFrom - 1);
+    if (from >= block.to || claimed.some((outer) => from >= outer.from && block.to <= outer.to)) continue;
+    claimed.push({ from, to: block.to });
+    ranges.push(Decoration.replace({ block: true }).range(from, block.to));
   }
   return Decoration.set(ranges, true);
 }
@@ -760,7 +739,7 @@ export const calloutFoldDeco = StateField.define<DecorationSet>({
     if (
       tr.docChanged ||
       tr.selection ||
-      tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly))
+      tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))
     ) {
       return buildCalloutFolds(tr.state);
     }
@@ -929,6 +908,7 @@ class TableWidget extends WidgetType {
     const cols = b.header.length;
     const wrap = document.createElement('div');
     wrap.className = 'cm-table-wrap';
+    if (!this.ro) wrap.appendChild(sourceButton(view, b, 'table'));
 
     const table = document.createElement('table');
     table.className = 'cm-table';
@@ -1179,28 +1159,8 @@ class BulletWidget extends WidgetType {
 
 // Strip scripts/handlers/dangerous URLs from raw note HTML before rendering it
 // inline (Obsidian renders embedded HTML, e.g. CKEditor/Trilium tables, the same).
-const HTML_DROP_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base']);
-function sanitizeHtml(html: string): string {
-  const tpl = document.createElement('template');
-  tpl.innerHTML = html;
-  for (const el of Array.from(tpl.content.querySelectorAll('*'))) {
-    if (HTML_DROP_TAGS.has(el.tagName.toLowerCase())) {
-      el.remove();
-      continue;
-    }
-    for (const attr of Array.from(el.attributes)) {
-      const n = attr.name.toLowerCase();
-      if (n.startsWith('on')) el.removeAttribute(attr.name);
-      else if ((n === 'href' || n === 'src' || n === 'xlink:href') && /^\s*javascript:/i.test(attr.value)) {
-        el.removeAttribute(attr.name);
-      }
-    }
-  }
-  return tpl.innerHTML;
-}
-
 class HtmlBlockWidget extends WidgetType {
-  constructor(readonly html: string) {
+  constructor(readonly html: string, readonly range?: { from: number; to: number }) {
     super();
   }
   eq(o: HtmlBlockWidget) {
@@ -1210,6 +1170,7 @@ class HtmlBlockWidget extends WidgetType {
     const div = document.createElement('div');
     div.className = 'cm-html-block';
     div.innerHTML = sanitizeHtml(this.html);
+    if (!view.state.readOnly && this.range) div.appendChild(sourceButton(view, this.range, 'HTML'));
     div.addEventListener('mousedown', (e) => {
       const a = (e.target as HTMLElement).closest('a');
       if (!a) return;
@@ -1227,23 +1188,17 @@ class HtmlBlockWidget extends WidgetType {
 
 /** Locate raw HTML blocks (whole-line ranges) via the markdown syntax tree. */
 function scanHtmlBlocks(state: EditorState): { from: number; to: number }[] {
-  const out: { from: number; to: number }[] = [];
-  const doc = state.doc;
-  syntaxTree(state).iterate({
-    enter: (node) => {
-      if (node.name !== 'HTMLBlock') return;
-      const fromLine = doc.lineAt(node.from);
-      const toLine = doc.lineAt(Math.max(node.from, Math.min(node.to, doc.length) - 1));
-      out.push({ from: fromLine.from, to: toLine.to });
-    },
-  });
-  return out;
+  return state.field(syntaxModel).htmlBlocks.map((range) => ({
+    from: state.doc.lineAt(range.from).from,
+    to: state.doc.lineAt(Math.max(range.from, range.to - 1)).to,
+  }));
 }
 
 interface Prop {
   key: string;
   values: string[];
   list: boolean;
+  editable?: boolean; scalarType?: string; forceList?: boolean;
 }
 
 const stripQuotes = (s: string) => s.replace(/^["'](.*)["']$/, '$1');
@@ -1257,52 +1212,7 @@ function sanitizeListValue(key: string, raw: string): string {
 }
 
 /** Parse the YAML subset Obsidian uses for properties. */
-function parseFrontmatter(yaml: string): Prop[] {
-  const props: Prop[] = [];
-  let cur: Prop | null = null;
-  for (const line of yaml.split('\n')) {
-    const kv = line.match(/^([\w .-]+?):\s*(.*)$/);
-    const li = line.match(/^\s*-\s+(.+)$/);
-    if (li && cur) {
-      cur.list = true;
-      cur.values.push(stripQuotes(li[1].trim()));
-    } else if (kv) {
-      cur = { key: kv[1].trim(), values: [], list: CORE_LIST_PROPS.has(kv[1].trim()) };
-      const val = kv[2].trim();
-      if (val) {
-        const arr = val.match(/^\[(.*)\]$/);
-        if (arr) {
-          cur.list = true;
-          cur.values = arr[1].split(',').map((s) => stripQuotes(s.trim())).filter(Boolean);
-        } else {
-          cur.values = [stripQuotes(val)];
-        }
-      }
-      props.push(cur);
-    }
-  }
-  return props;
-}
-
-const yamlNeedsQuote = (s: string) =>
-  s === '' || /^[\s>|*&!?@`"'[\]{}#,-]/.test(s) || /:\s/.test(s) || /[:#]$/.test(s) || /\s$/.test(s);
-const yamlQuote = (s: string) => (yamlNeedsQuote(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
-
-/** Serialize properties back to the inner YAML (without the `---` fences). */
-function serializeFrontmatter(props: Prop[]): string {
-  const lines: string[] = [];
-  for (const p of props) {
-    if (!p.key) continue;
-    if (p.list) {
-      lines.push(`${p.key}:`);
-      for (const v of p.values.filter((x) => x !== '')) lines.push(`  - ${yamlQuote(v)}`);
-    } else {
-      const v = p.values[0] ?? '';
-      lines.push(v === '' ? `${p.key}:` : `${p.key}: ${yamlQuote(v)}`);
-    }
-  }
-  return lines.join('\n');
-}
+const parseFrontmatter = readPropertyRows;
 
 // Obsidian's built-in List properties.
 const CORE_LIST_PROPS = new Set(['tags', 'aliases', 'cssclasses']);
@@ -1371,25 +1281,27 @@ class FrontmatterWidget extends WidgetType {
   toDOM(view: EditorView) {
     const box = document.createElement('div');
     box.className = 'properties cm-properties';
+    const range = view.state.field(syntaxModel).frontmatter;
+    if (!this.ro && range) box.appendChild(sourceButton(view, range, 'properties'));
 
-    // Re-find the current frontmatter range and replace it with fresh YAML.
+    // Commit source patches only, preserving every unrelated YAML token.
     const commit = (props: Prop[]) => {
-      const inner = serializeFrontmatter(props);
-      const text = view.state.doc.sliceString(0, Math.min(view.state.doc.length, 8000));
-      const fm = text.match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/);
-      if (fm) {
-        const end = fm[0].length;
-        const blockEnd = text[end - 1] === '\n' ? end - 1 : end;
-        view.dispatch({ changes: { from: 0, to: blockEnd, insert: `---\n${inner}\n---` } });
-      } else {
-        view.dispatch({ changes: { from: 0, to: 0, insert: `---\n${inner}\n---\n` } });
-      }
-      view.focus();
+      if (view.state.readOnly) return;
+      const text = view.state.doc.toString();
+      const fm = text.match(/^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
+      try {
+        if (!fm || fm[1] !== this.yaml) throw new Error('Properties changed while editing; draft was not written');
+        const offset = fm[0].indexOf('\n') + 1;
+        const changes = patchPropertyRows(this.yaml, props).map((change) => ({ ...change, from: change.from + offset, to: change.to + offset }));
+        if (changes.length) view.dispatch({ changes, userEvent: 'input.properties' });
+        view.focus();
+      } catch (error) { contextOf(view).reportError?.((error as Error).message); }
     };
     const readProps = (): Prop[] =>
       ([...box.querySelectorAll('.prop-row:not(.prop-newrow)')] as HTMLElement[]).map((row) => ({
-        key: (row.querySelector('.prop-key') as HTMLElement).innerText.trim(),
+        key: (row.querySelector('.prop-key') as HTMLElement).innerText,
         list: row.dataset.list === '1',
+        scalarType: (row.querySelector('.prop-val-field') as HTMLElement | null)?.dataset.propertyType,
         values:
           row.dataset.list === '1'
             ? ([...row.querySelectorAll('.prop-pill')] as HTMLElement[]).map((p) => p.dataset.val ?? '')
@@ -1433,6 +1345,7 @@ class FrontmatterWidget extends WidgetType {
         mutate((ps) => {
           const p = ps.find((x) => x.key === key);
           if (!p) return;
+          p.forceList = true;
           if (newIsList) p.list = true;
           else {
             p.list = false;
@@ -1481,6 +1394,10 @@ class FrontmatterWidget extends WidgetType {
     header.className = 'cm-props-header';
     header.textContent = 'Properties';
     box.appendChild(header);
+    if (!canEditProperties(this.yaml)) {
+      const hint = document.createElement('div'); hint.className = 'prop-unsupported';
+      hint.textContent = 'Complex or invalid YAML. Use the source entry to edit.'; box.appendChild(hint); return box;
+    }
 
     const editable = (el: HTMLElement, onCommit: () => void) => {
       if (this.ro) return; // reading mode: no inline editing
@@ -1509,6 +1426,7 @@ class FrontmatterWidget extends WidgetType {
           inp.dataset.raw = inp.value;
           commitChange();
         });
+        inp.dataset.propertyType = dt;
         return inp;
       }
       if (dt === 'checkbox') {
@@ -1517,11 +1435,12 @@ class FrontmatterWidget extends WidgetType {
         inp.className = 'prop-val-field prop-checkbox';
         const on = /^(true|yes|1)$/i.test(value);
         inp.checked = on;
-        inp.dataset.raw = on ? 'true' : 'false';
+        inp.dataset.raw = value;
         inp.addEventListener('change', () => {
           inp.dataset.raw = inp.checked ? 'true' : 'false';
           commitChange();
         });
+        inp.dataset.propertyType = dt;
         return inp;
       }
       if (dt === 'date' || dt === 'datetime') {
@@ -1539,6 +1458,7 @@ class FrontmatterWidget extends WidgetType {
           inp.dataset.raw = inp.value;
           commitChange();
         });
+        inp.dataset.propertyType = dt;
         return inp;
       }
       // text (default)
@@ -1552,6 +1472,7 @@ class FrontmatterWidget extends WidgetType {
           mutate(() => {});
         }
       });
+      span.dataset.propertyType = dt;
       return span;
     };
 
@@ -1657,7 +1578,7 @@ class FrontmatterWidget extends WidgetType {
 
       // Right-click the key or icon → Property type / Copy / Remove (like Obsidian).
       const openPropMenu = (e: MouseEvent) => {
-        if (this.ro) return;
+        if (this.ro || p.editable === false) return;
         e.preventDefault();
         e.stopPropagation();
         contextOf(view).openMenu({ x: e.clientX, y: e.clientY, items: propMenu(p.key, idx, renderAsList ? 'list' : dt) });
@@ -1737,6 +1658,12 @@ class FrontmatterWidget extends WidgetType {
       });
 
       row.append(icon, k, v, del);
+      if (p.editable === false) {
+        row.classList.add('prop-unsupported');
+        row.querySelectorAll('[contenteditable]').forEach((element) => element.removeAttribute('contenteditable'));
+        row.querySelectorAll('.prop-del, .prop-pill-x, .prop-pill-add').forEach((element) => element.remove());
+        for (const input of row.querySelectorAll('input')) { input.readOnly = true; input.tabIndex = -1; }
+      }
       box.appendChild(row);
     });
 
@@ -1829,11 +1756,14 @@ class FrontmatterWidget extends WidgetType {
       e.preventDefault();
       void startAdd();
     });
-    if (!this.ro) box.appendChild(addBtn);
+    box.appendChild(addBtn);
     // Reading mode: strip any remaining editing affordances (pill texts, inputs).
     if (this.ro) {
       for (const el of box.querySelectorAll('[contenteditable]')) el.removeAttribute('contenteditable');
-      for (const inp of box.querySelectorAll('input')) (inp as HTMLInputElement).disabled = true;
+      for (const inp of box.querySelectorAll('input')) {
+        inp.readOnly = true; inp.tabIndex = -1;
+        inp.addEventListener('click', (event) => event.preventDefault());
+      }
     }
     return box;
   }
@@ -1862,7 +1792,7 @@ function attachmentUrl(target: string, view: EditorView): string {
 
 function buildDecorations(view: EditorView): DecorationSet {
   const all: Range<Decoration>[] = [];
-  const sel = view.state.selection;
+  const sel = view.state.field(compositionSelection).selection;
   const doc = view.state.doc;
 
   // Overlap guard: two content-replacing decorations may not overlap, or CM
@@ -1880,7 +1810,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   // In reading mode (readonly) nothing is ever revealed — same render, no edit.
   const readonly = view.state.field(livePreviewReadonly, false) ?? false;
   const touches = (from: number, to: number) => {
-    if (readonly) return false;
+    if (readonly || forceRendered(view.state, { from, to })) return false;
     for (const r of sel.ranges) if (r.empty && r.from <= to && r.to >= from) return true;
     return false;
   };
@@ -1907,14 +1837,13 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
   // Frontmatter range (rendered by frontmatterField) — the regex passes skip it.
-  const fmMatch = doc.sliceString(0, Math.min(doc.length, 4000)).match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/);
-  const fmEnd = fmMatch ? fmMatch[0].length : 0;
+  const fmEnd = view.state.field(syntaxModel).frontmatter?.to ?? 0;
 
   // Tables are rendered as block widgets by `tableField`. When a table is shown
   // (selection not inside it) the plugin must NOT decorate inside its range, or
   // its inline replaces would collide with the block widget. Editable tables
   // (selection inside) get normal raw-markdown handling.
-  const tables = scanTables(doc);
+  const tables = scanTables(doc).filter((table) => !sourceIsOpen(view.state, table));
   const renderedTable = (from: number, to: number) =>
     tables.some((t) => from >= t.from && to <= t.to);
 
@@ -1926,13 +1855,14 @@ function buildDecorations(view: EditorView): DecorationSet {
 
   // Inline code and code blocks are literal — wikilink/embed/link/tag syntax
   // inside them must stay raw (e.g. `![[file]]` in backticks is not an embed).
-  const codeRanges: { from: number; to: number }[] = [];
+  const model = view.state.field(syntaxModel);
+  const codeRanges = [...model.literal, ...model.html, ...model.entities, ...view.state.field(blockModel).math];
   const inCode = (from: number, to: number) => {
     for (const r of codeRanges) if (from < r.to && to > r.from) return true;
     return false;
   };
 
-  const tree = syntaxTree(view.state);
+  const tree = view.state.field(syntaxModel).tree;
 
   for (const { from, to } of view.visibleRanges) {
     tree.iterate({
@@ -1940,6 +1870,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       to,
       enter: (node) => {
         const name = node.name;
+        if (sourceOwns(view.state, node) || view.state.field(blockModel).math.some((block) => node.from >= block.from && node.to <= block.to)) return false;
 
         // Record code spans/blocks so the regex passes below can skip them.
         if (name === 'InlineCode' || name === 'FencedCode' || name === 'CodeBlock') {
@@ -1970,10 +1901,13 @@ function buildDecorations(view: EditorView): DecorationSet {
           const last = doc.lineAt(Math.min(node.to, doc.length)).number;
           const blockTouched = touches(node.from, Math.min(node.to, doc.length));
           // language from the fence info-string (§7) → flair label top-right
-          const lang = doc.line(first).text.match(/^\s*(?:`{3,}|~{3,})[ \t]*([\w/+#-]*)/)?.[1] ?? '';
+          const code = view.state.field(blockModel).containers.find((block) => block.kind === 'code' && block.from === doc.line(first).from);
+          const lang = code?.language ?? '';
           for (let i = first; i <= last; i++) {
             const l = doc.line(i);
-            const isFence = /^\s*(`{3,}|~{3,})/.test(l.text);
+            const logical = stripQuotePrefix(l.text, code?.depth ?? 0);
+            const prefixLength = l.text.length - logical.length;
+            const isFence = /^\s*(`{3,}|~{3,})/.test(logical);
             all.push(
               Decoration.line({
                 class:
@@ -1985,7 +1919,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             );
             if (!blockTouched && isFence && (i === first || i === last) && l.to > l.from) {
               pushReplace(l.from, l.to, hidden);
-            }
+            } else if (!blockTouched && prefixLength) pushReplace(l.from, l.from + prefixLength, hidden);
           }
           return;
         }
@@ -1997,14 +1931,14 @@ function buildDecorations(view: EditorView): DecorationSet {
           all.push(
             Decoration.line({ class: `cm-h${lv} HyperMD-header HyperMD-header-${lv}` }).range(line.from, line.from),
           );
-          const m = doc.sliceString(line.from, line.to).match(/^(#{1,6}\s+)/);
+          const m = doc.sliceString(line.from, line.to).match(/^((?: {0,3}> ?)*)(#{1,6}\s+)/);
           if (m) {
-            if (!lineActive(node.from)) pushReplace(line.from, line.from + m[1].length, hidden);
+            if (!lineActive(node.from)) pushReplace(line.from + m[1].length, line.from + m[1].length + m[2].length, hidden);
             else
               all.push(
                 Decoration.mark({ class: 'cm-formatting cm-formatting-header' }).range(
-                  line.from,
                   line.from + m[1].length,
+                  line.from + m[1].length + m[2].length,
                 ),
               );
           }
@@ -2015,7 +1949,10 @@ function buildDecorations(view: EditorView): DecorationSet {
         // only when the caret is outside the span.
         if (EMPHASIS_CLASS[name]) {
           all.push(Decoration.mark({ class: EMPHASIS_CLASS[name] }).range(node.from, node.to));
-          if (!touches(node.from, node.to)) {
+          const ownsCaret = touches(node.from, node.to) && !model.nodes.some((child) =>
+            EMPHASIS_CLASS[child.name] && child.from >= node.from && child.to <= node.to &&
+            (child.from !== node.from || child.to !== node.to) && touches(child.from, child.to));
+          if (!ownsCaret) {
             const sn = node.node;
             for (let c = sn.firstChild; c; c = c.nextSibling) {
               if (/Mark$/.test(c.name)) pushReplace(c.from, c.to, hidden);
@@ -2034,6 +1971,7 @@ function buildDecorations(view: EditorView): DecorationSet {
     for (let ln = startLine; ln <= endLine; ln++) {
       const line = doc.line(ln);
       const text = line.text;
+      if (sourceOwns(view.state, line)) continue;
 
       // Skip lines covered by a rendered table / HTML block widget.
       if (renderedTable(line.from, line.to) || renderedHtml(line.from, line.to)) continue;
@@ -2049,8 +1987,8 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       // Inline-HTML paragraph line (e.g. `<u>…</u> và <mark>…`): Lezer only marks
       // block-level openers as HTMLBlock, so render whole-line inline HTML here.
-      if (/^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from)) {
-        pushReplace(line.from, line.to, Decoration.replace({ widget: new HtmlBlockWidget(text) }));
+      if (/^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from) && !view.state.field(syntaxModel).html.some((tag) => tag.from >= line.from && tag.to <= line.to)) {
+        pushReplace(line.from, line.to, Decoration.replace({ widget: new HtmlBlockWidget(text, { from: line.from, to: line.to }) }));
         continue;
       }
 
@@ -2069,68 +2007,17 @@ function buildDecorations(view: EditorView): DecorationSet {
       let bodyStart = 0;
       if (QUOTE_LINE_RE.test(text)) {
         const prefix = text.match(QUOTE_MARKERS_RE)![0];
-        const depth = (prefix.match(/>/g) ?? []).length;
         bodyStart = prefix.length;
-        // First/last line of this contiguous quote run
-        let firstLn = ln;
-        while (firstLn > 1 && QUOTE_LINE_RE.test(doc.line(firstLn - 1).text)) firstLn--;
-        let lastLn = ln;
-        while (lastLn < total && QUOTE_LINE_RE.test(doc.line(lastLn + 1).text)) lastLn++;
-        const titleLineFrom = doc.line(firstLn).from;
-        const firstInner = doc.line(firstLn).text.replace(QUOTE_MARKERS_RE, '');
-        const cm = firstInner.match(CALLOUT_RE);
-        if (cm) {
-          const type = cm[1].split('|')[0].trim().toLowerCase().replace(/\s+/g, '-');
-          const slot = CALLOUT_SLOT[type] ?? 'default';
-          const attributes = { style: `--callout-color: var(--callout-${slot})` };
-          const folded = cm[2] ? isCalloutFolded(view.state, titleLineFrom, cm[2]) : false;
-          all.push(
-            Decoration.line({
-              class:
-                'cm-callout cm-callout-line' +
-                (ln === firstLn ? ' cm-callout-first' : '') +
-                (ln === lastLn || (ln === firstLn && folded) ? ' cm-callout-last' : ''),
-              attributes,
-            }).range(line.from, line.from),
-          );
-          if (ln === firstLn) {
-            const markLen = bodyStart + cm[0].length;
-            const title = text.slice(markLen).trim();
-            if (!lineActive(line.from)) {
-              pushReplace(
-                line.from,
-                line.from + markLen,
-                Decoration.replace({
-                  widget: new CalloutHeadWidget(
-                    slot,
-                    title ? '' : calloutDefaultTitle(type),
-                    cm[2],
-                    folded,
-                    titleLineFrom,
-                  ),
-                }),
-              );
-            }
-            if (title) {
-              all.push(Decoration.mark({ class: 'cm-callout-title' }).range(line.from + markLen, line.to));
-            }
-            bodyStart = markLen; // list handling applies to the rest of the title line
-          } else if (!lineActive(line.from)) {
-            pushReplace(line.from, line.from + bodyStart, hidden);
-          }
-        } else {
-          // Plain quote: depth via background bars (data-quote-depth) — nested
-          // `> >` renders one bar per level like Obsidian.
-          all.push(
-            Decoration.line({
-              class: 'cm-blockquote HyperMD-quote',
-              attributes: { 'data-quote-depth': String(Math.min(depth, 3)) },
-            }).range(line.from, line.from),
-          );
-          if (!lineActive(line.from)) {
-            pushReplace(line.from, line.from + bodyStart, hidden);
-          }
-        }
+        const header = view.state.field(blockModel).containers.find((block) => block.kind === 'callout' && block.from === line.from);
+        if (header) {
+          const slot = CALLOUT_SLOT[header.type] ?? 'default';
+          const folded = header.fold ? isCalloutFolded(view.state, header.from, header.fold) : false;
+          if (!touches(line.from, header.prefixTo)) pushReplace(line.from, header.prefixTo, Decoration.replace({
+            widget: new CalloutHeadWidget(slot, header.title ? '' : calloutDefaultTitle(header.type), header.fold, folded, header.from),
+          }));
+          if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
+          bodyStart = header.prefixTo - line.from;
+        } else if (!touches(line.from, line.from + bodyStart)) pushReplace(line.from, line.from + bodyStart, hidden);
       }
 
       // Task checkbox + bullet — applied to the line body (works in quotes /
@@ -2138,6 +2025,10 @@ function buildDecorations(view: EditorView): DecorationSet {
       // non-space status counts as checked (no hard-coded custom-state list).
       const body = bodyStart ? text.slice(bodyStart) : text;
       const bodyFrom = line.from + bodyStart;
+      const prefix = body.match(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[.\]\s+)?/);
+      if (prefix) all.push(Decoration.line({ attributes: {
+        'data-list-body-start': String(bodyFrom + prefix[0].length),
+      } }).range(line.from));
       // Indentation guides for nested lists (one cm-indent per tab / 4-space unit).
       const indentGuides = (ws: string) => {
         let i = 0;
@@ -2195,7 +2086,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       let tm: RegExpExecArray | null;
       while ((tm = tagRe.exec(text))) {
         const tag = tm[2];
-        if (/^#\d+$/.test(tag) || !/[a-z]/i.test(tag)) continue;
+        if (/^#\d+$/.test(tag) || !/\p{L}/u.test(tag)) continue;
         const s = line.from + tm.index + tm[1].length;
         if (inCode(s, s + tag.length)) continue;
         all.push(Decoration.mark({ class: 'cm-hashtag cm-hashtag-begin cm-tag' }).range(s, s + 1));
@@ -2324,7 +2215,7 @@ function buildDecorations(view: EditorView): DecorationSet {
               h = sm[2] ? Number(sm[2]) : undefined;
             }
           }
-          pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(attachmentUrl(href, view), href, w, h) }));
+          pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(attachmentUrl(href, view), href, w, h, readonly) }));
         } else if (isEmbed && (VIDEO_EXT_RE.test(href) || AUDIO_EXT_RE.test(href))) {
           // `![[clip.mp4]]` / `![[song.mp3]]` → native HTML5 player like Obsidian.
           const kind = VIDEO_EXT_RE.test(href) ? 'video' : 'audio';
@@ -2375,7 +2266,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         // any custom scheme) is resolved by basename via the vault file index.
         const webLoadable = /^(https?|data|blob|file):/i.test(url);
         const src = webLoadable ? url : attachmentUrl(url, view);
-        pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt, w, h) }));
+        pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt, w, h, readonly) }));
       }
 
       // Markdown links [text](url) — not preceded by ! (those are images)
@@ -2411,11 +2302,12 @@ function buildDecorations(view: EditorView): DecorationSet {
 
 function buildFrontmatter(state: EditorState): DecorationSet {
   if (!state.field(livePreviewState, false)) return Decoration.none;
-  const text = state.doc.sliceString(0, Math.min(state.doc.length, 4000));
+  const text = state.doc.toString();
   const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
   if (!fm) return Decoration.none;
   const end = fm[0].length;
   const blockEnd = text[end - 1] === '\n' ? end - 1 : end;
+  if (sourceIsOpen(state, { from: 0, to: blockEnd })) return Decoration.none;
   // Always show the interactive Properties editor (like Obsidian); editing happens
   // in the widget, so the caret no longer reveals raw YAML in Live mode.
   const ro = state.field(livePreviewReadonly, false) ?? false;
@@ -2423,30 +2315,6 @@ function buildFrontmatter(state: EditorState): DecorationSet {
     Decoration.replace({ widget: new FrontmatterWidget(fm[1], ro), block: true }).range(0, blockEnd),
   ]);
 }
-
-export const setLivePreviewEnabled = StateEffect.define<boolean>();
-
-export const livePreviewState = StateField.define<boolean>({
-  create: () => true,
-  update(value, tr) {
-    for (const e of tr.effects) if (e.is(setLivePreviewEnabled)) return e.value;
-    return value;
-  },
-});
-
-/**
- * Reading mode = the SAME Live Preview pipeline, read-only: when set, the
- * caret/selection never reveals raw syntax, so everything stays rendered.
- */
-export const setLivePreviewReadonly = StateEffect.define<boolean>();
-
-export const livePreviewReadonly = StateField.define<boolean>({
-  create: () => false,
-  update(value, tr) {
-    for (const e of tr.effects) if (e.is(setLivePreviewReadonly)) return e.value;
-    return value;
-  },
-});
 
 /* ---------------- inline title (note filename, Obsidian-style) ---------------- */
 
@@ -2503,7 +2371,7 @@ export const inlineTitleField = StateField.define<DecorationSet>({
 export const frontmatterField = StateField.define<DecorationSet>({
   create: (state) => buildFrontmatter(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly))) {
+    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))) {
       return buildFrontmatter(tr.state);
     }
     return value.map(tr.changes);
@@ -2515,7 +2383,7 @@ export const frontmatterField = StateField.define<DecorationSet>({
 
 function buildTables(state: EditorState): DecorationSet {
   if (!state.field(livePreviewState, false)) return Decoration.none;
-  const tables = scanTables(state.doc);
+  const tables = scanTables(state.doc).filter((table) => !sourceIsOpen(state, table));
   if (!tables.length) return Decoration.none;
   const ro = state.field(livePreviewReadonly, false) ?? false;
   // Like Obsidian, tables are ALWAYS shown as the interactive widget (never as raw
@@ -2529,7 +2397,7 @@ function buildTables(state: EditorState): DecorationSet {
 export const tableField = StateField.define<DecorationSet>({
   create: (state) => buildTables(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly))) {
+    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))) {
       return buildTables(tr.state);
     }
     return value.map(tr.changes);
@@ -2546,17 +2414,18 @@ function buildHtmlBlocks(state: EditorState): DecorationSet {
   const ro = state.field(livePreviewReadonly, false) ?? false;
   const ranges: Range<Decoration>[] = [];
   for (const b of blocks) {
+    if (sourceIsOpen(state, b)) continue;
     let touched = false;
-    if (!ro)
+    if (!ro && !forceRendered(state, b))
       for (const r of state.selection.ranges) {
-        if (r.from <= b.to && r.to >= b.from) {
+        if (r.empty && r.from <= b.to && r.to >= b.from) {
           touched = true;
           break;
         }
       }
     if (touched) continue;
     const html = state.doc.sliceString(b.from, b.to);
-    ranges.push(Decoration.replace({ widget: new HtmlBlockWidget(html), block: true }).range(b.from, b.to));
+    ranges.push(Decoration.replace({ widget: new HtmlBlockWidget(html, b), block: true }).range(b.from, b.to));
   }
   return Decoration.set(ranges, true);
 }
@@ -2564,7 +2433,7 @@ function buildHtmlBlocks(state: EditorState): DecorationSet {
 export const htmlBlockField = StateField.define<DecorationSet>({
   create: (state) => buildHtmlBlocks(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly))) {
+    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))) {
       return buildHtmlBlocks(tr.state);
     }
     return value.map(tr.changes);

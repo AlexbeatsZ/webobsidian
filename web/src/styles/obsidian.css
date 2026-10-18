@@ -560,6 +560,26 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .is-reading-mode .cm-image-resize { display: none; }
 .markdown-embedded-view .cm-editor { height: auto; }
 .markdown-embedded-view .cm-content { padding: 0; margin: 0; max-width: none; }
+.md-html-b, .md-html-strong { font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
+.md-html-mark { background: var(--text-highlight-bg); color: inherit; }
+.md-html-kbd { font-family: var(--font-mono); background: var(--background-primary-alt); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); padding: 0 3px; }
+.cm-html-break { display: inline; }
+.cm-source-toggle { position: absolute; right: 4px; top: 2px; z-index: 2; font: 12px var(--font-mono); color: var(--text-muted); background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 4px; cursor: pointer; opacity: 0; }
+.cm-table-wrap:hover > .cm-source-toggle, .cm-properties:hover > .cm-source-toggle, .cm-html-block:hover > .cm-source-toggle { opacity: 1; }
+.cm-source-close { font: 12px var(--font-ui); margin-right: 8px; cursor: pointer; }
+.is-reading-mode .cm-source-toggle { display: none; }
+.cm-properties, .cm-html-block { position: relative; }
+.is-reading-mode .cm-props-add { display: block !important; visibility: hidden; }
+.is-reading-mode .prop-pill-x, .is-reading-mode .prop-pill-add, .is-reading-mode .prop-del { display: inline-flex !important; visibility: hidden; }
+.md-quote { border-left: 2px solid var(--interactive-accent); padding-left: 24px; }
+.md-callout { background: rgba(var(--callout-color, var(--callout-default)), .1); border-radius: var(--radius-s); padding: 12px 16px 12px 24px; }
+.md-callout .cm-callout-title { color: rgb(var(--callout-color, var(--callout-default))); }
+.md-code { background: var(--background-primary-alt); border-radius: var(--radius-s); padding: 8px 16px; }
+.md-code .cm-line.HyperMD-codeblock-bg { background: transparent !important; padding-left: 0; padding-right: 0; }
+.md-code .cm-line.HyperMD-codeblock-begin { padding-top: 0; }
+.md-code .cm-line.HyperMD-codeblock-end { padding-bottom: 0; }
+.cm-math-rendered, .cm-mermaid { position: relative; }
+.cm-math-rendered:hover > .cm-source-toggle, .cm-mermaid:hover > .cm-source-toggle { opacity: 1; }
 .is-reading-mode .cm-cell-edit,
 .is-reading-mode .cm-properties .prop-key,
 .is-reading-mode .cm-properties .prop-val-input,

@@ -10,10 +10,16 @@ import type { DocumentSnapshot, SourceChange } from '@webobsidian/markdown-core'
 import { obsidianHighlightStyle } from '../lib/highlight';
 import { obsidianKeymap } from '../lib/editorCommands';
 import { suggesterPlugin } from '../lib/suggest';
+import { syntaxModel, documentMetadata, blockModel } from '../lib/syntaxModel';
+import { inlineHtml } from '../lib/inlineHtml';
+import { sourceControls } from '../lib/sourceControls';
+import { semanticDecorations } from '../lib/semanticDecorations';
+import { listLayout } from '../lib/listLayout';
+import { blockLayout } from '../lib/blockLayout';
 import { renderContext, type RenderContext } from '../lib/renderContext';
 import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField,
   tableField, htmlBlockField, mermaidField, htmlRenderedState, htmlPreviewField,
-  calloutFoldState, calloutFoldDeco, noteTitleField, inlineTitleField, editorClickFix,
+  calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitleField, editorClickFix,
   livePreviewReadonly, setLivePreviewReadonly, setLivePreviewEnabled, setNoteTitle } from '../lib/livePreview';
 
 export type MarkdownMode = 'live' | 'reading' | 'source';
@@ -194,7 +200,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       doc: p.snapshot.text,
       selection: { anchor: initPos },
       extensions: [
-        drawSelection(),
+        drawSelection(), syntaxModel, documentMetadata, blockModel,
         contextComp.of(renderContext.of(p.context)),
         readonlyComp.of(readonlyExt(p.mode === 'reading')),
         EditorState.transactionFilter.of((tr) =>
@@ -218,9 +224,9 @@ export default function MarkdownView(props: MarkdownViewProps) {
         livePreviewState.init(() => isMd && p.mode !== 'source'),
         livePreviewReadonly.init(() => p.mode === 'reading'),
         noteTitleField.init(() => p.showTitle === false ? '' : titleOf(p.snapshot.id)),
-        inlineTitleField, frontmatterField, tableField, htmlBlockField, mermaidField,
+        sourceControls, inlineTitleField, frontmatterField, tableField, htmlBlockField, mermaidField,
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,
-        livePreviewPlugin, livePreviewTheme, editorClickFix,
+        inlineHtml, semanticDecorations, mathBlockField, blockLayout, livePreviewPlugin, livePreviewTheme, editorClickFix, listLayout,
         EditorView.updateListener.of((u) => {
           if (!u.docChanged || u.transactions.every((tr) => tr.annotation(externalUpdate))) return;
           const changes: SourceChange[] = [];

@@ -1,5 +1,6 @@
 import matter from 'gray-matter';
 import path from 'node:path';
+import { extractMetadata, parseLinkTarget } from '@webobsidian/markdown-core';
 
 export interface ParsedNote {
   title: string;
@@ -10,10 +11,6 @@ export interface ParsedNote {
   links: string[];
   headings: string[];
 }
-
-const WIKILINK_RE = /!?\[\[([^\]]+?)\]\]/g;
-const TAG_RE = /(?:^|\s)#([A-Za-z0-9_\-/]+)/g;
-const HEADING_RE = /^#{1,6}\s+(.+?)\s*$/gm;
 
 /** Parse a markdown document into structured fields used for search & links. */
 export function parseNote(rel: string, raw: string): ParsedNote {
@@ -27,20 +24,14 @@ export function parseNote(rel: string, raw: string): ParsedNote {
     /* malformed frontmatter — index raw */
   }
 
-  const links = new Set<string>();
-  for (const m of body.matchAll(WIKILINK_RE)) {
-    const target = m[1].split('|')[0].split('#')[0].trim();
-    if (target) links.add(target);
-  }
-
-  const tags = new Set<string>();
-  for (const m of body.matchAll(TAG_RE)) tags.add(m[1]);
+  const metadata = extractMetadata(raw.replace(/^\ufeff/, '').replace(/\r\n|\r/g, '\n'));
+  const links = new Set(metadata.links);
+  const tags = new Set(metadata.tags);
   const fmTags = frontmatter.tags;
   if (Array.isArray(fmTags)) for (const t of fmTags) tags.add(String(t));
   else if (typeof fmTags === 'string') for (const t of fmTags.split(/[,\s]+/)) if (t) tags.add(t);
 
-  const headings: string[] = [];
-  for (const m of body.matchAll(HEADING_RE)) headings.push(m[1]);
+  const headings = metadata.headings.map((heading) => heading.text);
 
   const fmTitle = typeof frontmatter.title === 'string' ? frontmatter.title : undefined;
   const title = fmTitle || path.basename(rel).replace(/\.(md|markdown)$/i, '');
@@ -50,6 +41,6 @@ export function parseNote(rel: string, raw: string): ParsedNote {
 
 /** Normalize a wikilink target to a comparable key (basename, no ext, lower). */
 export function linkKey(target: string): string {
-  const base = target.includes('/') ? target : target;
+  const base = parseLinkTarget(target).path;
   return base.replace(/\.(md|markdown)$/i, '').toLowerCase();
 }

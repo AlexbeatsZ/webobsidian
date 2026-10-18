@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api, type TreeNode, type ShareRecord } from './api';
 import { findNode } from './tree';
 import { documents } from './documents';
+import { parseLinkTarget } from '@webobsidian/markdown-core';
 let openGeneration = 0;
 let splitGeneration = 0;
 
@@ -193,7 +194,7 @@ interface AppState {
   notify: (msg: string, ms?: number) => void;
 
   openFile: (path: string) => Promise<void>;
-  openWikilink: (target: string) => Promise<void>;
+  openWikilink: (target: string, sourcePath?: string) => Promise<void>;
   closeTab: (path: string) => void;
   setContent: (c: string) => void;
   save: () => Promise<void>;
@@ -502,15 +503,21 @@ export const useStore = create<AppState>()(
         });
       },
 
-      openWikilink: async (target) => {
+      openWikilink: async (target, sourcePath) => {
         try {
-          const { path } = await api.resolve(target);
+          const resolved = await api.resolve(target, sourcePath ?? get().activePath ?? '');
+          const { path } = resolved;
+          if (resolved.status === 'ambiguous' || resolved.status === 'denied') {
+            get().notify(resolved.status === 'ambiguous' ? 'Ambiguous link: ' + target : 'Link is not allowed');
+            return;
+          }
           if (path) await get().openFile(path);
           else {
             // Only append `.md` when the target has no extension at all — a target
             // like `Foo.canvas` must stay `Foo.canvas`, not become `Foo.canvas.md`.
-            const hasExt = /\.[^./]+$/.test(target);
-            const newPath = hasExt ? target : `${target}.md`;
+            const destination = resolved.normalizedTarget ?? parseLinkTarget(target).path;
+            const hasExt = /\.[^./]+$/.test(destination);
+            const newPath = hasExt ? destination : `${destination}.md`;
             await get().createNote(newPath, `# ${target.replace(/\.md$/, '')}\n`);
           }
         } catch {

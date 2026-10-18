@@ -25,14 +25,14 @@ export default function Editor({ path: suppliedPath, reading = false }: { path?:
   const { session, snapshot, error } = useDocumentSession(path);
   const unregister = useRef<(() => void) | undefined>(undefined);
   const context = useMemo(() => createVaultRenderContext(path ?? '', {
-    openLink, openMenu, initialPropertyTypes: propertyTypes,
+    openLink: (target) => { void openLink(target, path ?? undefined); }, openMenu, reportError: notify, initialPropertyTypes: propertyTypes,
     files: () => {
       const files: string[] = [];
       const walk = (node: TreeNode) => { if (node.type === 'file') files.push(node.path); node.children?.forEach(walk); };
       if (tree) walk(tree);
       return files;
     },
-  }), [path, openLink, openMenu, tree, propertyTypes]);
+  }), [path, openLink, openMenu, tree, propertyTypes, notify]);
   useEffect(() => {
     if (!session || reading || !snapshot.dirty || snapshot.conflict) return;
     const timer = window.setTimeout(() => { void session.save().catch((cause) => notify(cause.message)); }, 900);

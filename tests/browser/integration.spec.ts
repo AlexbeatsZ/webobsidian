@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import type { RenderHarnessApi } from '../../web/src/dev/RenderHarness';
 
 test.beforeEach(async ({ page }) => {
@@ -44,4 +44,21 @@ test('different files and unmounting a reader do not steal the command target', 
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.activeDocument())).toBe('a.md');
   await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.format('**'));
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(1))).toBe('plain');
+});
+
+test('property editing patches one value and preserves mixed newlines, quotes and complex YAML', async ({ page }) => {
+  const raw = '\ufeff---\r\ntitle: \'old\' # keep\r\nuntouched: "quoted"\ncomplex:\r\n  nested: [1, 2]\r\n---\r\n\r\nplain';
+  await page.evaluate((source) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.reset(source), raw);
+  const live = page.locator('[data-slot="0"]');
+  await expect(live.locator('.cm-properties .prop-row')).toHaveCount(3);
+  const row = live.locator('.prop-row').filter({ hasText: 'title' });
+  await row.locator('.prop-val-input').fill('new');
+  await live.locator('.cm-line').filter({ hasText: 'plain' }).click();
+  expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw.replace("'old'", "'new'"));
+  await expect(page.locator('[data-slot="1"] .prop-row').filter({ hasText: 'title' }).locator('.prop-val-input')).toHaveText('new');
+  await expect(live.locator('.prop-row').filter({ hasText: 'complex' }).locator('[contenteditable]')).toHaveCount(0);
+  await live.getByRole('button', { name: 'Edit properties source' }).click();
+  await expect(live.locator('.cm-properties')).toHaveCount(0);
+  await live.getByRole('button', { name: 'Close source' }).click();
+  await expect(live.locator('.cm-properties')).toHaveCount(1);
 });

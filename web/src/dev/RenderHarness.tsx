@@ -17,6 +17,7 @@ export interface RenderHarnessApi {
   closeSecondary: () => void;
   activeDocument: () => string | null;
   format: (mark: string) => void;
+  coords: (slot: number, position: number) => { left: number; top: number } | null;
   links: string[];
   writes: string[];
 }
@@ -68,6 +69,10 @@ export default function RenderHarness() {
       focus: (slot) => refs.current[slot]?.focus(), closeSecondary: () => setSecondary(false),
       activeDocument: () => getActiveEditor()?.dom.closest('[data-document-id]')?.getAttribute('data-document-id') ?? null,
       format: fmtInline, links: links.current, writes: writes.current,
+      coords: (slot, position) => {
+        const rect = refs.current[slot]?.coordsAtPos(position);
+        return rect ? { left: rect.left, top: rect.top } : null;
+      },
     };
   }, [sessions]);
   return <div className="theme-light" style={{ minHeight: '100vh', display: 'flex', gap: 12 }}>

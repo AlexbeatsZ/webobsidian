@@ -19,6 +19,7 @@ export interface RenderContext {
   propertyTypes: () => Record<string, string>;
   setPropertyType: (key: string, type: string) => Promise<Record<string, string>>;
   renderEmbed: (target: string, signal: AbortSignal) => Promise<{ html: string } | null>;
+  reportError?: (message: string) => void;
 }
 
 const emptyContext: RenderContext = {

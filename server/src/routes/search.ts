@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
 import { qmd } from '../services/search.js';
 import { backlinksFor, graphData, resolveLink, buildLinkGraph } from '../services/links.js';
-import { resolveFile } from '../services/fileindex.js';
+import { resolveIndexedTarget } from '../services/fileindex.js';
 import { readPropertyTypes, setPropertyType } from '../services/propertytypes.js';
 
 export const searchRouter = Router();
@@ -83,16 +83,10 @@ searchRouter.get(
   '/resolve',
   asyncHandler(async (req, res) => {
     const target = String(req.query.target ?? '');
-    // The link graph only indexes markdown notes, so a wikilink that points at a
-    // non-markdown file with an explicit extension (e.g. `[[Foo.canvas]]`) misses.
-    // Fall back to the vault-wide file index for those — but only when an explicit
-    // non-markdown extension is present, so a bare `[[Foo]]` still resolves to a
-    // note (or stays unresolved so the client can offer to create one).
-    let resolved = resolveLink(target);
-    if (!resolved && /\.[^./]+$/.test(target) && !/\.(md|markdown)$/i.test(target)) {
-      resolved = resolveFile(target);
-    }
-    res.json({ target, path: resolved ?? null });
+    const sourcePath = String(req.query.sourcePath ?? '');
+    const result = resolveIndexedTarget(target, sourcePath);
+    res.json({ target, path: result.status === 'resolved' ? result.path : null,
+      status: result.status, candidates: result.candidates, fragment: result.fragment, normalizedTarget: result.path });
   }),
 );
 

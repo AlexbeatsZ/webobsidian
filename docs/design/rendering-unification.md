@@ -33,11 +33,11 @@ device acceptance complete from types/builds or synthetic events alone.
 - [x] T02: shared document sessions, history, serialized saves, revision conflicts.
 - [x] T03: instance-scoped MarkdownView, command focus routing, complete readonly.
 - [x] T04: readonly split shares the same renderer and same-file session.
-- [ ] T05: shared syntax/source model, path semantics, styles and HTML policy.
-- [ ] T06: br reveal/break behavior, simple HTML and entity positions.
-- [ ] T07: inline decorations, Unicode tags, lists/tasks, footnotes, source copy.
-- [ ] T08: media/math/code/HTML blocks and nested callout containers.
-- [ ] T09: source-preserving YAML properties, explicit source fallback.
+- [x] T05: shared syntax/source model, path semantics, styles and HTML policy.
+- [x] T06: br reveal/break behavior, simple HTML and entity positions.
+- [x] T07: inline decorations, Unicode tags, lists/tasks, footnotes, source copy.
+- [x] T08: media/math/code/HTML blocks and nested callout containers.
+- [x] T09: source-preserving YAML properties, explicit source fallback.
 - [ ] T10: shared table rendering, cell-local edits, range-based structural edits.
 - [ ] T11: migrate embedded notes/sections/blocks, lifecycle and cycle handling.
 - [ ] T12: migrate Canvas display/edit, retain JSON source/unknown data, visibility.
@@ -61,11 +61,12 @@ entry, and complete merger of browser and server output hosts.
 - Use temporary test vault/data/output. Do not restart the existing app or build
   over its server/public assets. Browser/device IME acceptance is reported apart.
 
-## Current implementation evidence
+## Implementation and remaining acceptance
 
-Original Editor.tsx owns global content/save and global renderer callbacks;
-activeEditor.ts keeps one mounting-based pointer. Split/Canvas use Preview.tsx;
-note embeds inside livePreview.ts also use markdown.ts. Table/YAML widgets
-reconstruct whole structures. Server file writes originally lack revisions.
-The replacement must remove these dependencies incrementally without rewriting
-the user's vault.
+T00-T09 are implemented. The shared full-source Lezer model feeds positions,
+metadata, block containers and link resolution; all raw HTML passes one schema.
+Live/Reading share one view engine. Simple HTML/br use source decorations;
+properties patch YAML token ranges. 18 unit tests and 17 Edge browser tests pass,
+including exact base-fixture pixels, nested callouts, source entries and readonly
+mutation protection. Native IME/device acceptance remains manual. T10-T14 still
+contain the legacy table/embed/Canvas/output pipelines and are active work.
