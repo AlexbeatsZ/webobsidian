@@ -155,8 +155,8 @@ for the private vault; shares and print do not receive it.
   file-signature SVG assets, with source/version/license in assets/icons/lucide.
   Do not substitute approximate paths. Trailing fold controls stay outside the
   collapsed-body replacement (noninclusive start).
-- Image conventions, Hider workspace changes and formula-engine replacement are
-  outside this migration. Bundled Chinese fonts retain the original full coverage;
+- Remaining image/embed/Mermaid presentation: see document-media-theme.md.
+  Hider workspace changes are separate. Bundled Chinese fonts retain full coverage;
   font subsetting/compression is not part of this change.
 
 Theme acceptance: web typecheck, isolated production build and 26 Edge browser tests pass.

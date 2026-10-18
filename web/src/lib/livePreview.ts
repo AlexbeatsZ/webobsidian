@@ -10,6 +10,7 @@ import { StateField, StateEffect, type EditorState, type Range, type Text } from
 import { syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { openLightbox } from './imageLightbox';
+import { applyImagePresentation, presentHtmlImages } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
 import { syntaxModel, blockModel } from './syntaxModel';
 import { compositionSelection } from './inlineHtml';
@@ -197,20 +198,21 @@ function writeImageWidth(view: EditorView, wrap: HTMLElement, width: number): vo
 
 class ImageWidget extends WidgetType {
   /** `width`/`height` from the Obsidian size param `![[img|300]]` / `![[img|300x200]]`. */
-  constructor(readonly src: string, readonly alt: string, readonly width?: number, readonly height?: number, readonly ro = false) {
+  constructor(readonly src: string, readonly alt: string, readonly width?: number, readonly height?: number, readonly ro = false, readonly target = src) {
     super();
   }
   eq(o: ImageWidget) {
-    return o.src === this.src && o.width === this.width && o.height === this.height && o.ro === this.ro;
+    return o.src === this.src && o.alt === this.alt && o.width === this.width && o.height === this.height && o.ro === this.ro && o.target === this.target;
   }
   toDOM(view: EditorView) {
     const wrap = document.createElement('span');
-    wrap.className = 'cm-image-wrap';
+    applyImagePresentation(wrap, this.target, this.alt);
     const img = document.createElement('img');
     img.src = this.src;
     img.alt = this.alt;
     img.className = 'cm-embed-image image-embed';
     img.draggable = false;
+    img.addEventListener('load', () => view.requestMeasure(), { once: true });
     if (this.width) img.width = this.width;
     if (this.height) img.height = this.height;
     // Missing attachment → Obsidian-style "could not be found" box.
@@ -235,13 +237,14 @@ class ImageWidget extends WidgetType {
       e.preventDefault();
       e.stopPropagation();
       const startX = pointX(e);
-      const startW = img.getBoundingClientRect().width;
-      const maxW = Math.max(80, view.contentDOM.clientWidth);
+      const zoom = Number(getComputedStyle(img).zoom) || 1;
+      const startW = img.getBoundingClientRect().width / zoom;
+      const maxW = Math.max(80, view.contentDOM.clientWidth / zoom);
       let curW = Math.round(startW);
       wrap.classList.add('is-resizing');
       const onMove = (ev: MouseEvent | TouchEvent) => {
         if ('touches' in ev) ev.preventDefault();
-        const dx = pointX(ev) - startX;
+        const dx = (pointX(ev) - startX) / zoom;
         curW = Math.min(maxW, Math.max(40, Math.round(side === 'right' ? startW + dx : startW - dx)));
         img.style.width = curW + 'px';
         img.style.height = 'auto';
@@ -439,14 +442,10 @@ class NoteEmbedWidget extends WidgetType {
       e.preventDefault();
       contextOf(view).openLink(this.target);
     });
-    // Filename title above the note content, like Obsidian's markdown-embed-title.
-    const title = document.createElement('div');
-    title.className = 'markdown-embed-title';
-    title.textContent = this.target.split('#')[0].split('/').pop() ?? this.target;
     const content = document.createElement('div');
-    content.className = 'markdown-embed-content markdown-preview';
+    content.className = 'markdown-embed-content';
     content.textContent = '…';
-    box.append(open, title, content);
+    box.append(open, content);
     const controller = new AbortController();
     this.controllers.set(box, controller);
     const context = contextOf(view);
@@ -466,7 +465,7 @@ class NoteEmbedWidget extends WidgetType {
         if (!fragment) { stop?.(); content.textContent = 'Embedded section or block could not be found'; return; }
         if (fragment.source === previous) return;
         previous = fragment.source; stop?.(); content.replaceChildren();
-        const host = document.createElement('div'); content.appendChild(host);
+        const host = document.createElement('div'); host.className = 'cm-note-fragment'; content.appendChild(host);
         stop = context.mountFragment?.(host, fragment.source, { id: res.path, sourceFrom: fragment.from,
           context: { ...res.context, embedTrail: [...trail, res.path] } });
         if (!stop) host.textContent = fragment.source;
@@ -487,7 +486,8 @@ function ensureMermaid() {
     mermaidPromise = import('mermaid').then((m) => {
       m.default.initialize({
         startOnLoad: false, securityLevel: 'strict',
-        theme: document.querySelector('.theme-dark') ? 'dark' : 'default',
+        theme: 'base', fontFamily: '"MathJax_Main", "MathJax_Math", "Noto Serif SC", serif',
+        themeVariables: { fontSize: '16px', primaryColor: '#fafafa', primaryTextColor: '#000000', lineColor: '#888888' },
       });
       return m.default;
     });
@@ -513,7 +513,10 @@ class MermaidWidget extends WidgetType {
     body.textContent = '…'; div.appendChild(body);
     div.dataset.renderPending = 'true';
     void ensureMermaid()
-      .then((mermaid) => mermaid.render(`cm-mmd-${++mermaidSeq}`, this.code))
+      .then(async mermaid => {
+        await Promise.all(['MathJax_Main', 'MathJax_Math', 'Noto Serif SC'].map(font => document.fonts.load('16px "' + font + '"')));
+        return mermaid.render(`cm-mmd-${++mermaidSeq}`, this.code);
+      })
       .then(({ svg }) => {
         body.innerHTML = svg;
       })
@@ -868,7 +871,12 @@ class HtmlBlockWidget extends WidgetType {
   toDOM(view: EditorView) {
     const div = document.createElement('div');
     div.className = 'cm-html-block';
+    const imageTargets: string[] = [];
+    const safe = sanitizeHtml(this.html);
+    const parsed = document.createElement('template'); parsed.innerHTML = safe;
+    parsed.content.querySelectorAll('img').forEach(img => imageTargets.push(img.getAttribute('src') ?? ''));
     div.innerHTML = sanitizeHtml(this.html, contextOf(view).rawUrl);
+    presentHtmlImages(div, imageTargets, () => view.requestMeasure());
     if (!view.state.readOnly && this.range) div.appendChild(sourceButton(view, this.range, 'HTML'));
     div.addEventListener('mousedown', (e) => {
       const a = (e.target as HTMLElement).closest('a');
@@ -1628,7 +1636,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           const line = doc.lineAt(node.from);
           const lv = HEADING_LEVEL[name];
           all.push(
-            Decoration.line({ class: `cm-h${lv} HyperMD-header HyperMD-header-${lv}${lineActive(node.from) ? "" : " cm-heading-labelled"}`, attributes: { "data-heading-label": `H${lv}` } }).range(line.from, line.from),
+            Decoration.line({ class: `cm-h${lv} HyperMD-header HyperMD-header-${lv}${!doc.sliceString(fmEnd, line.from).trim() ? ' cm-leading-heading' : ''}${lineActive(node.from) ? "" : " cm-heading-labelled"}`, attributes: { "data-heading-label": `H${lv}` } }).range(line.from, line.from),
           );
           const m = doc.sliceString(line.from, line.to).match(/^((?: {0,3}> ?)*)(#{1,6}\s+)/);
           if (m) {
@@ -1891,6 +1899,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       // Wikilinks / embeds — alias after the FIRST `|`; default display text
       // `href.split('#').filter(Boolean).join(' > ')`; nested `[[` rejected (§7).
+      let hasRenderedImage = false;
       const wikiRe = /(!?)\[\[(.+?)\]\]/g;
       while ((m = wikiRe.exec(text))) {
         const s = line.from + m.index;
@@ -1907,19 +1916,22 @@ function buildDecorations(view: EditorView): DecorationSet {
           .normalize('NFC');
         const alias = pi > 0 ? inner.slice(pi + 1).trim() : null;
         const defaultDisplay = href.split('#').filter(Boolean).join(' > ');
-        if (isEmbed && /\.(bmp|png|jpe?g|gif|svg|webp|avif)$/i.test(href)) {
+        if (isEmbed && /\.(bmp|png|jpe?g|gif|svg|webp|avif)$/i.test(href.split(/[?#]/)[0])) {
           // image size param: the LAST `|` segment, `300` or `300x200`
           let w: number | undefined;
           let h: number | undefined;
+          let caption = alias ?? href;
           if (pi > 0) {
             const segs = inner.split('|');
             const sm = segs[segs.length - 1].match(/^\s*([0-9]+)\s*(?:x\s*([0-9]+)\s*)?$/);
             if (sm) {
               w = Number(sm[1]);
               h = sm[2] ? Number(sm[2]) : undefined;
+              caption = segs.slice(1, -1).join('|') || href;
             }
           }
-          pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(attachmentUrl(href, view), href, w, h, readonly) }));
+          hasRenderedImage = true;
+          pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(attachmentUrl(href, view), caption, w, h, readonly, href) }));
         } else if (isEmbed && (VIDEO_EXT_RE.test(href) || AUDIO_EXT_RE.test(href))) {
           // `![[clip.mp4]]` / `![[song.mp3]]` → native HTML5 player like Obsidian.
           const kind = VIDEO_EXT_RE.test(href) ? 'video' : 'audio';
@@ -1970,8 +1982,13 @@ function buildDecorations(view: EditorView): DecorationSet {
         // any custom scheme) is resolved by basename via the vault file index.
         const webLoadable = /^(https?|data|blob|file):/i.test(url);
         const src = webLoadable ? url : attachmentUrl(url, view);
-        pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt, w, h, readonly) }));
+        hasRenderedImage = true;
+        pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt, w, h, readonly, url) }));
       }
+
+      const imageOnly = text.replace(/^(?: {0,3}> ?)*/, '')
+        .replace(/!\[\[[^\]]+\]\]|!\[[^\]]*\]\([^)]+\)/g, '').trim() === '';
+      if (imageOnly && hasRenderedImage && !lineActive(line.from)) all.push(Decoration.line({ class: 'cm-image-row' }).range(line.from));
 
       // Markdown links [text](url) — not preceded by ! (those are images)
       const linkRe = /(?<!\!)\[([^\]]+?)\]\(([^)]+)\)/g;
@@ -2236,7 +2253,6 @@ export const livePreviewTheme = EditorView.baseTheme({
     top: '1px',
   },
   '.cm-task-checkbox': { verticalAlign: 'middle', marginRight: '4px', cursor: 'pointer' },
-  '.cm-embed-image': { maxWidth: '100%', borderRadius: '6px', display: 'block', margin: '6px 0' },
   '.cm-properties': { margin: '4px 0 18px' },
   // Compound `.cm-line.cm-blockquote` selector beats CodeMirror's own `.cm-line`
   // padding rule (equal specificity, declared later) so the gap actually applies —
@@ -2261,7 +2277,6 @@ export const livePreviewTheme = EditorView.baseTheme({
   },
   '.cm-table th': { fontWeight: '600', background: 'var(--bg-secondary)' },
   // Interactive table editor (Obsidian-style): click-to-edit cells + hover controls.
-  '.cm-table-wrap': { position: 'relative', display: 'inline-block', margin: '8px 18px 18px 0' },
   '.cm-cell-edit': { outline: 'none', cursor: 'text', minWidth: '1em' },
   '.cm-cell-edit:focus': { boxShadow: 'inset 0 0 0 2px var(--interactive-accent)', background: 'var(--bg-primary)' },
   '.cm-table-addcol, .cm-table-addrow': {

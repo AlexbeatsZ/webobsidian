@@ -54,6 +54,9 @@
   --document-surface: #fafafa;
   --document-nested-surface: #f5f5f5;
   --document-border: hsl(0 0% 88%);
+  --document-pure: #000000;
+  --document-image-filter: invert(100%) contrast(130.77%) hue-rotate(180deg);
+  --callout-image-filter: invert(100%) contrast(125.6%) hue-rotate(180deg);
   --color-base-00: #ffffff;
   --color-base-05: #fcfcfc;
   --color-base-10: #fafafa;
@@ -149,6 +152,9 @@
   --document-surface: #252525;
   --document-nested-surface: #2c2c2c;
   --document-border: hsl(0 0% 28%);
+  --document-pure: #ffffff;
+  --document-image-filter: none;
+  --callout-image-filter: brightness(1.233) contrast(1);
   --color-base-00: #1e1e1e;
   --color-base-05: #212121;
   --color-base-10: #242424;
@@ -475,7 +481,8 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   border: solid var(--text-on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 /* Math (KaTeX) */
-.cm-math-rendered.math-block { display: block; text-align: center; padding: 0.5em 0; }
+.cm-math-rendered.math-block { display: block; text-align: center; padding: 0.5em 0; width: fit-content; min-width: 100%; max-width: none; }
+.cm-highlight .math-inline, .cm-highlight + .cm-widgetBuffer + .math-inline { background-color: var(--text-highlight-bg); }
 /* Code block: mono font on every code line; bg + inner padding only on fenced
    blocks (HyperMD-codeblock-bg) — indented code has no bg, like Obsidian. */
 .cm-s-obsidian .cm-line.HyperMD-codeblock { font-family: var(--font-mono); font-size: var(--font-smaller); }
@@ -511,26 +518,27 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   border-right: 1px solid rgba(var(--mono-rgb-100), 0.12);
   position: absolute; top: 0; bottom: 0; margin-inline-start: 0.85em;
 }
-/* Note embed (transclusion). `white-space: normal` resets CodeMirror's pre-wrap,
-   which would otherwise turn the \n between rendered blocks into blank lines. */
-.cm-note-embed { position: relative; border-left: 2px solid var(--background-modifier-border);
-  padding: 4px 12px 4px 20px; margin: 4px 0; border-radius: 0; white-space: normal; }
+/* Transclusions share the document layout without a frame, duplicate title or scroll cap. */
+.cm-note-embed { position: relative; border: 0; padding: 0; margin: 4px 0; white-space: normal; width: fit-content; min-width: 100%; max-width: none; }
 .cm-html-block, .cm-mermaid { white-space: normal; }
-.cm-note-embed .markdown-embed-title { font-size: var(--font-small); font-weight: 600;
-  color: var(--text-normal); line-height: var(--line-height-tight); margin-bottom: 2px; }
-.cm-note-embed .markdown-embed-content h1 { margin: 0.2em 0 0.3em; }
-.cm-note-embed .markdown-embed-content p { margin: 0.4em 0; }
+.cm-note-embed .markdown-embed-content { padding: 0; max-height: none; overflow: visible; }
+.cm-note-fragment > div > .markdown-embedded-view > .cm-editor > .cm-scroller > .cm-content > .cm-leading-heading { display: none; }
 .cm-note-embed .markdown-embed-link { position: absolute; top: 6px; right: 8px; width: 16px; height: 16px;
-  color: var(--text-faint); cursor: pointer; opacity: 0; transition: opacity var(--transition); }
-.cm-note-embed:hover .markdown-embed-link { opacity: 1; }
+  color: var(--text-faint); cursor: pointer; opacity: 0; transition: opacity var(--transition); z-index: 1; }
+.cm-note-embed:hover > .markdown-embed-link { opacity: 1; }
 .cm-note-embed .markdown-embed-link svg { width: 16px; height: 16px; }
-.cm-note-embed .markdown-embed-content { max-height: 400px; overflow-y: auto; padding: 0; }
-.cm-note-embed .markdown-embed-content > :first-child { margin-top: 0; }
 /* Missing attachment / unresolved embed */
 .cm-embed-missing { display: inline-block; width: 100%; text-align: center; color: var(--text-muted);
   background: var(--background-secondary); border-radius: var(--radius-s); padding: 12px; font-style: italic; }
 /* Mermaid */
-.cm-mermaid { text-align: center; padding: 8px 0; }
+.cm-mermaid { text-align: center; padding: 8px 0; --diagram-node-surface: var(--document-surface); --diagram-edge-surface: var(--background-primary); }
+.md-callout .cm-mermaid { --diagram-node-surface: var(--document-nested-surface); --diagram-edge-surface: var(--document-surface); }
+/* Mermaid generates its own inline SVG stylesheet. Only its visual slots need precedence. */
+.cm-mermaid foreignObject div { font-family: var(--font-text); font-size: 16px; }
+.cm-mermaid .node .label-container { fill: var(--diagram-node-surface) !important; }
+.cm-mermaid .nodeLabel, .cm-mermaid .edgeLabel { color: var(--document-pure) !important; }
+.cm-mermaid .edgeLabel p { background: var(--diagram-edge-surface) !important; }
+.cm-mermaid .node text, .cm-mermaid .edgeLabel text { fill: var(--document-pure) !important; }
 .cm-mermaid.mod-error { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-smaller); }
 /* ```html "Render HTML" toggle (block widget around the code fence) */
 .cm-html-preview { white-space: normal; margin: 4px 0 8px; }
@@ -559,6 +567,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 /* ---- Reading mode = Live Preview readonly: hide editing affordances ---- */
 .is-reading-mode .cm-content { caret-color: transparent; }
 .is-reading-mode .cm-image-resize { display: none; }
+.markdown-embedded-view, .markdown-embedded-view .cm-scroller { overflow: visible; }
 .markdown-embedded-view .cm-editor { height: auto; }
 .markdown-embedded-view .cm-content { padding: 0; margin: 0; max-width: none; }
 .md-html-b, .md-html-strong { font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
@@ -573,7 +582,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .is-reading-mode .cm-props-add,
 .is-reading-mode .prop-pill-x, .is-reading-mode .prop-pill-add, .is-reading-mode .prop-del { visibility: hidden; }
 .md-quote { border-left: 3px solid var(--text-normal); padding-left: 24px; }
-.md-callout, .callout { background: var(--document-surface); border: 0.5px solid var(--document-border); border-radius: 4px; padding: 12px 16px; margin: 16px 0; }
+.md-callout, .callout { width: fit-content; min-width: 100%; max-width: none; background: var(--document-surface); border: 0.5px solid var(--document-border); border-radius: 4px; padding: 12px 16px; margin: 16px 0; }
 .callout-title {
   display: flex;
   align-items: center;
@@ -1392,6 +1401,8 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
     display: block !important; background: #fff !important; }
   .markdown-source-view, .markdown-preview { color: #000 !important; }
   .cm-host { height: auto !important; }
+  .cm-image-wrap:is([data-image-dark], [data-image-wiki]) > img { filter: none !important; }
+  .cm-host .chem-cell svg { filter: invert(100%) hue-rotate(180deg) contrast(1.3); }
   @page { margin: 16mm; }
 }
 
@@ -1752,11 +1763,28 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .canvas-ctx-del { color: var(--text-error, #e5534b) !important; margin-left: 2px; }
 
 /* ---- Embedded images: drag-to-resize (Live Preview) + click-to-zoom (FR-2) ---- */
-.cm-image-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
-.cm-image-wrap img.cm-embed-image {
-  max-width: 100%; height: auto; border-radius: var(--radius);
-  cursor: zoom-in; display: block;
-}
+.cm-image-row { display: flex; align-items: flex-end; width: fit-content; }
+.cm-image-row > .cm-image-wrap { flex: none; }
+.cm-image-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; vertical-align: bottom; }
+.cm-image-wrap::after { content: attr(data-image-caption); display: block; margin: 0.5rem 0 0; font-size: 0.65rem; line-height: 1.2; color: var(--text-muted); text-align: center; overflow-wrap: anywhere; }
+.cm-image-wrap[data-image-caption=""]::after { display: none; }
+.cm-image-wrap > img { filter: var(--document-image-filter); zoom: var(--image-scale, 1); }
+.cm-image-wrap > img[alt*="."] { max-height: 100vh; object-fit: cover; }
+.cm-image-wrap:is([data-image-full], [data-image-svg]) { max-width: none; --image-max-width: none; }
+.cm-image-wrap[data-image-svg] > img { width: auto !important; }
+.cm-image-wrap[data-image-center] { display: block; width: fit-content; margin-inline: auto; }
+.cm-image-row:has(> [data-image-center]) { display: block; width: auto; }
+.md-callout .cm-image-wrap:not([data-image-svg]) > img { filter: var(--callout-image-filter); }
+/* The original STEM conventions deliberately match both filenames and fragments. */
+.theme-dark .cm-image-wrap[data-image-dark] > img { filter: invert(88.235%) hue-rotate(180deg); }
+.theme-dark .cm-image-wrap[data-image-wiki] > img { filter: invert(100%) hue-rotate(180deg); }
+.theme-dark .md-callout .cm-image-wrap[data-image-dark] > img { filter: invert(88.235%) hue-rotate(180deg) brightness(1.233) contrast(1); }
+.theme-light .cm-image-wrap:is([data-image-dark], [data-image-wiki]) > img { filter: none; }
+.cm-image-wrap img.cm-embed-image { max-width: var(--image-max-width, 100%); height: auto; border-radius: var(--radius); cursor: zoom-in; display: block; margin: 6px 0; }
+.cm-table-wrap { position: relative; display: block; width: fit-content; min-width: 100%; max-width: none; margin: 8px 0 18px; }
+.cm-html-block { width: fit-content; min-width: 100%; max-width: none; }
+.cm-host .chem-cell svg > g > line { stroke-width: 1.2px !important; }
+.theme-light .cm-host .chem-cell svg { filter: invert(100%) hue-rotate(180deg) contrast(1.3); }
 .cm-image-wrap.is-resizing { user-select: none; }
 .cm-image-wrap.is-resizing img.cm-embed-image { cursor: ew-resize; }
 /* Left/right edge bars — appear on hover, drag to set width (Obsidian-style). */
