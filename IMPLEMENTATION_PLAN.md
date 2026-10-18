@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-06-27 (security fix — chặn leo thang quyền token share; merge fix F-03 rate-limit, giữ `trust proxy` mặc định bật)
+Cập nhật lần cuối: 2026-10-18 (FR-13 compact desktop title bar; implementation complete, validation skipped at user request)
 
 ---
 
@@ -404,7 +404,10 @@ Cập nhật lần cuối: 2026-06-27 (security fix — chặn leo thang quyền
 - [x] M26.4 Reading view (Preview.tsx) click `<img>` → `openLightbox(currentSrc, alt)`; CSS handle resize
       (`.cm-image-resize`) + `.image-lightbox*` + cursor `zoom-in`. Typecheck sạch.
 
-## Phase 27 — Desktop app (Electron, multi-platform) — FR-13, PRD 1.5 (theo yêu cầu người dùng)
+## Phase 27 — Desktop app (Electron, multi-platform) — FR-13, PRD 1.6 (theo yêu cầu người dùng)
+- [~] M27.5 Compact menu title bar (PRD 1.6): implementation complete on Windows/Linux;
+      no app icon/name, native window controls/submenus, keyboard access, drag area and themes.
+      Validation intentionally skipped at the user's request; not marked verified.
 - [x] M27.1 Workspace `desktop/` (Electron shell). `src/main.ts`: single-instance lock; chọn vault lần đầu
       (dialog, default `~/Documents/WebObsidianVault`); `DATA_DIR`/config/logs trong `userData`; **spawn server
       hiện có như tiến trình con** qua `ELECTRON_RUN_AS_NODE` bind `127.0.0.1` + cổng trống ngẫu nhiên; chờ
@@ -430,6 +433,10 @@ Cập nhật lần cuối: 2026-06-27 (security fix — chặn leo thang quyền
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-10-18 (FR-13 compact desktop title bar): implemented a single Windows/Linux menu row
+  with native window controls, no app icon/name, native submenu actions and accelerators,
+  keyboard menu access, dragging, and light/dark styling. macOS and browser UI unchanged.
+  No build, runtime or UI validation was performed, as explicitly requested by the user.
 - 2026-06-27 (security fix — leo thang quyền qua token share): `verifyToken()` (server/src/services/auth.ts)
   chỉ kiểm tra chữ ký nên **mọi** token ký bằng `auth.jwtSecret` đều được chấp nhận như phiên owner. Endpoint
   public `POST /public/shares/:id/unlock` ký unlock-cookie bằng cùng secret → người được chia sẻ (có mật khẩu

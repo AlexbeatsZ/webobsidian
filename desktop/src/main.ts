@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, net, session, shell, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, net, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
@@ -278,12 +278,20 @@ function createWindow(): void {
     backgroundColor: '#1e1e1e',
     title: 'WebObsidian',
     icon: app.isPackaged ? undefined : path.join(__dirname, '..', 'buildResources', 'icon.png'),
+    ...(process.platform !== 'darwin' ? {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: { color: '#f6f6f6', symbolColor: '#333333', height: 32 },
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+
+  // Keep the application menu for its native actions and accelerators, but draw
+  // its top-level buttons in the title bar instead of a second native row.
+  if (process.platform !== 'darwin') mainWindow.setMenuBarVisibility(false);
 
   mainWindow.loadURL(baseUrl(serverPort));
 
@@ -361,6 +369,46 @@ function buildMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// Only the local app's top-level frame may operate its native desktop menus.
+function desktopWindow(event: IpcMainEvent | IpcMainInvokeEvent): BrowserWindow | null {
+  const frame = event.senderFrame;
+  if (!mainWindow || !frame || event.sender !== mainWindow.webContents || frame !== event.sender.mainFrame) return null;
+  try {
+    return new URL(frame.url).origin === baseUrl(serverPort) ? mainWindow : null;
+  } catch {
+    return null;
+  }
+}
+
+function registerTitleBar(): void {
+  ipcMain.handle('desktop:menu-items', (event) => {
+    if (!desktopWindow(event)) return [];
+    return Menu.getApplicationMenu()?.items
+      .filter((item) => item.visible && item.submenu)
+      .map((item) => ({ id: item.commandId, label: item.label.replace(/&/g, '') })) ?? [];
+  });
+  ipcMain.handle('desktop:open-menu', (event, id: number, x: number, y: number) => {
+    const win = desktopWindow(event);
+    if (!win || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    const item = Menu.getApplicationMenu()?.items.find((entry) => entry.commandId === id && entry.visible);
+    if (!item?.submenu) return;
+    const [width, height] = win.getContentSize();
+    return new Promise<void>((resolve) => item.submenu!.popup({
+      window: win,
+      x: Math.max(0, Math.min(width, Math.round(x))),
+      y: Math.max(0, Math.min(height, Math.round(y))),
+      callback: resolve,
+    }));
+  });
+  ipcMain.on('desktop:titlebar-theme', (event, dark: boolean) => {
+    const win = desktopWindow(event);
+    if (win && typeof dark === 'boolean') win.setTitleBarOverlay({
+      color: dark ? '#262626' : '#f6f6f6',
+      symbolColor: dark ? '#dadada' : '#333333',
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
@@ -381,6 +429,7 @@ if (!app.requestSingleInstanceLock()) {
       await writeConfig(cfg); // persist freshly-generated secret on first run
       await startServer(cfg);
       buildMenu();
+      if (process.platform !== 'darwin') registerTitleBar();
       createWindow();
     } catch (err) {
       dialog.showErrorBox('WebObsidian failed to start', String(err instanceof Error ? err.stack ?? err.message : err));

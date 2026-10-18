@@ -17,6 +17,10 @@ the matching prebuilt Electron binary — no cross-compilation, no `node-gyp`.
   `WEBOBSIDIAN_PASSWORD`, and used to **auto-login** — no password prompt.
 - Menu **File → Switch Vault…** changes the vault (relaunches to re-index);
   **Open Vault/Data Folder** and **Open Logs** help debugging.
+- On Windows/Linux, **File / Edit / View / Window / Help** share a single 32px
+  title bar with native window controls. No app icon or app-name label is drawn
+  in this bar. Drag its empty area to move the window; use F10, Alt or Alt + a
+  menu initial for keyboard access. macOS keeps its system menu bar.
 - Git sync needs `git` on the machine; without it the app still works for local editing.
 
 ## Build locally

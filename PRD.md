@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.5 · Cập nhật: 2026-06-22 · Trạng thái: Draft
+> Phiên bản: 1.6 · Cập nhật: 2026-10-18 · Trạng thái: Draft
+> Changelog 1.6 (FR-13 — compact desktop title bar): Windows/Linux use a single top row
+> containing File / Edit / View / Window / Help and native window controls, without an app
+> icon or app-name label. Keep native menu actions and accelerators, a draggable empty area,
+> and light/dark styling. macOS keeps its system menu bar. Browser UI is unchanged.
 > Changelog 1.5 (FR-13 — Desktop app Electron đa nền tảng, theo yêu cầu người dùng): bổ sung **FR-13** —
 > đóng gói WebObsidian thành **app cài đặt** macOS/Windows/Linux (arm64/x64/ia32). Workspace mới `desktop/`
 > là **Electron shell** spawn đúng server Express hiện có như tiến trình con (qua `ELECTRON_RUN_AS_NODE`,
@@ -382,6 +386,12 @@ chúng bằng đường có mũi tên, dùng cho brainstorm, moodboard, sơ đ�
   không portal/embed canvas-trong-canvas; không liên kết backlink graph từ node file (giữ đơn giản).
 
 ### FR-13 · Desktop app (Electron, multi-platform)
+Desktop title bar (1.6): on Windows/Linux, replace the separate system title and menu rows
+with a 32px menu title bar. The left edge starts with File / Edit / View / Window / Help;
+no app icon/name is drawn in this bar. Retain native window controls, native submenu actions,
+keyboard access (F10 / Alt and menu initials), window dragging and theme switching. Keep
+the macOS system menu bar and browser rendering unchanged.
+
 Mục tiêu: đóng gói WebObsidian thành **app cài đặt trên máy** (macOS/Windows/Linux) để người dùng tải về dùng
 như app native, không cần tự dựng server hay Docker. Bản chất là một **Electron shell** bọc quanh đúng server
 Express + SPA hiện có (không fork code, không đổi kiến trúc) — nên mọi tính năng web đều chạy y hệt.
