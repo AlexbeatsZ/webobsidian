@@ -23,12 +23,29 @@ GitHub sync (incl. Git LFS), an API for AI agents, and community-plugin support.
 
 ---
 
+## Direction of this fork
+
+This fork aims to rebuild an Obsidian-like application around the owner's personal
+workflows. The motivation is that Obsidian plugins offer limited control over the
+host application. Owning the source allows direct changes to the editor, workspace,
+file operations, and interface when plugin hooks are insufficient.
+
+WebObsidian provides the existing implementation base. Its browser, self-hosted, and
+desktop modes remain available; future work prioritizes concrete customization needs.
+[obsidian-typings](https://github.com/obsidian-typings/obsidian-typings) is a reference
+for undocumented APIs and compatibility analysis, not a complete Obsidian runtime.
+Community-plugin compatibility is selective and must be verified per workflow.
+
+See [project direction and reference boundaries](docs/design/product-direction.md)
+for the rationale, current implementation gaps, and proposed next steps.
+
 ## What is this?
 
 WebObsidian is a web application that gives you an [Obsidian](https://obsidian.md)-like
-experience over a **real folder of Markdown files** living on your server. Your vault is
-100% compatible with an existing Obsidian vault (including the `.obsidian/` folder) — you
-can edit the same files from the Obsidian desktop app and from the web, side by side.
+experience over a **real folder of Markdown files** living on your server. It works
+with existing Obsidian vault files. Compatibility with `.obsidian/` settings, themes,
+and plugins depends on the specific feature; preserving these files does not mean
+every Obsidian behavior is implemented.
 
 It is **single-user** and self-hosted: one master password protects the whole app, all
 configuration lives in a plain `data/settings.json` (no database engine), and the entire

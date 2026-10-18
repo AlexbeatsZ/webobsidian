@@ -4,7 +4,22 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-10-18 (FR-13 compact desktop title bar; implementation complete, validation skipped at user request)
+Cập nhật lần cuối: 2026-10-18 (fork direction and customization backlog documented; no runtime changes)
+
+## Fork direction — personal customization
+
+Project direction: [PRD §1.4](PRD.md#14-本-fork-的目标与优先级) and
+[design rationale](docs/design/product-direction.md).
+
+- [x] Record the owner's goal: rebuild an Obsidian-like app that can be customized beyond plugin limitations.
+- [x] Document obsidian-typings as an internal-API reference and distinguish declarations from runtime behavior.
+- [ ] Identify the first concrete customization workflows, required plugins, and relevant Obsidian version.
+- [ ] Map the APIs required by those workflows to implemented, partial, and unsupported behavior.
+- [ ] Implement the selected core changes and any required compatibility adapters, then verify the workflows.
+
+The historical Phase 8 checkboxes record the initial plugin infrastructure. The shim
+still contains empty implementations for commands, views, settings, persistence, and
+lifecycle cleanup; these checkboxes do not establish working plugin compatibility.
 
 ---
 

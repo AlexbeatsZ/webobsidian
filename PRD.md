@@ -1,7 +1,10 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.6 · Cập nhật: 2026-10-18 · Trạng thái: Draft
+> Phiên bản: 1.7 · Cập nhật: 2026-10-18 · Trạng thái: Draft
+> Changelog 1.7 (fork direction): rebuild an Obsidian-like application for personal
+> customization beyond plugin limitations. Use obsidian-typings as an API reference;
+> prioritize editable core behavior and selective, verified compatibility. See §1.4.
 > Changelog 1.6 (FR-13 — compact desktop title bar): Windows/Linux use a single top row
 > containing File / Edit / View / Window / Help and native window controls, without an app
 > icon or app-name label. Keep native menu actions and accelerators, a draggable empty area,
@@ -95,7 +98,7 @@
 
 ### 1.1 Mục tiêu (Goals)
 - Trải nghiệm soạn thảo/đọc Markdown tương đương Obsidian desktop (editor, live preview, wikilinks, graph, backlinks).
-- Vault là một thư mục thực trên server — tương thích 100% với vault Obsidian hiện có (kể cả `.obsidian/`).
+- Vault là một thư mục thực trên server — giữ các file vault Obsidian hiện có; mức tương thích cấu hình, theme và plugin được đánh giá riêng theo §1.4.
 - Sync 2 chiều bằng **GitHub repo native** (git), hỗ trợ **Git LFS** cho file lớn (ảnh, pdf, audio…).
 - **Login gate** đơn giản: một mật khẩu duy nhất bảo vệ toàn bộ app.
 - Cấu hình lưu trong **file `.json` thuần** (không cần DB engine).
@@ -113,6 +116,21 @@
 ### 1.3 Người dùng mục tiêu
 - Cá nhân tự host knowledge base, muốn truy cập từ mọi thiết bị qua web.
 - Người dùng muốn AI Agent đọc/ghi vault qua API an toàn.
+
+### 1.4 本 fork 的目标与优先级
+
+本项目的目的是重建一个可以满足用户个性化需求的 Obsidian。背景是现有 Obsidian
+插件对宿主行为的修改能力有限，因此本 fork 需要允许直接修改编辑器、工作区、文件管理
+和界面交互。以上目标指导后续需求取舍；前述自托管能力是已有基础。
+
+- 以实际个性化工作流决定下一步功能，不将全量复刻或全量社区插件兼容作为前置条件。
+- 参考 [obsidian-typings](https://github.com/obsidian-typings/obsidian-typings)
+  理解未公开 API、对象关系和插件依赖；类型定义与辅助工具不等于完整运行时实现。
+- 保留现有 Markdown、附件与 Canvas 数据，分别评估文件格式、配置语义和插件行为的兼容性。
+- 当前插件 shim 中仍有命令、视图、设置和生命周期等空实现；可加载不代表功能已兼容。
+- 首批个性化功能、目标插件和 Obsidian 参考版本尚待明确，本次不启动核心重构。
+
+设计依据、源码现状和后续顺序见 [项目定位与参考边界](docs/design/product-direction.md)。
 
 ---
 
