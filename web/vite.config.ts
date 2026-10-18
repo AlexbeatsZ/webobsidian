@@ -1,14 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { resolve } from 'node:path';
 
 // Web build outputs to ../server/public so the server can serve the SPA.
 export default defineConfig({
   plugins: [react()],
   build: {
+    manifest: true,
     outDir: '../server/public',
     emptyOutDir: true,
     chunkSizeWarningLimit: 900,
     rollupOptions: {
+      input: { index: resolve(__dirname, 'index.html'), share: resolve(__dirname, 'src/share.ts') },
       output: {
         manualChunks: {
           codemirror: [
@@ -18,15 +21,6 @@ export default defineConfig({
             '@codemirror/language',
             '@codemirror/lang-markdown',
             '@codemirror/theme-one-dark',
-          ],
-          markdown: [
-            'unified',
-            'remark-parse',
-            'remark-gfm',
-            'remark-rehype',
-            'rehype-raw',
-            'rehype-sanitize',
-            'rehype-stringify',
           ],
           react: ['react', 'react-dom'],
         },

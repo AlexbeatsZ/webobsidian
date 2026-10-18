@@ -65,7 +65,7 @@ export const EMPTY_CANVAS: CanvasData = { nodes: [], edges: [] };
 export function parseCanvas(raw: string): CanvasData {
   if (!raw || !raw.trim()) return { nodes: [], edges: [] };
   try {
-    const obj = JSON.parse(raw);
+    const obj = JSON.parse(raw.replace(/^\ufeff/, ''));
     const nodes = Array.isArray(obj?.nodes) ? (obj.nodes as CanvasNode[]) : [];
     const edges = Array.isArray(obj?.edges) ? (obj.edges as CanvasEdge[]) : [];
     return { nodes, edges };

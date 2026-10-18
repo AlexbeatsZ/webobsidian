@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { api, type NoteMatches } from '../lib/api';
-import { outline } from '../lib/markdown';
+import { extractMetadata, SourceDocument } from '@webobsidian/markdown-core';
 import TagsPanel from './TagsPanel';
 import Icon from './Icon';
 
@@ -216,7 +216,7 @@ function OutgoingPanel() {
 
 function OutlinePanel() {
   const content = useStore((s) => s.content);
-  const heads = outline(content);
+  const heads = extractMetadata(new SourceDocument(content).text).headings;
   return (
     <>
       <div className="nav-header">

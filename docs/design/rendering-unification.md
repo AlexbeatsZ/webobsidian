@@ -38,11 +38,11 @@ device acceptance complete from types/builds or synthetic events alone.
 - [x] T07: inline decorations, Unicode tags, lists/tasks, footnotes, source copy.
 - [x] T08: media/math/code/HTML blocks and nested callout containers.
 - [x] T09: source-preserving YAML properties, explicit source fallback.
-- [ ] T10: shared table rendering, cell-local edits, range-based structural edits.
-- [ ] T11: migrate embedded notes/sections/blocks, lifecycle and cycle handling.
-- [ ] T12: migrate Canvas display/edit, retain JSON source/unknown data, visibility.
-- [ ] T13: whole-document print/PDF and scoped public-share client; SSR fallback.
-- [ ] T14: remove unused client pipelines/dependencies and document final limits.
+- [x] T10: shared table rendering, cell-local edits, range-based structural edits.
+- [x] T11: migrate embedded notes/sections/blocks, lifecycle and cycle handling.
+- [x] T12: migrate Canvas display/edit, retain JSON source/unknown data, visibility.
+- [x] T13: whole-document print/PDF and scoped public-share client; SSR fallback.
+- [x] T14: remove unused client pipelines/dependencies and document final limits.
 
 First milestone is T00-T04, then continue dependent tasks. Excluded from v1:
 editable splits/embeds, full plugin compatibility, a new HTML-export product
@@ -63,10 +63,74 @@ entry, and complete merger of browser and server output hosts.
 
 ## Implementation and remaining acceptance
 
-T00-T09 are implemented. The shared full-source Lezer model feeds positions,
-metadata, block containers and link resolution; all raw HTML passes one schema.
-Live/Reading share one view engine. Simple HTML/br use source decorations;
-properties patch YAML token ranges. 18 unit tests and 17 Edge browser tests pass,
-including exact base-fixture pixels, nested callouts, source entries and readonly
-mutation protection. Native IME/device acceptance remains manual. T10-T14 still
-contain the legacy table/embed/Canvas/output pipelines and are active work.
+T00-T14 have a first implementation with automated acceptance. The current suite
+covers lossless source/history, local YAML/table edits, shared readonly embeds,
+Canvas JSON token patches, full print DOM, scoped share APIs and browser output.
+Native IME, touch devices and the operating system print dialog remain manual
+acceptance; no running user app was restarted or replaced.
+
+## Implementation map
+
+| Boundary | Main files | Contract |
+| --- | --- | --- |
+| Raw source and history | packages/markdown-core/src/source.ts, session.ts | LF editor coordinates map to exact original UTF-8 source; inverse patches preserve removed bytes |
+| Shared syntax and semantics | syntax.ts, blocks.ts, metadata.ts, links.ts, embeds.ts | Full-source positions, section/block selection, deterministic source-relative paths; ambiguous links never choose arbitrarily |
+| Instance engine | web/src/components/MarkdownView.tsx, MarkdownFragment.tsx | Content/mode/services in, source edits/events out; no workspace store or vault API |
+| Workspace adapter | Editor.tsx, documents.ts, vaultRenderContext.ts | One file session, independent views, autosave/revision conflicts outside renderer |
+| Inline and block presentation | inlineHtml.ts, semanticDecorations.ts, blockLayout.ts, livePreview.ts | Shared CSS classes/tokens for Live/Reading; explicit source region per instance |
+| Structured edits | properties.ts, tables.ts | Token/range patches; cell draft commits on leaving cell; unsupported YAML/irregular tables use source |
+| Canvas | CanvasMarkdown.tsx, CanvasVisible.tsx, canvasSource.ts | Shared card engine; offscreen cards unmount; only changed JSON tokens for text/geometry edits; exact-source undo |
+| Print/PDF | printDocument.ts | Independent readonly full-document host; wait for assets/fonts, freeze DOM, print; no mode switch or fixed delay |
+| Public shares | share.ts, shareScope.ts, shares.ts, sharepage.ts | Same reading engine; server grants declared embeds/media only, section boundaries preserved, no authenticated client APIs |
+| SSR fallback | server/services/renderhtml.ts, rendercanvas.ts | Retained for crawlers/no JS; shared HTML schema, not a promise of browser-identical server layout |
+
+Fragment hosts carry data-source-from. Their local MarkdownModel positions plus
+that base offset identify ranges in the parent document. Embed contexts carry the
+embedded note's path, subscriptions and their own ancestry; rendering stops at a
+cycle or four levels. Explicit HTML execution is a separate sandboxed capability
+for the private vault; shares and print do not receive it.
+
+## Reproducible acceptance
+
+1. Run npm run typecheck and npm run test:unit. The source/session tests cover
+   BOM, UTF-16 offsets, mixed line endings, no-op saves, inverse edits, delayed
+   saves and revision conflicts. Structured tests preserve quotes/comments and
+   unrelated YAML/JSON/table tokens.
+2. Set RENDER_TEST_BROWSER to an installed Edge/Chromium executable and run
+   npm run test:render followed by npm run test:integration. Both use a dev-only
+   double-view fixture and an isolated browser profile, never a live vault.
+3. Full-syntax pixel comparison scrolls the same snapshot through four positions;
+   caret and editing controls are hidden for the comparison. Other tests assert
+   reveal ranges, code literals, lists, nested callouts, readonly dispatches,
+   focus routing, copied source, draft updates and cancellation cleanup.
+4. The print regression uses 350 paragraphs and verifies the last paragraph,
+   every bold span, a rendered break/formula and absence of virtual gaps.
+5. For packaged acceptance, build web to Temp/.agents/meta-obsidian-build/server/public
+   and compile server to the adjacent dist folder. Run node tests/packaged-rendering.mjs.
+   It creates a disposable vault/server, checks SSR + manifest + real client
+   Markdown/Canvas + scoped media/password/no-JS boundaries, compares source,
+   then stops its own server and deletes its fixture.
+6. Manual acceptance: Chinese/Japanese IME at br and task boundaries; real Android
+   touch/pinch and keyboard dismissal on Canvas; selection across widgets using
+   keyboard/mouse; system print/PDF pagination in supported browsers. Record the
+   browser/device/version and exact observed behavior before marking these done.
+
+## Boundaries and rollback
+
+- This establishes one client rendering implementation; it does not implement
+  every Obsidian extension or prove every theme/browser visually identical.
+- Complex YAML scalars/anchors, duplicate keys and irregular tables retain a
+  source entry. Source-mode edits deliberately permit arbitrary Markdown/YAML.
+- Fragment-local reference definitions are supported. References/footnotes whose
+  definitions live outside a selected embed fragment are not yet imported into
+  that fragment. This remains a compatibility follow-up.
+- Canvas text/geometry patches retain unrelated source formatting. Array
+  insert/delete/reorder reuse exact existing object tokens, retaining unknown
+  fields and their spacing; only inserted nodes need serialization. Raw adapter
+  replacement preserves mixed line endings between distant changes.
+- Full-document print necessarily materializes all content and uses more memory
+  than the virtualized editor; unusually large output should be checked manually.
+- Revert a delivery commit with git revert; never reset a user's vault. New API
+  revision fields are optional for older clients. Deploy server and client from
+  the same build so the share manifest and scoped API match. The old client
+  pipeline was removed only after its callers were migrated.

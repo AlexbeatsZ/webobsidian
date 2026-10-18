@@ -9,7 +9,7 @@ let active: EditorView | null = null;
 
 export function registerEditor(view: EditorView, commands: EditorCommands): () => void {
   mounted.set(view, commands);
-  const focus = () => { active = view; };
+  const focus = (event: FocusEvent) => { if ((event.target as Element).closest('.cm-editor') === view.dom) active = view; };
   view.dom.addEventListener('focusin', focus);
   return () => {
     view.dom.removeEventListener('focusin', focus);

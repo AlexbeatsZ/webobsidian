@@ -6,6 +6,16 @@ export interface RenderMenuItem {
   submenu?: RenderMenuItem[]; separator?: boolean;
 }
 export interface PropertySuggestion { key: string; type: string; count: number }
+export interface FragmentOptions {
+  id: string; mode?: 'live' | 'reading'; sourceFrom?: number; autoFocus?: boolean;
+  context?: RenderContext; onCommit?: (source: string) => void;
+  onReady?: () => void;
+}
+export interface EmbeddedNote {
+  path: string; context: RenderContext;
+  read: () => { source: string; from: number } | null;
+  subscribe: (listener: () => void) => () => void;
+}
 
 /** Services are scoped to a view's source document and capability boundary. */
 export interface RenderContext {
@@ -18,7 +28,11 @@ export interface RenderContext {
   properties: () => Promise<PropertySuggestion[]>;
   propertyTypes: () => Record<string, string>;
   setPropertyType: (key: string, type: string) => Promise<Record<string, string>>;
-  renderEmbed: (target: string, signal: AbortSignal) => Promise<{ html: string } | null>;
+  renderEmbed: (target: string, signal: AbortSignal) => Promise<EmbeddedNote | null>;
+  embedTrail?: readonly string[];
+  allowHtmlExecution?: boolean;
+  bindEditor?: (view: EditorView, commands: { undo: () => boolean; redo: () => boolean }) => () => void;
+  mountFragment?: (host: HTMLElement, source: string, options: FragmentOptions) => () => void;
   reportError?: (message: string) => void;
 }
 

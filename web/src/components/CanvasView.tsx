@@ -3,10 +3,12 @@ import { useStore, type ContextMenuItem } from '../lib/store';
 import { api, type TreeNode } from '../lib/api';
 import { useIsMobile } from '../lib/useIsMobile';
 import Icon from './Icon';
-import Preview from './Preview';
+import CanvasMarkdown, { type CanvasTextHandle } from './CanvasMarkdown';
+import Editor from './Editor';
+import CanvasVisible from './CanvasVisible';
+import { patchCanvasSource } from '@webobsidian/markdown-core';
 import {
   parseCanvas,
-  serializeCanvas,
   resolveColor,
   PRESET_COLORS,
   nodesBBox,
@@ -47,22 +49,9 @@ type Drag =
   | null;
 
 /** Markdown / image / link body rendered inside a file node. */
-function FileNodeBody({ file }: { file: string }) {
-  const [md, setMd] = useState<string | null>(null);
+function FileNodeBody({ file, subpath }: { file: string; subpath?: string }) {
   const isImg = IMG_RE.test(file);
   const isMd = MD_RE.test(file);
-  useEffect(() => {
-    if (!isMd) return;
-    let cancelled = false;
-    api
-      .read(file)
-      .then((r) => !cancelled && setMd(typeof r === 'string' ? r : r.content))
-      .catch(() => !cancelled && setMd(null));
-    return () => {
-      cancelled = true;
-    };
-  }, [file, isMd]);
-
   if (isImg) {
     return (
       <div className="canvas-file-img">
@@ -78,7 +67,7 @@ function FileNodeBody({ file }: { file: string }) {
         <span className="title">{name.replace(MD_RE, '')}</span>
       </div>
       <div className="canvas-file-body markdown-preview">
-        {isMd ? (md != null ? <Preview source={md} /> : <div className="canvas-loading">Loading…</div>) : (
+        {isMd ? <Editor path={file} reading embedded fragment={subpath?.replace(/^#/, '')} /> : (
           <div className="canvas-file-generic">
             <Icon name="file" size={28} />
             <span>{name}</span>
@@ -119,7 +108,7 @@ export default function CanvasView() {
   const [edgeDrop, setEdgeDrop] = useState<{ sx: number; sy: number; cx: number; cy: number; edgeId: string; end: 'from' | 'to' } | null>(null);
   // Right-click formatting menu while editing a text card.
   const [textMenu, setTextMenu] = useState<{ x: number; y: number } | null>(null);
-  const editTaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editTaRef = useRef<CanvasTextHandle | null>(null);
   // "Add link" note-search dropdown (inserts a [[wikilink]] into the editing card).
   const [linkPicker, setLinkPicker] = useState<{ x: number; y: number } | null>(null);
   const [linkFilter, setLinkFilter] = useState('');
@@ -154,7 +143,7 @@ export default function CanvasView() {
   const commitTextEdit = (raw?: string) => {
     const id = editingNodeRef.current;
     if (!id) return;
-    const text = raw ?? editTaRef.current?.value ?? '';
+    const text = raw ?? editTaRef.current?.rawValue ?? '';
     editingNodeRef.current = null; // guard re-entry before React re-renders
     updateNodes((x) => (x.id === id ? ({ ...x, text } as CanvasNode) : x));
     setTextMenu(null);
@@ -286,7 +275,7 @@ export default function CanvasView() {
       const ta = editTaRef.current;
       const t = e.target as HTMLElement | null;
       if (!ta || !t) return;
-      if (t === ta || ta.contains(t)) return; // inside the textarea — keep editing
+      if (ta.contains(t)) return; // inside the textarea — keep editing
       // Helper UIs that legitimately steal focus while editing must not commit.
       if (t.closest('.canvas-textmenu, .canvas-linkpicker, .canvas-notepicker')) return;
       commitTextEdit();
@@ -298,9 +287,9 @@ export default function CanvasView() {
 
   // Apply a canvas state to the store (marks dirty) WITHOUT touching history.
   const applyData = useCallback(
-    (next: CanvasData) => {
+    (next: CanvasData, source?: string) => {
+      const s = source ?? patchCanvasSource(lastWritten.current, next);
       setData(next);
-      const s = serializeCanvas(next);
       lastWritten.current = s;
       setContent(s);
     },
@@ -310,7 +299,7 @@ export default function CanvasView() {
   // Commit a user edit: record the prior state for undo, then apply.
   const commit = useCallback(
     (next: CanvasData) => {
-      undoStack.current.push(serializeCanvas(dataRef.current));
+      undoStack.current.push(lastWritten.current);
       if (undoStack.current.length > 200) undoStack.current.shift();
       redoStack.current = [];
       setHistV((v) => v + 1);
@@ -321,8 +310,8 @@ export default function CanvasView() {
 
   const undo = useCallback(() => {
     if (!undoStack.current.length) return;
-    redoStack.current.push(serializeCanvas(dataRef.current));
-    applyData(parseCanvas(undoStack.current.pop()!));
+    redoStack.current.push(lastWritten.current);
+    const raw = undoStack.current.pop()!; applyData(parseCanvas(raw), raw);
     setSel(EMPTY_SEL);
     setEditingNode(null);
     setEditingEdge(null);
@@ -331,8 +320,8 @@ export default function CanvasView() {
 
   const redo = useCallback(() => {
     if (!redoStack.current.length) return;
-    undoStack.current.push(serializeCanvas(dataRef.current));
-    applyData(parseCanvas(redoStack.current.pop()!));
+    undoStack.current.push(lastWritten.current);
+    const raw = redoStack.current.pop()!; applyData(parseCanvas(raw), raw);
     setSel(EMPTY_SEL);
     setEditingNode(null);
     setEditingEdge(null);
@@ -441,7 +430,7 @@ export default function CanvasView() {
   // textarea's current (uncommitted) value so the commit doesn't revert typing.
   const setTextAlign = (align: TextAlign) => {
     const editId = editingNodeRef.current;
-    const curText = editId ? editTaRef.current?.value : undefined;
+    const curText = editId ? editTaRef.current?.rawValue : undefined;
     const targets = new Set<string>(editId ? [editId] : selRef.current.nodes);
     if (!targets.size) return;
     commit({
@@ -611,19 +600,6 @@ export default function CanvasView() {
       ta.focus();
       ta.selectionStart = s + m; ta.selectionEnd = e + m + sel.length;
     }
-  };
-
-  // Obsidian editor hotkeys, on the plain textarea (parity with the main editor's
-  // obsidianKeymap): ⌘B bold · ⌘I italic · ⌘K add link · ⌘L task · ⌘/ comment.
-  const onTextKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Escape') { (e.target as HTMLTextAreaElement).blur(); return; }
-    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-    const k = e.key.toLowerCase();
-    if (k === 'b') { e.preventDefault(); toggleWrap('**'); }
-    else if (k === 'i') { e.preventDefault(); toggleWrap('*'); }
-    else if (k === 'k') { e.preventDefault(); openLinkPicker(); }
-    else if (k === 'l') { e.preventDefault(); setLinePrefix('- [ ] '); }
-    else if (k === '/') { e.preventDefault(); toggleWrap('%%'); }
   };
 
   // Replace the block prefix (heading/list/quote) on the caret's line.
@@ -1462,31 +1438,18 @@ export default function CanvasView() {
             >
               {n.type === 'text' && (
                 editingNode === n.id ? (
-                  <textarea
-                    className="canvas-text-edit"
-                    autoFocus
-                    ref={(el) => { editTaRef.current = el; }}
-                    defaultValue={(n as TextNode).text}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setTextMenu({ x: e.clientX, y: e.clientY }); }}
-                    onBlur={(e) => {
-                      // Keep editing while the link dropdown is open (it takes focus).
-                      if (linkPicker) return;
-                      // The format menu preventDefaults blur, so a real blur = done editing.
-                      // (On Android the doc-level pointerdown listener also commits — both
-                      // paths route through commitTextEdit, which is idempotent.)
-                      commitTextEdit(e.target.value);
-                    }}
-                    onKeyDown={onTextKeyDown}
-                    style={{ textAlign: (n as TextNode).textAlign ?? 'left' }}
-                  />
+                  <div className="canvas-text-edit" onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setTextMenu({ x: e.clientX, y: e.clientY }); }}
+                    onKeyDownCapture={e => { if (e.key === 'Escape' && !e.nativeEvent.isComposing) { e.preventDefault(); e.stopPropagation(); commitTextEdit(); } }}>
+                    <CanvasMarkdown key={n.id + ':editing'} id={(activePath ?? '') + ':' + n.id} source={(n as TextNode).text}
+                      path={activePath ?? ''} editing handle={editTaRef} />
+                  </div>
                 ) : (
                   <div className="canvas-text-body markdown-preview" style={{ textAlign: (n as TextNode).textAlign ?? 'left' }}>
-                    {(n as TextNode).text.trim() ? <Preview source={(n as TextNode).text} /> : <span className="canvas-placeholder">Empty card — double-click to edit</span>}
+                    <CanvasVisible>{(n as TextNode).text.trim() ? <CanvasMarkdown key={n.id} id={(activePath ?? '') + ':' + n.id} source={(n as TextNode).text} path={activePath ?? ''} /> : <span className="canvas-placeholder">Empty card — double-click to edit</span>}</CanvasVisible>
                   </div>
                 )
               )}
-              {n.type === 'file' && <FileNodeBody file={(n as any).file} />}
+              {n.type === 'file' && <CanvasVisible><FileNodeBody file={(n as any).file} subpath={(n as any).subpath} /></CanvasVisible>}
               {n.type === 'link' && (
                 <a className="canvas-link-body" href={(n as any).url} target="_blank" rel="noopener" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.preventDefault()}>
                   <Icon name="globe" size={22} />

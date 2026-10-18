@@ -1,6 +1,9 @@
 import { useStore, GRAPH_PATH, type ContextMenuItem } from '../lib/store';
 import { api } from '../lib/api';
 import Editor from './Editor';
+import { documents } from '../lib/documents';
+import { printDocument } from '../lib/printDocument';
+import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import GraphView from './GraphView';
 import CanvasView from './CanvasView';
 import FolderView from './FolderView';
@@ -110,16 +113,11 @@ export default function Workspace() {
     }, 80);
   };
 
-  // Export the rendered note via the browser's print dialog (→ Save as PDF).
-  // Switch to Reading view first so the full rendered document is laid out,
-  // then restore the previous mode after the dialog closes.
   const exportToPdf = () => {
-    const prev = useStore.getState().viewMode;
-    setViewMode('reading');
-    window.setTimeout(() => {
-      window.print();
-      setViewMode(prev);
-    }, 200);
+    if (!activePath) return;
+    const snapshot = documents.get(activePath)?.snapshot; if (!snapshot) return;
+    const context = createVaultRenderContext(activePath, { openLink: () => {}, openMenu: () => {}, files: () => [], reportError: notify });
+    void printDocument(snapshot, context).catch(error => notify(error.message));
   };
 
   // Per-pane "More options" (⋯) menu, like Obsidian's pane menu.

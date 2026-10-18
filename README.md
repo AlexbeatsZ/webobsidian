@@ -39,6 +39,22 @@ Community-plugin compatibility is selective and must be verified per workflow.
 See [project direction and reference boundaries](docs/design/product-direction.md)
 for the rationale, current implementation gaps, and proposed next steps.
 
+## Rendering and source preservation
+
+Live editing, Reading, split panes, embedded notes, table cells, Canvas Markdown
+and the public-share client reuse one CodeMirror presentation engine. Views get
+an explicit document context; the workspace owns sessions, saves and permissions.
+Unchanged source keeps its BOM, mixed line endings, whitespace and quoting.
+Table/property edits patch ranges instead of serializing the whole structure.
+Print/PDF freezes an entire readonly rendering after resources load. Public
+shares use server-enforced transclusion/media capabilities and retain SSR for
+crawlers and visitors without JavaScript.
+
+See [rendering design, acceptance and limits](docs/design/rendering-unification.md).
+Automated checks: npm run test:unit, npm run test:render, npm run test:integration.
+The browser suites accept RENDER_TEST_BROWSER for an installed Chromium executable.
+Native IME/touch and system print-dialog acceptance remain manual.
+
 ## What is this?
 
 WebObsidian is a web application that gives you an [Obsidian](https://obsidian.md)-like

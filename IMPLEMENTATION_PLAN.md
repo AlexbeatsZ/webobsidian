@@ -4,7 +4,22 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-10-18 (fork direction and customization backlog documented; no runtime changes)
+Cập nhật lần cuối: 2026-10-18 (rendering unification first implementation and automated acceptance)
+
+## Rendering unification (PRD 1.8)
+
+- [x] T00-T04: isolated acceptance tools, lossless source/session/history, pure multi-instance view and shared readonly split.
+- [x] T05-T09: shared semantics/HTML policy/styles, br/simple HTML, inline/list and nested block presentation, YAML range patches.
+- [x] T10-T12: cell-local table drafts/range operations, readonly subscribed embeds, shared Canvas cards and source-preserving JSON changes.
+- [x] T13-T14: full output host, scoped share client/API with SSR fallback, remove unused client pipeline/dependencies.
+- [ ] Manual acceptance on native IME/touch devices and operating-system PDF print dialog.
+
+Detailed implementation, checks and limitations: [rendering design](docs/design/rendering-unification.md).
+2026-10-18: migrated all client rendering callers; source and browser regression
+coverage includes mixed newline/quote preservation, readonly/focus isolation,
+full-fixture pixels, table/YAML/Canvas edits, embed drafts/cycles, full print and
+scoped share output. Packaged acceptance uses an independent disposable server.
+The user's existing app remains running on its previous assets.
 
 ## Fork direction — personal customization
 

@@ -1,3 +1,10 @@
+---
+title: 'Rendering acceptance' # preserve this quote and comment
+tags: [one, "two"]
+complex:
+  nested: [1, 2]
+---
+
 # Rendering acceptance
 
 Plain paragraph with **bold**, *italic*, ~~strike~~, ==highlight==, `inline code`,

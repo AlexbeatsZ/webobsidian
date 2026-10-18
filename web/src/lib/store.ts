@@ -537,7 +537,7 @@ export const useStore = create<AppState>()(
         const path = get().activePath;
         const doc = path ? documents.get(path) : undefined;
         if (!doc) return;
-        doc.setText(content);
+        doc.setRawText(content);
       },
 
       save: async () => {

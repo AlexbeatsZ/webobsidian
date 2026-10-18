@@ -1,6 +1,15 @@
 import { expect, it, vi } from 'vitest';
 import { DocumentSession } from './session.js';
 
+it('preserves exact raw line endings across distant changes from a source adapter', () => {
+  const raw = '\ufefffirst\r\nsecond\nthird\rfourth';
+  const session = new DocumentSession('a.canvas', raw, 'r0', async () => ({}));
+  const changed = raw.replace('first', 'FIRST').replace('fourth', 'FOURTH');
+  session.setRawText(changed);
+  expect(session.snapshot.raw).toBe(changed);
+  session.undo(); expect(session.snapshot.raw).toBe(raw);
+});
+
 it('shares unsaved source and leaves edits made during a save dirty', async () => {
   let finish!: (value: { revision: string }) => void;
   const writes: string[] = [];

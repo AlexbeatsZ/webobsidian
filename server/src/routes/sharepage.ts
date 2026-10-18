@@ -20,7 +20,7 @@ let cssCache: { file: string; css: string } | null = null;
 async function appCss(): Promise<string> {
   const assets = path.join(__dirname, '..', '..', 'public', 'assets');
   try {
-    const files = (await fs.readdir(assets)).filter((f) => /^index-.*\.css$/.test(f)).sort();
+    const files = (await fs.readdir(assets)).filter((f) => /^(?:index|obsidian)-.*\.css$/.test(f)).sort();
     const file = files.at(-1);
     if (!file) return '';
     if (cssCache?.file !== file) {
@@ -30,6 +30,23 @@ async function appCss(): Promise<string> {
   } catch {
     return '';
   }
+}
+
+/** Vite's manifest keeps the client enhancement bound to this build. */
+async function shareClientHead(nonce: string): Promise<string> {
+  try {
+    const manifest = JSON.parse(await fs.readFile(path.join(__dirname, '..', '..', 'public', '.vite', 'manifest.json'), 'utf8'));
+    const entry = manifest['src/share.ts']; if (!entry?.file?.startsWith('assets/')) return '';
+    const css = new Set<string>(), visited = new Set<string>();
+    const collect = (key: string) => {
+      if (visited.has(key)) return; visited.add(key);
+      const item = manifest[key]; if (!item) return;
+      for (const file of item.css ?? []) if (file.startsWith('assets/')) css.add(file);
+      for (const imported of item.imports ?? []) collect(imported);
+    }; collect('src/share.ts');
+    return [...css].map(file => '<link rel="stylesheet" href="/' + escapeHtml(file) + '" />').join('\n') +
+      '<script type="module" nonce="' + escapeHtml(nonce) + '" src="/' + escapeHtml(entry.file) + '"></script>\n';
+  } catch { return ''; }
 }
 
 function baseUrl(req: Request): string {
@@ -137,7 +154,7 @@ document.getElementById('unlock-form').addEventListener('submit', async (e) => {
       : null);
 
     const html = isCanvas
-      ? await renderCanvasHtml(content, fileUrl)
+      ? await renderCanvasHtml(content, fileUrl, share.path)
       : await renderNoteHtml(content, fileUrl);
 
     const head = [
@@ -157,7 +174,7 @@ document.getElementById('unlock-form').addEventListener('submit', async (e) => {
       ]),
       `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
       `<meta name="twitter:description" content="${escapeHtml(desc)}" />`,
-    ].join('\n') + '\n';
+    ].join('\n') + '\n' + await shareClientHead(res.locals.cspNonce);
 
     res.send(
       page({
@@ -166,8 +183,8 @@ document.getElementById('unlock-form').addEventListener('submit', async (e) => {
         css,
         bare: isCanvas,
         body: isCanvas
-          ? `<div class="public-canvas-title">${escapeHtml(title)}</div>\n${html}\n${canvasViewerScript(res.locals.cspNonce)}`
-          : `<div class="inline-title">${escapeHtml(title)}</div>\n${html}`,
+          ? `<div class="public-canvas-title" data-share-id="${escapeHtml(share.id)}">${escapeHtml(title)}</div>\n${html}\n${canvasViewerScript(res.locals.cspNonce)}`
+          : `<div class="inline-title">${escapeHtml(title)}</div>\n<div id="shared-markdown" data-share-id="${escapeHtml(share.id)}">${html}</div>`,
       }),
     );
   }),

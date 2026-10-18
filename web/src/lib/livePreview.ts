@@ -16,8 +16,8 @@ import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered, toggleSourceRegion } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
-import { contextOf, type RenderMenuItem as LpMenuItem } from './renderContext';
+import { analyzeMarkdown, tableModels, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
+import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -388,13 +388,14 @@ class MathWidget extends WidgetType {
     const body = document.createElement('span');
     body.textContent = this.tex;
     span.appendChild(body); // shown until KaTeX loads
+    span.dataset.renderPending = 'true';
     void ensureKatex().then((katex) => {
       try {
         katex.render(this.tex, body, { throwOnError: false, displayMode: this.display });
       } catch {
         /* keep raw tex */
       }
-    });
+    }).catch(() => { span.classList.add('mod-error'); }).finally(() => { delete span.dataset.renderPending; });
     if (this.range && !view.state.readOnly) span.appendChild(sourceButton(view, this.range, 'formula'));
     return span;
   }
@@ -426,7 +427,8 @@ function embedNotFound(el: HTMLElement, target: string) {
 
 class NoteEmbedWidget extends WidgetType {
   private controllers = new WeakMap<HTMLElement, AbortController>();
-  destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); }
+  private cleanup = new WeakMap<HTMLElement, (() => void)[]>();
+  destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); this.cleanup.get(dom)?.forEach(stop => stop()); }
   constructor(readonly target: string) {
     super();
   }
@@ -458,22 +460,32 @@ class NoteEmbedWidget extends WidgetType {
     box.append(open, title, content);
     const controller = new AbortController();
     this.controllers.set(box, controller);
-    void contextOf(view).renderEmbed(this.target, controller.signal).then((res) => {
+    const context = contextOf(view);
+    const trail = context.embedTrail ?? [context.sourcePath];
+    const cleanup: (() => void)[] = []; this.cleanup.set(box, cleanup);
+    if (trail.length > 4) { content.textContent = 'Embed depth limit reached'; return box; }
+    box.dataset.renderPending = 'true';
+    void context.renderEmbed(this.target, controller.signal).then(res => {
       if (controller.signal.aborted) return;
-      if (!res) {
-        box.textContent = '';
-        embedNotFound(box, this.target);
-        return;
-      }
-      content.innerHTML = res.html; // sanitized upstream (rehype-sanitize)
-      content.addEventListener('mousedown', (e) => {
-        const a = (e.target as HTMLElement).closest('[data-wikilink]') as HTMLElement | null;
-        if (!a) return;
-        e.preventDefault();
-        const t = a.getAttribute('data-wikilink');
-        if (t) contextOf(view).openLink(t);
-      });
-    });
+      if (!res) { embedNotFound(content, this.target); return; }
+      if (trail.includes(res.path)) { content.textContent = 'Circular embed: ' + res.path; return; }
+      let stop: (() => void) | undefined, previous: string | undefined;
+      cleanup.push(() => stop?.());
+      const refresh = () => {
+        if (controller.signal.aborted) return;
+        const fragment = res.read();
+        if (!fragment) { stop?.(); content.textContent = 'Embedded section or block could not be found'; return; }
+        if (fragment.source === previous) return;
+        previous = fragment.source; stop?.(); content.replaceChildren();
+        const host = document.createElement('div'); content.appendChild(host);
+        stop = context.mountFragment?.(host, fragment.source, { id: res.path, sourceFrom: fragment.from,
+          context: { ...res.context, embedTrail: [...trail, res.path] } });
+        if (!stop) host.textContent = fragment.source;
+      };
+      cleanup.push(res.subscribe(refresh)); refresh();
+    }).catch(error => {
+      if (!controller.signal.aborted) { content.textContent = 'Unable to load embed'; context.reportError?.(String(error)); }
+    }).finally(() => { delete box.dataset.renderPending; });
     return box;
   }
 }
@@ -510,6 +522,7 @@ class MermaidWidget extends WidgetType {
     div.className = 'mermaid cm-mermaid';
     const body = document.createElement('div');
     body.textContent = '…'; div.appendChild(body);
+    div.dataset.renderPending = 'true';
     void ensureMermaid()
       .then((mermaid) => mermaid.render(`cm-mmd-${++mermaidSeq}`, this.code))
       .then(({ svg }) => {
@@ -520,7 +533,7 @@ class MermaidWidget extends WidgetType {
         body.textContent = String(err?.message ?? err);
         // mermaid leaves an orphaned error element in <body> on parse failure
         document.getElementById(`dcm-mmd-${mermaidSeq}`)?.remove();
-      });
+      }).finally(() => { delete div.dataset.renderPending; });
     if (this.range && !view.state.readOnly) div.appendChild(sourceButton(view, this.range, 'diagram'));
     return div;
   }
@@ -634,7 +647,7 @@ class HtmlPreviewWidget extends WidgetType {
 }
 
 function buildHtmlPreview(state: EditorState): DecorationSet {
-  if (!state.field(livePreviewState, false)) return Decoration.none;
+  if (!state.field(livePreviewState, false) || !state.facet(renderContext).allowHtmlExecution) return Decoration.none;
   const doc = state.doc;
   const renderedKeys = state.field(htmlRenderedState, false) ?? [];
   const ranges: Range<Decoration>[] = [];
@@ -750,395 +763,91 @@ export const calloutFoldDeco = StateField.define<DecorationSet>({
 
 /* ---------------- tables ---------------- */
 
-type Align = 'left' | 'center' | 'right' | null;
-interface TableBlock {
-  from: number;
-  to: number;
-  key: string;
-  header: string[];
-  align: Align[];
-  rows: string[][];
-}
+type TableBlock = TableModel;
+function scanTables(doc: Text): TableBlock[] { return tableModels(analyzeMarkdown(doc.toString())); }
 
-// A GFM delimiter row contains only `|`, `-`, `:`, and whitespace. The caller
-// also requires at least one `-` and one `|`, which rules out an `---` rule.
-const DELIM_RE = /^[\s|:-]+$/;
-
-function splitCells(line: string): string[] {
-  let t = line.trim();
-  if (t.startsWith('|')) t = t.slice(1);
-  if (t.endsWith('|')) t = t.slice(0, -1);
-  return t.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim());
-}
-
-/** Find GFM/Obsidian tables in the doc: a header row, a delimiter row, then body rows. */
-function scanTables(doc: Text): TableBlock[] {
-  const out: TableBlock[] = [];
-  const total = doc.lines;
-  let n = 1;
-  while (n < total) {
-    const header = doc.line(n);
-    const delim = doc.line(n + 1);
-    if (
-      header.text.includes('|') &&
-      delim.text.includes('-') &&
-      delim.text.includes('|') &&
-      DELIM_RE.test(delim.text)
-    ) {
-      const headerCells = splitCells(header.text);
-      const align: Align[] = splitCells(delim.text).map((c) => {
-        const l = c.startsWith(':');
-        const r = c.endsWith(':');
-        return l && r ? 'center' : r ? 'right' : l ? 'left' : null;
-      });
-      const rows: string[][] = [];
-      let i = n + 2;
-      for (; i <= total; i++) {
-        const t = doc.line(i).text;
-        if (t.trim() === '' || !t.includes('|')) break;
-        rows.push(splitCells(t));
-      }
-      const from = header.from;
-      const to = doc.line(i - 1).to;
-      out.push({
-        from,
-        to,
-        key: `${headerCells.join('|')}${align.join(',')}${rows.map((r) => r.join('|')).join('')}`,
-        header: headerCells,
-        align,
-        rows,
-      });
-      n = i;
-      continue;
-    }
-    n++;
-  }
-  return out;
-}
-
-// Lightweight inline renderer for table cells (code / bold / italic / links).
-// `<br>` is the only inline HTML Obsidian commonly renders inside table cells.
-const CELL_INLINE_RE =
-  /(<br\s*\/?>)|(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*|_[^_]+_)|(!?\[\[[^\]]+?\]\])|(\[[^\]]+?\]\([^)]+\))/gi;
-
-function appendInline(parent: HTMLElement, text: string, view: EditorView) {
-  CELL_INLINE_RE.lastIndex = 0;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = CELL_INLINE_RE.exec(text))) {
-    if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
-    const tok = m[0];
-    if (m[1]) {
-      parent.appendChild(document.createElement('br'));
-    } else if (m[2]) {
-      const c = document.createElement('code');
-      c.className = 'cm-code';
-      c.textContent = tok.slice(1, -1);
-      parent.appendChild(c);
-    } else if (m[3]) {
-      const b = document.createElement('strong');
-      b.textContent = tok.slice(2, -2);
-      parent.appendChild(b);
-    } else if (m[4]) {
-      const em = document.createElement('em');
-      em.textContent = tok.slice(1, -1);
-      parent.appendChild(em);
-    } else if (m[5]) {
-      const embed = tok.startsWith('!');
-      const inner = tok.slice(embed ? 3 : 2, -2);
-      const [target, alias] = inner.split('|');
-      const a = document.createElement('a');
-      a.className = 'cm-wikilink internal-link';
-      a.textContent = (alias ?? target).trim();
-      a.onmousedown = (e) => {
-        e.preventDefault();
-        contextOf(view).openLink(target.trim());
-      };
-      parent.appendChild(a);
-    } else {
-      const lm = /\[([^\]]+?)\]\(([^)]+)\)/.exec(tok)!;
-      const href = lm[2].replace(/\s+"[^"]*"$/, '').trim();
-      const a = document.createElement('a');
-      a.className = 'cm-md-link';
-      a.textContent = lm[1];
-      a.title = href;
-      const external = /^https?:\/\//i.test(href);
-      a.onmousedown = (e) => {
-        e.preventDefault();
-        if (external) window.open(href, '_blank', 'noopener');
-        else if (!href.startsWith('#')) contextOf(view).openLink(href.replace(/\.(md|markdown)$/i, ''));
-      };
-      parent.appendChild(a);
-    }
-    last = CELL_INLINE_RE.lastIndex;
-  }
-  if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
-}
-
-const ALIGN_DELIM: Record<string, string> = { left: ':---', center: ':---:', right: '---:', '': '---' };
-
-/** Serialize a table model back to GFM markdown. */
-function serializeTable(header: string[], align: (Align | '')[], rows: string[][]): string {
-  const esc = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
-  const line = (cells: string[]) => `| ${cells.map(esc).join(' | ')} |`;
-  const delim = `| ${align.map((a) => ALIGN_DELIM[a || '']).join(' | ')} |`;
-  return [line(header), delim, ...rows.map(line)].join('\n');
-}
-
-/**
- * Obsidian-style interactive table editor: cells are click-to-edit, hover shows
- * +row / +column buttons, right-click opens a format menu (insert/delete/align).
- * Every mutation re-serializes the model and replaces the table's source range,
- * which makes `tableField` rebuild the widget — so the DOM is always in sync.
- */
 class TableWidget extends WidgetType {
-  /** `ro` = reading mode: render-only, no cell editing / handles / menus. */
-  constructor(readonly block: TableBlock, readonly ro: boolean) {
-    super();
-  }
-  eq(o: TableWidget) {
-    return o.block.key === this.block.key && o.ro === this.ro;
-  }
-  ignoreEvent() {
-    // We own all interaction (editing + controls); keep events from reaching CM.
-    return true;
-  }
+  private cleanup = new WeakMap<HTMLElement, (() => void)[]>();
+  constructor(readonly block: TableBlock, readonly ro: boolean) { super(); }
+  eq(o: TableWidget) { return o.block.key === this.block.key && o.block.from === this.block.from && o.ro === this.ro; }
+  ignoreEvent() { return true; }
+  destroy(dom: HTMLElement) { this.cleanup.get(dom)?.forEach(stop => stop()); }
   toDOM(view: EditorView) {
-    const b = this.block;
-    const cols = b.header.length;
-    const wrap = document.createElement('div');
-    wrap.className = 'cm-table-wrap';
+    const b = this.block, context = contextOf(view);
+    const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap';
+    const cleanup: (() => void)[] = []; this.cleanup.set(wrap, cleanup);
     if (!this.ro) wrap.appendChild(sourceButton(view, b, 'table'));
-
-    const table = document.createElement('table');
-    table.className = 'cm-table';
-    wrap.appendChild(table);
-
-    // Read the current (possibly edited) model straight from the DOM so that
-    // uncommitted cell edits are never lost when a structural op fires.
-    const readModel = () => {
-      const ths = [...table.querySelectorAll('thead th')] as HTMLElement[];
-      const header = ths.map((th) => th.dataset.raw ?? '');
-      const align = ths.map((th) => (th.dataset.align ?? '') as Align | '');
-      const rows = ([...table.querySelectorAll('tbody tr')] as HTMLElement[]).map((tr) =>
-        ([...tr.children] as HTMLElement[]).map((td) => td.dataset.raw ?? ''),
-      );
-      return { header, align, rows };
+    const table = document.createElement('table'); table.className = 'cm-table'; wrap.appendChild(table);
+    const apply = (changes: SourceChange[]) => {
+      if (view.state.readOnly || view.state.sliceDoc(b.from, b.to) !== b.key) return;
+      view.dispatch({ changes });
     };
-    const flushActive = () => {
-      const el = document.activeElement as HTMLElement | null;
-      if (el && el.dataset && el.classList.contains('cm-cell-edit')) el.dataset.raw = el.innerText;
-    };
-    const commit = (m: { header: string[]; align: (Align | '')[]; rows: string[][] }) => {
-      view.dispatch({ changes: { from: b.from, to: b.to, insert: serializeTable(m.header, m.align, m.rows) } });
-      view.focus();
-    };
-    const mutate = (fn: (m: { header: string[]; align: (Align | '')[]; rows: string[][] }) => void) => {
-      flushActive();
-      const m = readModel();
-      fn(m);
-      commit(m);
-    };
-
-    const setCellRendered = (cell: HTMLElement) => {
-      cell.textContent = '';
-      appendInline(cell, cell.dataset.raw ?? '', view);
-    };
-    const makeCell = (cell: HTMLElement, raw: string, col: number, rowIdx: number) => {
-      cell.className = 'cm-cell-edit';
-      cell.dataset.raw = raw;
-      if (b.align[col]) {
-        cell.style.textAlign = b.align[col]!;
-        if (cell.tagName === 'TH') cell.dataset.align = b.align[col]!;
-      } else if (cell.tagName === 'TH') {
-        cell.dataset.align = '';
-      }
-      if (this.ro) {
-        // reading mode: display only
-        setCellRendered(cell);
-        return;
-      }
-      cell.setAttribute('contenteditable', 'true');
-      cell.spellcheck = false;
-      setCellRendered(cell);
-      cell.addEventListener('focus', () => {
-        cell.textContent = cell.dataset.raw ?? '';
-        const r = document.createRange();
-        r.selectNodeContents(cell);
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(r);
-      });
-      cell.addEventListener('blur', () => {
-        const v = cell.innerText;
-        if (v === cell.dataset.raw) {
-          setCellRendered(cell);
-          return;
-        }
-        cell.dataset.raw = v;
-        mutate(() => {}); // model already reflects the edited data-raw
-      });
-      cell.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          (cell as HTMLElement).blur();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          cell.textContent = cell.dataset.raw ?? '';
-          setCellRendered(cell);
-          (cell as HTMLElement).blur();
-        }
-      });
-      cell.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        contextOf(view).openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(col, rowIdx) });
-      });
-    };
-
-    // ---- structural operations (operate on the live model) ----
-    const insertColumn = (at: number) =>
-      mutate((m) => {
-        m.header.splice(at, 0, '');
-        m.align.splice(at, 0, '');
-        m.rows.forEach((r) => r.splice(at, 0, ''));
-      });
-    const deleteColumn = (at: number) =>
-      mutate((m) => {
-        if (m.header.length <= 1) return;
-        m.header.splice(at, 1);
-        m.align.splice(at, 1);
-        m.rows.forEach((r) => r.splice(at, 1));
-      });
-    const insertRow = (at: number) => mutate((m) => m.rows.splice(at, 0, new Array(m.header.length).fill('')));
-    const deleteRow = (at: number) => mutate((m) => m.rows.splice(at, 1));
-    const setAlign = (col: number, a: Align | '') => mutate((m) => (m.align[col] = a));
-    const moveColumn = (from: number, to: number) =>
-      mutate((m) => {
-        if (to < 0 || to >= m.header.length) return;
-        const mv = <T,>(a: T[]) => a.splice(to, 0, a.splice(from, 1)[0]);
-        mv(m.header);
-        mv(m.align);
-        m.rows.forEach(mv);
-      });
-    const moveRow = (from: number, to: number) =>
-      mutate((m) => {
-        if (to < 0 || to >= m.rows.length) return;
-        m.rows.splice(to, 0, m.rows.splice(from, 1)[0]);
-      });
-
-    // rowIdx: -1 for header row, otherwise body row index.
-    const cellMenu = (col: number, rowIdx: number): LpMenuItem[] => [
-      { label: 'Insert column left', icon: 'plus', onClick: () => insertColumn(col) },
-      { label: 'Insert column right', icon: 'plus', onClick: () => insertColumn(col + 1) },
-      { label: 'Insert row above', icon: 'plus', onClick: () => insertRow(Math.max(0, rowIdx)) },
-      { label: 'Insert row below', icon: 'plus', onClick: () => insertRow(rowIdx + 1) },
-      { label: '', separator: true },
-      { label: 'Move column left', onClick: () => moveColumn(col, col - 1) },
-      { label: 'Move column right', onClick: () => moveColumn(col, col + 1) },
-      ...(rowIdx >= 0
-        ? [
-            { label: 'Move row up', onClick: () => moveRow(rowIdx, rowIdx - 1) },
-            { label: 'Move row down', onClick: () => moveRow(rowIdx, rowIdx + 1) },
-          ]
-        : []),
-      { label: '', separator: true },
-      {
-        label: 'Align column',
-        icon: 'align-left',
-        submenu: [
-          { label: 'Left', icon: 'align-left', onClick: () => setAlign(col, 'left') },
-          { label: 'Center', icon: 'align-center', onClick: () => setAlign(col, 'center') },
-          { label: 'Right', icon: 'align-right', onClick: () => setAlign(col, 'right') },
-        ],
-      },
-      { label: '', separator: true },
-      { label: 'Delete column', icon: 'trash-2', onClick: () => deleteColumn(col) },
-      ...(rowIdx >= 0 ? [{ label: 'Delete row', icon: 'trash-2', onClick: () => deleteRow(rowIdx) }] : []),
-    ];
-
-    // ---- build header + body ----
-    const thead = document.createElement('thead');
-    const htr = document.createElement('tr');
-    for (let c = 0; c < cols; c++) {
-      const th = document.createElement('th');
-      makeCell(th, b.header[c] ?? '', c, -1);
-      htr.appendChild(th);
-    }
-    thead.appendChild(htr);
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
+    const structural = (operation: TableOperation) => apply(changeTable(b, operation));
     b.rows.forEach((row, ri) => {
+      const section = ri === 0 ? document.createElement('thead') : table.querySelector('tbody') ?? document.createElement('tbody');
       const tr = document.createElement('tr');
-      for (let c = 0; c < cols; c++) {
-        const td = document.createElement('td');
-        makeCell(td, row[c] ?? '', c, ri);
-        tr.appendChild(td);
+      for (let col = 0; col < b.align.length; col++) {
+        const cell = document.createElement(ri === 0 ? 'th' : 'td');
+        cell.className = 'cm-cell-edit'; cell.style.textAlign = b.align[col] ?? '';
+        const token = row.cells[col];
+        const raw = token?.text ?? '';
+        let stop: (() => void) | undefined;
+        let editing = false;
+        const mount = (mode: 'live' | 'reading') => {
+          stop?.(); cell.replaceChildren();
+          const host = document.createElement('div'); cell.appendChild(host);
+          stop = context.mountFragment?.(host, raw, {
+            id: context.sourcePath + ':cell:' + ri + ':' + col, sourceFrom: token?.from ?? row.to,
+            mode, autoFocus: mode === 'live',
+            onCommit: (value) => { editing = false; if (value !== raw) apply([editTableCell(b, ri, col, value)]); else mount('reading'); },
+          });
+          if (!stop) host.textContent = raw;
+        };
+        cleanup.push(() => stop?.()); mount('reading');
+        if (!this.ro && b.editable) {
+          cell.addEventListener('click', (e) => {
+            if (editing || (e.target as HTMLElement).closest('a,button,input')) return;
+            editing = true; mount('live');
+          });
+          cell.addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' && !e.shiftKey || e.key === 'Escape') && !e.isComposing) {
+              e.preventDefault(); e.stopPropagation();
+              if (e.key === 'Escape') { editing = false; mount('reading'); } else (document.activeElement as HTMLElement)?.blur();
+            }
+          }, true);
+          cell.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation(); if (editing) return;
+            context.openMenu({ x: e.clientX, y: e.clientY, items: [
+              { label: 'Insert column left', onClick: () => structural({ kind: 'insertColumn', column: col }) },
+              { label: 'Insert column right', onClick: () => structural({ kind: 'insertColumn', column: col + 1 }) },
+              { label: 'Insert row above', onClick: () => structural({ kind: 'insertRow', row: Math.max(0, ri - 1) }) },
+              { label: 'Insert row below', onClick: () => structural({ kind: 'insertRow', row: ri }) },
+              { label: 'Move column left', onClick: () => structural({ kind: 'moveColumn', column: col, to: col - 1 }) },
+              { label: 'Move column right', onClick: () => structural({ kind: 'moveColumn', column: col, to: col + 1 }) },
+              ...(ri > 0 ? [
+                { label: 'Move row up', onClick: () => structural({ kind: 'moveRow', row: ri - 1, to: ri - 2 }) },
+                { label: 'Move row down', onClick: () => structural({ kind: 'moveRow', row: ri - 1, to: ri }) },
+              ] : []),
+              ...(['left', 'center', 'right'] as const).map(align => ({ label: 'Align ' + align, onClick: () => structural({ kind: 'align', column: col, align }) })),
+              { label: 'Delete column', onClick: () => structural({ kind: 'deleteColumn', column: col }) },
+              ...(ri > 0 ? [{ label: 'Delete row', onClick: () => structural({ kind: 'deleteRow', row: ri - 1 }) }] : []),
+            ] });
+          });
+        }
+        tr.appendChild(cell);
       }
-      tbody.appendChild(tr);
+      section.appendChild(tr); if (!section.parentNode) table.appendChild(section);
     });
-    table.appendChild(tbody);
-
-    // Reading mode: no handles / add buttons / menus — table is display-only.
-    if (this.ro) return wrap;
-
-    // ---- row / column select handles (hover-highlight + open the format menu) ----
-    const highlightCol = (c: number, on: boolean) => {
-      for (const tr of table.querySelectorAll('tr')) (tr.children[c] as HTMLElement)?.classList.toggle('cm-cell-hl', on);
-    };
-    const highlightRow = (tr: HTMLElement, on: boolean) => {
-      for (const cell of tr.children) (cell as HTMLElement).classList.toggle('cm-cell-hl', on);
-    };
-    ([...thead.querySelectorAll('th')] as HTMLElement[]).forEach((th, c) => {
-      const h = document.createElement('div');
-      h.className = 'cm-col-handle';
-      h.contentEditable = 'false';
-      h.title = 'Select / format column';
-      h.addEventListener('mouseenter', () => highlightCol(c, true));
-      h.addEventListener('mouseleave', () => highlightCol(c, false));
-      h.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        highlightCol(c, false);
-        contextOf(view).openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(c, -1) });
-      });
-      th.appendChild(h);
-    });
-    ([...tbody.querySelectorAll('tr')] as HTMLElement[]).forEach((tr, ri) => {
-      const first = tr.children[0] as HTMLElement | undefined;
-      if (!first) return;
-      const h = document.createElement('div');
-      h.className = 'cm-row-handle';
-      h.contentEditable = 'false';
-      h.title = 'Select / format row';
-      h.addEventListener('mouseenter', () => highlightRow(tr, true));
-      h.addEventListener('mouseleave', () => highlightRow(tr, false));
-      h.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        highlightRow(tr, false);
-        contextOf(view).openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(0, ri) });
-      });
-      first.appendChild(h);
-    });
-
-    // ---- hover +column / +row buttons (mousedown so a focused cell flushes) ----
-    const addCol = document.createElement('div');
-    addCol.className = 'cm-table-addcol';
-    addCol.title = 'Add column';
-    addCol.textContent = '+';
-    addCol.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      insertColumn(cols);
-    });
-    const addRow = document.createElement('div');
-    addRow.className = 'cm-table-addrow';
-    addRow.title = 'Add row';
-    addRow.textContent = '+';
-    addRow.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      insertRow(b.rows.length);
-    });
-    wrap.append(addCol, addRow);
+    if (!this.ro && b.editable) {
+      for (const [className, title, action] of [
+        ['cm-table-addrow', 'Add row', () => structural({ kind: 'insertRow', row: b.rows.length - 1 })],
+        ['cm-table-addcol', 'Add column', () => structural({ kind: 'insertColumn', column: b.align.length })],
+      ] as const) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = className; button.title = title; button.textContent = '+';
+        button.onmousedown = event => { event.preventDefault(); if (!wrap.querySelector('[contenteditable="true"]')) action(); };
+        wrap.appendChild(button);
+      }
+    }
     return wrap;
   }
 }
@@ -1169,7 +878,7 @@ class HtmlBlockWidget extends WidgetType {
   toDOM(view: EditorView) {
     const div = document.createElement('div');
     div.className = 'cm-html-block';
-    div.innerHTML = sanitizeHtml(this.html);
+    div.innerHTML = sanitizeHtml(this.html, contextOf(view).rawUrl);
     if (!view.state.readOnly && this.range) div.appendChild(sourceButton(view, this.range, 'HTML'));
     div.addEventListener('mousedown', (e) => {
       const a = (e.target as HTMLElement).closest('a');
@@ -2227,7 +1936,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             if (sm) w = Number(sm[1]);
           }
           pushReplace(s, e, Decoration.replace({ widget: new MediaWidget(attachmentUrl(href, view), href, kind, w) }));
-        } else if (isEmbed && !/\.[a-z0-9]{1,5}$/i.test(href.split('#')[0])) {
+        } else if (isEmbed && (/\.(?:md|markdown)$/i.test(href.split('#')[0]) || !/\.[a-z0-9]{1,5}$/i.test(href.split('#')[0]))) {
           // `![[note]]` (no binary extension) → real transclusion like Obsidian.
           pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href) }));
         } else {

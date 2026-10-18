@@ -569,8 +569,8 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .cm-source-close { font: 12px var(--font-ui); margin-right: 8px; cursor: pointer; }
 .is-reading-mode .cm-source-toggle { display: none; }
 .cm-properties, .cm-html-block { position: relative; }
-.is-reading-mode .cm-props-add { display: block !important; visibility: hidden; }
-.is-reading-mode .prop-pill-x, .is-reading-mode .prop-pill-add, .is-reading-mode .prop-del { display: inline-flex !important; visibility: hidden; }
+.is-reading-mode .cm-props-add,
+.is-reading-mode .prop-pill-x, .is-reading-mode .prop-pill-add, .is-reading-mode .prop-del { visibility: hidden; }
 .md-quote { border-left: 2px solid var(--interactive-accent); padding-left: 24px; }
 .md-callout { background: rgba(var(--callout-color, var(--callout-default)), .1); border-radius: var(--radius-s); padding: 12px 16px 12px 24px; }
 .md-callout .cm-callout-title { color: rgb(var(--callout-color, var(--callout-default))); }
@@ -580,16 +580,13 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .md-code .cm-line.HyperMD-codeblock-end { padding-bottom: 0; }
 .cm-math-rendered, .cm-mermaid { position: relative; }
 .cm-math-rendered:hover > .cm-source-toggle, .cm-mermaid:hover > .cm-source-toggle { opacity: 1; }
-.is-reading-mode .cm-cell-edit,
 .is-reading-mode .cm-properties .prop-key,
 .is-reading-mode .cm-properties .prop-val-input,
 .is-reading-mode .cm-properties .prop-pill-text,
 .is-reading-mode .cm-properties .prop-input,
 .is-reading-mode .cm-properties .prop-checkbox { pointer-events: none; }
 .is-reading-mode .cm-table-addcol, .is-reading-mode .cm-table-addrow,
-.is-reading-mode .cm-col-handle, .is-reading-mode .cm-row-handle,
-.is-reading-mode .prop-del, .is-reading-mode .prop-pill-x,
-.is-reading-mode .prop-pill-add, .is-reading-mode .cm-props-add { display: none !important; }
+.is-reading-mode .cm-col-handle, .is-reading-mode .cm-row-handle { display: none !important; }
 
 /* ---- Suggestion popup (.suggestion-container, §20) ---- */
 .suggestion-container { position: fixed; z-index: 9999; background: var(--background-primary);

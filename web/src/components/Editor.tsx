@@ -5,9 +5,10 @@ import { useDocumentSession } from '../lib/useDocumentSession';
 import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { registerEditor } from '../lib/activeEditor';
 import MarkdownView from './MarkdownView';
+import { analyzeMarkdown, fragmentRange } from '@webobsidian/markdown-core';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
-export default function Editor({ path: suppliedPath, reading = false }: { path?: string; reading?: boolean }) {
+export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment }: { path?: string; reading?: boolean; embedded?: boolean; fragment?: string }) {
   const activePath = useStore((s) => s.activePath);
   const path = suppliedPath ?? activePath;
   const mode = useStore((s) => s.viewMode);
@@ -25,7 +26,7 @@ export default function Editor({ path: suppliedPath, reading = false }: { path?:
   const { session, snapshot, error } = useDocumentSession(path);
   const unregister = useRef<(() => void) | undefined>(undefined);
   const context = useMemo(() => createVaultRenderContext(path ?? '', {
-    openLink: (target) => { void openLink(target, path ?? undefined); }, openMenu, reportError: notify, initialPropertyTypes: propertyTypes,
+    bindEditor: registerEditor, openLink: (target, sourcePath) => { void openLink(target, sourcePath ?? path ?? undefined); }, openMenu, reportError: notify, initialPropertyTypes: propertyTypes,
     files: () => {
       const files: string[] = [];
       const walk = (node: TreeNode) => { if (node.type === 'file') files.push(node.path); node.children?.forEach(walk); };
@@ -40,8 +41,11 @@ export default function Editor({ path: suppliedPath, reading = false }: { path?:
   }, [session, reading, snapshot.version, snapshot.dirty, snapshot.conflict, notify]);
   if (error) return <div className="editor-error" role="alert">{error.message}</div>;
   if (!session) return <div className="editor-loading">Loading…</div>;
-  return <MarkdownView snapshot={snapshot} mode={reading ? 'reading' : mode} context={context}
-    autoFocus={!reading} showTitle
+  const range = fragment ? fragmentRange(analyzeMarkdown(snapshot.text), fragment) : null;
+  if (fragment && !range) return <div className="editor-error">Section or block could not be found</div>;
+  const displayed = range ? { ...snapshot, text: snapshot.text.slice(range.from, range.to), raw: snapshot.text.slice(range.from, range.to) } : snapshot;
+  return <MarkdownView snapshot={displayed} mode={reading ? 'reading' : mode} context={context}
+    autoFocus={!reading} showTitle={!embedded} layout={embedded ? 'embedded' : 'page'}
     onChange={(changes, version, origin) => { session.edit(version, changes, origin); return session.snapshot; }}
     onUndo={() => { session.undo(); return session.snapshot; }}
     onRedo={() => { session.redo(); return session.snapshot; }}

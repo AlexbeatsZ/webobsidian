@@ -11,7 +11,7 @@ import {
   listShares, createShare, setShareEnabled, setSharePassword, deleteShare, getActiveShare,
   type ShareRecord,
 } from '../services/shares.js';
-import { canvasEmbedTargets } from '../services/rendercanvas.js';
+import { buildShareScope } from '../services/shareScope.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 
@@ -96,33 +96,6 @@ sharesRouter.delete(
 
 /** ---- Public API (NO auth) — /public/shares ------------------------------- */
 
-/**
- * Files the shared note embeds (`![[target]]` and `![](relative-url)`) — the
- * only paths the public file endpoint is allowed to serve. Mirrors the
- * client-side markdown preprocessing in web/src/lib/markdown.ts.
- */
-function embedTargets(content: string): string[] {
-  const out = new Set<string>();
-  for (const m of content.matchAll(/!\[\[([^\]]+?)\]\]/g)) {
-    const t = m[1].split('|')[0].split('#')[0].trim();
-    if (t) out.add(t);
-  }
-  for (const m of content.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
-    const url = m[1].replace(/\s+"[^"]*"$/, '').trim();
-    // web-loadable URLs are loaded directly by the browser, not via the vault
-    if (url && !/^(https?|data|blob|file):/i.test(url)) {
-      out.add(decodeURIComponent(url.split('/').pop() || url));
-    }
-  }
-  return [...out];
-}
-
-/** Resolve a path/basename the same way GET /api/files/content does. */
-async function resolveVaultPath(rel: string): Promise<string | null> {
-  if (await vault.exists(rel)) return rel;
-  return resolveFile(rel) ?? null;
-}
-
 export const publicSharesRouter = Router();
 
 const UNLOCK_TTL = '12h';
@@ -195,6 +168,17 @@ publicSharesRouter.get(
   }),
 );
 
+publicSharesRouter.get('/:id/render', asyncHandler(async (req, res) => {
+  const share = await getActiveShare(req.params.id);
+  if (!share || !(await vault.exists(share.path))) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await isUnlocked(req, share))) { res.status(401).json({ error: 'password required' }); return; }
+  const scope = await buildShareScope(share.path, { read: vault.readFileText, resolve: resolveFile });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ kind: isCanvas(share.path) ? 'canvas' : 'markdown', documents: [...scope.values()].map(doc => ({
+    token: doc.token, source: doc.source, from: doc.from, notes: Object.fromEntries(doc.notes),
+  })) });
+}));
+
 publicSharesRouter.get(
   '/:id/file',
   asyncHandler(async (req, res) => {
@@ -208,23 +192,12 @@ publicSharesRouter.get(
       res.status(401).json({ error: 'password required', passwordRequired: true });
       return;
     }
-    const target = await resolveVaultPath(requested);
-    if (!target || isMd(target)) {
-      res.status(404).json({ error: 'not found' });
-      return;
-    }
-    // Allowlist check: the resolved file must be one the shared note/canvas embeds.
-    const content = await vault.readFileText(share.path);
-    const targets = isCanvas(share.path) ? await canvasEmbedTargets(content) : embedTargets(content);
-    const allowed = new Set<string>();
-    for (const t of targets) {
-      const r = await resolveVaultPath(t);
-      if (r) allowed.add(r);
-    }
-    if (!allowed.has(target)) {
-      res.status(404).json({ error: 'not found' });
-      return;
-    }
+    const scope = await buildShareScope(share.path, { read: vault.readFileText, resolve: resolveFile });
+    const from = scope.get(String(req.query.from ?? 'root'));
+    // Legacy SSR URLs have no source token; accept only an unambiguous declared asset.
+    const candidates = new Set([...scope.values()].flatMap(doc => doc.media.has(requested) ? [doc.media.get(requested)!] : []));
+    const target = req.query.from ? from?.media.get(requested) : candidates.size === 1 ? [...candidates][0] : undefined;
+    if (!target || isMd(target)) { res.status(404).json({ error: 'not found' }); return; }
     // Stream with Range support so shared <video>/<audio> can seek.
     const abs = await vault.resolveInVault(target);
     await sendFileWithRange(req, res, abs, mimeFor(target), { 'Cache-Control': 'private, max-age=300' });

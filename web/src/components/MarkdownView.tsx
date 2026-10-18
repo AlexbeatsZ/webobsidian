@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef } from 'react';
+import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap, drawSelection } from '@codemirror/view';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
@@ -45,6 +46,9 @@ const titleOf = (path: string) => (path.split('/').pop() ?? path).replace(/\.(md
 
 export default function MarkdownView(props: MarkdownViewProps) {
   const { snapshot, mode, context, showTitle = true, layout = 'page' } = props;
+  const scopedContext = useMemo<RenderContext>(() => ({ ...context,
+    mountFragment: (host, source, options) => mountMarkdownFragment(host, source, { ...options, context: options.context ?? context }),
+  }), [context]);
   const instanceId = useId();
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -201,7 +205,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       selection: { anchor: initPos },
       extensions: [
         drawSelection(), syntaxModel, documentMetadata, blockModel,
-        contextComp.of(renderContext.of(p.context)),
+        contextComp.of(renderContext.of(scopedContext)),
         readonlyComp.of(readonlyExt(p.mode === 'reading')),
         EditorState.transactionFilter.of((tr) =>
           tr.docChanged && tr.startState.readOnly && !tr.annotation(externalUpdate) ? [] : tr),
@@ -249,7 +253,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
   useEffect(() => {
     const isMd = /\.(md|markdown)$/i.test(snapshot.id) || layout === 'embedded';
     view.current?.dispatch({ effects: [
-      contextComp.reconfigure(renderContext.of(context)),
+      contextComp.reconfigure(renderContext.of(scopedContext)),
       setLivePreviewEnabled.of(isMd && mode !== 'source'),
       setLivePreviewReadonly.of(mode === 'reading'),
       readonlyComp.reconfigure(readonlyExt(mode === 'reading')),

@@ -62,3 +62,86 @@ test('property editing patches one value and preserves mixed newlines, quotes an
   await live.getByRole('button', { name: 'Close source' }).click();
   await expect(live.locator('.cm-properties')).toHaveCount(1);
 });
+
+test('one table cell uses the shared editor and patches only its original token', async ({ page }) => {
+  const raw = '\ufeff| **A**  | B |\r\n| :--- | ---: |\n| x\\|y | old |\r\n\r\nend';
+  await page.evaluate(source => window.renderHarness.reset(source), raw);
+  const live = page.locator('[data-slot="0"]');
+  const cell = live.locator('tbody td').nth(1);
+  await expect(cell).toHaveText('old');
+  await cell.click();
+  const input = cell.locator('[contenteditable="true"]');
+  await expect(input).toBeFocused();
+  await input.press('ControlOrMeta+a');
+  await input.pressSequentially('**new**');
+  await input.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe(raw.replace('old', '**new**'));
+  await expect(page.locator('[data-slot="1"] tbody td').nth(1).locator('.cm-strong')).toHaveText('new');
+  await page.evaluate(() => window.renderHarness.undo(0));
+  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe(raw);
+});
+
+test('embeds use the shared readonly engine, subscribe to drafts and stop cycles', async ({ page }) => {
+  await page.evaluate(() => {
+    window.renderHarness.notes({ 'b.md': '# First\n\nskip\n\n# Wanted\n\n**inside**\n\n![[c]]', 'c.md': '![[b]]' });
+    window.renderHarness.reset('![[b.md#Wanted]]\n\nend');
+  });
+  const reading = page.locator('[data-slot="1"]');
+  await expect(reading.locator('.cm-note-embed').first()).toContainText('inside');
+  await expect(reading).toContainText('Circular embed: b.md');
+  await expect(reading).not.toContainText('skip');
+  await expect(reading.locator('.cm-note-embed [contenteditable="true"]')).toHaveCount(0);
+  await page.evaluate(() => window.renderHarness.changeNote('b.md', '# Wanted\n\n**changed**'));
+  await expect(reading.locator('.cm-note-embed').first()).toContainText('changed');
+  await expect(reading).not.toContainText('Circular embed');
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('![[b.md#Wanted]]\n\nend');
+});
+
+test('Canvas uses the shared live editor and preserves the surrounding JSON source', async ({ page }) => {
+  await page.route('**/api/tags', route => route.fulfill({ json: { tags: [] } }));
+  const raw = '\ufeff{\r\n "custom": {"keep":1},\n "nodes": [{"id":"a","type":"text","x":0,"y":0,"width":380,"height":220,"text" : "**old**","unknown":7}],\r\n "edges": []\r\n}';
+  await page.evaluate(source => window.renderHarness.canvas(source), raw);
+  const card = page.locator('.canvas-node.canvas-text');
+  await expect(card.locator('.cm-strong')).toHaveText('old');
+  await card.dblclick();
+  const input = card.locator('[contenteditable="true"]');
+  await expect(input).toBeFocused();
+  await input.press('ControlOrMeta+a'); await input.pressSequentially('**new**');
+  await input.press('Escape');
+  await expect.poll(() => page.evaluate(() => window.renderHarness.canvasRaw())).toBe(raw.replace('**old**', '**new**'));
+  await expect(card.locator('.cm-strong')).toHaveText('new');
+});
+
+test('print freezes the entire reading document including content beyond the viewport', async ({ page }) => {
+  const source = Array.from({ length: 350 }, (_, i) => `Paragraph ${i} **bold**`).join('\n\n') + '\n\nlast<br>line\n\n$$\nx^2\n$$';
+  await page.evaluate(source => window.renderHarness.reset(source), source);
+  await page.evaluate(() => window.renderHarness.preparePrint());
+  const print = page.frameLocator('.note-print-frame');
+  await expect(print.locator('.cm-content').first()).toContainText('Paragraph 349');
+  await expect(print.locator('.cm-strong')).toHaveCount(350);
+  await expect(print.locator('.cm-gap')).toHaveCount(0);
+  await expect(print.locator('.katex')).toHaveCount(1);
+  await expect(print.locator('.cm-html-break')).toHaveCount(1);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+});
+
+test('public enhancement uses the shared readonly renderer with share-scoped services', async ({ page }) => {
+  const forbidden: string[] = [];
+  await page.route('**/api/**', route => { forbidden.push(route.request().url()); return route.fulfill({ status: 403 }); });
+  await page.route('**/public/shares/fixture/render', route => route.fulfill({ json: {
+    kind: 'markdown', documents: [
+      { token: 'root', source: '**public**<br>second\n\n![[nested]]\n\n<div onclick="alert(1)"><script>alert(2)</script>safe</div>', from: 0, notes: { nested: 'child' } },
+      { token: 'child', source: '**child**', from: 30, notes: {} },
+    ],
+  } }));
+  await page.evaluate(() => {
+    const host = document.createElement('div'); host.id = 'shared-markdown'; host.dataset.shareId = 'fixture'; host.textContent = 'SSR fallback'; document.body.appendChild(host);
+    const script = document.createElement('script'); script.type = 'module'; script.src = '/src/share.ts'; document.head.appendChild(script);
+  });
+  const host = page.locator('#shared-markdown');
+  await expect(host.locator('.cm-strong')).toHaveText(['public', 'child']);
+  await expect(host.locator('.cm-html-break')).toHaveCount(1);
+  await expect(host.locator('[contenteditable="true"],.cm-source-toggle,script,[onclick]')).toHaveCount(0);
+  await expect(host).not.toContainText('SSR fallback');
+  expect(forbidden).toEqual([]);
+});

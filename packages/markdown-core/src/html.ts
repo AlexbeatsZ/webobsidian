@@ -20,8 +20,20 @@ export const htmlSchema: Schema = {
   },
 };
 
-export function sanitizeHtmlFragment(html: string): string {
-  return toHtml(sanitize(fromHtml(html, { fragment: true }), htmlSchema));
+export function sanitizeHtmlFragment(html: string, mediaUrl?: (target: string) => string): string {
+  const tree = sanitize(fromHtml(html, { fragment: true }), htmlSchema);
+  const visit = (node: ReturnType<typeof sanitize>) => {
+    if (node.type === 'element' && ['img', 'video', 'audio', 'source'].includes(node.tagName) && typeof node.properties.src === 'string' && mediaUrl && !/^(?:https?:|data:|blob:)/i.test(node.properties.src)) node.properties.src = mediaUrl(node.properties.src);
+    if ('children' in node) node.children.forEach(visit);
+  };
+  visit(tree);
+  return toHtml(tree);
+}
+
+export function htmlMediaTargets(html: string): string[] {
+  const targets: string[] = [];
+  sanitizeHtmlFragment(html, target => { targets.push(target); return target; });
+  return targets;
 }
 
 export function decodeHtmlEntity(entity: string): string {

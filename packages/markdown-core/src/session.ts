@@ -60,6 +60,15 @@ export class DocumentSession {
 
   /** Compatibility for callers supplying a complete editor string; patch only its difference. */
   setText(text: string, origin = 'replace'): void {
+    this.replaceText(text, origin, false);
+  }
+
+  /** Compatibility adapters that already computed exact raw-source patches. */
+  setRawText(text: string, origin = 'replace.raw'): void {
+    this.replaceText(text, origin, true);
+  }
+
+  private replaceText(text: string, origin: string, preserveRaw: boolean): void {
     const normalized = text.replace(/^\ufeff/, '').replace(/\r\n|\r/g, '\n');
     const before = this.source.text;
     if (before === normalized) return;
@@ -68,7 +77,10 @@ export class DocumentSession {
     let to = before.length;
     let insertTo = normalized.length;
     while (to > from && insertTo > from && before[to - 1] === normalized[insertTo - 1]) { to--; insertTo--; }
-    this.edit(this.version, [{ from, to, insert: normalized.slice(from, insertTo) }], origin);
+    const raw = preserveRaw ? new SourceDocument(text) : undefined;
+    this.edit(this.version, [{ from, to, insert: normalized.slice(from, insertTo),
+      ...(raw ? { rawInsert: raw.raw.slice(raw.rawOffset(from), raw.rawOffset(insertTo)) } : {}),
+    }], origin);
   }
 
   undo(): boolean { return this.moveHistory(this.undoStack, this.redoStack); }

@@ -6,3 +6,6 @@ export * from './links.js';
 export * from './metadata.js';
 export * from './blocks.js';
 export * from './properties.js';
+export * from './tables.js';
+export * from './canvasSource.js';
+export * from './embeds.js';

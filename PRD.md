@@ -1,7 +1,12 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.7 · Cập nhật: 2026-10-18 · Trạng thái: Draft
+> Phiên bản: 1.8 · Cập nhật: 2026-10-18 · Trạng thái: Draft
+> Changelog 1.8 (rendering unification): source-preserving document sessions;
+> one instance-scoped client engine for Live/Reading/splits/tables/embeds/Canvas;
+> inclusive br source boundaries; local YAML/JSON/table patches; full-document
+> readonly print and capability-scoped share enhancement with SSR fallback.
+> Acceptance and v1 limits: [rendering design](docs/design/rendering-unification.md).
 > Changelog 1.7 (fork direction): rebuild an Obsidian-like application for personal
 > customization beyond plugin limitations. Use obsidian-typings as an API reference;
 > prioritize editable core behavior and selective, verified compatibility. See §1.4.

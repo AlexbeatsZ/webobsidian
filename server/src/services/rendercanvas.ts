@@ -5,6 +5,8 @@
 // faithful snapshot. Text/embedded-note bodies reuse the markdown renderer.
 import { renderNoteHtml, escapeHtml } from './renderhtml.js';
 import * as vault from './vault.js';
+import { SourceDocument, analyzeMarkdown, fragmentRange } from '@webobsidian/markdown-core';
+import { resolveFile } from './fileindex.js';
 
 type Side = 'top' | 'right' | 'bottom' | 'left';
 interface Rect { x: number; y: number; width: number; height: number; }
@@ -15,6 +17,7 @@ interface CNode extends Rect {
   text?: string;
   textAlign?: 'left' | 'center' | 'right';
   file?: string;
+  subpath?: string;
   url?: string;
   label?: string;
 }
@@ -88,7 +91,7 @@ function bbox(nodes: CNode[]): Rect | null {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
-async function renderNode(n: CNode, fileUrl: (p: string) => string): Promise<string> {
+async function renderNode(n: CNode, fileUrl: (p: string) => string, sourcePath: string): Promise<string> {
   const col = resolveColor(n.color);
   const style = `left:${n.x}px;top:${n.y}px;width:${n.width}px;height:${n.height}px;` +
     (col ? `--c:${escapeHtml(col)};border-color:${escapeHtml(col)};` : '');
@@ -99,7 +102,7 @@ async function renderNode(n: CNode, fileUrl: (p: string) => string): Promise<str
   if (n.type === 'text') {
     const align = n.textAlign === 'center' || n.textAlign === 'right' ? n.textAlign : 'left';
     const body = (n.text ?? '').trim() ? await renderNoteHtml(n.text ?? '', fileUrl) : '';
-    return `<div class="canvas-node canvas-text" style="${style}"><div class="canvas-text-body markdown-preview" style="text-align:${align}">${body}</div></div>`;
+    return `<div class="canvas-node canvas-text" style="${style}"><div class="canvas-text-body markdown-preview" data-share-node="${escapeHtml(n.id)}" style="text-align:${align}">${body}</div></div>`;
   }
   if (n.type === 'link') {
     const url = n.url ?? '';
@@ -113,19 +116,24 @@ async function renderNode(n: CNode, fileUrl: (p: string) => string): Promise<str
   const name = (file.split('/').pop() ?? file).replace(MD_RE, '');
   let body = '';
   if (MD_RE.test(file)) {
-    const md = await vault.readFileText(file).catch(() => null);
-    body = md ? await renderNoteHtml(md, fileUrl) : '';
+    const resolved = resolveFile(file, sourcePath);
+    const md = resolved ? await vault.readFileText(resolved).catch(() => null) : null;
+    if (md) {
+      const model = analyzeMarkdown(new SourceDocument(md).text);
+      const range = fragmentRange(model, (n.subpath ?? '').replace(/^#/, ''));
+      body = range ? await renderNoteHtml(model.text.slice(range.from, range.to), fileUrl) : '';
+    }
   }
-  return `<div class="canvas-node canvas-file" style="${style}"><div class="canvas-file-note"><div class="canvas-file-head"><span class="title">${escapeHtml(name)}</span></div><div class="canvas-file-body markdown-preview">${body}</div></div></div>`;
+  return `<div class="canvas-node canvas-file" style="${style}"><div class="canvas-file-note"><div class="canvas-file-head"><span class="title">${escapeHtml(name)}</span></div><div class="canvas-file-body markdown-preview" data-share-node="${escapeHtml(n.id)}">${body}</div></div></div>`;
 }
 
 /**
  * Render a `.canvas` document to a self-contained static HTML block. `fileUrl`
  * resolves a vault path (image / embed) to a public URL.
  */
-export async function renderCanvasHtml(raw: string, fileUrl: (p: string) => string): Promise<string> {
+export async function renderCanvasHtml(raw: string, fileUrl: (p: string) => string, sourcePath = ''): Promise<string> {
   let data: { nodes?: CNode[]; edges?: CEdge[] };
-  try { data = JSON.parse(raw); } catch { data = {}; }
+  try { data = JSON.parse(raw.replace(/^\ufeff/, '')); } catch { data = {}; }
   // Normalise geometry up front: every downstream use (style attrs, bbox, the
   // `shifted` arithmetic) then operates on numbers, not attacker-supplied strings.
   const nodes: CNode[] = (Array.isArray(data.nodes) ? data.nodes : []).map((n) => ({
@@ -149,7 +157,7 @@ export async function renderCanvasHtml(raw: string, fileUrl: (p: string) => stri
 
   // Groups behind everything, then other nodes (matches the editor's z-order).
   const ordered = [...shifted.filter((n) => n.type === 'group'), ...shifted.filter((n) => n.type !== 'group')];
-  const nodeHtml = (await Promise.all(ordered.map((n) => renderNode(n, fileUrl)))).join('\n');
+  const nodeHtml = (await Promise.all(ordered.map((n) => renderNode(n, fileUrl, sourcePath)))).join('\n');
 
   const edgeSvg = edges.map((e) => {
     const a = byId.get(e.fromNode), b = byId.get(e.toNode);
