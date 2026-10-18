@@ -31,5 +31,7 @@ tabs retain the existing web layout.
 
 ## Delivery status
 
-Implemented on 2026-10-18. Build, type, runtime and UI validation were explicitly
-skipped at the user's request. The existing running app was not replaced.
+Implemented on 2026-10-18. The user subsequently requested a build: core, server,
+web and desktop type checks and the Windows x64 installer/portable build passed.
+Runtime and UI acceptance remain skipped at the user's request. The existing
+running app was not replaced or restarted.

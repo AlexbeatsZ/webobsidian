@@ -63,10 +63,14 @@
       "artifactName": "${productName}-${version}-win-${arch}.${ext}"
     },
     "nsis": {
+      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
     },
     "linux": {
       "icon": "buildResources/icon.png",

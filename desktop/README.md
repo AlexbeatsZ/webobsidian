@@ -33,6 +33,18 @@ npm run desktop          # build everything + launch the app (dev)
 npm run desktop:dist     # build installers for THIS platform → desktop/release/
 ```
 
+To build only the Windows x64 installer and portable app without publishing or
+launching them, run from the repo root:
+
+```bash
+npm run build
+npm --workspace desktop run dist -- --win nsis portable --x64 --publish never
+```
+
+The two outputs have separate names so they can coexist in `desktop/release/`:
+`WebObsidian-<version>-win-x64-setup.exe` and
+`WebObsidian-<version>-win-x64-portable.exe`.
+
 Or directly inside `desktop/` (assumes `npm run build` already ran at the root):
 
 ```bash
@@ -68,7 +80,8 @@ Artifacts:
 | Platform | Formats | Arch |
 |----------|---------|------|
 | macOS    | `.dmg`, `.zip`         | arm64, x64 |
-| Windows  | NSIS `.exe`, portable `.exe` | x64, arm64, ia32 |
+| Windows  | NSIS `.exe`           | x64, arm64, ia32 |
+| Windows  | portable `.exe`       | x64 |
 | Linux    | `.AppImage`, `.deb`    | x64, arm64 |
 
 The apps are **not code-signed/notarized**, so users will see a Gatekeeper /
