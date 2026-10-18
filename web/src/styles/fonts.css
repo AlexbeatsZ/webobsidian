@@ -1,0 +1,78 @@
+/* Bundled from the STEM font snippets; independent of installed system fonts. */
+@font-face{
+	font-family: 'mathjax_main';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+	src: url('../assets/fonts/Fonts-MathJaxMain-1.woff');
+}
+@font-face{
+	font-family: 'mathjax_main';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+	src: url('../assets/fonts/Fonts-MathJaxMain-2.woff');
+}
+@font-face{
+	font-family: 'mathjax_main';
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+	src: url('../assets/fonts/Fonts-MathJaxMain-3.woff');
+}
+@font-face{
+	font-family: 'mathjax_math';
+	font-weight: 700;
+    font-style: italic;
+    font-display: swap;
+	src: url('../assets/fonts/Fonts-MathJaxMain-4.woff');
+}
+@font-face{
+	font-family: 'mathjax_math';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    src:url('../assets/fonts/Fonts-MathJaxMath-5.woff')
+}
+@font-face{
+    font-family: 'mathjax_math';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    src:url('../assets/fonts/Fonts-MathJaxMath-6.woff')
+}
+@font-face{
+    font-family: 'mathjax_math';
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+    src:url('../assets/fonts/Fonts-MathJaxMath-7.woff')
+}
+@font-face{
+    font-family: 'mathjax_math';
+    font-weight: 700;
+    font-style: italic;
+    font-display: swap;
+    src:url('../assets/fonts/Fonts-MathJaxMath-8.woff')
+}
+@font-face{
+	font-family: 'noto serif sc';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+	src: url('../assets/fonts/Fonts-NotoSerifSC-9.ttf');
+}
+@font-face{
+	font-family: 'noto serif sc';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+	src: url('../assets/fonts/Fonts-NotoSerifSC-10.ttf');
+}
+@font-face{
+	font-family: 'Cascadia Code';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+	src: url('../assets/fonts/Fonts-CascadiaCode-11.ttf');
+}

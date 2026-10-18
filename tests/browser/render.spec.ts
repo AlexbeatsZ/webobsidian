@@ -1,6 +1,13 @@
 import { expect, test } from './test';
 import type { RenderHarnessApi } from '../../web/src/dev/RenderHarness';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
+const { PNG } = require(path.join(path.dirname(require.resolve('playwright-core/package.json')), 'lib/utilsBundle.js'));
+// Allow only one 8-bit level of rasterization rounding, never displaced geometry.
+function samePixels(a: Buffer, b: Buffer): boolean {
+  const left = PNG.sync.read(a), right = PNG.sync.read(b);
+  return left.width === right.width && left.height === right.height && left.data.every((value: number, i: number) => Math.abs(value - right.data[i]) <= 1);
+}
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/__render-test');
@@ -86,7 +93,7 @@ test('unfocused live syntax has the same pixels as reading', async ({ page }) =>
   const options = { animations: 'disabled' as const, caret: 'hide' as const };
   const live = await page.locator('[data-slot="0"]').screenshot(options);
   const reading = await page.locator('[data-slot="1"]').screenshot(options);
-  expect(live.equals(reading)).toBe(true);
+  expect(samePixels(live, reading)).toBe(true);
 });
 
 test('the full syntax fixture stays visually equal through multiple scroll positions', async ({ page }) => {
@@ -99,12 +106,13 @@ test('the full syntax fixture stays visually equal through multiple scroll posit
   await page.mouse.move(1490, 750);
   for (const top of [0, 500, 1000, 1500]) {
     await page.evaluate(top => { window.renderHarness.scroll(0, top); window.renderHarness.scroll(1, top); }, top);
+    await page.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); await document.fonts.ready; });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const options = { animations: 'disabled' as const, caret: 'hide' as const,
       style: '.cm-props-add,.prop-pill-add,.prop-pill-x,.prop-del,.cm-source-toggle{visibility:hidden!important}' };
     const live = await page.locator('[data-slot="0"]').screenshot(options);
     const reading = await page.locator('[data-slot="1"]').screenshot(options);
-    expect(live.equals(reading), 'same pixels at scroll ' + top).toBe(true);
+    expect(samePixels(live, reading), 'same pixels at scroll ' + top).toBe(true);
   }
 });
 
@@ -192,4 +200,33 @@ test('display formula supports source entry without losing multiline source', as
   await live.getByRole('button', { name: 'Close source' }).click();
   await expect(live.locator('.katex-display')).toHaveCount(1);
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw);
+});
+test('default typography loads bundled fonts and shares callout presentation', async ({ page }) => {
+  const source = '# Heading\n\n正文 **bold** ==highlight== `code`\n\n> [!proof] Proof\n> Body\n\n> [!think] Think\n> Body\n\n> [!tactic] Tactic\n> Body\n\nend';
+  await page.evaluate(source => window.renderHarness.reset(source), source);
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  const fonts = await page.evaluate(async () => {
+    return Promise.all(['MathJax_Main', 'MathJax_Math', 'Noto Serif SC', 'Cascadia Code'].map(async family => (await document.fonts.load('18px "' + family + '"')).length));
+  });
+  expect(fonts.every(count => count > 0)).toBe(true);
+  for (const slot of [0, 1]) {
+    const host = page.locator(`[data-slot="${slot}"]`);
+    await expect(host.locator('.cm-content').first()).toHaveCSS('font-size', '18px');
+    await expect(host.locator('.cm-heading-labelled')).toHaveCount(1);
+    for (const kind of ['proof', 'think', 'tactic']) {
+      const callout = host.locator(`.md-callout[data-callout="${kind}"]`);
+      await expect(callout).toHaveCSS('border-top-style', 'solid');
+      expect(await callout.locator(':scope > .cm-line').first().evaluate(el => getComputedStyle(el, '::before').width)).toBe('3px');
+    }
+  }
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => { document.querySelector('.theme-light,.theme-dark')!.className = 'theme-' + theme; }, theme);
+    const surface = theme === 'dark' ? 'rgb(37, 37, 37)' : 'rgb(250, 250, 250)';
+    await expect(page.locator('[data-slot="0"] .md-callout').first()).toHaveCSS('background-color', surface);
+    await expect(page.locator('[data-slot="0"] .cm-highlight').first()).toHaveCSS('background-color', theme === 'dark' ? 'rgb(71, 71, 71)' : 'rgb(224, 224, 224)');
+    await page.screenshot({ path: test.info().outputPath('theme-' + theme + '.png') });
+  }
+  await page.evaluate(() => window.renderHarness.cursor(0, 3));
+  await expect(page.locator('[data-slot="0"] .cm-heading-labelled')).toHaveCount(0);
+  await expect(page.locator('[data-slot="1"] .cm-heading-labelled')).toHaveCount(1);
 });

@@ -1638,7 +1638,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           const line = doc.lineAt(node.from);
           const lv = HEADING_LEVEL[name];
           all.push(
-            Decoration.line({ class: `cm-h${lv} HyperMD-header HyperMD-header-${lv}` }).range(line.from, line.from),
+            Decoration.line({ class: `cm-h${lv} HyperMD-header HyperMD-header-${lv}${lineActive(node.from) ? "" : " cm-heading-labelled"}`, attributes: { "data-heading-label": `H${lv}` } }).range(line.from, line.from),
           );
           const m = doc.sliceString(line.from, line.to).match(/^((?: {0,3}> ?)*)(#{1,6}\s+)/);
           if (m) {
@@ -2211,7 +2211,7 @@ export const livePreviewTheme = EditorView.baseTheme({
   '.cm-strike': { textDecoration: 'line-through' },
   '.cm-code': {
     fontFamily: 'var(--font-mono)',
-    background: 'var(--background-primary-alt)',
+    background: 'var(--document-surface)',
     borderRadius: '4px',
     padding: '0.5px 4px',
     fontSize: 'var(--font-smaller)',
@@ -2245,10 +2245,10 @@ export const livePreviewTheme = EditorView.baseTheme({
   '.cm-properties': { margin: '4px 0 18px' },
   // Compound `.cm-line.cm-blockquote` selector beats CodeMirror's own `.cm-line`
   // padding rule (equal specificity, declared later) so the gap actually applies —
-  // otherwise text sits flush against the bar. Blockquote: 2px accent bar +
+  // otherwise text sits flush against the bar. Blockquote: 3px text-color bar +
   // 24px padding (§19). Callout colors live in obsidian.css (--callout-* slots).
   '.cm-line.cm-blockquote': {
-    borderLeft: '2px solid var(--interactive-accent)',
+    borderLeft: '3px solid var(--text-normal)',
     paddingLeft: '24px',
     color: 'var(--text-normal)',
   },

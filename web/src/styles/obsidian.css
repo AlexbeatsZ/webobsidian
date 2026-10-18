@@ -1,14 +1,14 @@
-/* WebObsidian — faithful Obsidian theme (light default + dark).
-   Tokens verbatim from Obsidian 1.12.7 app.css (docs/obsidian-desktop-internals.md §19/§21). */
+/* Default document theme adapted from the STEM editing view. */
+@import "./fonts.css";
 :root {
   --font-default: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI',
     Roboto, 'Inter', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
   --font-monospace-default: ui-monospace, SFMono-Regular, 'Cascadia Mono', 'Roboto Mono',
     'DejaVu Sans Mono', 'Liberation Mono', Menlo, Monaco, 'Consolas', 'Source Code Pro', monospace;
   --font-ui: var(--font-default);
-  --font-text: var(--font-default);
-  --font-mono: var(--font-monospace-default);
-  --font-text-size: 16px;
+  --font-text: "MathJax_Main", "MathJax_Math", "Noto Serif SC", serif;
+  --font-mono: "Cascadia Code", var(--font-monospace-default);
+  --font-text-size: 18px;
   --font-smallest: 0.8em;
   --font-smaller: 0.875em;
   --font-small: 0.933em;
@@ -28,6 +28,10 @@
   --file-margins: 32px;
   --p-spacing: 1rem;
   --indent-size: 4;
+  --callout-proof: 34, 197, 94;
+  --callout-think: 249, 115, 22;
+  --callout-tactic: 255, 190, 200;
+  --callout-attention: 255, 50, 50;
   --ribbon-width: 44px;
   --sidebar-width: 252px;
   --right-width: 300px;
@@ -47,6 +51,9 @@
 
 /* ---------- Obsidian light (default) ---------- */
 .theme-light {
+  --document-surface: #fafafa;
+  --document-nested-surface: #f5f5f5;
+  --document-border: hsl(0 0% 88%);
   --color-base-00: #ffffff;
   --color-base-05: #fcfcfc;
   --color-base-10: #fafafa;
@@ -78,13 +85,13 @@
 
   /* Callout color slots (RGB triplets, §21) */
   --callout-default: var(--color-blue-rgb);
-  --callout-summary: var(--color-cyan-rgb);
+  --callout-summary: 58, 188, 148;
   --callout-info: var(--color-blue-rgb);
-  --callout-todo: var(--color-blue-rgb);
+  --callout-todo: 157, 102, 45;
   --callout-important: var(--color-cyan-rgb);
   --callout-tip: var(--color-cyan-rgb);
   --callout-success: var(--color-green-rgb);
-  --callout-question: var(--color-orange-rgb);
+  --callout-question: 157, 102, 45;
   --callout-warning: var(--color-orange-rgb);
   --callout-fail: var(--color-red-rgb);
   --callout-error: var(--color-red-rgb);
@@ -108,7 +115,7 @@
   --text-accent-hover: var(--color-accent-2);
   --text-on-accent: white;
   --text-selection: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.2);
-  --text-highlight-bg: rgba(255, 208, 0, 0.4);
+  --text-highlight-bg: hsl(0 0% 88%);
   --interactive-normal: var(--color-base-00);
   --interactive-hover: var(--color-base-10);
   --interactive-accent: var(--color-accent-1);
@@ -138,6 +145,10 @@
 
 /* ---------- Obsidian dark ---------- */
 .theme-dark {
+  --bold-modifier: 300;
+  --document-surface: #252525;
+  --document-nested-surface: #2c2c2c;
+  --document-border: hsl(0 0% 28%);
   --color-base-00: #1e1e1e;
   --color-base-05: #212121;
   --color-base-10: #242424;
@@ -168,13 +179,13 @@
   --color-pink: #fa99cd;    --color-pink-rgb: 250, 153, 205;
 
   --callout-default: var(--color-blue-rgb);
-  --callout-summary: var(--color-cyan-rgb);
+  --callout-summary: 58, 188, 148;
   --callout-info: var(--color-blue-rgb);
-  --callout-todo: var(--color-blue-rgb);
+  --callout-todo: 157, 102, 45;
   --callout-important: var(--color-cyan-rgb);
   --callout-tip: var(--color-cyan-rgb);
   --callout-success: var(--color-green-rgb);
-  --callout-question: var(--color-orange-rgb);
+  --callout-question: 157, 102, 45;
   --callout-warning: var(--color-orange-rgb);
   --callout-fail: var(--color-red-rgb);
   --callout-error: var(--color-red-rgb);
@@ -198,7 +209,7 @@
   --text-accent-hover: var(--color-accent-2);
   --text-on-accent: white;
   --text-selection: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.33);
-  --text-highlight-bg: rgba(255, 208, 0, 0.4);
+  --text-highlight-bg: hsl(0 0% 28%);
   --interactive-normal: var(--color-base-30);
   --interactive-hover: var(--color-base-35);
   --interactive-accent: var(--color-accent);
@@ -419,13 +430,9 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .cm-gutters { background: var(--background-primary) !important; border: 0 !important; color: var(--text-faint) !important; }
 .cm-activeLine { background: transparent !important; }
 .cm-activeLineGutter { background: transparent !important; }
-/* …but don't clobber lines that carry their own background (callout/code) */
-.cm-s-obsidian .cm-line.cm-callout-line.cm-activeLine {
-  background: rgba(var(--callout-color, var(--callout-default)), 0.1) !important; }
-.cm-s-obsidian .cm-line.HyperMD-codeblock-bg.cm-activeLine {
-  background: var(--background-primary-alt) !important; }
 .cm-selectionBackground, .cm-editor ::selection { background: var(--text-selection) !important; }
 
+.cm-heading-labelled::before { content: attr(data-heading-label); white-space: nowrap; position: absolute; right: calc(100% + 6px); bottom: 0; font: normal 0.6rem/1.5 var(--font-ui); color: var(--text-muted); pointer-events: none; }
 /* ---- Obsidian editor typography (cm-s-obsidian, §19/§20) ---- */
 /* Live Preview block spacing: heading lines carry padding-top = --p-spacing (1rem) */
 .cm-s-obsidian .cm-line.HyperMD-header { line-height: var(--line-height-tight); padding-top: var(--p-spacing); }
@@ -472,7 +479,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 /* Code block: mono font on every code line; bg + inner padding only on fenced
    blocks (HyperMD-codeblock-bg) — indented code has no bg, like Obsidian. */
 .cm-s-obsidian .cm-line.HyperMD-codeblock { font-family: var(--font-mono); font-size: var(--font-smaller); }
-.cm-s-obsidian .cm-line.HyperMD-codeblock-bg { background: var(--background-primary-alt); padding-left: 16px; padding-right: 16px; }
+.cm-s-obsidian .cm-line.HyperMD-codeblock-bg { background: var(--document-surface); padding-left: 16px; padding-right: 16px; }
 .cm-s-obsidian .cm-line.HyperMD-codeblock-begin { border-radius: var(--radius-s) var(--radius-s) 0 0; padding-top: 8px; }
 .cm-s-obsidian .cm-line.HyperMD-codeblock-end { border-radius: 0 0 var(--radius-s) var(--radius-s); padding-bottom: 8px; }
 /* HR — keep within the normal line box (no extra margins) */
@@ -544,13 +551,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   color: rgb(var(--callout-color, var(--callout-default))); transition: transform var(--transition); }
 .cm-callout-fold svg { width: 16px; height: 16px; }
 .cm-callout-fold.is-folded { transform: rotate(-90deg); }
-/* Callout (per-line rendering; colors via --callout-color RGB triplet) */
-.cm-s-obsidian .cm-line.cm-callout-line { background: rgba(var(--callout-color, var(--callout-default)), 0.1);
-  mix-blend-mode: var(--highlight-mix-blend-mode); padding-left: 24px; padding-right: 12px; }
-.cm-s-obsidian .cm-line.cm-callout-first { border-radius: var(--radius-s) var(--radius-s) 0 0; padding-top: 12px; }
-.cm-s-obsidian .cm-line.cm-callout-last { border-radius: 0 0 var(--radius-s) var(--radius-s); padding-bottom: 12px; }
-.cm-s-obsidian .cm-line.cm-callout-first.cm-callout-last { border-radius: var(--radius-s); }
-.cm-s-obsidian .cm-callout-title { color: rgb(var(--callout-color, var(--callout-default))); font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
+.cm-s-obsidian .cm-callout-title { color: rgb(var(--callout-color, var(--callout-default))); font-weight: 600; }
 .cm-callout-icon { display: inline-flex; vertical-align: text-bottom; margin-right: 6px;
   color: rgb(var(--callout-color, var(--callout-default))); }
 .cm-callout-icon svg { width: 16px; height: 16px; }
@@ -571,10 +572,13 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .cm-properties, .cm-html-block { position: relative; }
 .is-reading-mode .cm-props-add,
 .is-reading-mode .prop-pill-x, .is-reading-mode .prop-pill-add, .is-reading-mode .prop-del { visibility: hidden; }
-.md-quote { border-left: 2px solid var(--interactive-accent); padding-left: 24px; }
-.md-callout { background: rgba(var(--callout-color, var(--callout-default)), .1); border-radius: var(--radius-s); padding: 12px 16px 12px 24px; }
+.md-quote { border-left: 3px solid var(--text-normal); padding-left: 24px; }
+.md-callout { background: var(--document-surface); border: 0.5px solid var(--document-border); border-radius: 4px; padding: 12px 16px; margin: 16px 0; }
+.md-callout > .cm-line:first-child { padding-left: 12px; padding-bottom: 8px; }
+.md-callout > .cm-line:first-child::before { content: ""; position: absolute; left: 0; top: 0; bottom: 8px; width: 3px; border-radius: 2px; background: rgb(var(--callout-color, var(--callout-default))); }
+.md-callout .md-code, .md-callout .cm-code { background: var(--document-nested-surface); }
 .md-callout .cm-callout-title { color: rgb(var(--callout-color, var(--callout-default))); }
-.md-code { background: var(--background-primary-alt); border-radius: var(--radius-s); padding: 8px 16px; }
+.md-code { background: var(--document-surface); border-radius: var(--radius-s); padding: 8px 16px; }
 .md-code .cm-line.HyperMD-codeblock-bg { background: transparent !important; padding-left: 0; padding-right: 0; }
 .md-code .cm-line.HyperMD-codeblock-begin { padding-top: 0; }
 .md-code .cm-line.HyperMD-codeblock-end { padding-bottom: 0; }
@@ -616,8 +620,8 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .markdown-preview b, .markdown-preview strong { font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
 .markdown-preview mark { background: var(--text-highlight-bg); color: inherit; }
 .markdown-preview p { margin: .6em 0; }
-.markdown-preview code { font-family: var(--font-mono); background: var(--bg-secondary); padding: 1px 5px; border-radius: var(--radius-s); font-size: .88em; }
-.markdown-preview pre { background: var(--background-primary-alt); padding: 12px 16px; border-radius: var(--radius-s); overflow-x: auto; position: relative; }
+.markdown-preview code { font-family: var(--font-mono); background: var(--document-surface); padding: 1px 5px; border-radius: var(--radius-s); font-size: .88em; }
+.markdown-preview pre { background: var(--document-surface); padding: 12px 16px; border-radius: var(--radius-s); overflow-x: auto; position: relative; }
 /* Language flair top-right, same as Live Preview's code blocks */
 .markdown-preview pre[data-lang]::after { content: attr(data-lang); position: absolute; top: 6px; right: 10px;
   color: var(--text-faint); font-size: var(--font-ui-smaller); font-family: var(--font-ui); text-transform: capitalize; }
@@ -644,7 +648,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .markdown-preview .html-render-frame { display: block; width: 100%; height: 70vh;
   border: 1px solid var(--bg-modifier-border); border-radius: var(--radius-s);
   background: #fff; resize: vertical; overflow: auto; }
-.markdown-preview blockquote { border-left: 3px solid var(--interactive-accent); margin: .8em 0; padding: 2px 24px; color: var(--text-normal); }
+.markdown-preview blockquote { border-left: 3px solid var(--text-normal); margin: .8em 0; padding: 2px 24px; color: var(--text-normal); }
 .markdown-preview img { max-width: 100%; border-radius: var(--radius); cursor: zoom-in; }
 .markdown-preview table { border-collapse: collapse; margin: .6em 0; }
 .markdown-preview th, .markdown-preview td { border: 1px solid var(--bg-modifier-border); padding: 4px 10px; text-align: left; vertical-align: top; }
@@ -705,12 +709,12 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .cm-props-dd-item:hover { background: var(--bg-modifier-hover); }
 .cm-props-dd-item .prop-icon { color: var(--text-faint); width: 16px; text-align: center; }
 
-/* Callouts (reading view) — same §21 box/colors as Live Preview */
+/* Static HTML fallback uses the same document tokens. */
 .callout { --callout-color: var(--callout-default);
   background: rgba(var(--callout-color), 0.1); mix-blend-mode: var(--highlight-mix-blend-mode);
   border-radius: var(--radius-s); padding: 12px 12px 12px 24px; margin: 1em 0; }
 .callout-title { display: flex; align-items: center; gap: 6px;
-  color: rgb(var(--callout-color)); font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
+  color: rgb(var(--callout-color)); font-weight: 600; border-left: 3px solid currentColor; padding-left: 12px; margin-bottom: 8px; }
 .callout-icon { display: inline-flex; }
 .callout-icon svg { width: 16px; height: 16px; }
 .callout-content > :first-child { margin-top: 0.25em; }
@@ -720,7 +724,11 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .callout-fold { display: inline-flex; margin-left: 4px; color: rgb(var(--callout-color)); transition: transform var(--transition); }
 .callout-fold svg { width: 16px; height: 16px; }
 .callout.is-collapsed .callout-fold { transform: rotate(-90deg); }
-/* type → color slot mapping (§21) */
+/* type → color slot mapping */
+.callout[data-callout='proof'] { --callout-color: var(--callout-proof); }
+.callout[data-callout='think'] { --callout-color: var(--callout-think); }
+.callout[data-callout='tactic'] { --callout-color: var(--callout-tactic); }
+.callout[data-callout='attention'] { --callout-color: var(--callout-attention); }
 .callout[data-callout='abstract'], .callout[data-callout='summary'], .callout[data-callout='tldr'] { --callout-color: var(--callout-summary); }
 .callout[data-callout='info'] { --callout-color: var(--callout-info); }
 .callout[data-callout='todo'] { --callout-color: var(--callout-todo); }
@@ -728,7 +736,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .callout[data-callout='tip'], .callout[data-callout='hint'] { --callout-color: var(--callout-tip); }
 .callout[data-callout='success'], .callout[data-callout='check'], .callout[data-callout='done'] { --callout-color: var(--callout-success); }
 .callout[data-callout='question'], .callout[data-callout='help'], .callout[data-callout='faq'] { --callout-color: var(--callout-question); }
-.callout[data-callout='warning'], .callout[data-callout='caution'], .callout[data-callout='attention'] { --callout-color: var(--callout-warning); }
+.callout[data-callout='warning'], .callout[data-callout='caution'] { --callout-color: var(--callout-warning); }
 .callout[data-callout='failure'], .callout[data-callout='fail'], .callout[data-callout='missing'] { --callout-color: var(--callout-fail); }
 .callout[data-callout='danger'], .callout[data-callout='error'] { --callout-color: var(--callout-error); }
 .callout[data-callout='bug'] { --callout-color: var(--callout-bug); }

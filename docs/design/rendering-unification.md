@@ -134,3 +134,23 @@ for the private vault; shares and print do not receive it.
   revision fields are optional for older clients. Deploy server and client from
   the same build so the share manifest and scoped API match. The old client
   pipeline was removed only after its callers were migrated.
+
+## Default document theme (2026-10-18)
+
+- The STEM editing view is the typography reference: MathJax_Main / MathJax_Math /
+  Noto Serif SC at 18px; Cascadia Code for code. UI fonts remain independent.
+- Font faces are extracted from the user's STEM snippets into assets/fonts and
+  imported through fonts.css. There is no local() dependency on system fonts.
+- Existing theme definitions are replaced in place, without a user-theme override
+  layer. Light/dark surfaces, gray highlights, dark bold weight, 3px quote rules,
+  neutral bordered callouts and their colored title rules are shared by all clients.
+- Heading labels use the same active-line predicate as heading source reveal.
+  Reading always displays labels; editing suppresses them on the active heading.
+- Custom proof/think/tactic and attention color/icon slots belong to callouts.ts.
+- Image conventions, Hider workspace changes and formula-engine replacement are
+  outside this migration. Bundled Chinese fonts retain the original full coverage;
+  font subsetting/compression is not part of this change.
+
+Theme acceptance: typecheck, isolated production build and 25 Edge browser tests pass.
+Pixel parity permits at most one 8-bit channel level of rasterization rounding;
+font readiness is awaited after scrolling. Human real-vault acceptance remains pending.
