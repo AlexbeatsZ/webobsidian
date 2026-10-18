@@ -10,6 +10,8 @@ web/dist/
 server/dist/
 server/public/
 coverage/
+playwright-report/
+test-results/
 *.tsbuildinfo
 # Desktop (Electron) build artifacts
 desktop/.gen/

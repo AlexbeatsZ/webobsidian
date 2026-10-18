@@ -51,7 +51,7 @@ filesRouter.get(
       if (resolved) rel = resolved;
     }
     if (vault.isTextFile(rel)) {
-      res.json({ path: rel, content: await vault.readFileText(rel), encoding: 'utf8' });
+      res.json({ path: rel, ...(await vault.readFileSnapshot(rel)), encoding: 'utf8' });
     } else {
       // Stream with Range support so embedded <video>/<audio> can seek.
       const abs = await vault.resolveInVault(rel);
@@ -63,14 +63,18 @@ filesRouter.get(
 filesRouter.put(
   '/content',
   asyncHandler(async (req, res) => {
-    const { path: rel, content } = req.body ?? {};
+    const { path: rel, content, baseRevision } = req.body ?? {};
     if (typeof rel !== 'string' || typeof content !== 'string') {
       res.status(400).json({ error: 'path and content required' });
       return;
     }
-    await vault.writeFileText(rel, content);
+    if (baseRevision !== undefined && typeof baseRevision !== 'string') {
+      res.status(400).json({ error: 'baseRevision must be a string' });
+      return;
+    }
+    const snapshot = await vault.writeFileText(rel, content, baseRevision);
     reindex({ upsert: rel, added: rel });
-    res.json({ ok: true, path: rel });
+    res.json({ ok: true, path: rel, ...snapshot });
   }),
 );
 

@@ -108,9 +108,9 @@ export const api = {
   // files
   tree: () => req<TreeNode>('/api/files/'),
   read: (path: string) =>
-    req<{ path: string; content: string }>(`/api/files/content?path=${encodeURIComponent(path)}`),
-  write: (path: string, content: string) =>
-    req<{ ok: true }>('/api/files/content', { method: 'PUT', body: JSON.stringify({ path, content }) }),
+    req<{ path: string; content: string; revision?: string }>(`/api/files/content?path=${encodeURIComponent(path)}`),
+  write: (path: string, content: string, baseRevision?: string) =>
+    req<{ ok: true; revision?: string }>('/api/files/content', { method: 'PUT', body: JSON.stringify({ path, content, baseRevision }) }),
   createFolder: (path: string) =>
     req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
   rename: (from: string, to: string) =>

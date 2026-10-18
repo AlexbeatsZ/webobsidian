@@ -6,21 +6,28 @@
   "workspaces": [
     "server",
     "web",
-    "desktop"
+    "desktop",
+    "packages/markdown-core"
   ],
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm --workspace server run dev",
     "dev:web": "npm --workspace web run dev",
-    "build": "npm --workspace web run build && npm --workspace server run build",
+    "build": "npm run build:core && npm --workspace web run build && npm --workspace server run build",
     "start": "npm --workspace server run start",
-    "typecheck": "npm --workspace server run typecheck && npm --workspace web run typecheck",
+    "typecheck": "npm run build:core && npm --workspace server run typecheck && npm --workspace web run typecheck",
     "desktop": "npm run build && npm --workspace desktop run dev",
     "desktop:dist": "npm run build && npm --workspace desktop run dist",
-    "desktop:publish": "npm run build && npm --workspace desktop run dist:publish"
+    "desktop:publish": "npm run build && npm --workspace desktop run dist:publish",
+    "build:core": "npm --workspace @webobsidian/markdown-core run build",
+    "test:unit": "vitest run",
+    "test:render": "playwright test --project=render",
+    "test:integration": "playwright test --project=integration"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@playwright/test": "^1.64.1",
+    "concurrently": "^9.1.0",
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": ">=20"

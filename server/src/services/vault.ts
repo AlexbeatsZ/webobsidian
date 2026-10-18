@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getSettings } from './settings.js';
+import { readTextFile, writeTextFile } from './textFile.js';
 
 export interface TreeNode {
   name: string;
@@ -142,7 +143,11 @@ export function isTextFile(rel: string): boolean {
 
 export async function readFileText(rel: string): Promise<string> {
   const abs = await resolveInVault(rel);
-  return fs.readFile(abs, 'utf8');
+  return (await readTextFile(abs)).content;
+}
+
+export async function readFileSnapshot(rel: string) {
+  return readTextFile(await resolveInVault(rel));
 }
 
 export async function readFileBuffer(rel: string): Promise<Buffer> {
@@ -150,12 +155,9 @@ export async function readFileBuffer(rel: string): Promise<Buffer> {
   return fs.readFile(abs);
 }
 
-export async function writeFileText(rel: string, content: string): Promise<void> {
+export async function writeFileText(rel: string, content: string, baseRevision?: string): Promise<{ revision: string }> {
   const abs = await resolveInVault(rel);
-  await fs.mkdir(path.dirname(abs), { recursive: true });
-  const tmp = `${abs}.tmp-${Date.now()}`;
-  await fs.writeFile(tmp, content, 'utf8');
-  await fs.rename(tmp, abs);
+  return writeTextFile(abs, content, baseRevision);
 }
 
 export async function writeFileBuffer(rel: string, buf: Buffer): Promise<void> {
