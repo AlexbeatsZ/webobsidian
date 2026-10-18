@@ -99,16 +99,17 @@ test('embeds use the shared readonly engine, subscribe to drafts and stop cycles
 
 test('Canvas uses the shared live editor and preserves the surrounding JSON source', async ({ page }) => {
   await page.route('**/api/tags', route => route.fulfill({ json: { tags: [] } }));
-  const raw = '\ufeff{\r\n "custom": {"keep":1},\n "nodes": [{"id":"a","type":"text","x":0,"y":0,"width":380,"height":220,"text" : "**old**","unknown":7}],\r\n "edges": []\r\n}';
+  const raw = '\ufeff{\r\n "custom": {"keep":1},\n "nodes": [{"id":"a","type":"text","x":0,"y":0,"width":380,"height":220,"text" : "**old** $x^2$","unknown":7}],\r\n "edges": []\r\n}';
   await page.evaluate(source => window.renderHarness.canvas(source), raw);
   const card = page.locator('.canvas-node.canvas-text');
   await expect(card.locator('.cm-strong')).toHaveText('old');
+  await expect(card.locator('mjx-container[data-mathjax-version="4.1.3"]')).toHaveCount(1);
   await card.dblclick();
   const input = card.locator('[contenteditable="true"]');
   await expect(input).toBeFocused();
   await input.press('ControlOrMeta+a'); await input.pressSequentially('**new**');
   await input.press('Escape');
-  await expect.poll(() => page.evaluate(() => window.renderHarness.canvasRaw())).toBe(raw.replace('**old**', '**new**'));
+  await expect.poll(() => page.evaluate(() => window.renderHarness.canvasRaw())).toBe(raw.replace('**old** $x^2$', '**new**'));
   await expect(card.locator('.cm-strong')).toHaveText('new');
 });
 
@@ -120,7 +121,12 @@ test('print freezes the entire reading document including content beyond the vie
   await expect(print.locator('.cm-content').first()).toContainText('Paragraph 349');
   await expect(print.locator('.cm-strong')).toHaveCount(350);
   await expect(print.locator('.cm-gap')).toHaveCount(0);
-  await expect(print.locator('.katex')).toHaveCount(1);
+  await expect(print.locator('mjx-container[jax="SVG"]')).toHaveCount(1);
+  await expect(print.locator('#MJX-SVG-styles')).toHaveCount(1);
+  expect(await print.locator('mjx-container svg').evaluate(svg => [...svg.querySelectorAll('use')].every(use => {
+    const href = use.getAttribute('href') ?? use.getAttribute('xlink:href');
+    return href?.startsWith('#') && Boolean(svg.querySelector(`[id="${href.slice(1)}"]`));
+  }))).toBe(true);
   await expect(print.locator('.cm-html-break')).toHaveCount(1);
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
 });
@@ -130,7 +136,7 @@ test('public enhancement uses the shared readonly renderer with share-scoped ser
   await page.route('**/api/**', route => { forbidden.push(route.request().url()); return route.fulfill({ status: 403 }); });
   await page.route('**/public/shares/fixture/render', route => route.fulfill({ json: {
     kind: 'markdown', documents: [
-      { token: 'root', source: '**public**<br>second\n\n![[nested]]\n\n<div onclick="alert(1)"><script>alert(2)</script>safe</div>', from: 0, notes: { nested: 'child' } },
+      { token: 'root', source: '**public**<br>second\n\n![[nested]]\n\n$\\ce{H2O}$\n\n<div onclick="alert(1)"><script>alert(2)</script>safe</div>', from: 0, notes: { nested: 'child' } },
       { token: 'child', source: '**child**', from: 30, notes: {} },
     ],
   } }));
@@ -141,6 +147,8 @@ test('public enhancement uses the shared readonly renderer with share-scoped ser
   const host = page.locator('#shared-markdown');
   await expect(host.locator('.cm-strong')).toHaveText(['public', 'child']);
   await expect(host.locator('.cm-html-break')).toHaveCount(1);
+  await expect(host.locator('mjx-container[data-mathjax-version="4.1.3"]')).toHaveCount(1);
+  await expect(host.locator('[data-mml-node="merror"]')).toHaveCount(0);
   await expect(host.locator('[contenteditable="true"],.cm-source-toggle,script,[onclick]')).toHaveCount(0);
   await expect(host).not.toContainText('SSR fallback');
   expect(forbidden).toEqual([]);

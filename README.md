@@ -76,7 +76,7 @@ stack runs from a single `docker compose up`.
 ## ✨ Features
 
 - 📝 **Editor & rendering** — CodeMirror 6 with live / source / reading views; wikilinks
-  `[[note]]`, embeds `![[file]]`, tags `#tag`, callouts, task lists, KaTeX math and
+  `[[note]]`, embeds `![[file]]`, tags `#tag`, callouts, task lists, MathJax 4.1.3 math and
   Mermaid diagrams.
 - 🕸️ **Graph view** — force-directed graph built from your wikilinks, with fly-to node
   search and highlighting.

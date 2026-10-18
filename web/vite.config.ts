@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+import { mathJaxAssets, mathJaxVersion } from './mathjaxAssets';
 
 // Web build outputs to ../server/public so the server can serve the SPA.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), mathJaxAssets()],
+  define: { __MATHJAX_VERSION__: JSON.stringify(mathJaxVersion) },
   build: {
     manifest: true,
     outDir: '../server/public',

@@ -26,7 +26,7 @@ export async function preparePrintDocument(snapshot: DocumentSnapshot, context: 
       const height = Math.ceil(Math.max(doc.body.scrollHeight + 2000, 2000));
       if (host.querySelector('.cm-gap') && height > parseFloat(frame.style.height)) { frame.style.height = height + 'px'; frame.contentWindow!.dispatchEvent(new Event('resize')); stable = 0; }
       await nextFrame();
-      // Lazy CSS (KaTeX) was added to the parent document by the module loader.
+      // Copy any styles added by lazy renderers after the print host was mounted.
       document.querySelectorAll('link[rel="stylesheet"]').forEach(el => {
         const href = (el as HTMLLinkElement).href;
         if (![...doc.querySelectorAll('link')].some(link => link.href === href)) doc.head.appendChild(el.cloneNode(true));

@@ -162,3 +162,43 @@ for the private vault; shares and print do not receive it.
 Theme acceptance: web typecheck, isolated production build and 26 Edge browser tests pass.
 Pixel parity permits at most one 8-bit channel level of rasterization rounding;
 font readiness is awaited after scrolling. Human real-vault acceptance remains pending.
+
+## Formula engine (2026-10-18)
+
+- The shared MathWidget uses MathJax 4.1.3 instead of KaTeX. The web dependency is
+  pinned exactly; the lockfile also pins New Computer Modern and the 4.1.3 bbm,
+  bboldx, dsfont and mhchem SVG font extensions. Mermaid retains its own KaTeX
+  dependency for its diagram syntax.
+- mathjaxAssets.ts serves the official startup/core/TeX/SVG components, TeX
+  extensions and SVG font data locally in development and emits the same relative
+  directory tree into production assets. No CDN is needed for these components.
+  The official startup loader selects only the components needed by widgets;
+  page-wide scanning, the MathJax context menu and speech workers are not loaded.
+- mathjax.ts owns one lazy runtime and calls tex2svgPromise so font/extension
+  loading completes before render-pending is cleared. MathJax 4 serializes those
+  conversions internally. Widget destruction aborts late DOM updates; completion
+  asks CodeMirror to measure the changed layout. Failed loads retain raw TeX.
+- ui/safe filters attributes from user-authored TeX, including unsafe URL protocols.
+  The source session remains authoritative and unchanged by formula conversion.
+  The existing dollar-delimiter parser and formula source controls remain shared
+  across editing, reading, embedded notes, Canvas, printing and public shares.
+- SVG paths use a per-formula local cache. Print receives the SVG stylesheet in
+  its own document and can clone formulas without references to the parent page.
+- List indentation is remeasured on CodeMirror geometry changes, since asynchronous
+  formula layout can rebuild line DOM and discard previously measured styles.
+  Pixel comparisons await the visible widgets and list measurements after scrolling.
+- Browser regressions cover exact runtime version, inline/display/AMS/chemistry,
+  dynamic font and extension loads from the same origin, source entry/close,
+  malformed input, URL filtering and disposal while initialization is delayed.
+  Integration/packaged checks include Canvas, whole-document print and public
+  shares. Real-vault visual acceptance and the OS print dialog remain manual.
+
+Acceptance: isolated source snapshot (base 0942246 + formula-engine changes),
+typecheck, 28 unit/HTTP tests, 36 Edge render/integration tests, production build
+and packaged Markdown/Canvas share acceptance passed. The snapshot uses its own
+Vite cache, core workspace link, browser-test port and output so concurrent theme
+and plugin work does not affect this result. No running app was replaced.
+
+References: [MathJax components](https://docs.mathjax.org/en/latest/web/components/index.html),
+[promise conversion and local SVG caches](https://docs.mathjax.org/en/latest/web/convert.html),
+[safe extension](https://docs.mathjax.org/en/latest/options/safe.html).

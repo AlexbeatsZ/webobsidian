@@ -19,6 +19,7 @@ import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePr
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 import { analyzeMarkdown, tableModels, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
+import { renderMath } from './mathjax';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -355,19 +356,11 @@ class CalloutFoldWidget extends WidgetType {
   ignoreEvent(event: Event) { return event.type === 'mousedown'; }
 }
 
-/* ---------------- math (KaTeX, lazy-loaded like Obsidian's MathJax) ---------------- */
-
-let katexPromise: Promise<typeof import('katex')['default']> | null = null;
-function ensureKatex() {
-  if (!katexPromise) {
-    katexPromise = Promise.all([import('katex'), import('katex/dist/katex.min.css')]).then(
-      ([k]) => k.default,
-    );
-  }
-  return katexPromise;
-}
+/* ---------------- math (locally bundled MathJax, loaded on demand) ---------------- */
 
 class MathWidget extends WidgetType {
+  private controllers = new WeakMap<HTMLElement, AbortController>();
+  destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); }
   constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }) {
     super();
   }
@@ -379,15 +372,13 @@ class MathWidget extends WidgetType {
     span.className = 'cm-math-rendered' + (this.display ? ' math-block' : ' math-inline');
     const body = document.createElement('span');
     body.textContent = this.tex;
-    span.appendChild(body); // shown until KaTeX loads
+    span.appendChild(body); // shown until MathJax finishes, or if loading fails
     span.dataset.renderPending = 'true';
-    void ensureKatex().then((katex) => {
-      try {
-        katex.render(this.tex, body, { throwOnError: false, displayMode: this.display });
-      } catch {
-        /* keep raw tex */
-      }
-    }).catch(() => { span.classList.add('mod-error'); }).finally(() => { delete span.dataset.renderPending; });
+    const controller = new AbortController();
+    this.controllers.set(span, controller);
+    void renderMath(body, this.tex, this.display, controller.signal)
+      .catch(() => { if (!controller.signal.aborted) span.classList.add('mod-error'); })
+      .finally(() => { delete span.dataset.renderPending; if (!controller.signal.aborted) view.requestMeasure(); });
     if (this.range && !view.state.readOnly) span.appendChild(sourceButton(view, this.range, 'formula'));
     return span;
   }
@@ -1843,7 +1834,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         all.push(Decoration.mark({ class: 'cm-comment' }).range(s, e));
       }
 
-      // $$Display math$$ (single-line) — rendered via KaTeX when the caret is outside.
+      // $$Display math$$ (single-line) — rendered via MathJax when the caret is outside.
       const dmathRe = /\$\$(.+?)\$\$/g;
       while ((m = dmathRe.exec(text))) {
         const s = line.from + m.index;

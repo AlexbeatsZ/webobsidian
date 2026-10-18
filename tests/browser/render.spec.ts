@@ -106,7 +106,9 @@ test('the full syntax fixture stays visually equal through multiple scroll posit
   await page.mouse.move(1490, 750);
   for (const top of [0, 500, 1000, 1500]) {
     await page.evaluate(top => { window.renderHarness.scroll(0, top); window.renderHarness.scroll(1, top); }, top);
+    await expect(page.locator('[data-render-pending]')).toHaveCount(0);
     await page.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); await document.fonts.ready; });
+    await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('.cm-line[data-list-body-start]')].every(line => line.style.paddingLeft !== ''));
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const options = { animations: 'disabled' as const, caret: 'hide' as const,
       style: '.cm-props-add,.prop-pill-add,.prop-pill-x,.prop-del,.cm-source-toggle{visibility:hidden!important}' };
@@ -177,29 +179,107 @@ test('nested callouts own their math and code and fold independently', async ({ 
   await page.evaluate((source) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.reset(source), raw);
   const reading = page.locator('[data-slot="1"]');
   await expect(reading.locator('.md-callout .md-callout')).toHaveCount(1);
-  await expect(reading.locator('.katex')).toHaveCount(0);
+  await expect(reading.locator('mjx-container[jax="SVG"]')).toHaveCount(0);
   await reading.locator('.cm-callout-fold').click();
-  await expect(reading.locator('.katex-display')).toHaveCount(1);
+  await expect(reading.locator('mjx-container[jax="SVG"][display="true"]')).toHaveCount(1);
   await expect(reading.locator('.md-code')).toContainText('let x = 1');
   await expect(reading.locator('.cm-content')).not.toContainText('> >');
   await reading.locator('.cm-callout-fold').click();
-  await expect(reading.locator('.katex')).toHaveCount(0);
+  await expect(reading.locator('mjx-container[jax="SVG"]')).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw);
 });
 
 test('display formula supports source entry without losing multiline source', async ({ page }) => {
   const raw = '$$\n\\frac{a}{b}\n$$\n\nplain';
   await page.evaluate((source) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.reset(source), raw);
-  await expect(page.locator('[data-slot="1"] .katex-display')).toHaveCount(1);
+  await expect(page.locator('[data-slot="1"] mjx-container[jax="SVG"][display="true"]')).toHaveCount(1);
   await page.evaluate((position) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.cursor(0, position), raw.length);
   const live = page.locator('[data-slot="0"]');
-  await expect(live.locator('.katex-display')).toHaveCount(1);
+  await expect(live.locator('mjx-container[jax="SVG"][display="true"]')).toHaveCount(1);
   await live.getByRole('button', { name: 'Edit formula source' }).click();
-  await expect(live.locator('.katex-display')).toHaveCount(0);
+  await expect(live.locator('mjx-container[jax="SVG"][display="true"]')).toHaveCount(0);
   await expect(live.locator('.cm-content')).toContainText('\\frac{a}{b}');
   await live.getByRole('button', { name: 'Close source' }).click();
-  await expect(live.locator('.katex-display')).toHaveCount(1);
+  await expect(live.locator('mjx-container[jax="SVG"][display="true"]')).toHaveCount(1);
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw);
+});
+
+test('MathJax 4.1.3 renders inline, display, chemistry and dynamic glyphs with local assets', async ({ page }) => {
+  const assets: string[] = [];
+  const external: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).origin !== new URL(page.url()).origin) external.push(request.url());
+  });
+  await page.route('**/assets/mathjax-*/**', async route => {
+    assets.push(route.request().url());
+    await route.continue();
+  });
+  const raw = 'Inline $\\frac{a}{b}$ and $\\ce{2 H2 + O2 -> 2 H2O}$.\n\n$$\n\\begin{aligned} f(x)&=\\int_0^1 x^2\\,dx \\\\ \\mathbb{R}&\\ni x \\end{aligned}\n$$\n\n$\\unicode{x1F0A1}$\n\n$\\require{bbm}\\mathbbm{R} + \\require{bboldx}\\mathbb{N} + \\require{dsfont}\\mathds{1}$\n\nend';
+  await page.evaluate(source => window.renderHarness.reset(source), raw);
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  for (const slot of [0, 1]) {
+    const host = page.locator(`[data-slot="${slot}"]`);
+    await expect(host.locator('mjx-container[data-mathjax-version="4.1.3"]')).toHaveCount(5);
+    await expect(host.locator('mjx-container[display="true"]')).toHaveCount(1);
+    await expect(host.locator('[data-render-pending],[data-mml-node="merror"],.mod-error')).toHaveCount(0);
+    await expect(host.locator('mjx-container').first()).toHaveAttribute('aria-label', '\\frac{a}{b}');
+  }
+  expect(assets.some(url => url.endsWith('/startup.js'))).toBe(true);
+  expect(assets.some(url => url.endsWith('/mhchem.js'))).toBe(true);
+  expect(assets.some(url => url.includes('/svg/dynamic/'))).toBe(true);
+  expect(assets.every(url => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
+  expect(external).toEqual([]);
+  expect(await page.evaluate(() => document.querySelectorAll('script[src$="/startup.js"]').length)).toBe(1);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(raw);
+});
+
+test('MathJax handles malformed TeX and filters unsafe links without changing source', async ({ page }) => {
+  const raw = '$\\frac{$\n\n$\\href{javascript:alert(1)}{unsafe}$\n\nend';
+  await page.evaluate(source => window.renderHarness.reset(source), raw);
+  const reading = page.locator('[data-slot="1"]');
+  await expect(reading.locator('mjx-container')).toHaveCount(2);
+  await expect(reading.locator('[data-render-pending]')).toHaveCount(0);
+  await expect(reading.locator('[data-mml-node="merror"]')).toHaveCount(1);
+  await expect(reading.locator('[href^="javascript:"],[data-mjx-href^="javascript:"]')).toHaveCount(0);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(raw);
+});
+
+test('wrapped lists retain measured indentation after asynchronous formula layout', async ({ page }) => {
+  const raw = '- ' + 'a long wrapped item '.repeat(20) + '\n\n$$\n\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}\n$$\n\nend';
+  await page.evaluate(source => window.renderHarness.reset(source), raw);
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  await expect(page.locator('mjx-container')).toHaveCount(2);
+  await expect(page.locator('[data-render-pending]')).toHaveCount(0);
+  for (const slot of [0, 1]) {
+    await expect.poll(() => page.evaluate(slot => {
+      const h = window.renderHarness, first = h.coords(slot, 2)!;
+      for (let position = 3; position < 300; position++) {
+        const next = h.coords(slot, position);
+        if (next && next.top > first.top + 2) return Math.abs(next.left - first.left);
+      }
+      return Infinity;
+    }, slot)).toBeLessThan(2);
+  }
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(raw);
+});
+
+test('delayed MathJax conversion cannot repopulate an unmounted formula', async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let requested!: () => void;
+  const request = new Promise<void>(resolve => { requested = resolve; });
+  await page.route('**/assets/mathjax-*/startup.js', async route => {
+    requested(); await gate; await route.continue();
+  });
+  await page.evaluate(() => window.renderHarness.reset('$x^2$\n\nend'));
+  await request;
+  await page.evaluate(() => window.renderHarness.reset('Replacement\n\nplain'));
+  release();
+  await page.waitForResponse('**/assets/mathjax-*/ui/safe.js');
+  await page.waitForFunction(() => typeof (window as unknown as { MathJax: { tex2svgPromise?: unknown } }).MathJax.tex2svgPromise === 'function');
+  await expect(page.locator('.cm-content')).toHaveText(['Replacementplain', 'Replacementplain']);
+  await expect(page.locator('mjx-container,[data-render-pending]')).toHaveCount(0);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('Replacement\n\nplain');
 });
 test('default typography loads bundled fonts and shares callout presentation', async ({ page }) => {
   const source = '# Heading\n\n正文 **bold** ==highlight== `code`\n\n> [!proof] Proof\n> Body\n\n> [!think] Think\n> Body\n\n> [!tactic] Tactic\n> Body\n\nend';

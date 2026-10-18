@@ -6,7 +6,8 @@ class ListLayout {
   private previous = new Set<HTMLElement>();
   constructor(private view: EditorView) { this.schedule(); }
   update(update: ViewUpdate) {
-    if (update.docChanged || update.selectionSet || update.viewportChanged || update.transactions.some((tr) => tr.effects.length)) this.schedule();
+    // Async formula/font layout can rebuild line DOM and discard measured styles.
+    if (update.docChanged || update.selectionSet || update.geometryChanged || update.transactions.some((tr) => tr.effects.length)) this.schedule();
   }
   private schedule() {
     this.view.requestMeasure({

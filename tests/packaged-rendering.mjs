@@ -22,9 +22,9 @@ catch (error) { if (error.code !== 'EEXIST') throw error; }
 const fixture = await fs.mkdtemp(path.join(tempBase, 'meta-obsidian-package-test-'));
 const vault = path.join(fixture, 'vault'), data = path.join(fixture, 'data');
 await fs.mkdir(vault); await fs.mkdir(data);
-const source = '\ufeff# Root\r\n\r\n**public**<br>second\n\n![[nested#Allowed]]\n\n![[pixel.png]]\n\n| A | B |\n| --- | --- |\n| x | y |\n\n$$\nx^2\n$$';
+const source = '\ufeff# Root\r\n\r\n**public**<br>second\n\n![[nested#Allowed]]\n\n![[pixel.png]]\n\n| A | B |\n| --- | --- |\n| x | y |\n\n$$\n\\ce{2 H2 + O2 -> 2 H2O} + \\mathbb{R}\n$$';
 const canvas = JSON.stringify({ nodes: [
-  { id: 'text', type: 'text', x: 0, y: 0, width: 300, height: 180, text: '**canvas card**<br>second' },
+  { id: 'text', type: 'text', x: 0, y: 0, width: 300, height: 180, text: '**canvas card**<br>second\n\n$x^2$' },
   { id: 'file', type: 'file', x: 340, y: 0, width: 300, height: 220, file: 'nested.md', subpath: '#Allowed' },
 ], edges: [] });
 await Promise.all([
@@ -62,13 +62,22 @@ try {
   assert.equal((await fetch(base + '/public/shares/locked/render')).status, 401);
   browser = await chromium.launch({ executablePath: process.env.RENDER_TEST_BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
   const page = await browser.newPage();
-  const errors = [], authenticatedRequests = [];
+  const errors = [], authenticatedRequests = [], externalRequests = [], mathAssets = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) authenticatedRequests.push(request.url()); });
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/')) authenticatedRequests.push(url.href);
+    if (url.origin !== base) externalRequests.push(url.href);
+    if (url.pathname.includes('/assets/mathjax-')) mathAssets.push(url.pathname);
+  });
   await page.goto(base + '/share/plain');
   await page.locator('#shared-markdown .cm-note-embed .cm-strong').waitFor();
-  await page.locator('#shared-markdown .katex').waitFor();
+  await page.locator('#shared-markdown mjx-container[jax="SVG"]').waitFor();
+  assert.equal(await page.locator('#shared-markdown mjx-container').getAttribute('data-mathjax-version'), '4.1.3');
+  assert.equal(await page.locator('#shared-markdown [data-mml-node="merror"]').count(), 0);
+  assert.ok(mathAssets.some(asset => asset.endsWith('/mhchem.js')));
+  assert.ok(mathAssets.some(asset => asset.includes('/svg/dynamic/')));
   assert.equal(await page.locator('#shared-markdown .cm-html-break').count(), 1);
   assert.equal(await page.locator('#shared-markdown .cm-table').count(), 1);
   assert.equal(await page.locator('#shared-markdown [contenteditable="true"]').count(), 0);
@@ -78,9 +87,11 @@ try {
   await page.goto(base + '/share/canvas');
   await page.locator('[data-share-node="text"] .cm-strong').waitFor();
   await page.locator('[data-share-node="file"] .cm-strong').waitFor();
+  await page.locator('[data-share-node="text"] mjx-container[data-mathjax-version="4.1.3"]').waitFor();
   assert.ok(!(await page.textContent('body')).includes('private-section-marker'));
   assert.equal(await page.locator('[data-share-node] [contenteditable="true"]').count(), 0);
   assert.deepEqual(authenticatedRequests, []);
+  assert.deepEqual(externalRequests, []);
   assert.deepEqual(errors, []);
   const noJs = await browser.newContext({ javaScriptEnabled: false });
   const fallback = await noJs.newPage(); await fallback.goto(base + '/share/plain');

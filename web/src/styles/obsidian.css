@@ -480,9 +480,11 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   content: ''; position: absolute; left: 4.5px; top: 1.5px; width: 4px; height: 8px;
   border: solid var(--text-on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
-/* Math (KaTeX) */
+/* Math (MathJax SVG; one spacing owner for display formulas) */
 .cm-math-rendered.math-block { display: block; text-align: center; padding: 0.5em 0; width: fit-content; min-width: 100%; max-width: none; }
 .cm-highlight .math-inline, .cm-highlight + .cm-widgetBuffer + .math-inline { background-color: var(--text-highlight-bg); }
+.cm-math-rendered mjx-container[jax="SVG"][display="true"] { margin: 0; }
+.cm-math-rendered mjx-container[jax="SVG"] { max-width: 100%; }
 /* Code block: mono font on every code line; bg + inner padding only on fenced
    blocks (HyperMD-codeblock-bg) — indented code has no bg, like Obsidian. */
 .cm-s-obsidian .cm-line.HyperMD-codeblock { font-family: var(--font-mono); font-size: var(--font-smaller); }
