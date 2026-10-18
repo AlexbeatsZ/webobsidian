@@ -216,7 +216,7 @@ test('default typography loads bundled fonts and shares callout presentation', a
     for (const kind of ['proof', 'think', 'tactic']) {
       const callout = host.locator(`.md-callout[data-callout="${kind}"]`);
       await expect(callout).toHaveCSS('border-top-style', 'solid');
-      expect(await callout.locator(':scope > .cm-line').first().evaluate(el => getComputedStyle(el, '::before').width)).toBe('3px');
+      expect(await callout.locator(':scope > .callout-title').evaluate(el => getComputedStyle(el, '::before').width)).toBe('3px');
     }
   }
   for (const theme of ['light', 'dark']) {
@@ -229,4 +229,53 @@ test('default typography loads bundled fonts and shares callout presentation', a
   await page.evaluate(() => window.renderHarness.cursor(0, 3));
   await expect(page.locator('[data-slot="0"] .cm-heading-labelled')).toHaveCount(0);
   await expect(page.locator('[data-slot="1"] .cm-heading-labelled')).toHaveCount(1);
+});
+
+test('callout title owns its rule and centers the original Lucide icons', async ({ page }) => {
+  const raw = '> [!proof]+ 适用条件 **形成与解离**\n> 正文\n\n> [!think]\n> 正文\n\n> [!tactic]- ' + '习题套路与带格式的长标题 '.repeat(12) + '\n> 隐藏的正文\n\nend';
+  await page.evaluate(source => window.renderHarness.reset(source), raw);
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  await page.evaluate(() => document.fonts.ready);
+  for (const slot of [0, 1]) {
+    const host = page.locator(`[data-slot="${slot}"]`);
+    for (const [kind, icon] of [['proof', 'check-circle'], ['think', 'lightbulb'], ['tactic', 'file-signature']]) {
+      const title = host.locator(`.md-callout[data-callout="${kind}"] > .callout-title`);
+      await expect(title.locator(`svg[data-lucide="${icon}"]`)).toHaveCount(1);
+      const geometry = await title.evaluate(el => {
+        const rule = getComputedStyle(el, '::before');
+        const rect = el.getBoundingClientRect();
+        const svg = el.querySelector('.cm-callout-icon svg')!.getBoundingClientRect();
+        const text = [...el.querySelectorAll('.cm-callout-title')].map(node => node.getBoundingClientRect());
+        return { top: rule.top, bottom: rule.bottom, width: rule.width, height: parseFloat(rule.height),
+          textOffset: (Math.min(...text.map(r => r.top)) + Math.max(...text.map(r => r.bottom)) - rect.top - rect.bottom) / 2,
+          titleHeight: rect.height, iconOffset: (svg.top + svg.bottom - rect.top - rect.bottom) / 2,
+          lineRule: getComputedStyle(el.querySelector('.cm-line')!, '::before').content };
+      });
+      expect(geometry.top).toBe('0px'); expect(geometry.bottom).toBe('0px'); expect(geometry.width).toBe('3px');
+      expect(geometry.height).toBeCloseTo(geometry.titleHeight, 1);
+      expect(Math.abs(geometry.iconOffset)).toBeLessThan(0.6);
+      expect(Math.abs(geometry.textOffset)).toBeLessThan(2);
+      expect(geometry.lineRule).toBe('none');
+    }
+    // The control follows the text rather than sitting between the leading icon and title.
+    expect(await host.locator('.md-callout[data-callout="proof"] .cm-line').first().evaluate(el => {
+      const text = el.querySelector('.cm-callout-title')!.getBoundingClientRect();
+      const fold = el.querySelector('.cm-callout-fold')!.getBoundingClientRect();
+      return fold.left >= text.right;
+    })).toBe(true);
+  }
+  const reading = page.locator('[data-slot="1"]');
+  const tactic = reading.locator('.md-callout[data-callout="tactic"]');
+  await expect(tactic).not.toContainText('隐藏的正文');
+  await tactic.locator('.cm-callout-fold').click();
+  await expect(tactic).toContainText('隐藏的正文');
+  await tactic.locator('.cm-callout-fold').click();
+  // Source reveal, edit and undo must keep the CM-owned title editable.
+  await page.evaluate(position => window.renderHarness.cursor(0, position), raw.indexOf('适用条件') + 2);
+  await page.evaluate(position => window.renderHarness.edit(0, [{ from: position, to: position, insert: '新' }]), raw.indexOf('适用条件') + 2);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toContain('适用新条件');
+  await page.evaluate(() => window.renderHarness.undo(0));
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(raw);
+  await page.evaluate(() => { window.renderHarness.cursor(0, window.renderHarness.source(0).length); document.querySelector('.theme-light')!.className = 'theme-dark'; });
+  await page.screenshot({ path: test.info().outputPath('callout-title-alignment.png') });
 });

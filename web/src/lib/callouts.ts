@@ -1,3 +1,7 @@
+import checkCircle from '../assets/icons/lucide/check-circle.svg?raw';
+import lightbulb from '../assets/icons/lucide/lightbulb.svg?raw';
+import fileSignature from '../assets/icons/lucide/file-signature.svg?raw';
+
 /**
  * Callout constants (docs §7/§21) shared by Live Preview (livePreview.ts) and
  * Reading view (markdown.ts) so both modes render callouts identically.
@@ -24,10 +28,6 @@ export const CALLOUT_SLOT: Record<string, string> = {
 
 // Lucide icon paths per slot (same icon family Obsidian ships).
 export const CALLOUT_ICON: Record<string, string> = {
-  proof: '<circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/>',
-  think: '<path d="M9 18h6m-6 3h6M8 14a6 6 0 1 1 8 0l-1 3H9z"/>',
-  tactic: '<path d="M14 2H6v20h12V6zM14 2v4h4M8 15l2 2 5-6"/>',
-  attention: '<path d="m12 3 10 18H2zM12 9v5m0 3v1"/>',
   default: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
   summary: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
@@ -59,8 +59,17 @@ export function calloutTypeSlot(group1: string): { type: string; slot: string } 
   return { type, slot: CALLOUT_SLOT[type] ?? 'default' };
 }
 
+// Exact upstream SVG assets, pinned to Lucide v0.263.1 with the requested names.
+const CUSTOM_CALLOUT_ICONS: Record<string, { name: string; svg: string }> = {
+  proof: { name: 'check-circle', svg: checkCircle },
+  think: { name: 'lightbulb', svg: lightbulb },
+  tactic: { name: 'file-signature', svg: fileSignature },
+};
+
 export function calloutIconSvg(slot: string): string {
+  const custom = CUSTOM_CALLOUT_ICONS[slot];
+  if (custom) return custom.svg.replace('<svg', '<svg data-lucide="' + custom.name + '"');
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${
-    CALLOUT_ICON[slot] ?? CALLOUT_ICON.default
+    CALLOUT_ICON[slot === 'attention' ? 'warning' : slot] ?? CALLOUT_ICON.default
   }</svg>`;
 }

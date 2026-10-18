@@ -313,54 +313,43 @@ class MediaWidget extends WidgetType {
 
 /* ---------------- callouts (§21) — constants shared with Reading view ---------------- */
 
-/** Icon (+ optional default title + fold chevron) replacing the `> [!type]` marker. */
+/** Replaces only the source marker; custom title text stays editable. */
 class CalloutHeadWidget extends WidgetType {
-  constructor(
-    readonly slot: string,
-    readonly defaultTitle: string,
-    readonly fold: string, // '', '+', '-'
-    readonly folded: boolean,
-    readonly titleFrom: number,
-  ) {
-    super();
-  }
-  eq(o: CalloutHeadWidget) {
-    return (
-      o.slot === this.slot &&
-      o.defaultTitle === this.defaultTitle &&
-      o.fold === this.fold &&
-      o.folded === this.folded &&
-      o.titleFrom === this.titleFrom
-    );
-  }
-  toDOM(view: EditorView) {
+  constructor(readonly slot: string, readonly defaultTitle: string) { super(); }
+  eq(o: CalloutHeadWidget) { return o.slot === this.slot && o.defaultTitle === this.defaultTitle; }
+  toDOM() {
     const span = document.createElement('span');
+    span.className = 'cm-callout-head';
     const icon = document.createElement('span');
     icon.className = 'cm-callout-icon';
     icon.innerHTML = calloutIconSvg(this.slot);
     span.appendChild(icon);
     if (this.defaultTitle) {
-      const t = document.createElement('span');
-      t.className = 'cm-callout-title';
-      t.textContent = this.defaultTitle;
-      span.appendChild(t);
-    }
-    if (this.fold) {
-      const ch = document.createElement('span');
-      ch.className = 'cm-callout-fold' + (this.folded ? ' is-folded' : '');
-      ch.innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
-      ch.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        view.dispatch({ effects: toggleCalloutFold.of(this.titleFrom) });
-      });
-      span.appendChild(ch);
+      const title = document.createElement('span');
+      title.className = 'cm-callout-title';
+      title.textContent = this.defaultTitle;
+      span.appendChild(title);
     }
     return span;
   }
-  ignoreEvent(e: Event) {
-    return e.type === 'mousedown';
+  ignoreEvent(event: Event) { return event.type === 'mousedown'; }
+}
+
+/** Trailing control, separate from the leading icon so it follows custom titles. */
+class CalloutFoldWidget extends WidgetType {
+  constructor(readonly folded: boolean, readonly titleFrom: number) { super(); }
+  eq(o: CalloutFoldWidget) { return o.folded === this.folded && o.titleFrom === this.titleFrom; }
+  toDOM(view: EditorView) {
+    const control = document.createElement('span');
+    control.className = 'cm-callout-fold' + (this.folded ? ' is-folded' : '');
+    control.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+    control.addEventListener('mousedown', event => {
+      event.preventDefault();
+      view.dispatch({ effects: toggleCalloutFold.of(this.titleFrom) });
+    });
+    return control;
   }
+  ignoreEvent(event: Event) { return event.type === 'mousedown'; }
 }
 
 /* ---------------- math (KaTeX, lazy-loaded like Obsidian's MathJax) ---------------- */
@@ -741,7 +730,8 @@ function buildCalloutFolds(state: EditorState): DecorationSet {
     const from = Math.max(block.from, block.bodyFrom - 1);
     if (from >= block.to || claimed.some((outer) => from >= outer.from && block.to <= outer.to)) continue;
     claimed.push({ from, to: block.to });
-    ranges.push(Decoration.replace({ block: true }).range(from, block.to));
+    // Keep the trailing title control outside the folded body boundary.
+    ranges.push(Decoration.replace({ block: true, inclusiveStart: false }).range(from, block.to));
   }
   return Decoration.set(ranges, true);
 }
@@ -1721,9 +1711,14 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (header) {
           const slot = CALLOUT_SLOT[header.type] ?? 'default';
           const folded = header.fold ? isCalloutFolded(view.state, header.from, header.fold) : false;
-          if (!touches(line.from, header.prefixTo)) pushReplace(line.from, header.prefixTo, Decoration.replace({
-            widget: new CalloutHeadWidget(slot, header.title ? '' : calloutDefaultTitle(header.type), header.fold, folded, header.from),
-          }));
+          if (!touches(line.from, header.prefixTo)) {
+            pushReplace(line.from, header.prefixTo, Decoration.replace({
+              widget: new CalloutHeadWidget(slot, header.title ? '' : calloutDefaultTitle(header.type)),
+            }));
+            if (header.fold) all.push(Decoration.widget({
+              widget: new CalloutFoldWidget(folded, header.from), side: -1,
+            }).range(line.to));
+          }
           if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
           bodyStart = header.prefixTo - line.from;
         } else if (!touches(line.from, line.from + bodyStart)) pushReplace(line.from, line.from + bodyStart, hidden);

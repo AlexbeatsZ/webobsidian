@@ -547,12 +547,12 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s);
   background: #fff; resize: vertical; overflow: auto; }
 /* Callout fold chevron */
-.cm-callout-fold { display: inline-flex; vertical-align: text-bottom; margin-left: 6px; cursor: pointer;
+.cm-callout-fold { display: inline-flex; align-items: center; height: 1lh; vertical-align: top; margin-left: 6px; cursor: pointer;
   color: rgb(var(--callout-color, var(--callout-default))); transition: transform var(--transition); }
 .cm-callout-fold svg { width: 16px; height: 16px; }
 .cm-callout-fold.is-folded { transform: rotate(-90deg); }
-.cm-s-obsidian .cm-callout-title { color: rgb(var(--callout-color, var(--callout-default))); font-weight: 600; }
-.cm-callout-icon { display: inline-flex; vertical-align: text-bottom; margin-right: 6px;
+.cm-callout-head { display: inline; }
+.cm-callout-icon { display: inline-flex; align-items: center;
   color: rgb(var(--callout-color, var(--callout-default))); }
 .cm-callout-icon svg { width: 16px; height: 16px; }
 
@@ -573,11 +573,33 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .is-reading-mode .cm-props-add,
 .is-reading-mode .prop-pill-x, .is-reading-mode .prop-pill-add, .is-reading-mode .prop-del { visibility: hidden; }
 .md-quote { border-left: 3px solid var(--text-normal); padding-left: 24px; }
-.md-callout { background: var(--document-surface); border: 0.5px solid var(--document-border); border-radius: 4px; padding: 12px 16px; margin: 16px 0; }
-.md-callout > .cm-line:first-child { padding-left: 12px; padding-bottom: 8px; }
-.md-callout > .cm-line:first-child::before { content: ""; position: absolute; left: 0; top: 0; bottom: 8px; width: 3px; border-radius: 2px; background: rgb(var(--callout-color, var(--callout-default))); }
+.md-callout, .callout { background: var(--document-surface); border: 0.5px solid var(--document-border); border-radius: 4px; padding: 12px 16px; margin: 16px 0; }
+.callout-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  padding-left: 12px;
+  position: relative;
+  color: rgb(var(--callout-color, var(--callout-default)));
+}
+.callout-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 2px;
+  background-color: currentColor;
+}
+/* Keep CM's inline text/caret layout intact. Reserve one icon column for all
+   wrapped lines and center the SVG on the complete title container. */
+.md-callout-title > .cm-line { flex: 1; min-width: 0; position: static; padding-left: 22px; }
+.md-callout-title .cm-callout-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); }
 .md-callout .md-code, .md-callout .cm-code { background: var(--document-nested-surface); }
-.md-callout .cm-callout-title { color: rgb(var(--callout-color, var(--callout-default))); }
+
 .md-code { background: var(--document-surface); border-radius: var(--radius-s); padding: 8px 16px; }
 .md-code .cm-line.HyperMD-codeblock-bg { background: transparent !important; padding-left: 0; padding-right: 0; }
 .md-code .cm-line.HyperMD-codeblock-begin { padding-top: 0; }
@@ -710,11 +732,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .cm-props-dd-item .prop-icon { color: var(--text-faint); width: 16px; text-align: center; }
 
 /* Static HTML fallback uses the same document tokens. */
-.callout { --callout-color: var(--callout-default);
-  background: rgba(var(--callout-color), 0.1); mix-blend-mode: var(--highlight-mix-blend-mode);
-  border-radius: var(--radius-s); padding: 12px 12px 12px 24px; margin: 1em 0; }
-.callout-title { display: flex; align-items: center; gap: 6px;
-  color: rgb(var(--callout-color)); font-weight: 600; border-left: 3px solid currentColor; padding-left: 12px; margin-bottom: 8px; }
+.callout { --callout-color: var(--callout-default); }
 .callout-icon { display: inline-flex; }
 .callout-icon svg { width: 16px; height: 16px; }
 .callout-content > :first-child { margin-top: 0.25em; }

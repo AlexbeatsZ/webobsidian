@@ -27,6 +27,11 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
     if (block.kind === 'callout') {
       attributes['data-callout'] = block.type;
       attributes.style = `--callout-color: var(--callout-${CALLOUT_SLOT[block.type] ?? 'default'})`;
+      // Give the title its own box. Its rule must track the complete title,
+      // including wrapped text, independently of the gap before the body.
+      ranges.push(BlockWrapper.create({ tagName: 'div',
+        attributes: { class: 'callout-title md-callout-title' }, rank: 0,
+      }).range(block.from, state.doc.lineAt(block.from).to));
     }
     if (block.kind === 'code') attributes['data-lang'] = block.language;
     ranges.push(BlockWrapper.create({ tagName: 'div', attributes,

@@ -147,10 +147,18 @@ for the private vault; shares and print do not receive it.
 - Heading labels use the same active-line predicate as heading source reveal.
   Reading always displays labels; editing suppresses them on the active heading.
 - Custom proof/think/tactic and attention color/icon slots belong to callouts.ts.
+- Callout headers have a dedicated `callout-title` block wrapper. The 3px rule
+  belongs to that container with `top: 0; bottom: 0`; the 8px body gap is a margin,
+  never a pseudo-element height adjustment. Icons center on the complete title,
+  including wrapped lines; CM retains its inline text and caret ownership.
+- proof/think/tactic use the unmodified Lucide v0.263.1 check-circle, lightbulb and
+  file-signature SVG assets, with source/version/license in assets/icons/lucide.
+  Do not substitute approximate paths. Trailing fold controls stay outside the
+  collapsed-body replacement (noninclusive start).
 - Image conventions, Hider workspace changes and formula-engine replacement are
   outside this migration. Bundled Chinese fonts retain the original full coverage;
   font subsetting/compression is not part of this change.
 
-Theme acceptance: typecheck, isolated production build and 25 Edge browser tests pass.
+Theme acceptance: web typecheck, isolated production build and 26 Edge browser tests pass.
 Pixel parity permits at most one 8-bit channel level of rasterization rounding;
 font readiness is awaited after scrolling. Human real-vault acceptance remains pending.
