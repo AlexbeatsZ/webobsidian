@@ -1,7 +1,6 @@
 import { useStore, GRAPH_PATH, type ContextMenuItem } from '../lib/store';
 import { api } from '../lib/api';
 import Editor from './Editor';
-import Preview from './Preview';
 import GraphView from './GraphView';
 import CanvasView from './CanvasView';
 import FolderView from './FolderView';
@@ -432,7 +431,7 @@ export default function Workspace() {
                 <Icon name="x" size={16} />
               </button>
             </div>
-            <Preview source={splitContent} />
+            <Editor path={splitPath} reading />
           </div>
         )}
       </div>

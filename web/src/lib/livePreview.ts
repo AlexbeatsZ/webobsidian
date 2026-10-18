@@ -11,6 +11,7 @@ import { syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { openLightbox } from './imageLightbox';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
+import { contextOf, type RenderMenuItem as LpMenuItem } from './renderContext';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -22,43 +23,6 @@ import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
  * markup across the line. (PRD FR-2)
  */
 
-let openLink: (target: string) => void = () => {};
-export function setLivePreviewLinkHandler(fn: (target: string) => void) {
-  openLink = fn;
-}
-
-export interface LpMenuItem {
-  label: string;
-  icon?: string;
-  onClick?: () => void;
-  submenu?: LpMenuItem[];
-  separator?: boolean;
-}
-let openMenu: (m: { x: number; y: number; items: LpMenuItem[] }) => void = () => {};
-export function setLivePreviewMenuHandler(fn: (m: { x: number; y: number; items: LpMenuItem[] }) => void) {
-  openMenu = fn;
-}
-
-export interface PropSuggestion {
-  key: string;
-  type: string;
-  count: number;
-}
-let propertyProvider: () => Promise<PropSuggestion[]> = async () => [];
-export function setLivePreviewPropertyProvider(fn: () => Promise<PropSuggestion[]>) {
-  propertyProvider = fn;
-}
-
-// Per-vault property type registry (mirrors Obsidian's `.obsidian/types.json`).
-let propTypeRegistry: Record<string, string> = {};
-export function setLivePreviewPropertyTypes(types: Record<string, string>) {
-  propTypeRegistry = types ?? {};
-}
-let persistPropertyType: (key: string, type: string) => Promise<Record<string, string>> = async () => ({});
-export function setLivePreviewPropertyTypeSetter(fn: (key: string, type: string) => Promise<Record<string, string>>) {
-  persistPropertyType = fn;
-}
-
 /**
  * Start Obsidian's "Add file property" flow: focus a new property-key field in
  * the Properties widget and open the key suggester dropdown — the same UI the
@@ -67,6 +31,7 @@ export function setLivePreviewPropertyTypeSetter(fn: (key: string, type: string)
  * Requires Live Preview, non-readonly — the caller switches to live mode first.
  */
 export function triggerAddProperty(view: EditorView): void {
+  if (view.state.readOnly) return;
   const click = (): boolean => {
     const btn = view.dom.querySelector<HTMLElement>('.cm-props-add');
     if (!btn) return false;
@@ -83,12 +48,6 @@ export function triggerAddProperty(view: EditorView): void {
   const iv = window.setInterval(() => {
     if (click() || ++tries > 30) window.clearInterval(iv);
   }, 25);
-}
-
-// Suggestions for list-property item values (vault tags for the `tags` property).
-let tagProvider: () => Promise<string[]> = async () => [];
-export function setLivePreviewTagProvider(fn: () => Promise<string[]>) {
-  tagProvider = fn;
 }
 
 /* ---------------- widgets ---------------- */
@@ -120,14 +79,14 @@ class WikilinkWidget extends WidgetType {
   eq(o: WikilinkWidget) {
     return o.target === this.target && o.label === this.label && o.embed === this.embed && o.aria === this.aria;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const a = document.createElement('a');
     a.className = 'cm-hmd-internal-link cm-wikilink internal-link' + (this.embed ? ' embed' : '');
     a.textContent = this.label;
     if (this.aria) a.setAttribute('aria-label', this.aria);
     a.onmousedown = (e) => {
       e.preventDefault();
-      openLink(this.target);
+      contextOf(view).openLink(this.target);
     };
     return a;
   }
@@ -143,7 +102,7 @@ class MdLinkWidget extends WidgetType {
   eq(o: MdLinkWidget) {
     return o.label === this.label && o.href === this.href;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const external = /^https?:\/\//i.test(this.href);
     const a = document.createElement('a');
     a.className = 'cm-md-link' + (external ? ' external-link' : ' internal-link');
@@ -154,7 +113,7 @@ class MdLinkWidget extends WidgetType {
       e.preventDefault();
       if (external) window.open(this.href, '_blank', 'noopener');
       else if (this.href.startsWith('#')) { /* in-note anchor — no-op */ }
-      else openLink(this.href.replace(/\.(md|markdown)$/i, ''));
+      else contextOf(view).openLink(this.href.replace(/\.(md|markdown)$/i, ''));
     };
     return a;
   }
@@ -177,6 +136,7 @@ class CheckboxWidget extends WidgetType {
     box.checked = this.checked;
     box.onmousedown = (e) => {
       e.preventDefault();
+      if (view.state.readOnly) return;
       view.dispatch({ changes: { from: this.pos, to: this.pos + 1, insert: this.checked ? ' ' : 'x' } });
     };
     return box;
@@ -197,6 +157,7 @@ const pointX = (e: MouseEvent | TouchEvent): number =>
  * numeric size segment is replaced; otherwise one is appended).
  */
 function writeImageWidth(view: EditorView, wrap: HTMLElement, width: number): void {
+  if (view.state.readOnly) return;
   let pos: number;
   try {
     pos = view.posAtDOM(wrap);
@@ -294,7 +255,7 @@ class ImageWidget extends WidgetType {
       window.addEventListener('touchmove', onMove, { passive: false });
       window.addEventListener('touchend', onUp);
     };
-    for (const side of ['left', 'right'] as const) {
+    for (const side of (view.state.readOnly ? [] : ['left', 'right']) as ('left' | 'right')[]) {
       const h = document.createElement('span');
       h.className = `cm-image-resize cm-image-resize-${side}`;
       h.addEventListener('mousedown', (e) => startResize(e, side));
@@ -449,17 +410,14 @@ class HrWidget extends WidgetType {
 
 // Injected from Editor.tsx: resolves a wikilink target and returns rendered,
 // sanitized HTML (api.resolve + renderMarkdown — same pipeline as Reading view).
-let noteEmbedProvider: (target: string) => Promise<{ html: string } | null> = async () => null;
-export function setLivePreviewNoteEmbedProvider(fn: (target: string) => Promise<{ html: string } | null>) {
-  noteEmbedProvider = fn;
-}
-
 function embedNotFound(el: HTMLElement, target: string) {
   el.classList.add('cm-embed-missing');
   el.textContent = `"${target}" could not be found.`;
 }
 
 class NoteEmbedWidget extends WidgetType {
+  private controllers = new WeakMap<HTMLElement, AbortController>();
+  destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); }
   constructor(readonly target: string) {
     super();
   }
@@ -469,7 +427,7 @@ class NoteEmbedWidget extends WidgetType {
   ignoreEvent() {
     return true;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const box = document.createElement('div');
     box.className = 'internal-embed markdown-embed cm-note-embed';
     const open = document.createElement('span');
@@ -479,7 +437,7 @@ class NoteEmbedWidget extends WidgetType {
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
     open.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      openLink(this.target);
+      contextOf(view).openLink(this.target);
     });
     // Filename title above the note content, like Obsidian's markdown-embed-title.
     const title = document.createElement('div');
@@ -489,7 +447,10 @@ class NoteEmbedWidget extends WidgetType {
     content.className = 'markdown-embed-content markdown-preview';
     content.textContent = '…';
     box.append(open, title, content);
-    void noteEmbedProvider(this.target).then((res) => {
+    const controller = new AbortController();
+    this.controllers.set(box, controller);
+    void contextOf(view).renderEmbed(this.target, controller.signal).then((res) => {
+      if (controller.signal.aborted) return;
       if (!res) {
         box.textContent = '';
         embedNotFound(box, this.target);
@@ -501,7 +462,7 @@ class NoteEmbedWidget extends WidgetType {
         if (!a) return;
         e.preventDefault();
         const t = a.getAttribute('data-wikilink');
-        if (t) openLink(t);
+        if (t) contextOf(view).openLink(t);
       });
     });
     return box;
@@ -576,7 +537,7 @@ function buildMermaid(state: EditorState): DecorationSet {
     let touched = false;
     if (!ro)
       for (const r of state.selection.ranges) {
-        if (r.from <= to && r.to >= from) {
+        if (r.empty && r.from <= to && r.to >= from) {
           touched = true;
           break;
         }
@@ -881,7 +842,7 @@ function scanTables(doc: Text): TableBlock[] {
 const CELL_INLINE_RE =
   /(<br\s*\/?>)|(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*|_[^_]+_)|(!?\[\[[^\]]+?\]\])|(\[[^\]]+?\]\([^)]+\))/gi;
 
-function appendInline(parent: HTMLElement, text: string) {
+function appendInline(parent: HTMLElement, text: string, view: EditorView) {
   CELL_INLINE_RE.lastIndex = 0;
   let last = 0;
   let m: RegExpExecArray | null;
@@ -912,7 +873,7 @@ function appendInline(parent: HTMLElement, text: string) {
       a.textContent = (alias ?? target).trim();
       a.onmousedown = (e) => {
         e.preventDefault();
-        openLink(target.trim());
+        contextOf(view).openLink(target.trim());
       };
       parent.appendChild(a);
     } else {
@@ -926,7 +887,7 @@ function appendInline(parent: HTMLElement, text: string) {
       a.onmousedown = (e) => {
         e.preventDefault();
         if (external) window.open(href, '_blank', 'noopener');
-        else if (!href.startsWith('#')) openLink(href.replace(/\.(md|markdown)$/i, ''));
+        else if (!href.startsWith('#')) contextOf(view).openLink(href.replace(/\.(md|markdown)$/i, ''));
       };
       parent.appendChild(a);
     }
@@ -1001,7 +962,7 @@ class TableWidget extends WidgetType {
 
     const setCellRendered = (cell: HTMLElement) => {
       cell.textContent = '';
-      appendInline(cell, cell.dataset.raw ?? '');
+      appendInline(cell, cell.dataset.raw ?? '', view);
     };
     const makeCell = (cell: HTMLElement, raw: string, col: number, rowIdx: number) => {
       cell.className = 'cm-cell-edit';
@@ -1051,7 +1012,7 @@ class TableWidget extends WidgetType {
       cell.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(col, rowIdx) });
+        contextOf(view).openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(col, rowIdx) });
       });
     };
 
@@ -1159,7 +1120,7 @@ class TableWidget extends WidgetType {
       h.addEventListener('mousedown', (e) => {
         e.preventDefault();
         highlightCol(c, false);
-        openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(c, -1) });
+        contextOf(view).openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(c, -1) });
       });
       th.appendChild(h);
     });
@@ -1175,7 +1136,7 @@ class TableWidget extends WidgetType {
       h.addEventListener('mousedown', (e) => {
         e.preventDefault();
         highlightRow(tr, false);
-        openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(0, ri) });
+        contextOf(view).openMenu({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY, items: cellMenu(0, ri) });
       });
       first.appendChild(h);
     });
@@ -1245,7 +1206,7 @@ class HtmlBlockWidget extends WidgetType {
   eq(o: HtmlBlockWidget) {
     return o.html === this.html;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const div = document.createElement('div');
     div.className = 'cm-html-block';
     div.innerHTML = sanitizeHtml(this.html);
@@ -1255,7 +1216,7 @@ class HtmlBlockWidget extends WidgetType {
       e.preventDefault();
       const href = a.getAttribute('href') || '';
       if (/^https?:\/\//i.test(href)) window.open(href, '_blank', 'noopener');
-      else if (href && !href.startsWith('#')) openLink(href.replace(/\.(md|markdown)$/i, ''));
+      else if (href && !href.startsWith('#')) contextOf(view).openLink(href.replace(/\.(md|markdown)$/i, ''));
     });
     return div;
   }
@@ -1381,8 +1342,8 @@ function dtToObs(dt: string, key: string): string {
   return dt;
 }
 /** Effective display type: the vault registry wins, else inferred from the value. */
-function displayTypeOf(p: Prop): string {
-  const reg = propTypeRegistry[p.key];
+function displayTypeOf(p: Prop, registry: Record<string, string>): string {
+  const reg = registry[p.key];
   if (reg && OBS_TO_DT[reg]) return OBS_TO_DT[reg];
   return propType(p);
 }
@@ -1458,8 +1419,8 @@ class FrontmatterWidget extends WidgetType {
     // note's YAML if list-ness changed (else just refresh the icon in place).
     const setType = async (key: string, dt: string) => {
       try {
-        const types = await persistPropertyType(key, dtToObs(dt, key));
-        setLivePreviewPropertyTypes(types);
+        const types = await contextOf(view).setPropertyType(key, dtToObs(dt, key));
+        void types;
       } catch {
         /* keep going with local change */
       }
@@ -1615,7 +1576,7 @@ class FrontmatterWidget extends WidgetType {
       dd.style.top = `${Math.round(ir.bottom + 2)}px`;
       inp.focus();
 
-      const suggestions = key === 'tags' ? await tagProvider() : [];
+      const suggestions = key === 'tags' ? await contextOf(view).tags() : [];
       const existing = new Set(([...container.querySelectorAll('.prop-pill')] as HTMLElement[]).map((p) => p.dataset.val));
       let done = false;
       const cleanup = () => {
@@ -1678,7 +1639,7 @@ class FrontmatterWidget extends WidgetType {
     };
 
     props.forEach((p, idx) => {
-      const dt = displayTypeOf(p);
+      const dt = displayTypeOf(p, contextOf(view).propertyTypes());
       const renderAsList = dt === 'list' || p.list;
       const row = document.createElement('div');
       row.className = 'prop-row';
@@ -1699,7 +1660,7 @@ class FrontmatterWidget extends WidgetType {
         if (this.ro) return;
         e.preventDefault();
         e.stopPropagation();
-        openMenu({ x: e.clientX, y: e.clientY, items: propMenu(p.key, idx, renderAsList ? 'list' : dt) });
+        contextOf(view).openMenu({ x: e.clientX, y: e.clientY, items: propMenu(p.key, idx, renderAsList ? 'list' : dt) });
       };
       k.addEventListener('contextmenu', openPropMenu);
       icon.addEventListener('contextmenu', openPropMenu);
@@ -1803,7 +1764,7 @@ class FrontmatterWidget extends WidgetType {
       input.focus();
 
       const existing = new Set(readProps().map((p) => p.key));
-      const all = (await propertyProvider()).filter((p) => !existing.has(p.key));
+      const all = (await contextOf(view).properties()).filter((p) => !existing.has(p.key));
 
       let done = false;
       const choose = (key: string, type: string) => {
@@ -1895,8 +1856,8 @@ const EMPHASIS_CLASS: Record<string, string> = {
 
 const hidden = Decoration.replace({});
 
-function attachmentUrl(target: string): string {
-  return `/api/files/content?path=${encodeURIComponent(target)}`;
+function attachmentUrl(target: string, view: EditorView): string {
+  return contextOf(view).rawUrl(target);
 }
 
 function buildDecorations(view: EditorView): DecorationSet {
@@ -1920,7 +1881,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   const readonly = view.state.field(livePreviewReadonly, false) ?? false;
   const touches = (from: number, to: number) => {
     if (readonly) return false;
-    for (const r of sel.ranges) if (r.from <= to && r.to >= from) return true;
+    for (const r of sel.ranges) if (r.empty && r.from <= to && r.to >= from) return true;
     return false;
   };
   const lineActive = (pos: number) => {
@@ -2363,7 +2324,7 @@ function buildDecorations(view: EditorView): DecorationSet {
               h = sm[2] ? Number(sm[2]) : undefined;
             }
           }
-          pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(attachmentUrl(href), href, w, h) }));
+          pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(attachmentUrl(href, view), href, w, h) }));
         } else if (isEmbed && (VIDEO_EXT_RE.test(href) || AUDIO_EXT_RE.test(href))) {
           // `![[clip.mp4]]` / `![[song.mp3]]` → native HTML5 player like Obsidian.
           const kind = VIDEO_EXT_RE.test(href) ? 'video' : 'audio';
@@ -2374,7 +2335,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             const sm = segs[segs.length - 1].match(/^\s*([0-9]+)\s*(?:x\s*[0-9]+\s*)?$/);
             if (sm) w = Number(sm[1]);
           }
-          pushReplace(s, e, Decoration.replace({ widget: new MediaWidget(attachmentUrl(href), href, kind, w) }));
+          pushReplace(s, e, Decoration.replace({ widget: new MediaWidget(attachmentUrl(href, view), href, kind, w) }));
         } else if (isEmbed && !/\.[a-z0-9]{1,5}$/i.test(href.split('#')[0])) {
           // `![[note]]` (no binary extension) → real transclusion like Obsidian.
           pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href) }));
@@ -2413,7 +2374,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         // Browser-loadable URLs load directly; anything else (a relative path or
         // any custom scheme) is resolved by basename via the vault file index.
         const webLoadable = /^(https?|data|blob|file):/i.test(url);
-        const src = webLoadable ? url : attachmentUrl(url.split('/').pop() || url);
+        const src = webLoadable ? url : attachmentUrl(url, view);
         pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt, w, h) }));
       }
 

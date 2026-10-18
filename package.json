@@ -10,7 +10,7 @@
     "packages/markdown-core"
   ],
   "scripts": {
-    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev": "npm run build:core && concurrently -n core,server,web -c yellow,blue,magenta \"npm:dev:core\" \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm --workspace server run dev",
     "dev:web": "npm --workspace web run dev",
     "build": "npm run build:core && npm --workspace web run build && npm --workspace server run build",
@@ -22,12 +22,14 @@
     "build:core": "npm --workspace @webobsidian/markdown-core run build",
     "test:unit": "vitest run",
     "test:render": "playwright test --project=render",
-    "test:integration": "playwright test --project=integration"
+    "test:integration": "playwright test --project=integration",
+    "dev:core": "npm --workspace @webobsidian/markdown-core run dev"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "concurrently": "^9.1.0",
-    "vitest": "^5.0.5"
+    "vite": "^5.4.21",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=20"

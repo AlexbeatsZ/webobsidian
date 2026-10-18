@@ -1,5 +1,6 @@
 import { EditorView, ViewPlugin, ViewUpdate, keymap } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
+import { contextOf } from './renderContext';
 import { prepareQuery, fuzzySearch, fuzzySearchPath, type FuzzyMatch } from './fuzzy';
 
 /**
@@ -9,15 +10,6 @@ import { prepareQuery, fuzzySearch, fuzzySearchPath, type FuzzyMatch } from './f
  *  - `#` tag suggester — trigger on /(^|\s)#…$/ before the cursor.
  * Ranking uses the exact Obsidian fuzzy score (lib/fuzzy.ts). Max 20 items.
  */
-
-let linkFiles: () => string[] = () => [];
-export function setLinkSuggestFiles(fn: () => string[]) {
-  linkFiles = fn;
-}
-let vaultTags: () => string[] = () => [];
-export function setTagSuggestTags(fn: () => string[]) {
-  vaultTags = fn;
-}
 
 // Tag body charset (§7) — editor flavour additionally requires a letter.
 const TAG_TAIL_RE = /(^|\s)#([^ -⁯⸀-⹿'!"#$%&()*+,.:;<=>?@^`{|}~[\]\\\s]*)$/;
@@ -64,11 +56,11 @@ function detect(view: EditorView): Ctx | null {
   return null;
 }
 
-function computeItems(ctx: Ctx): Item[] {
+function computeItems(ctx: Ctx, view: EditorView): Item[] {
   const pq = prepareQuery(ctx.query);
   const out: Item[] = [];
   if (ctx.mode === 'link') {
-    for (const path of linkFiles()) {
+    for (const path of contextOf(view).files()) {
       const target = path.replace(/\.md$/i, '');
       const m = ctx.query ? fuzzySearchPath(pq, target) : { score: 0, matches: [] as [number, number][] };
       if (!m) continue;
@@ -81,7 +73,7 @@ function computeItems(ctx: Ctx): Item[] {
       });
     }
   } else {
-    for (const tag of vaultTags()) {
+    for (const tag of (cachedTags.get(view) ?? [])) {
       const m = ctx.query ? fuzzySearch(pq, tag) : { score: 0, matches: [] as [number, number][] };
       if (!m) continue;
       out.push({ label: tag, insert: tag, match: m });
@@ -110,13 +102,17 @@ function renderLabel(el: HTMLElement, label: string, item: Item) {
   if (last < label.length) el.appendChild(document.createTextNode(label.slice(last)));
 }
 
+const cachedTags = new WeakMap<EditorView, string[]>();
 class SuggestState {
+  private destroyed = false;
   dom: HTMLElement | null = null;
   ctx: Ctx | null = null;
   items: Item[] = [];
   selected = 0;
 
-  constructor(readonly view: EditorView) {}
+  constructor(readonly view: EditorView) {
+    void contextOf(view).tags().then((tags) => { if (!this.destroyed) cachedTags.set(view, tags); });
+  }
 
   update(u: ViewUpdate) {
     if (u.docChanged || u.selectionSet || u.focusChanged) {
@@ -127,11 +123,11 @@ class SuggestState {
 
   refresh() {
     const view = this.view;
-    if (!view.hasFocus) return this.hide();
+    if (this.destroyed || view.state.readOnly || !view.hasFocus) return this.hide();
     const ctx = detect(view);
     if (!ctx) return this.hide();
     this.ctx = ctx;
-    this.items = computeItems(ctx);
+    this.items = computeItems(ctx, view);
     this.selected = 0;
     if (!this.items.length) return this.hide();
     this.show();
@@ -237,6 +233,8 @@ class SuggestState {
   }
 
   destroy() {
+    this.destroyed = true;
+    cachedTags.delete(this.view);
     this.hide();
   }
 }

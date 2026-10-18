@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { api, type TreeNode, type ShareRecord } from './api';
 import { findNode } from './tree';
+import { documents } from './documents';
+let openGeneration = 0;
+let splitGeneration = 0;
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
 export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -361,14 +364,16 @@ export const useStore = create<AppState>()(
       splitDirection: 'right',
       openToSide: async (path, direction) => {
         if (!TEXT_RE.test(path)) return;
-        const r = await api.read(path);
+        const generation = ++splitGeneration;
+        const doc = await documents.open(path);
+        if (generation !== splitGeneration) return;
         set((s) => ({
           splitPath: path,
-          splitContent: typeof r === 'string' ? r : r.content,
+          splitContent: doc.snapshot.raw,
           splitDirection: direction ?? s.splitDirection,
         }));
       },
-      closeSplit: () => set({ splitPath: null, splitContent: '' }),
+      closeSplit: () => { splitGeneration++; set({ splitPath: null, splitContent: '' }); },
 
       recent: [],
       removeRecent: (path) => set((s) => ({ recent: s.recent.filter((p) => p !== path) })),
@@ -477,6 +482,7 @@ export const useStore = create<AppState>()(
       },
 
       openFile: async (path) => {
+        const generation = ++openGeneration;
         if (path === GRAPH_PATH) return get().openGraph();
         if (get().dirty) await get().save();
         // A folder path (e.g. deep-link /note/<folder>) opens a folder content
@@ -484,14 +490,15 @@ export const useStore = create<AppState>()(
         const isFolder = findNode(get().tree, path)?.type === 'folder';
         let content = '';
         if (!isFolder && TEXT_RE.test(path)) {
-          const r = await api.read(path);
-          content = typeof r === 'string' ? r : r.content;
+          const doc = await documents.open(path);
+          content = doc.snapshot.raw;
         }
+        if (generation !== openGeneration) return;
         const title = path.split('/').pop() ?? path;
         set((s) => {
           const tabs = s.tabs.find((t) => t.path === path) ? s.tabs : [...s.tabs, { path, title }];
           const recent = isFolder ? s.recent : [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
-          return { tabs, activePath: path, content, dirty: false, recent, ...pushHistory(s, path) };
+          return { tabs, activePath: path, content, dirty: documents.get(path)?.snapshot.dirty ?? false, recent, ...pushHistory(s, path) };
         });
       },
 
@@ -519,14 +526,16 @@ export const useStore = create<AppState>()(
           return { tabs, activePath, ...(wasActive ? { content: '', dirty: false } : {}) };
         }),
 
-      setContent: (c) => set({ content: c, dirty: true }),
+      setContent: (content) => {
+        const path = get().activePath;
+        const doc = path ? documents.get(path) : undefined;
+        if (!doc) return;
+        doc.setText(content);
+      },
 
       save: async () => {
-        const { activePath, content, dirty } = get();
-        if (!activePath || !dirty) return;
-        if (!TEXT_RE.test(activePath)) return;
-        await api.write(activePath, content);
-        set({ dirty: false });
+        const path = get().activePath;
+        if (path && TEXT_RE.test(path)) await documents.get(path)?.save();
       },
 
       createNote: async (path, body) => {
@@ -608,9 +617,10 @@ export const useStore = create<AppState>()(
         const { activePath, splitPath, tabs } = get();
         if (activePath && TEXT_RE.test(activePath)) {
           try {
-            const r = await api.read(activePath);
-            set({ content: typeof r === 'string' ? r : r.content, dirty: false });
+            const doc = await documents.refresh(activePath);
+            if (get().activePath === activePath) set({ content: doc.snapshot.raw, dirty: doc.snapshot.dirty });
           } catch {
+            if (get().activePath !== activePath) return;
             set({
               tabs: tabs.filter((t) => t.path !== activePath),
               activePath: tabs.filter((t) => t.path !== activePath).at(-1)?.path ?? null,
@@ -620,10 +630,10 @@ export const useStore = create<AppState>()(
         }
         if (splitPath && TEXT_RE.test(splitPath)) {
           try {
-            const r = await api.read(splitPath);
-            set({ splitContent: typeof r === 'string' ? r : r.content });
+            const doc = await documents.refresh(splitPath);
+            if (get().splitPath === splitPath) set({ splitContent: doc.snapshot.raw });
           } catch {
-            set({ splitPath: null, splitContent: '' });
+            if (get().splitPath === splitPath) set({ splitPath: null, splitContent: '' });
           }
         }
       },
@@ -660,8 +670,21 @@ export const useStore = create<AppState>()(
 
 // Save durable workspace state to the server (debounced) whenever it changes.
 useStore.subscribe((state, prev) => {
+  if (state.activePath !== prev.activePath && state.activePath) {
+    const doc = documents.get(state.activePath);
+    if (doc) useStore.setState({ content: doc.snapshot.raw, dirty: doc.snapshot.dirty });
+  }
   if (!canSave || suppressSave) return;
   if (JSON.stringify(pickPersisted(state)) !== JSON.stringify(pickPersisted(prev))) {
     scheduleSave();
   }
+});
+
+// Compatibility mirrors for panels/Canvas; document ownership lives in sessions.
+documents.subscribe((snapshot) => {
+  const state = useStore.getState();
+  const patch: Partial<AppState> = {};
+  if (state.activePath === snapshot.id) { patch.content = snapshot.raw; patch.dirty = snapshot.dirty; }
+  if (state.splitPath === snapshot.id) patch.splitContent = snapshot.raw;
+  if (Object.keys(patch).length) useStore.setState(patch);
 });

@@ -557,6 +557,9 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 
 /* ---- Reading mode = Live Preview readonly: hide editing affordances ---- */
 .is-reading-mode .cm-content { caret-color: transparent; }
+.is-reading-mode .cm-image-resize { display: none; }
+.markdown-embedded-view .cm-editor { height: auto; }
+.markdown-embedded-view .cm-content { padding: 0; margin: 0; max-width: none; }
 .is-reading-mode .cm-cell-edit,
 .is-reading-mode .cm-properties .prop-key,
 .is-reading-mode .cm-properties .prop-val-input,

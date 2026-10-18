@@ -28,11 +28,11 @@
 Each task is committed independently after its checks. Never mark runtime/IME or
 device acceptance complete from types/builds or synthetic events alone.
 
-- [ ] T00: isolated Vitest/Playwright harness and syntax fixtures.
-- [ ] T01: lossless source coordinate mapping, patches and inverse edits.
-- [ ] T02: shared document sessions, history, serialized saves, revision conflicts.
-- [ ] T03: instance-scoped MarkdownView, command focus routing, complete readonly.
-- [ ] T04: readonly split shares the same renderer and same-file session.
+- [x] T00: isolated Vitest/Playwright harness and syntax fixtures.
+- [x] T01: lossless source coordinate mapping, patches and inverse edits.
+- [x] T02: shared document sessions, history, serialized saves, revision conflicts.
+- [x] T03: instance-scoped MarkdownView, command focus routing, complete readonly.
+- [x] T04: readonly split shares the same renderer and same-file session.
 - [ ] T05: shared syntax/source model, path semantics, styles and HTML policy.
 - [ ] T06: br reveal/break behavior, simple HTML and entity positions.
 - [ ] T07: inline decorations, Unicode tags, lists/tasks, footnotes, source copy.
