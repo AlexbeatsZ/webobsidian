@@ -36,8 +36,6 @@ including previously unresolved links. Host events batch in one serialized queue
 and emit one resolved notification per processed batch. Plugin resolution rules
 are preserved independently of the shared renderer's stricter ambiguity policy.
 
-## User acceptance
-
 ## Server link indexes
 
 TargetIndex precomputes NFC/case-normalized exact and suffix candidates, retaining
@@ -47,6 +45,15 @@ resolution and the note graph each own a mutable index. The graph maintains
 outgoing resolved sets, incoming source sets and lookup-key dependencies;
 content edits update one source, path membership changes revisit affected
 resolved and unresolved sources. Backlinks read the incoming set directly.
+
+## Source coordinates
+
+SourceDocument stores BOM width and normalized offsets after CRLF sequences,
+instead of one raw offset per UTF-16 code unit. rawOffset uses an upper-bound
+lookup; bare CR normalizes to LF without adding width. Multiple simultaneous
+edits concatenate untouched source slices and insertions once, in source order.
+Inverse changes still carry exact removed raw bytes. Predominant line-ending
+selection and all public source/session interfaces are unchanged.
 
 ## User acceptance
 

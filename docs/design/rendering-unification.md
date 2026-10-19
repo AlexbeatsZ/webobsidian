@@ -117,6 +117,10 @@ for the private vault; shares and print do not receive it.
 
 ## Boundaries and rollback
 
+- 2026-10-19 performance pass: source coordinates use sparse CRLF/BOM differences
+  and multi-range edits concatenate untouched raw slices once. Exact inverse
+  source is retained. See performance.md; verification remains static only.
+
 - This establishes one client rendering implementation; it does not implement
   every Obsidian extension or prove every theme/browser visually identical.
 - Complex YAML scalars/anchors, duplicate keys and irregular tables retain a

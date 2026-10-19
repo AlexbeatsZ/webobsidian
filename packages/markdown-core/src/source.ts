@@ -10,7 +10,9 @@ export interface SourceChange {
 export class SourceDocument {
   private value: string;
   private normalized = '';
-  private offsets: number[] = [];
+  /** LF offsets immediately after CRLF; each contributes one extra raw code unit. */
+  private crlfEnds: number[] = [];
+  private bom = 0;
   readonly lineEnding: string;
 
   constructor(raw: string) {
@@ -28,7 +30,9 @@ export class SourceDocument {
     if (!Number.isInteger(position) || position < 0 || position > this.normalized.length) {
       throw new RangeError('Source position outside document');
     }
-    return this.offsets[position];
+    let lo = 0, hi = this.crlfEnds.length;
+    while (lo < hi) { const mid = (lo + hi) >>> 1; if (this.crlfEnds[mid] <= position) lo = mid + 1; else hi = mid; }
+    return position + this.bom + lo;
   }
 
   /** Apply simultaneous ranges. Returns an inverse suitable for exact undo. */
@@ -56,25 +60,33 @@ export class SourceDocument {
       delta += insert.length - (change.to - change.from);
       end = change.to;
     }
-    for (const replacement of replacements.reverse()) {
-      this.value = this.value.slice(0, replacement.from) + replacement.insert + this.value.slice(replacement.to);
+    if (!replacements.length) return inverse;
+    const chunks: string[] = [];
+    let cursor = 0;
+    for (const replacement of replacements) {
+      chunks.push(this.value.slice(cursor, replacement.from), replacement.insert);
+      cursor = replacement.to;
     }
+    chunks.push(this.value.slice(cursor));
+    this.value = chunks.join('');
     this.index();
     return inverse;
   }
 
   private index(): void {
     const chunks: string[] = [];
-    let offset = this.value.startsWith('\ufeff') ? 1 : 0;
-    this.offsets = [offset];
-    while (offset < this.value.length) {
-      const char = this.value[offset++];
-      if (char === '\r') {
-        if (this.value[offset] === '\n') offset++;
-        chunks.push('\n');
-      } else chunks.push(char);
-      this.offsets.push(offset);
+    this.bom = this.value.startsWith('\ufeff') ? 1 : 0;
+    this.crlfEnds = [];
+    let cursor = this.bom, extra = 0;
+    for (const match of this.value.matchAll(/\r\n?/g)) {
+      chunks.push(this.value.slice(cursor, match.index), '\n');
+      cursor = match.index! + match[0].length;
+      if (match[0].length === 2) {
+        this.crlfEnds.push(match.index! - this.bom - extra + 1);
+        extra++;
+      }
     }
+    chunks.push(this.value.slice(cursor));
     this.normalized = chunks.join('');
   }
 }
