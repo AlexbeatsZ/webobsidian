@@ -864,13 +864,34 @@ export async function loadPlugins(): Promise<void> {
         sharedApp.workspace.trigger('layout-change');
       }
     });
-    const dataChanged = sharedApp.vault.on('modify', (file: files.TFile) => {
-      if (file.extension === 'md')
-        void sharedApp.metadataCache.refresh(file).then(() => {
-          sharedApp.metadataCache.rebuildLinks();
-          sharedApp.metadataCache.trigger('resolved');
-        });
-    });
+    const pendingFiles = new Set<string>(), structuralFiles = new Set<string>();
+    let metadataTimer: number | undefined, metadataRunning = false, metadataStopped = false;
+    const drainMetadata = async () => {
+      metadataTimer = undefined;
+      if (metadataRunning || metadataStopped) return;
+      metadataRunning = true;
+      try {
+        while (pendingFiles.size && !metadataStopped) {
+          const paths = [...pendingFiles], structural = [...structuralFiles];
+          pendingFiles.clear(); structuralFiles.clear();
+          await sharedApp.metadataCache.updateFiles(paths, structural);
+        }
+      } catch (error) { console.error('[metadata]', error); }
+      finally { metadataRunning = false; }
+    };
+    const queueMetadata = (file: files.TAbstractFile, structural: boolean, oldPath?: string) => {
+      if (!(file instanceof files.TFile)) return;
+      pendingFiles.add(file.path);
+      if (structural) structuralFiles.add(file.path);
+      if (oldPath) { pendingFiles.add(oldPath); structuralFiles.add(oldPath); }
+      if (metadataTimer === undefined && !metadataRunning) metadataTimer = window.setTimeout(() => { void drainMetadata(); }, 0);
+    };
+    const metadataEvents = [
+      sharedApp.vault.on('modify', (file: files.TFile) => queueMetadata(file, false)),
+      sharedApp.vault.on('create', (file: files.TAbstractFile) => queueMetadata(file, true)),
+      sharedApp.vault.on('delete', (file: files.TAbstractFile) => queueMetadata(file, true)),
+      sharedApp.vault.on('rename', (file: files.TAbstractFile, oldPath: string) => queueMetadata(file, true, oldPath)),
+    ];
     const keys = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return;
       for (const command of pluginCommands.values())
@@ -891,7 +912,9 @@ export async function loadPlugins(): Promise<void> {
     stopHost = () => {
       stopMenus();
       unsub();
-      sharedApp.vault.offref(dataChanged);
+      metadataStopped = true;
+      window.clearTimeout(metadataTimer);
+      for (const ref of metadataEvents) sharedApp.vault.offref(ref);
       window.removeEventListener('keydown', keys, true);
       sharedApp.workspace.reset();
     };

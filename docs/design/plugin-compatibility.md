@@ -40,6 +40,8 @@ desktop 类型检查；先前动态结果只证明当时快照，不能视为最
 
 ## 实现分工
 
+- 性能约定（2026-10-19）：MetadataCache 按会话版本缓存打开文档，按原文复用未打开文档元数据；位置换算复用行索引。modify 只更新对应源文件链接，create/delete/rename 按路径依赖重解析受影响源文件，批处理后统一 resolved；不更改插件既有链接选择规则。详见 performance.md，当前仅静态验证。
+
 - `web/src/lib/obsidian/events.ts`：Events、Component、子组件、事件、DOM 监听和定时器清理。
 - `dom.ts`、`ui.ts`：非枚举 DOM 辅助方法、模态框、建议、菜单、设置控件。
 - `vault.ts`：稳定文件对象、父子目录、真实读写/二进制/资源 URL、元数据和链接解析。

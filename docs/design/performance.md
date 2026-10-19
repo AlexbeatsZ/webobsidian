@@ -16,8 +16,6 @@ Unlinked mentions load only when expanded and reuse the current path/generation
 result. Both request chains abort on cleanup and reject stale results. The fetch
 API accepts optional AbortSignal arguments without changing existing callers.
 
-## User acceptance
-
 ## Dependency-aware decorations
 
 Semantic reference definitions, footnote numbering and exclusion lookups are
@@ -27,6 +25,16 @@ items. Layout, math and plugin block fields retain their value for unrelated
 transactions; YAML/table fields do not depend on ordinary selection. Relevant
 mode/source effects and the frozen IME selection still invalidate decoration.
 Block wrappers remain full-document so CodeMirror can measure virtualized layout.
+
+## Plugin metadata
+
+Session metadata is cached by session identity/version; unopened-file metadata
+reuses unchanged source. Positions use one line-start index per parse. Content
+events update only their source links. Create/delete/rename events additionally
+revisit sources recorded under matching path suffix/basename dependencies,
+including previously unresolved links. Host events batch in one serialized queue
+and emit one resolved notification per processed batch. Plugin resolution rules
+are preserved independently of the shared renderer's stricter ambiguity policy.
 
 ## User acceptance
 

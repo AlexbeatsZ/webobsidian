@@ -268,20 +268,23 @@ export function parseLinktext(text: string) {
   const [path, ...sub] = text.split('#');
   return { path, subpath: sub.length ? '#' + sub.join('#') : '' };
 }
-function point(source: string, offset: number) {
-  const before = source.slice(0, offset);
-  return {
-    line: before.split('\n').length - 1,
-    col: offset - before.lastIndexOf('\n') - 1,
-    offset,
+function pointIndex(source: string) {
+  const starts = [0];
+  for (let i = source.indexOf('\n'); i !== -1; i = source.indexOf('\n', i + 1)) starts.push(i + 1);
+  return (offset: number) => {
+    let lo = 0, hi = starts.length;
+    while (lo < hi) { const mid = (lo + hi) >>> 1; if (starts[mid] <= offset) lo = mid + 1; else hi = mid; }
+    const line = lo - 1;
+    return { line, col: offset - starts[line], offset };
   };
 }
 export function cachedMetadata(source: string) {
+  const point = pointIndex(source);
   const model = analyzeMarkdown(source),
     meta = extractMetadata(model),
     position = (from: number, to: number) => ({
-      start: point(source, from),
-      end: point(source, to),
+      start: point(from),
+      end: point(to),
     });
   let frontmatter: any;
   if (model.frontmatter) {
@@ -343,6 +346,10 @@ export function cachedMetadata(source: string) {
 }
 export class MetadataCache extends Events {
   private cache = new Map<string, any>();
+  private sessionCache = new WeakMap<object, { version: number; metadata: any }>();
+  private sources = new Map<string, string>();
+  private references = new Map<string, Set<string>>();
+  private sourceKeys = new Map<string, Set<string>>();
   resolvedLinks: Record<string, Record<string, number>> = {};
   unresolvedLinks: Record<string, Record<string, number>> = {};
   constructor(public vault: Vault) {
@@ -353,13 +360,20 @@ export class MetadataCache extends Events {
   }
   getCache(path: string) {
     const session = documents.get(path);
-    return session
-      ? cachedMetadata(session.snapshot.text)
-      : (this.cache.get(path) ?? null);
+    if (!session) return this.cache.get(path) ?? null;
+    let entry = this.sessionCache.get(session);
+    if (!entry || entry.version !== session.snapshot.version) {
+      entry = { version: session.snapshot.version, metadata: cachedMetadata(session.snapshot.text) };
+      this.sessionCache.set(session, entry);
+    }
+    return entry.metadata;
   }
   async refresh(file: TFile) {
     const source = await this.vault.cachedRead(file);
-    const cache = cachedMetadata(source.replace(/\r\n?/g, '\n'));
+    const cache = documents.get(file.path) ? this.getCache(file.path)
+      : this.sources.get(file.path) === source ? this.cache.get(file.path)
+      : cachedMetadata(source.replace(/\r\n?/g, '\n'));
+    this.sources.set(file.path, source);
     this.cache.set(file.path, cache);
     this.trigger('changed', file, source, cache);
     this.trigger('resolve', file);
@@ -382,13 +396,31 @@ export class MetadataCache extends Events {
   rebuildLinks() {
     this.resolvedLinks = {};
     this.unresolvedLinks = {};
-    for (const file of this.vault.getMarkdownFiles()) {
+    this.references.clear();
+    this.sourceKeys.clear();
+    for (const file of this.vault.getMarkdownFiles()) this.updateFileLinks(file);
+  }
+  private removeFileLinks(path: string) {
+    for (const key of this.sourceKeys.get(path) ?? []) {
+      const sources = this.references.get(key);
+      sources?.delete(path);
+      if (!sources?.size) this.references.delete(key);
+    }
+    this.sourceKeys.delete(path);
+    delete this.resolvedLinks[path];
+    delete this.unresolvedLinks[path];
+  }
+  private updateFileLinks(file: TFile) {
+      this.removeFileLinks(file.path);
       const resolved: Record<string, number> = {},
         unresolved: Record<string, number> = {};
+      const cache = this.getFileCache(file);
+      const keys = new Set<string>();
       for (const link of [
-        ...(this.getFileCache(file)?.links ?? []),
-        ...(this.getFileCache(file)?.embeds ?? []),
+        ...(cache?.links ?? []),
+        ...(cache?.embeds ?? []),
       ]) {
+        keys.add(normalizePath(parseLinktext(link.link).path));
         const target = this.getFirstLinkpathDest(link.link, file.path);
         const map = target ? resolved : unresolved;
         const key = target?.path ?? link.link;
@@ -396,7 +428,35 @@ export class MetadataCache extends Events {
       }
       this.resolvedLinks[file.path] = resolved;
       this.unresolvedLinks[file.path] = unresolved;
+      this.sourceKeys.set(file.path, keys);
+      for (const key of keys) {
+        if (!this.references.has(key)) this.references.set(key, new Set());
+        this.references.get(key)!.add(file.path);
+      }
+  }
+  /** Content changes touch one source; path changes also revisit its dependents. */
+  async updateFiles(paths: readonly string[], structuralPaths: readonly string[]) {
+    const affected = new Set(paths);
+    for (const path of structuralPaths) {
+      const parts = normalizePath(path).split('/');
+      const keys = new Set<string>();
+      for (let i = 0; i < parts.length; i++) {
+        const suffix = parts.slice(i).join('/');
+        keys.add(suffix); keys.add(suffix.replace(/\.md$/, ''));
+      }
+      keys.add(parts.at(-1)!.replace(/\.[^.]+$/, ''));
+      for (const key of keys) for (const source of this.references.get(key) ?? []) affected.add(source);
     }
+    for (const path of paths) {
+      const file = this.vault.getFileByPath(path);
+      if (file && /^(md|markdown)$/i.test(file.extension)) await this.refresh(file).catch(console.error);
+      else { this.cache.delete(path); this.sources.delete(path); this.removeFileLinks(path); }
+    }
+    for (const path of affected) {
+      const file = this.vault.getFileByPath(path);
+      if (file && /^(md|markdown)$/i.test(file.extension)) this.updateFileLinks(file);
+    }
+    this.trigger('resolved');
   }
   getFirstLinkpathDest(link: string, source = '') {
     const target = normalizePath(parseLinktext(link).path);
