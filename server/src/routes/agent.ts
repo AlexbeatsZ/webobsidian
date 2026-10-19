@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { requireApiKey } from '../middleware/apikey.js';
 import * as vault from '../services/vault.js';
 import { qmd } from '../services/search.js';
-import { backlinksFor, buildLinkGraph } from '../services/links.js';
+import { backlinksFor } from '../services/links.js';
 import { parseNote } from '../services/markdown.js';
 
 /**
@@ -11,11 +11,6 @@ import { parseNote } from '../services/markdown.js';
  * All note paths are vault-relative. Scopes: read / write / search.
  */
 export const agentRouter = Router();
-
-function reindex(rel?: string) {
-  if (rel) void qmd.upsert(rel).catch(() => {});
-  void buildLinkGraph().catch(() => {});
-}
 
 agentRouter.get('/health', (_req, res) => res.json({ ok: true, service: 'webobsidian-agent-api', version: 'v1' }));
 
@@ -62,7 +57,6 @@ agentRouter.put(
     const rel = decodeURIComponent((req.params as any)[0]);
     const content = typeof req.body?.content === 'string' ? req.body.content : '';
     await vault.writeFileText(rel, content);
-    reindex(rel);
     res.json({ ok: true, path: rel });
   }),
 );
@@ -77,7 +71,6 @@ agentRouter.patch(
     const existing = (await vault.exists(rel)) ? await vault.readFileText(rel) : '';
     const joined = existing && !existing.endsWith('\n') ? existing + '\n' + append : existing + append;
     await vault.writeFileText(rel, joined);
-    reindex(rel);
     res.json({ ok: true, path: rel, size: joined.length });
   }),
 );
@@ -93,8 +86,6 @@ agentRouter.delete(
       return;
     }
     const trashed = await vault.trash(rel);
-    qmd.remove(rel);
-    reindex();
     res.json({ ok: true, trashed });
   }),
 );

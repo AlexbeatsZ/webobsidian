@@ -3,7 +3,7 @@ import MiniSearch from 'minisearch';
 import { getSettings } from './settings.js';
 import { INDEX_FILE, config } from '../config.js';
 import { listMarkdownFiles, readFileText } from './vault.js';
-import { parseNote } from './markdown.js';
+import { parseNote, type ParsedNote } from './markdown.js';
 
 /**
  * QMD — the WebObsidian search engine.
@@ -108,6 +108,9 @@ class QmdEngine {
   private async toDoc(rel: string): Promise<QmdDoc> {
     const raw = await readFileText(rel);
     const note = parseNote(rel, raw);
+    return this.fromNote(rel, note);
+  }
+  private fromNote(rel: string, note: ParsedNote): QmdDoc {
     const snippet = note.body.replace(/\s+/g, ' ').trim().slice(0, 280);
     this.snippets.set(rel, snippet);
     this.tagSet.set(rel, note.tags);
@@ -147,12 +150,16 @@ class QmdEngine {
   async upsert(rel: string): Promise<void> {
     if (!/\.(md|markdown)$/i.test(rel)) return;
     try {
-      const doc = await this.toDoc(rel);
-      if (this.mini.has(rel)) this.mini.replace(doc);
-      else this.mini.add(doc);
+      this.upsertNote(rel, parseNote(rel, await readFileText(rel)));
     } catch {
       this.remove(rel);
     }
+  }
+
+  upsertNote(rel: string, note: ParsedNote): void {
+    const doc = this.fromNote(rel, note);
+    if (this.mini.has(rel)) this.mini.replace(doc);
+    else this.mini.add(doc);
   }
 
   remove(rel: string): void {

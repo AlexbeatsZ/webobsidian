@@ -26,11 +26,12 @@ import { agentRouter } from './routes/agent.js';
 import { uiStateRouter } from './routes/uistate.js';
 import { sharesRouter, publicSharesRouter } from './routes/shares.js';
 import { sharePageRouter } from './routes/sharepage.js';
-import { initSearch, qmd } from './services/search.js';
-import { buildLinkGraph, updateLinkGraphForFile } from './services/links.js';
-import { buildFileIndex, indexFile, unindexFile } from './services/fileindex.js';
-import { setBroadcaster, broadcast, notifyIndexChanged } from './services/realtime.js';
-import { getVaultRoot, ensureVault, invalidateStat } from './services/vault.js';
+import { initSearch } from './services/search.js';
+import { buildLinkGraph } from './services/links.js';
+import { buildFileIndex } from './services/fileindex.js';
+import { setBroadcaster } from './services/realtime.js';
+import { getVaultRoot, ensureVault } from './services/vault.js';
+import { enableFileUpdates, queueFileUpdate } from './services/fileupdates.js';
 import { startAutoSync } from './services/autosync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -142,6 +143,7 @@ async function main() {
 
   const server = http.createServer(app);
   setupWebsocket(server);
+  enableFileUpdates();
   await setupWatcher();
   startAutoSync();
 
@@ -252,25 +254,7 @@ function startWatcher(root: string, usePolling: boolean) {
 
   const onChange = async (absPath: string, type: string) => {
     const rel = path.relative(root, absPath).split(path.sep).join('/');
-    // keep the attachment/file index in sync for embed resolution
-    if (type === 'add') indexFile(rel);
-    else if (type === 'unlink') unindexFile(rel);
-    // Drop the cached mtime/ctime so the next listTree re-stats just this file.
-    invalidateStat(rel);
-    if (/\.(md|markdown)$/i.test(rel)) {
-      // Update only the changed file in the search + link indexes (O(1)) — a full
-      // buildLinkGraph() re-reads every note in the vault and was the main CPU sink
-      // when Obsidian touched files in the background.
-      if (type === 'unlink') {
-        qmd.remove(rel);
-        await updateLinkGraphForFile(rel, true).catch(() => {});
-      } else {
-        await qmd.upsert(rel).catch(() => {});
-        await updateLinkGraphForFile(rel).catch(() => {});
-      }
-    }
-    notifyIndexChanged();
-    broadcast({ type: 'fs', event: type, path: rel });
+    await queueFileUpdate(rel, type as Parameters<typeof queueFileUpdate>[1]);
   };
   watcher
     .on('add', (p) => onChange(p, 'add'))

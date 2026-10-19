@@ -1,5 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { queueFileUpdate } from './fileupdates.js';
+import { indexedFilesUnder } from './fileindex.js';
 import { getSettings } from './settings.js';
 import { readTextFile, writeTextFile } from './textFile.js';
 
@@ -157,18 +159,22 @@ export async function readFileBuffer(rel: string): Promise<Buffer> {
 
 export async function writeFileText(rel: string, content: string, baseRevision?: string): Promise<{ revision: string }> {
   const abs = await resolveInVault(rel);
-  return writeTextFile(abs, content, baseRevision);
+  const result = await writeTextFile(abs, content, baseRevision);
+  void queueFileUpdate(rel);
+  return result;
 }
 
 export async function writeFileBuffer(rel: string, buf: Buffer): Promise<void> {
   const abs = await resolveInVault(rel);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, buf);
+  void queueFileUpdate(rel);
 }
 
 export async function createFolder(rel: string): Promise<void> {
   const abs = await resolveInVault(rel);
   await fs.mkdir(abs, { recursive: true });
+  void queueFileUpdate(rel, 'addDir');
 }
 
 /**
@@ -211,7 +217,12 @@ export async function rename(from: string, to: string): Promise<void> {
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
   await fs.mkdir(path.dirname(absTo), { recursive: true });
+  const children = indexedFilesUnder(from);
   await fs.rename(absFrom, absTo);
+  for (const child of new Set([from, ...children])) {
+    void queueFileUpdate(child, 'unlink');
+    void queueFileUpdate(to + child.slice(from.length), 'add');
+  }
 }
 
 /**
@@ -240,13 +251,17 @@ export async function copy(from: string, to: string): Promise<string[]> {
   } else {
     out.push(toRel(root, absTo));
   }
+  for (const file of out) void queueFileUpdate(file, 'add');
+  void queueFileUpdate(to, 'add');
   return out;
 }
 
 /** Permanently delete a file or folder (no trash). */
 export async function remove(rel: string): Promise<void> {
   const abs = await resolveInVault(rel);
+  const children = indexedFilesUnder(rel);
   await fs.rm(abs, { recursive: true, force: true });
+  for (const child of new Set([rel, ...children])) void queueFileUpdate(child, 'unlink');
 }
 
 /** Move a path into the vault trash folder, preserving relative layout. */
@@ -263,7 +278,9 @@ export async function trash(rel: string): Promise<string> {
     const ext = path.extname(dest);
     finalDest = `${dest.slice(0, dest.length - ext.length)}.${Date.now()}${ext}`;
   }
+  const children = indexedFilesUnder(rel);
   await fs.rename(absFrom, finalDest);
+  for (const child of new Set([rel, ...children])) void queueFileUpdate(child, 'unlink');
   return toRel(root, finalDest);
 }
 
@@ -367,6 +384,7 @@ export async function restoreFromTrash(trashRel: string): Promise<string> {
   }
   await fs.mkdir(path.dirname(absTo), { recursive: true });
   await fs.rename(absFrom, absTo);
+  void queueFileUpdate(destRel, 'add');
   await pruneEmptyDirs(path.dirname(absFrom), trashRoot);
   return destRel;
 }

@@ -9,6 +9,7 @@ import {
 } from '@webobsidian/markdown-core';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Events } from './events';
+import type { FileStat } from '../tree';
 
 export function normalizePath(path: string) {
   return path
@@ -109,6 +110,7 @@ export class Vault extends Events {
   fileMap: Record<string, TAbstractFile> = {};
   private root = new TFolder('', '');
   private settings: Record<string, any> = {};
+  private fallbackLinks: Map<string, TFile> | undefined;
   constructor() {
     super();
     this.root.vault = this;
@@ -152,6 +154,7 @@ export class Vault extends Events {
     };
     this.root.children = (tree.children ?? []).map((n) => walk(n, this.root));
     this.fileMap = next;
+    this.fallbackLinks = undefined;
     for (const event of events) this.trigger(event.name, event.file);
     if (emit)
       for (const [path, file] of Object.entries(prior))
@@ -160,6 +163,12 @@ export class Vault extends Events {
   getAllLoadedFiles() {
     return Object.values(this.fileMap);
   }
+  applyFileStat(path: string, stat: FileStat) {
+    const file = this.getFileByPath(path);
+    if (!file) return;
+    file.stat = { mtime: stat.mtime ?? file.stat.mtime, ctime: stat.ctime ?? file.stat.ctime, size: stat.size ?? file.stat.size };
+    this.trigger('modify', file);
+  }
   getFiles(): TFile[] {
     return this.getAllLoadedFiles().filter(
       (f): f is TFile => f instanceof TFile
@@ -167,6 +176,22 @@ export class Vault extends Events {
   }
   getMarkdownFiles() {
     return this.getFiles().filter((f) => /^(md|markdown)$/i.test(f.extension));
+  }
+  /** Preserve getFiles().find precedence while avoiding a vault scan per link. */
+  findLinkCandidate(target: string): TFile | null {
+    if (!this.fallbackLinks) {
+      this.fallbackLinks = new Map();
+      for (const file of this.getFiles()) {
+        const parts = file.path.split('/');
+        const keys = new Set([file.basename]);
+        for (let i = 1; i < parts.length; i++) {
+          const suffix = parts.slice(i).join('/');
+          keys.add(suffix); keys.add(suffix.replace(/\.md$/, ''));
+        }
+        for (const key of keys) if (!this.fallbackLinks.has(key)) this.fallbackLinks.set(key, file);
+      }
+    }
+    return this.fallbackLinks.get(target) ?? null;
   }
   getAbstractFileByPath(path: string) {
     return this.fileMap[normalizePath(path)] ?? null;
@@ -227,6 +252,7 @@ export class Vault extends Events {
     file.path = path;
     file.name = path.split('/').pop()!;
     this.fileMap[path] = file;
+    this.fallbackLinks = undefined;
     await useStore.getState().loadTree();
     this.trigger('rename', file, old);
   }
@@ -347,7 +373,7 @@ export function cachedMetadata(source: string, model: MarkdownModel = analyzeMar
 export class MetadataCache extends Events {
   private cache = new Map<string, any>();
   private sessionCache = new WeakMap<object, { version: number; metadata: any }>();
-  private sources = new Map<string, string>();
+  private revisions = new Map<string, string>();
   private references = new Map<string, Set<string>>();
   private sourceKeys = new Map<string, Set<string>>();
   resolvedLinks: Record<string, Record<string, number>> = {};
@@ -369,11 +395,14 @@ export class MetadataCache extends Events {
     return entry.metadata;
   }
   async refresh(file: TFile) {
-    const source = await this.vault.cachedRead(file);
-    const cache = documents.get(file.path) ? this.getCache(file.path)
-      : this.sources.get(file.path) === source ? this.cache.get(file.path)
+    const session = documents.get(file.path);
+    const loaded = session ? undefined : await api.read(file.path);
+    const source = session?.snapshot.raw ?? loaded!.content;
+    const revision = loaded?.revision;
+    const cache = session ? this.getCache(file.path)
+      : revision !== undefined && this.revisions.get(file.path) === revision ? this.cache.get(file.path)
       : cachedMetadata(source.replace(/\r\n?/g, '\n'));
-    this.sources.set(file.path, source);
+    if (revision !== undefined) this.revisions.set(file.path, revision); else this.revisions.delete(file.path);
     this.cache.set(file.path, cache);
     this.trigger('changed', file, source, cache);
     this.trigger('resolve', file);
@@ -450,7 +479,7 @@ export class MetadataCache extends Events {
     for (const path of paths) {
       const file = this.vault.getFileByPath(path);
       if (file && /^(md|markdown)$/i.test(file.extension)) await this.refresh(file).catch(console.error);
-      else { this.cache.delete(path); this.sources.delete(path); this.removeFileLinks(path); }
+      else { this.cache.delete(path); this.revisions.delete(path); this.removeFileLinks(path); }
     }
     for (const path of affected) {
       const file = this.vault.getFileByPath(path);
@@ -473,16 +502,7 @@ export class MetadataCache extends Events {
       const file = this.vault.getFileByPath(name);
       if (file) return file;
     }
-    return (
-      this.vault
-        .getFiles()
-        .find(
-          (f) =>
-            f.path.endsWith('/' + target) ||
-            f.path.endsWith('/' + target + '.md') ||
-            f.basename === target
-        ) ?? null
-    );
+    return this.vault.findLinkCandidate(target);
   }
   fileToLinktext(file: TFile, _source: string, omitMd = false) {
     return omitMd ? file.path.replace(/\.md$/i, '') : file.path;

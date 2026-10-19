@@ -31,3 +31,7 @@ export function resolveFile(target: string, sourcePath = ''): string | undefined
 }
 export function indexFile(relative: string): void { files.add(relative); }
 export function unindexFile(relative: string): void { files.delete(relative); }
+export function hasIndexedFile(relative: string): boolean { return files.has(relative); }
+export function indexedFilesUnder(relative: string): string[] {
+  return [...files.paths()].filter((file) => file === relative || file.startsWith(relative + '/'));
+}

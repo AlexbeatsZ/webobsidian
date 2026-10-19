@@ -79,9 +79,11 @@ export default function App() {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'fs') {
-          // coalesce bursts of fs events into a single tree refresh
-          window.clearTimeout(treeTimer);
-          treeTimer = window.setTimeout(() => loadTree(), 800);
+          // Content saves update one stat; structure/unknown paths refresh the tree.
+          if (!(msg.event === 'change' && msg.stat && useStore.getState().applyFileStat(msg.path, msg.stat))) {
+            window.clearTimeout(treeTimer);
+            treeTimer = window.setTimeout(() => loadTree(), 800);
+          }
         } else if (msg.type === 'index') {
           window.clearTimeout(indexTimer);
           indexTimer = window.setTimeout(notifyIndexChanged, 800);

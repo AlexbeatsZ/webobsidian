@@ -1,7 +1,13 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.9 · Cập nhật: 2026-10-18 · Trạng thái: Draft
+> Phiên bản: 1.10 · Cập nhật: 2026-10-19 · Trạng thái: Draft
+> Changelog 1.10 (editing performance): index-driven backlinks; dependency-aware
+> decorations; cached plugin metadata and incremental links; reusable target and
+> reverse-link indexes; shared syntax/Lezer fragments; sparse raw-source mappings;
+> unified file update queues and per-file stat patches. Public file formats,
+> source preservation and plugin resolution rules remain unchanged. Static-only
+> checks and user acceptance: [performance design](docs/design/performance.md).
 > Changelog 1.9 (plugin host): commands, settings/persistence, vault/metadata,
 > workspace/editor/CM6 extensions, Markdown processors and lifecycle cleanup;
 > optional trusted desktop Node/Web Viewer host. Scope and final static-only

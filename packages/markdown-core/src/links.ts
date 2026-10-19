@@ -51,6 +51,8 @@ export class TargetIndex {
   private exact = new Map<string, Set<string>>();
   private suffix = new Map<string, Set<string>>();
   constructor(files: Iterable<string> = []) { for (const file of files) this.add(file); }
+  has(file: string): boolean { return this.files.has(file); }
+  paths(): Iterable<string> { return this.files; }
   keysFor(file: string): string[] {
     const parts = keyOf(file).split('/');
     return parts.map((_, i) => parts.slice(i).join('/'));

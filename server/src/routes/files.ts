@@ -5,32 +5,16 @@ import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
 import * as vault from '../services/vault.js';
 import { getSettings } from '../services/settings.js';
-import { qmd } from '../services/search.js';
-import { updateLinkGraphForFile } from '../services/links.js';
 import { scheduleAutoCommitOnSave } from '../services/git.js';
 import { resolveFile } from '../services/fileindex.js';
 import { onFileRenamed } from '../services/shares.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
-import { notifyIndexChanged } from '../services/realtime.js';
 
 export const filesRouter = Router();
 filesRouter.use(requireAuth);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512 * 1024 * 1024 } });
-
-const isMd = (p: string) => /\.(md|markdown)$/i.test(p);
-
-// Refresh derived indexes after a mutation (best-effort, non-blocking).
-// Incremental: only the touched file(s) are reparsed, not the whole vault.
-function reindex(opts: { upsert?: string; added?: string; removed?: string } = {}) {
-  const jobs: Promise<void>[] = [];
-  if (opts.upsert) jobs.push(qmd.upsert(opts.upsert));
-  if (opts.added && isMd(opts.added)) jobs.push(updateLinkGraphForFile(opts.added));
-  if (opts.removed && isMd(opts.removed)) jobs.push(updateLinkGraphForFile(opts.removed, true));
-  if (jobs.length) void Promise.allSettled(jobs).then(notifyIndexChanged);
-  scheduleAutoCommitOnSave();
-}
 
 filesRouter.get(
   '/',
@@ -76,7 +60,7 @@ filesRouter.put(
       return;
     }
     const snapshot = await vault.writeFileText(rel, content, baseRevision);
-    reindex({ upsert: rel, added: rel });
+    scheduleAutoCommitOnSave();
     res.json({ ok: true, path: rel, ...snapshot });
   }),
 );
@@ -122,9 +106,8 @@ filesRouter.patch(
       return;
     }
     await vault.rename(from, to);
-    await qmd.rename(from, to);
     await onFileRenamed(from, to).catch(() => {}); // keep public share links pointing at the note
-    reindex({ added: to, removed: from });
+    scheduleAutoCommitOnSave();
     res.json({ ok: true, from, to });
   }),
 );
@@ -137,13 +120,7 @@ filesRouter.post(
       res.status(400).json({ error: 'from and to required' });
       return;
     }
-    const copied = await vault.copy(from, to);
-    for (const f of copied) {
-      if (isMd(f)) {
-        void qmd.upsert(f).catch(() => {});
-        void updateLinkGraphForFile(f).catch(() => {});
-      }
-    }
+    await vault.copy(from, to);
     scheduleAutoCommitOnSave();
     res.json({ ok: true, from, to });
   }),
@@ -169,7 +146,7 @@ filesRouter.post(
       return;
     }
     const restored = await vault.restoreFromTrash(rel);
-    reindex({ upsert: restored, added: restored });
+    scheduleAutoCommitOnSave();
     res.json({ ok: true, restored });
   }),
 );
@@ -206,15 +183,14 @@ filesRouter.delete(
       return;
     }
     const s = await getSettings();
-    qmd.remove(rel);
     if (s.vault.deleteMode === 'permanent') {
       await vault.remove(rel);
-      reindex({ removed: rel });
+      scheduleAutoCommitOnSave();
       res.json({ ok: true, deleted: rel });
       return;
     }
     const dest = await vault.trash(rel);
-    reindex({ removed: rel });
+    scheduleAutoCommitOnSave();
     res.json({ ok: true, trashed: dest });
   }),
 );

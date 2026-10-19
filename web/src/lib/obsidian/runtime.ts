@@ -851,7 +851,9 @@ export async function loadPlugins(): Promise<void> {
       instance: { open: () => useStore.getState().setPalette(true, 'files') },
     };
     const unsub = useStore.subscribe((state, prior) => {
-      if (state.tree !== prior.tree) sharedApp.vault.sync(state.tree, true);
+      if (state.lastFileChange !== prior.lastFileChange && state.lastFileChange) {
+        sharedApp.vault.applyFileStat(state.lastFileChange.path, state.lastFileChange.stat);
+      } else if (state.tree !== prior.tree) sharedApp.vault.sync(state.tree, true);
       if (state.activePath !== prior.activePath) {
         sharedApp.workspace.trigger(
           'file-open',
@@ -881,6 +883,7 @@ export async function loadPlugins(): Promise<void> {
     };
     const queueMetadata = (file: files.TAbstractFile, structural: boolean, oldPath?: string) => {
       if (!(file instanceof files.TFile)) return;
+      if (!structural && !/^(md|markdown)$/i.test(file.extension)) return;
       pendingFiles.add(file.path);
       if (structural) structuralFiles.add(file.path);
       if (oldPath) { pendingFiles.add(oldPath); structuralFiles.add(oldPath); }

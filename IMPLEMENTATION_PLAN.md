@@ -4,7 +4,19 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-10-18 (rendering unification first implementation and automated acceptance)
+Cập nhật lần cuối: 2026-10-19 (editing performance implementation; static-only validation)
+
+## Editing performance (PRD 1.10)
+
+- [x] Index-driven backlinks/unlinked mentions with cancellation and generation caching.
+- [x] Dependency-aware decorations and document-version semantic caches.
+- [x] Plugin metadata revision/session caches, line-position lookup and incremental link dependencies.
+- [x] Reusable exact/suffix target indexes and incoming backlink sets.
+- [x] Sparse source offsets, single-pass raw patches, shared analysis and Lezer fragment reuse.
+- [x] Unified per-path updates, one parse for search/links, stat patches and stable file contexts.
+- [ ] User input/IME/plugin/large-vault/performance acceptance; browser and Electron runs remain deferred.
+
+Implementation and static verification boundary: [performance design](docs/design/performance.md).
 
 ## Rendering unification (PRD 1.8)
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, type TreeNode, type ShareRecord } from './api';
-import { findNode } from './tree';
+import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
 import { parseLinkTarget } from '@webobsidian/markdown-core';
 let openGeneration = 0;
@@ -91,6 +91,9 @@ interface AppState {
   setMustChangePassword: (v: boolean) => void;
 
   tree: TreeNode | null;
+  filePaths: string[];
+  lastFileChange: { path: string; stat: FileStat } | null;
+  applyFileStat: (path: string, stat: FileStat) => boolean;
   loadTree: () => Promise<void>;
 
   tabs: Tab[];
@@ -309,9 +312,18 @@ export const useStore = create<AppState>()(
       setMustChangePassword: (v) => set({ mustChangePassword: v }),
 
       tree: null,
+      filePaths: [],
+      lastFileChange: null,
+      applyFileStat: (path, stat) => {
+        const tree = patchFileStat(get().tree, path, stat);
+        if (!tree) return false;
+        set({ tree, lastFileChange: { path, stat } });
+        return true;
+      },
       loadTree: async () => {
         const tree = await api.tree();
-        set({ tree });
+        const paths = filePaths(tree), prior = get().filePaths;
+        set({ tree, filePaths: paths.length === prior.length && paths.every((path, i) => path === prior[i]) ? prior : paths });
       },
 
       tabs: [],

@@ -6,6 +6,8 @@ import { backlinksFor, graphData, resolveLink, buildLinkGraph } from '../service
 import { resolveIndexedTarget } from '../services/fileindex.js';
 import { readPropertyTypes, setPropertyType } from '../services/propertytypes.js';
 import { notifyIndexChanged } from '../services/realtime.js';
+import { rebuildFileIndexes } from '../services/fileupdates.js';
+import { buildFileIndex } from '../services/fileindex.js';
 
 export const searchRouter = Router();
 searchRouter.use(requireAuth);
@@ -101,8 +103,11 @@ searchRouter.get(
 searchRouter.post(
   '/reindex',
   asyncHandler(async (_req, res) => {
-    await qmd.build();
-    await buildLinkGraph();
+    await rebuildFileIndexes(async () => {
+      await qmd.build();
+      await buildLinkGraph();
+      await buildFileIndex();
+    });
     notifyIndexChanged();
     res.json({ ok: true });
   }),

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
-import { api, type TreeNode } from '../lib/api';
+import { api } from '../lib/api';
 import { useDocumentSession } from '../lib/useDocumentSession';
 import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { registerEditor } from '../lib/activeEditor';
@@ -18,7 +18,7 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   const openMenu = useStore((s) => s.openContextMenu);
   const setLeftPanel = useStore((s) => s.setLeftPanel);
   const notify = useStore((s) => s.notify);
-  const tree = useStore((s) => s.tree);
+  const files = useStore((s) => s.filePaths);
   const [propertyTypes, setPropertyTypes] = useState<Record<string, string>>({});
   useEffect(() => { let current = true;
     void api.propertyTypes().then((result) => { if (current) setPropertyTypes(result.types); }).catch(() => {});
@@ -28,13 +28,8 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   const unregister = useRef<(() => void) | undefined>(undefined);
   const context = useMemo(() => createVaultRenderContext(path ?? '', {
     bindEditor: registerEditor, openLink: (target, sourcePath) => { void openLink(target, sourcePath ?? path ?? undefined); }, openMenu, reportError: notify, initialPropertyTypes: propertyTypes,
-    files: () => {
-      const files: string[] = [];
-      const walk = (node: TreeNode) => { if (node.type === 'file') files.push(node.path); node.children?.forEach(walk); };
-      if (tree) walk(tree);
-      return files;
-    },
-  }), [path, openLink, openMenu, tree, propertyTypes, notify]);
+    files: () => [...files],
+  }), [path, openLink, openMenu, files, propertyTypes, notify]);
   useEffect(() => {
     if (!session || reading || !snapshot.dirty || snapshot.conflict) return;
     const timer = window.setTimeout(() => { void session.save().catch((cause) => notify(cause.message)); }, 900);
