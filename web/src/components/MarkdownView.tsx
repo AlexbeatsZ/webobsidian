@@ -9,11 +9,11 @@ import { search, searchKeymap } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { syntaxHighlighting } from '@codemirror/language';
-import type { DocumentSnapshot, SourceChange } from '@webobsidian/markdown-core';
+import { analyzeMarkdown, type DocumentSnapshot, type SourceChange, type MarkdownModel } from '@webobsidian/markdown-core';
 import { obsidianHighlightStyle } from '../lib/highlight';
 import { obsidianKeymap } from '../lib/editorCommands';
 import { suggesterPlugin } from '../lib/suggest';
-import { syntaxModel, documentMetadata, blockModel } from '../lib/syntaxModel';
+import { syntaxModel, adoptSyntaxModel, documentMetadata, blockModel } from '../lib/syntaxModel';
 import { inlineHtml } from '../lib/inlineHtml';
 import { sourceControls } from '../lib/sourceControls';
 import { semanticDecorations } from '../lib/semanticDecorations';
@@ -28,9 +28,10 @@ import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField
 export type MarkdownMode = 'live' | 'reading' | 'source';
 export interface MarkdownViewProps {
   snapshot: DocumentSnapshot;
+  analysis?: MarkdownModel;
   mode: MarkdownMode;
   context: RenderContext;
-  onChange?: (changes: SourceChange[], baseVersion: number, origin: string) => DocumentSnapshot;
+  onChange?: (changes: SourceChange[], baseVersion: number, origin: string, model: MarkdownModel) => DocumentSnapshot;
   onUndo?: () => DocumentSnapshot;
   onRedo?: () => DocumentSnapshot;
   onSave?: () => void;
@@ -71,7 +72,9 @@ export default function MarkdownView(props: MarkdownViewProps) {
     let from = 0, to = before.length, insertTo = next.text.length;
     while (from < to && from < insertTo && before[from] === next.text[from]) from++;
     while (to > from && insertTo > from && before[to - 1] === next.text[insertTo - 1]) { to--; insertTo--; }
-    v.dispatch({ changes: { from, to, insert: next.text.slice(from, insertTo) }, annotations: externalUpdate.of(true) });
+    const model = latest.current.analysis;
+    v.dispatch({ changes: { from, to, insert: next.text.slice(from, insertTo) },
+      effects: model?.text === next.text ? adoptSyntaxModel.of(model) : [], annotations: externalUpdate.of(true) });
   };
   // --- editor formatting actions (used by the right-click menu) ---
   const wrap = (before: string, after = before) => {
@@ -206,7 +209,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       doc: p.snapshot.text,
       selection: { anchor: initPos },
       extensions: [
-        editorSelection, syntaxModel, documentMetadata, blockModel,
+        editorSelection, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
         readonlyComp.of(readonlyExt(p.mode === 'reading')),
         EditorState.transactionFilter.of((tr) =>
@@ -240,7 +243,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
           u.changes.iterChanges((from, to, _a, _b, inserted) => changes.push({ from, to, insert: inserted.toString() }));
           const typing = u.transactions.some((tr) => tr.isUserEvent('input.type'));
           const next = latest.current.onChange?.(changes, version.current,
-            typing ? 'input.type:' + instanceId : 'edit');
+            typing ? 'input.type:' + instanceId : 'edit', u.state.field(syntaxModel));
           if (next) version.current = next.version;
         }),
       ],

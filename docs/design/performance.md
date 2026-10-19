@@ -57,6 +57,21 @@ selection and all public source/session interfaces are unchanged.
 
 ## User acceptance
 
+## Shared syntax and grammar fragments
+
+DocumentSession exposes lazy analysis and accepts a model from its originating
+editor only when path/text match. Saving/conflict-state snapshots reuse the same
+version's analysis. MarkdownView receives an optional analysis value and adopts
+matching models during external synchronization; it still has no workspace or
+vault dependency. CodeMirror edits pass exact old/new change ranges to Lezer
+TreeFragment; session undo/external adapters use a bounding text difference.
+Initial loads retain full parsing. Metadata and per-view block derivations use
+WeakMaps keyed by immutable model identity. Outline/embeds/plugin metadata share
+session analysis; fragment caches are scoped to the full parent model and range.
+Grammar reuse does not make the complete derived-node traversal incremental.
+
+## User acceptance
+
 - Type continuously in a long note with backlinks/outline open; unsaved input
   must not issue backlinks/search/matches requests.
 - Save and modify other notes externally; backlinks and unlinked mentions refresh.

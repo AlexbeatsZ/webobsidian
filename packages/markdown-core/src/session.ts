@@ -1,4 +1,5 @@
 import { SourceDocument, type SourceChange } from './source.js';
+import { analyzeMarkdown, updateMarkdown, type MarkdownModel } from './syntax.js';
 
 export interface DocumentSnapshot {
   readonly id: string;
@@ -27,6 +28,7 @@ export class DocumentSession {
   private undoStack: UndoGroup[] = [];
   private redoStack: UndoGroup[] = [];
   private current: DocumentSnapshot;
+  private model: MarkdownModel | undefined;
 
   constructor(readonly id: string, raw: string, revision: string | undefined, private writer: DocumentWriter) {
     this.source = new SourceDocument(raw);
@@ -36,6 +38,25 @@ export class DocumentSession {
   }
 
   get snapshot(): DocumentSnapshot { return this.current; }
+  /** Lazy, shared by views/embeds/metadata, unaffected by save-state snapshots. */
+  get analysis(): MarkdownModel {
+    if (this.model?.version === this.version) return this.model;
+    const text = this.source.text;
+    if (this.model) {
+      const before = this.model.text;
+      let from = 0, to = before.length, insertTo = text.length;
+      while (from < to && from < insertTo && before[from] === text[from]) from++;
+      while (to > from && insertTo > from && before[to - 1] === text[insertTo - 1]) { to--; insertTo--; }
+      this.model = updateMarkdown(this.model, text, [{ fromA: from, toA: to, fromB: from, toB: insertTo }], this.version);
+    } else this.model = analyzeMarkdown(text, this.id, this.version);
+    return this.model;
+  }
+  /** Adopt the model the originating editor already computed for this exact text. */
+  acceptAnalysis(model: MarkdownModel): void {
+    if (model.id === this.id && model.text === this.source.text) {
+      this.model = model.version === this.version ? model : { ...model, version: this.version };
+    }
+  }
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };

@@ -5,6 +5,7 @@ import {
   extractMetadata,
   analyzeMarkdown,
   blockContainers,
+  type MarkdownModel,
 } from '@webobsidian/markdown-core';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Events } from './events';
@@ -278,10 +279,9 @@ function pointIndex(source: string) {
     return { line, col: offset - starts[line], offset };
   };
 }
-export function cachedMetadata(source: string) {
+export function cachedMetadata(source: string, model: MarkdownModel = analyzeMarkdown(source)) {
   const point = pointIndex(source);
-  const model = analyzeMarkdown(source),
-    meta = extractMetadata(model),
+  const meta = extractMetadata(model),
     position = (from: number, to: number) => ({
       start: point(from),
       end: point(to),
@@ -363,7 +363,7 @@ export class MetadataCache extends Events {
     if (!session) return this.cache.get(path) ?? null;
     let entry = this.sessionCache.get(session);
     if (!entry || entry.version !== session.snapshot.version) {
-      entry = { version: session.snapshot.version, metadata: cachedMetadata(session.snapshot.text) };
+      entry = { version: session.snapshot.version, metadata: cachedMetadata(session.snapshot.text, session.analysis) };
       this.sessionCache.set(session, entry);
     }
     return entry.metadata;

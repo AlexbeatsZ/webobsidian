@@ -1,5 +1,5 @@
 import { parser, GFM } from '@lezer/markdown';
-import type { Tree } from '@lezer/common';
+import { TreeFragment, type Tree, type ChangedRange } from '@lezer/common';
 
 export const markdownParser = parser.configure(GFM);
 export interface SourceSpan { from: number; to: number }
@@ -14,7 +14,16 @@ export interface MarkdownModel {
 
 /** One full-source grammar for views, fragments and metadata; never serializes Markdown. */
 export function analyzeMarkdown(text: string, id = '', version = 0): MarkdownModel {
-  const tree = markdownParser.parse(text);
+  return modelFromTree(text, id, version, markdownParser.parse(text));
+}
+
+/** Reuse unchanged grammar fragments; derived ranges still cover the full source. */
+export function updateMarkdown(previous: MarkdownModel, text: string, changes: readonly ChangedRange[], version = previous.version + 1): MarkdownModel {
+  const fragments = TreeFragment.applyChanges(TreeFragment.addTree(previous.tree), changes);
+  return modelFromTree(text, previous.id, version, markdownParser.parse(text, fragments));
+}
+
+function modelFromTree(text: string, id: string, version: number, tree: Tree): MarkdownModel {
   const nodes: SyntaxRange[] = [], literal: SourceSpan[] = [], html: HtmlToken[] = [], htmlBlocks: SourceSpan[] = [], entities: SourceSpan[] = [];
   const parents: number[] = [];
   const fm = text.match(/^---\n[\s\S]*?\n---[ \t]*(?:\n|$)/);

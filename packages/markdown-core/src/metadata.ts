@@ -6,9 +6,12 @@ export interface Metadata {
   tags: string[]; links: string[]; headings: Heading[]; comments: SourceSpan[];
   blockIds: (SourceSpan & { id: string })[];
 }
+const metadataCache = new WeakMap<MarkdownModel, Metadata>();
 
 export function extractMetadata(source: string | MarkdownModel): Metadata {
   const model = typeof source === 'string' ? analyzeMarkdown(source) : source;
+  const cached = metadataCache.get(model);
+  if (cached) return cached;
   const { text } = model;
   const forbidden = [...model.literal, ...model.html, ...model.htmlBlocks, ...(model.frontmatter ? [model.frontmatter] : [])];
   const intersects = (from: number, to: number) => forbidden.some((range) => from < range.to && to > range.from);
@@ -45,7 +48,9 @@ export function extractMetadata(source: string | MarkdownModel): Metadata {
     const from = match.index! + match[0].indexOf(match[1]);
     if (!intersects(from, from + match[1].length)) blockIds.push({ from, to: from + match[1].length, id: match[1].slice(1) });
   }
-  return { tags: [...tags], links: [...links], headings, comments, blockIds };
+  const result = { tags: [...tags], links: [...links], headings, comments, blockIds };
+  metadataCache.set(model, result);
+  return result;
 }
 
 export function fragmentRange(model: MarkdownModel, fragment: string): SourceSpan | null {

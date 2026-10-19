@@ -1,4 +1,4 @@
-import { analyzeMarkdown, fragmentRange, parseLinkTarget } from '@webobsidian/markdown-core';
+import { fragmentRange, parseLinkTarget } from '@webobsidian/markdown-core';
 import { api } from './api';
 import { documents } from './documents';
 import type { RenderContext } from './renderContext';
@@ -25,7 +25,7 @@ export function createVaultRenderContext(path: string, services: Services): Rend
       return {
         path: note.id, context: createVaultRenderContext(note.id, services), subscribe: note.subscribe,
         read: () => {
-          const model = analyzeMarkdown(note.snapshot.text, note.id, note.snapshot.version);
+          const model = note.analysis;
           const range = fragmentRange(model, destination.fragment);
           return range ? { source: model.text.slice(range.from, range.to), from: range.from } : null;
         },

@@ -5,6 +5,7 @@ import { extractMetadata, SourceDocument } from '@webobsidian/markdown-core';
 import TagsPanel from './TagsPanel';
 import Icon from './Icon';
 import { useIndexVersion } from '../lib/indexEvents';
+import { documents } from '../lib/documents';
 
 const MD_RE = /\.(md|markdown)$/i;
 const name = (p: string) => p.split('/').pop()?.replace(MD_RE, '') ?? p;
@@ -218,7 +219,11 @@ function OutgoingPanel() {
 
 function OutlinePanel() {
   const content = useStore((s) => s.content);
-  const heads = extractMetadata(new SourceDocument(content).text).headings;
+  const activePath = useStore((s) => s.activePath);
+  const heads = useMemo(() => {
+    const session = activePath ? documents.get(activePath) : undefined;
+    return extractMetadata(session?.analysis ?? new SourceDocument(content).text).headings;
+  }, [activePath, content]);
   return (
     <>
       <div className="nav-header">

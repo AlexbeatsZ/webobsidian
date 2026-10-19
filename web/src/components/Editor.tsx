@@ -42,12 +42,13 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   }, [session, reading, snapshot.version, snapshot.dirty, snapshot.conflict, notify]);
   if (error) return <div className="editor-error" role="alert">{error.message}</div>;
   if (!session) return <div className="editor-loading">Loading…</div>;
-  const range = fragment ? fragmentRange(analyzeMarkdown(snapshot.text), fragment) : null;
+  const analysis = session.analysis;
+  const range = fragment ? fragmentRange(analysis, fragment) : null;
   if (fragment && !range) return <div className="editor-error">Section or block could not be found</div>;
   const displayed = range ? { ...snapshot, text: snapshot.text.slice(range.from, range.to), raw: snapshot.text.slice(range.from, range.to) } : snapshot;
-  return <MarkdownView snapshot={displayed} mode={reading ? 'reading' : mode} context={context}
+  return <MarkdownView snapshot={displayed} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={context}
     autoFocus={!reading} showTitle={!embedded} layout={embedded ? 'embedded' : 'page'}
-    onChange={(changes, version, origin) => { session.edit(version, changes, origin); return session.snapshot; }}
+    onChange={(changes, version, origin, model) => { session.edit(version, changes, origin); session.acceptAnalysis(model); return session.snapshot; }}
     onUndo={() => { session.undo(); return session.snapshot; }}
     onRedo={() => { session.redo(); return session.snapshot; }}
     onSave={() => { if (!reading) void session.save().catch((cause) => notify(cause.message)); }}
@@ -61,4 +62,14 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
         unregister.current = () => { stopPlugins(); stopEditor(); };
       } else unregister.current = undefined;
     }} />;
+}
+
+const fragments = new WeakMap<ReturnType<typeof analyzeMarkdown>, Map<string, ReturnType<typeof analyzeMarkdown>>>();
+function fragmentAnalysis(model: ReturnType<typeof analyzeMarkdown>, from: number, to: number) {
+  let cache = fragments.get(model);
+  if (!cache) { cache = new Map(); fragments.set(model, cache); }
+  const key = `${from}:${to}`;
+  let result = cache.get(key);
+  if (!result) { result = analyzeMarkdown(model.text.slice(from, to), model.id, model.version); cache.set(key, result); }
+  return result;
 }
