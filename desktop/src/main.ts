@@ -104,17 +104,29 @@ async function startServer(cfg: DesktopConfig): Promise<void> {
   };
 
   // Run the bundled server with Electron's own Node (no external node needed).
-  serverProc = spawn(process.execPath, [serverEntry()], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-
   const log = (await fs.open(LOG_FILE(), 'a')).createWriteStream();
-  serverProc.stdout?.pipe(log);
-  serverProc.stderr?.pipe(log);
-  serverProc.on('exit', (code, signal) => {
+  const child = spawn(process.execPath, [serverEntry()], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  serverProc = child;
+  let startupError: Error | undefined;
+
+  child.stdout?.pipe(log, { end: false });
+  child.stderr?.pipe(log, { end: false });
+  child.on('error', (err) => {
+    startupError = new Error(`Could not start the server: ${err.message}\nServer log: ${LOG_FILE()}`);
+  });
+  child.on('exit', (code, signal) => {
     if (!app.isPackaged) console.error(`[server] exited code=${code} signal=${signal}`);
-    serverProc = null;
+    if (serverProc === child) serverProc = null;
+  });
+  child.on('close', (code, signal) => {
+    // Finish both output streams before reporting a startup failure so the log
+    // is available even when the app immediately closes the error dialog.
+    log.end(() => {
+      startupError ??= new Error(`Server exited before becoming healthy (code=${code}, signal=${signal}).\nServer log: ${LOG_FILE()}`);
+    });
   });
 
-  await waitForHealth(serverPort);
+  await waitForHealth(serverPort, () => startupError);
   await autoLogin(serverPort, cfg.secret);
 }
 
@@ -126,16 +138,18 @@ function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function waitForHealth(port: number): Promise<void> {
+async function waitForHealth(port: number, failure: () => Error | undefined): Promise<void> {
   const deadline = Date.now() + 30_000;
   for (;;) {
+    const startupError = failure();
+    if (startupError) throw startupError;
     try {
       const res = await apiRequest('GET', `${baseUrl(port)}/healthz`);
       if (res.status === 200) return;
     } catch {
       /* not up yet */
     }
-    if (Date.now() > deadline) throw new Error('Server did not become healthy in time.');
+    if (Date.now() > deadline) throw failure() ?? new Error(`Server did not become healthy in time.\nServer log: ${LOG_FILE()}`);
     await delay(250);
   }
 }

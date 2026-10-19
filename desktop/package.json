@@ -1,6 +1,6 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "WebObsidian desktop app (Electron shell around the self-hosted server)",
   "author": "xnohat <xnohat@gmail.com>",
@@ -9,6 +9,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "check:bundle": "node scripts/check-server-bundle.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "start": "electron dist/main.js",
     "dev": "node scripts/build.mjs && electron dist/main.js",

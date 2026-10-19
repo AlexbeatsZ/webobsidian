@@ -49,6 +49,7 @@ Or directly inside `desktop/` (assumes `npm run build` already ran at the root):
 
 ```bash
 npm run build        # esbuild: dist/ (main+preload) + .gen/server/ (server bundle + SPA)
+npm run check:bundle # static standalone dependency check; does not start the server
 npm start            # launch with the already-built bundle
 npm run dist         # electron-builder → installers in desktop/release/
 npm run dist:dir     # fast unpacked build (no installer), for smoke testing
@@ -59,6 +60,19 @@ npm run dist:dir     # fast unpacked build (no installer), for smoke testing
 > Electron by hand, clear it: `env -u ELECTRON_RUN_AS_NODE electron dist/main.js`.
 > Packaged apps are unaffected. The shell sets `ELECTRON_RUN_AS_NODE=1` only for the
 > server child it spawns.
+
+## Startup errors
+
+Startup failures report the server log path. On Windows it is
+`%APPDATA%/@webobsidian/desktop/logs/server.log`. A child that exits before its
+health check passes is reported with its exit status, rather than waiting for
+the full startup deadline.
+
+The 2026-10-18 Windows 0.1.1 build could fail with
+`Cannot find module './impl/format'`: the standalone bundle had selected
+`jsonc-parser`'s UMD entry. Version 0.1.2 uses its ESM entry and rejects surviving
+relative `require` calls during the build. See
+[desktop runtime](../docs/design/desktop-runtime.md) for the packaging contract.
 
 ## Releasing (GitHub Releases)
 
