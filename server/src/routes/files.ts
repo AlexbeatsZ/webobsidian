@@ -12,6 +12,7 @@ import { resolveFile } from '../services/fileindex.js';
 import { onFileRenamed } from '../services/shares.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
+import { notifyIndexChanged } from '../services/realtime.js';
 
 export const filesRouter = Router();
 filesRouter.use(requireAuth);
@@ -23,9 +24,11 @@ const isMd = (p: string) => /\.(md|markdown)$/i.test(p);
 // Refresh derived indexes after a mutation (best-effort, non-blocking).
 // Incremental: only the touched file(s) are reparsed, not the whole vault.
 function reindex(opts: { upsert?: string; added?: string; removed?: string } = {}) {
-  if (opts.upsert) void qmd.upsert(opts.upsert).catch(() => {});
-  if (opts.added && isMd(opts.added)) void updateLinkGraphForFile(opts.added).catch(() => {});
-  if (opts.removed && isMd(opts.removed)) void updateLinkGraphForFile(opts.removed, true).catch(() => {});
+  const jobs: Promise<void>[] = [];
+  if (opts.upsert) jobs.push(qmd.upsert(opts.upsert));
+  if (opts.added && isMd(opts.added)) jobs.push(updateLinkGraphForFile(opts.added));
+  if (opts.removed && isMd(opts.removed)) jobs.push(updateLinkGraphForFile(opts.removed, true));
+  if (jobs.length) void Promise.allSettled(jobs).then(notifyIndexChanged);
   scheduleAutoCommitOnSave();
 }
 

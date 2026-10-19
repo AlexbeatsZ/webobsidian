@@ -10,3 +10,8 @@ export function setBroadcaster(fn: Broadcaster): void {
 export function broadcast(msg: unknown): void {
   _broadcast(msg);
 }
+
+let indexVersion = 0;
+export function notifyIndexChanged(): void {
+  broadcast({ type: 'index', version: ++indexVersion });
+}

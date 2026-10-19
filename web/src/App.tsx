@@ -17,6 +17,7 @@ import FolderPicker from './components/FolderPicker';
 import { loadPlugins, sharedApp } from './lib/plugins';
 import { initUrlSync } from './lib/urlsync';
 import { useIsMobile } from './lib/useIsMobile';
+import { notifyIndexChanged } from './lib/indexEvents';
 
 export default function App() {
   const authed = useStore((s) => s.authed);
@@ -73,6 +74,7 @@ export default function App() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
     let treeTimer: number | undefined;
+    let indexTimer: number | undefined;
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data);
@@ -80,6 +82,9 @@ export default function App() {
           // coalesce bursts of fs events into a single tree refresh
           window.clearTimeout(treeTimer);
           treeTimer = window.setTimeout(() => loadTree(), 800);
+        } else if (msg.type === 'index') {
+          window.clearTimeout(indexTimer);
+          indexTimer = window.setTimeout(notifyIndexChanged, 800);
         } else if (msg.type === 'uistate') {
           // another tab/device changed the workspace → sync live
           useStore.getState().applyRemoteState(msg.state, msg.originId);
@@ -90,6 +95,7 @@ export default function App() {
     };
     return () => {
       window.clearTimeout(treeTimer);
+      window.clearTimeout(indexTimer);
       ws.close();
     };
   }, [authed, loadTree]);

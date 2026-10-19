@@ -29,7 +29,7 @@ import { sharePageRouter } from './routes/sharepage.js';
 import { initSearch, qmd } from './services/search.js';
 import { buildLinkGraph, updateLinkGraphForFile } from './services/links.js';
 import { buildFileIndex, indexFile, unindexFile } from './services/fileindex.js';
-import { setBroadcaster, broadcast } from './services/realtime.js';
+import { setBroadcaster, broadcast, notifyIndexChanged } from './services/realtime.js';
 import { getVaultRoot, ensureVault, invalidateStat } from './services/vault.js';
 import { startAutoSync } from './services/autosync.js';
 
@@ -269,6 +269,7 @@ function startWatcher(root: string, usePolling: boolean) {
         await updateLinkGraphForFile(rel).catch(() => {});
       }
     }
+    notifyIndexChanged();
     broadcast({ type: 'fs', event: type, path: rel });
   };
   watcher

@@ -4,6 +4,7 @@ import { api, type NoteMatches } from '../lib/api';
 import { extractMetadata, SourceDocument } from '@webobsidian/markdown-core';
 import TagsPanel from './TagsPanel';
 import Icon from './Icon';
+import { useIndexVersion } from '../lib/indexEvents';
 
 const MD_RE = /\.(md|markdown)$/i;
 const name = (p: string) => p.split('/').pop()?.replace(MD_RE, '') ?? p;
@@ -43,50 +44,51 @@ function Section({
 /** Linked mentions (backlinks index) + Unlinked mentions (plain-text title hits). */
 function BacklinksPanel() {
   const activePath = useStore((s) => s.activePath);
-  const content = useStore((s) => s.content);
+  const indexVersion = useIndexVersion();
+  const key = JSON.stringify([activePath, indexVersion]);
   const openFile = useStore((s) => s.openFile);
-  const [linked, setLinked] = useState<string[]>([]);
-  const [unlinked, setUnlinked] = useState<NoteMatches[]>([]);
+  const [linkedResult, setLinked] = useState({ key: '', paths: [] as string[] });
+  const [unlinkedResult, setUnlinked] = useState({ key: '', matches: [] as NoteMatches[] });
+  const linked = linkedResult.key === key ? linkedResult.paths : [];
+  const unlinked = unlinkedResult.key === key ? unlinkedResult.matches : [];
   const [openLinked, setOpenLinked] = useState(true);
   const [openUnlinked, setOpenUnlinked] = useState(true);
 
   useEffect(() => {
-    if (!activePath || !MD_RE.test(activePath)) {
-      setLinked([]);
-      return;
-    }
-    api.backlinks(activePath).then((r) => setLinked(r.backlinks)).catch(() => setLinked([]));
-  }, [activePath, content]);
+    if (!activePath || !MD_RE.test(activePath)) return;
+    const controller = new AbortController();
+    api.backlinks(activePath, controller.signal)
+      .then((r) => { if (!controller.signal.aborted) setLinked({ key, paths: r.backlinks }); })
+      .catch(() => { if (!controller.signal.aborted) setLinked({ key, paths: [] }); });
+    return () => controller.abort();
+  }, [activePath, key]);
 
   useEffect(() => {
-    if (!activePath || !MD_RE.test(activePath)) {
-      setUnlinked([]);
-      return;
-    }
-    let stale = false;
+    if (!activePath || !MD_RE.test(activePath) || !openUnlinked || linkedResult.key !== key || unlinkedResult.key === key) return;
+    const controller = new AbortController();
     const title = name(activePath);
     (async () => {
       try {
-        const { hits } = await api.search(title, 100);
-        const linkedSet = new Set(linked);
+        const { hits } = await api.search(title, 100, controller.signal);
+        const linkedSet = new Set(linkedResult.paths);
         const candidates = hits
           .filter((h) => h.path !== activePath && !linkedSet.has(h.path) && MD_RE.test(h.path))
           .slice(0, 30)
           .map((h) => h.path);
         if (!candidates.length) {
-          if (!stale) setUnlinked([]);
+          if (!controller.signal.aborted) setUnlinked({ key, matches: [] });
           return;
         }
-        const { matches } = await api.searchMatches(title, candidates, false, true);
-        if (!stale) setUnlinked(matches.filter((m) => m.count > 0));
+        const { matches } = await api.searchMatches(title, candidates, false, true, controller.signal);
+        if (!controller.signal.aborted) setUnlinked({ key, matches: matches.filter((m) => m.count > 0) });
       } catch {
-        if (!stale) setUnlinked([]);
+        if (!controller.signal.aborted) setUnlinked({ key, matches: [] });
       }
     })();
     return () => {
-      stale = true;
+      controller.abort();
     };
-  }, [activePath, linked]);
+  }, [activePath, key, openUnlinked, linkedResult, unlinkedResult.key]);
 
   return (
     <>

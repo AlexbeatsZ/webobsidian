@@ -5,6 +5,7 @@ import { qmd } from '../services/search.js';
 import { backlinksFor, graphData, resolveLink, buildLinkGraph } from '../services/links.js';
 import { resolveIndexedTarget } from '../services/fileindex.js';
 import { readPropertyTypes, setPropertyType } from '../services/propertytypes.js';
+import { notifyIndexChanged } from '../services/realtime.js';
 
 export const searchRouter = Router();
 searchRouter.use(requireAuth);
@@ -102,6 +103,7 @@ searchRouter.post(
   asyncHandler(async (_req, res) => {
     await qmd.build();
     await buildLinkGraph();
+    notifyIndexChanged();
     res.json({ ok: true });
   }),
 );

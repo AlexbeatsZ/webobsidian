@@ -145,16 +145,18 @@ export const api = {
 
   // search & links
   // limit omitted → server returns every match (panel renders them incrementally)
-  search: (q: string, limit?: number) =>
+  search: (q: string, limit?: number, signal?: AbortSignal) =>
     req<{ hits: SearchHit[] }>(
       `/api/search?q=${encodeURIComponent(q)}${limit ? `&limit=${limit}` : ''}`,
+      { signal },
     ),
   // per-note highlighted match contexts for the given paths (lazy, batched);
   // phrase=true matches the whole query as one needle (unlinked mentions)
-  searchMatches: (query: string, paths: string[], matchCase = false, phrase = false) =>
+  searchMatches: (query: string, paths: string[], matchCase = false, phrase = false, signal?: AbortSignal) =>
     req<{ matches: NoteMatches[] }>('/api/search/matches', {
       method: 'POST',
       body: JSON.stringify({ query, paths, matchCase, phrase }),
+      signal,
     }),
   tags: () => req<{ tags: { tag: string; count: number }[] }>('/api/tags'),
   properties: () =>
@@ -165,8 +167,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ key, type }),
     }),
-  backlinks: (path: string) =>
-    req<{ backlinks: string[] }>(`/api/backlinks?path=${encodeURIComponent(path)}`),
+  backlinks: (path: string, signal?: AbortSignal) =>
+    req<{ backlinks: string[] }>(`/api/backlinks?path=${encodeURIComponent(path)}`, { signal }),
   resolve: (target: string, sourcePath = '') =>
     req<{ path: string | null; status?: string; fragment?: string; candidates?: string[]; normalizedTarget?: string }>(`/api/resolve?target=${encodeURIComponent(target)}&sourcePath=${encodeURIComponent(sourcePath)}`),
   graph: () =>
