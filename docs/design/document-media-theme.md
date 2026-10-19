@@ -32,6 +32,10 @@
   虚拟化，通过外部文档滚动查看，不能把“无内部高度上限”等同于“所有行始终在 DOM”。
 - 表格、HTML、Callout 与块公式的外壳使用 `width:fit-content;min-width:100%;max-width:none`。
   普通文本正常换行，宽表格可以按固有最小宽度展开。
+- 表格内层 `cm-table-frame` 跟随实际表格宽高；添加行/列与源码按钮以该层定位，
+  不能以满栏宽度的外壳定位。表格外部纵向空隙用 padding 纳入编辑器高度测量。
+- Callout 正文保留原始 CodeMirror 文本行，外框只作包装装饰。纵向间距不用行间 margin：
+  外层用 16px padding，正文包装层用 8px 顶部 padding，标题竖线仍从 top:0 到 bottom:0。
 
 ## Mermaid 与特殊生成内容
 

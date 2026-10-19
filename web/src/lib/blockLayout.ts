@@ -24,9 +24,19 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
       class: 'md-container md-' + block.kind,
       'data-source-from': String(block.from), 'data-source-to': String(block.to),
     };
+    const rank = Math.max(1, (block.kind === 'code' ? 80 : 100) - block.depth);
     if (block.kind === 'callout') {
       attributes['data-callout'] = block.type;
       attributes.style = `--callout-color: var(--callout-${CALLOUT_SLOT[block.type] ?? 'default'})`;
+      // BlockWrapper measurement includes padding, but not collapsed margins or
+      // gaps between sibling lines. Keep every pixel in a measured wrapper.
+      // All body lines remain CodeMirror text; these wrappers only draw frames.
+      ranges.push(BlockWrapper.create({ tagName: 'div',
+        attributes: { class: 'md-callout-spacing' }, rank: rank + 0.25,
+      }).range(block.from, block.to));
+      if (block.bodyFrom < block.to) ranges.push(BlockWrapper.create({ tagName: 'div',
+        attributes: { class: 'md-callout-body' }, rank: rank - 0.25,
+      }).range(block.bodyFrom, block.to));
       // Give the title its own box. Its rule must track the complete title,
       // including wrapped text, independently of the gap before the body.
       ranges.push(BlockWrapper.create({ tagName: 'div',
@@ -35,7 +45,7 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
     }
     if (block.kind === 'code') attributes['data-lang'] = block.language;
     ranges.push(BlockWrapper.create({ tagName: 'div', attributes,
-      rank: Math.max(0, (block.kind === 'code' ? 80 : 100) - block.depth),
+      rank,
     }).range(block.from, block.to));
   }
   return BlockWrapper.set(ranges, true);

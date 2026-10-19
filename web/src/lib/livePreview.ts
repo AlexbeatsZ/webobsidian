@@ -17,7 +17,7 @@ import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered, toggleSourceRegion } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { analyzeMarkdown, tableModels, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
+import { changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { renderMath } from './mathjax';
 
@@ -356,6 +356,18 @@ class CalloutFoldWidget extends WidgetType {
   ignoreEvent(event: Event) { return event.type === 'mousedown'; }
 }
 
+/** Only a title control; the callout body stays in the editor's text lines. */
+class CalloutSourceWidget extends WidgetType {
+  constructor(readonly range: { from: number; to: number }) { super(); }
+  eq(other: CalloutSourceWidget) { return other.range.from === this.range.from && other.range.to === this.range.to; }
+  toDOM(view: EditorView) {
+    const button = sourceButton(view, this.range, 'callout');
+    button.classList.add('cm-callout-source');
+    return button;
+  }
+  ignoreEvent() { return true; }
+}
+
 /* ---------------- math (locally bundled MathJax, loaded on demand) ---------------- */
 
 class MathWidget extends WidgetType {
@@ -377,7 +389,11 @@ class MathWidget extends WidgetType {
     const controller = new AbortController();
     this.controllers.set(span, controller);
     void renderMath(body, this.tex, this.display, controller.signal)
-      .catch(() => { if (!controller.signal.aborted) span.classList.add('mod-error'); })
+      .catch(error => {
+        if (controller.signal.aborted) return;
+        span.classList.add('mod-error');
+        span.title = `Formula rendering failed: ${error instanceof Error ? error.message : String(error)}`;
+      })
       .finally(() => { delete span.dataset.renderPending; if (!controller.signal.aborted) view.requestMeasure(); });
     if (this.range && !view.state.readOnly) span.appendChild(sourceButton(view, this.range, 'formula'));
     return span;
@@ -748,7 +764,6 @@ export const calloutFoldDeco = StateField.define<DecorationSet>({
 /* ---------------- tables ---------------- */
 
 type TableBlock = TableModel;
-function scanTables(doc: Text): TableBlock[] { return tableModels(analyzeMarkdown(doc.toString())); }
 
 class TableWidget extends WidgetType {
   private cleanup = new WeakMap<HTMLElement, (() => void)[]>();
@@ -759,9 +774,10 @@ class TableWidget extends WidgetType {
   toDOM(view: EditorView) {
     const b = this.block, context = contextOf(view);
     const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap';
+    const frame = document.createElement('div'); frame.className = 'cm-table-frame'; wrap.appendChild(frame);
     const cleanup: (() => void)[] = []; this.cleanup.set(wrap, cleanup);
-    if (!this.ro) wrap.appendChild(sourceButton(view, b, 'table'));
-    const table = document.createElement('table'); table.className = 'cm-table'; wrap.appendChild(table);
+    if (!this.ro) frame.appendChild(sourceButton(view, b, 'table'));
+    const table = document.createElement('table'); table.className = 'cm-table'; frame.appendChild(table);
     const apply = (changes: SourceChange[]) => {
       if (view.state.readOnly || view.state.sliceDoc(b.from, b.to) !== b.key) return;
       view.dispatch({ changes });
@@ -829,7 +845,7 @@ class TableWidget extends WidgetType {
       ] as const) {
         const button = document.createElement('button'); button.type = 'button'; button.className = className; button.title = title; button.textContent = '+';
         button.onmousedown = event => { event.preventDefault(); if (!wrap.querySelector('[contenteditable="true"]')) action(); };
-        wrap.appendChild(button);
+        frame.appendChild(button);
       }
     }
     return wrap;
@@ -1541,7 +1557,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   // (selection not inside it) the plugin must NOT decorate inside its range, or
   // its inline replaces would collide with the block widget. Editable tables
   // (selection inside) get normal raw-markdown handling.
-  const tables = scanTables(doc).filter((table) => !sourceIsOpen(view.state, table));
+  const tables = view.state.field(blockModel).tables.filter((table) => !sourceIsOpen(view.state, table));
   const renderedTable = (from: number, to: number) =>
     tables.some((t) => from >= t.from && to <= t.to);
 
@@ -1719,6 +1735,9 @@ function buildDecorations(view: EditorView): DecorationSet {
             }).range(line.to));
           }
           if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
+          if (!view.state.readOnly) all.push(Decoration.widget({
+            widget: new CalloutSourceWidget(header), side: 1,
+          }).range(line.to));
           bodyStart = header.prefixTo - line.from;
         } else if (!touches(line.from, line.from + bodyStart)) pushReplace(line.from, line.from + bodyStart, hidden);
       }
@@ -2095,7 +2114,7 @@ export const frontmatterField = StateField.define<DecorationSet>({
 
 function buildTables(state: EditorState): DecorationSet {
   if (!state.field(livePreviewState, false)) return Decoration.none;
-  const tables = scanTables(state.doc).filter((table) => !sourceIsOpen(state, table));
+  const tables = state.field(blockModel).tables.filter((table) => !sourceIsOpen(state, table));
   if (!tables.length) return Decoration.none;
   const ro = state.field(livePreviewReadonly, false) ?? false;
   // Like Obsidian, tables are ALWAYS shown as the interactive widget (never as raw
@@ -2171,27 +2190,6 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
   },
   { decorations: (v) => v.decorations },
 );
-
-/**
- * Make a single click land the caret exactly where the user clicked, so the
- * clicked line becomes "active" and its concealed markup reveals immediately.
- * Tall heading line-boxes and the focus-gaining click on a contenteditable can
- * otherwise swallow the first click, which is why editing a heading "took
- * several clicks". We only act on a plain click (no shift = not range-extending)
- * and let CodeMirror still handle drag-select normally.
- */
-export const editorClickFix = EditorView.domEventHandlers({
-  mousedown(event, view) {
-    if (event.button !== 0 || event.shiftKey || event.detail > 1) return false;
-    // `precise: false` returns the CLOSEST position and never null, so clicking
-    // anywhere on a tall heading line-box (incl. its padding, where the default
-    // posAtCoords returns null and CM leaves the caret put) still moves the caret
-    // onto that line — which reveals its concealed markup on the first click.
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }, false);
-    view.dispatch({ selection: { anchor: pos } });
-    return false; // let CodeMirror handle focus/drag normally too
-  },
-});
 
 export const livePreviewTheme = EditorView.baseTheme({
   // Heading sizes/weights come from the stylesheet (.cm-s-obsidian .HyperMD-header-N,

@@ -46,6 +46,9 @@ export function sourceButton(view: EditorView, range: SourceSpan, label: string)
   button.setAttribute('aria-label', button.title);
   button.addEventListener('mousedown', (event) => {
     event.preventDefault(); event.stopPropagation();
+  });
+  button.addEventListener('click', (event) => {
+    event.preventDefault(); event.stopPropagation();
     if (view.state.readOnly) return;
     view.dispatch({ effects: toggleSourceRegion.of(range), selection: { anchor: range.from }, scrollIntoView: true });
     view.focus();
@@ -59,6 +62,9 @@ class CloseSourceWidget extends WidgetType {
     const button = document.createElement('button');
     button.type = 'button'; button.className = 'cm-source-close'; button.textContent = 'Close source';
     button.addEventListener('mousedown', (event) => {
+      event.preventDefault(); event.stopPropagation();
+    });
+    button.addEventListener('click', (event) => {
       event.preventDefault(); event.stopPropagation();
       view.dispatch({ effects: toggleSourceRegion.of(null) });
       view.focus();

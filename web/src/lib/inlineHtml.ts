@@ -2,7 +2,7 @@ import { EditorSelection, StateEffect, StateField, type EditorState, type Range 
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import { caretTouches, decodeHtmlEntity, simpleHtmlTags, type HtmlToken, type SourceSpan } from '@webobsidian/markdown-core';
 import { syntaxModel, blockModel } from './syntaxModel';
-import { sourceIsOpen, forceRendered } from './sourceControls';
+import { sourceIsOpen, forceRendered, toggleSourceRegion } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 
 const composition = StateEffect.define<boolean>();
@@ -80,7 +80,7 @@ const htmlField = StateField.define<DecorationSet>({
   create: build,
   update(value, transaction) {
     return transaction.docChanged || transaction.selection || transaction.effects.some((effect) =>
-      effect.is(composition) || effect.is(setLivePreviewEnabled) || effect.is(setLivePreviewReadonly))
+        effect.is(composition) || effect.is(setLivePreviewEnabled) || effect.is(setLivePreviewReadonly) || effect.is(toggleSourceRegion))
       ? build(transaction.state) : value;
   },
   provide: (field) => EditorView.decorations.from(field),

@@ -148,8 +148,8 @@ for the private vault; shares and print do not receive it.
   Reading always displays labels; editing suppresses them on the active heading.
 - Custom proof/think/tactic and attention color/icon slots belong to callouts.ts.
 - Callout headers have a dedicated `callout-title` block wrapper. The 3px rule
-  belongs to that container with `top: 0; bottom: 0`; the 8px body gap is a margin,
-  never a pseudo-element height adjustment. Icons center on the complete title,
+  belongs to that container with `top: 0; bottom: 0`; the 8px body gap is measured
+  padding on the body wrapper, never a title margin or pseudo-element height adjustment. Icons center on the complete title,
   including wrapped lines; CM retains its inline text and caret ownership.
 - proof/think/tactic use the unmodified Lucide v0.263.1 check-circle, lightbulb and
   file-signature SVG assets, with source/version/license in assets/icons/lucide.
@@ -202,3 +202,49 @@ and plugin work does not affect this result. No running app was replaced.
 References: [MathJax components](https://docs.mathjax.org/en/latest/web/components/index.html),
 [promise conversion and local SVG caches](https://docs.mathjax.org/en/latest/web/convert.html),
 [safe extension](https://docs.mathjax.org/en/latest/options/safe.html).
+
+## Editor corrections after user acceptance (2026-10-19)
+
+The user reported an invisible dark-mode caret, slow formulas, callout clicks
+landing on the following heading, obscured selections, missing callout source
+entry, and table controls aligned with the editor column instead of the table.
+Earlier browser/build results did not cover this real-note workflow.
+
+- **Callout text ownership:** an unfolded callout is never a whole-block widget.
+  Its body remains the original CodeMirror lines and text nodes. Only quote/header
+  markers, the title icon/controls and surrounding frames are decorated. Folding
+  may hide the body; it must not introduce a second editable text copy.
+- CodeMirror 6.43 wrapper measurement includes padding but omits vertical margins
+  between children. Outer callout spacing uses a padding-only wrapper; the body
+  owns the 8px title gap. Title and body text stay in their original source ranges.
+  The title rule remains exactly as tall as its own title container. Live and
+  reading titles reserve the same control space so line wrapping stays identical.
+- The redundant `mousedown` selection dispatch was removed. It changed revealed
+  markup/layout before CodeMirror's own mouse handler calculated the drag anchor.
+  Native primary selection/caret now track actual text boxes, including wrapped
+  callout lines. Secondary selections use text marks and secondary cursors use a
+  measured overlay. Both cursor styles follow document theme colors.
+- Callout title `</>` enters the existing source region, including nested content;
+  Close source / Escape restores live decoration without serializing Markdown.
+  Source controls also accept keyboard-generated clicks. Inline HTML responds to
+  source-close effects even if the selection did not change.
+- Tables retain the full-column outer layout contract, but an intrinsic-width
+  inner frame owns the table and all its controls. Vertical spacing is padding,
+  included in the block widget's measured height. Table models are derived once
+  per document version, not by reparsing the whole Markdown on every caret move.
+- MathJax uses a 256-entry LRU of detached SVG results keyed by TeX, display mode,
+  metrics and preamble revision. Equal pending requests share conversion; aborted
+  subscribers cannot update DOM, and jobs with no active subscribers skip conversion.
+  The queue yields between batches at an 8ms budget, avoiding a clamped timer for
+  every simple formula. Each mounted SVG clone gets unique local IDs.
+  Definition-bearing TeX bypasses caching; public SVG conversions used by preamble
+  plugins invalidate it. Asset loader paths are absolute local web URLs; failed
+  loads share a short cooldown and widget error titles retain the actual reason.
+
+Verification for these corrections is **static only**, per the user's instruction:
+type checks, production build, and package-content inspection. No browser,
+Computer Use, Electron launch, live-note edit, or performance benchmark is part
+of this pass. User acceptance must cover dark-mode typing, clicking the second
+wrapped body line, drag/Shift selection within/across callouts, nested/folded
+source entry and return, narrow/wide table control alignment, and repeated
+open/edit/scroll of a formula-heavy note with the user's enabled plugins.

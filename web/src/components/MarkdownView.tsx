@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef } from 'react';
 import { pluginCodeBlocks, pluginPostProcessing } from '../lib/obsidian/markdown';
 import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
-import { EditorView, keymap, drawSelection } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
+import { editorSelection } from '../lib/editorSelection';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { search, searchKeymap } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
@@ -21,7 +22,7 @@ import { blockLayout } from '../lib/blockLayout';
 import { renderContext, type RenderContext } from '../lib/renderContext';
 import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField,
   tableField, htmlBlockField, mermaidField, htmlRenderedState, htmlPreviewField,
-  calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitleField, editorClickFix,
+  calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitleField,
   livePreviewReadonly, setLivePreviewReadonly, setLivePreviewEnabled, setNoteTitle } from '../lib/livePreview';
 
 export type MarkdownMode = 'live' | 'reading' | 'source';
@@ -205,7 +206,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       doc: p.snapshot.text,
       selection: { anchor: initPos },
       extensions: [
-        drawSelection(), syntaxModel, documentMetadata, blockModel,
+        editorSelection, syntaxModel, documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
         readonlyComp.of(readonlyExt(p.mode === 'reading')),
         EditorState.transactionFilter.of((tr) =>
@@ -232,7 +233,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         sourceControls, inlineTitleField, frontmatterField, tableField, htmlBlockField, mermaidField,
         ...(p.context.allowPlugins ? [pluginCodeBlocks, pluginPostProcessing] : []),
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,
-        inlineHtml, semanticDecorations, mathBlockField, blockLayout, livePreviewPlugin, livePreviewTheme, editorClickFix, listLayout,
+        inlineHtml, semanticDecorations, mathBlockField, blockLayout, livePreviewPlugin, livePreviewTheme, listLayout,
         EditorView.updateListener.of((u) => {
           if (!u.docChanged || u.transactions.every((tr) => tr.annotation(externalUpdate))) return;
           const changes: SourceChange[] = [];
