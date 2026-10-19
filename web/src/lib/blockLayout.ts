@@ -6,10 +6,11 @@ import { livePreviewState, livePreviewReadonly } from './renderState';
 import { compositionSelection } from './inlineHtml';
 import { sourceOwns } from './sourceControls';
 import { CALLOUT_SLOT } from './callouts';
+import { decorationInputsChanged } from './decorationDependencies';
 
 export const blockLayout = StateField.define<RangeSet<BlockWrapper>>({
   create: build,
-  update: (_value, transaction) => build(transaction.state),
+  update: (value, transaction) => decorationInputsChanged(transaction) ? build(transaction.state) : value,
   provide: (field) => EditorView.blockWrappers.from(field),
 });
 function build(state: EditorState): RangeSet<BlockWrapper> {

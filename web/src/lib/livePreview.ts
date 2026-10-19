@@ -20,6 +20,7 @@ export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePr
 import { changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { renderMath } from './mathjax';
+import { decorationInputsChanged } from './decorationDependencies';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -558,7 +559,7 @@ function buildMathBlocks(state: EditorState): DecorationSet {
   ).map((block) => Decoration.replace({ widget: new MathWidget(block.tex, true, block), block: true }).range(block.from, block.to)), true);
 }
 export const mathBlockField = StateField.define<DecorationSet>({
-  create: buildMathBlocks, update: (_value, transaction) => buildMathBlocks(transaction.state),
+  create: buildMathBlocks, update: (value, transaction) => decorationInputsChanged(transaction) ? buildMathBlocks(transaction.state) : value,
   provide: (field) => EditorView.decorations.from(field),
 });
 
@@ -2102,7 +2103,7 @@ export const inlineTitleField = StateField.define<DecorationSet>({
 export const frontmatterField = StateField.define<DecorationSet>({
   create: (state) => buildFrontmatter(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))) {
+    if (decorationInputsChanged(tr, false)) {
       return buildFrontmatter(tr.state);
     }
     return value.map(tr.changes);
@@ -2128,7 +2129,7 @@ function buildTables(state: EditorState): DecorationSet {
 export const tableField = StateField.define<DecorationSet>({
   create: (state) => buildTables(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))) {
+    if (decorationInputsChanged(tr, false)) {
       return buildTables(tr.state);
     }
     return value.map(tr.changes);

@@ -17,6 +17,7 @@ import { caretTouches, type SourceSpan } from '@webobsidian/markdown-core';
 import { forceRendered, sourceIsOpen, sourceButton } from '../sourceControls';
 import { contextOf } from '../renderContext';
 import { Component } from './events';
+import { decorationInputsChanged } from '../decorationDependencies';
 
 export class MarkdownRenderChild extends Component {
   constructor(public containerEl: HTMLElement) {
@@ -133,7 +134,7 @@ function build(state: EditorState): DecorationSet {
 }
 export const pluginCodeBlocks = StateField.define<DecorationSet>({
   create: build,
-  update: (_v, tr) => build(tr.state),
+  update: (value, tr) => decorationInputsChanged(tr) || !!tr.selection || tr.effects.some((e) => e.is(refresh)) ? build(tr.state) : value,
   provide: (field) => EditorView.decorations.from(field),
 });
 export const pluginPostProcessing = ViewPlugin.fromClass(
