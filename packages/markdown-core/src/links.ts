@@ -26,28 +26,89 @@ function normalizePath(value: string): string | null {
   return parts.join('/');
 }
 
-export function resolveTarget(raw: string, sourcePath: string, files: readonly string[]): ResolvedTarget {
+function prepareTarget(raw: string, sourcePath: string) {
   const target = parseLinkTarget(raw);
   const result = (status: ResolvedTarget['status'], path = target.path, candidates: string[] = []): ResolvedTarget =>
     ({ ...target, path, status, candidates });
-  if (/^(?:https?|mailto):/i.test(target.path)) return result('external');
-  if (/^[a-z][a-z\d+.-]*:/i.test(target.path) || target.path.includes('\0')) return result('denied');
-  if (!target.path) return result('resolved', sourcePath);
+  if (/^(?:https?|mailto):/i.test(target.path)) return { terminal: result('external') };
+  if (/^[a-z][a-z\d+.-]*:/i.test(target.path) || target.path.includes('\0')) return { terminal: result('denied') };
+  if (!target.path) return { terminal: result('resolved', sourcePath) };
   const folder = sourcePath.split('/').slice(0, -1).join('/');
   const explicitRelative = /^\.\.?\//.test(target.path);
   let decoded = target.path;
   try { decoded = decodeURIComponent(decoded); } catch { /* literal percent is a valid filename */ }
   const normalized = normalizePath(explicitRelative ? `${folder}/${decoded}` : decoded);
-  if (normalized === null) return result('denied');
+  if (normalized === null) return { terminal: result('denied') };
   const extension = /\.[^/]+$/.test(normalized);
-  const candidates = files.filter((file) => extension || /\.(md|markdown)$/i.test(file));
   const names = extension ? [normalized] : [normalized + '.md', normalized + '.markdown'];
-  const match = (names: string[]) => candidates.filter((file) => names.some((name) => keyOf(file) === keyOf(name)));
-  let found = match(names);
-  if (!found.length && !explicitRelative && !target.path.startsWith('/')) found = match(names.map((name) => folder ? `${folder}/${name}` : name));
-  if (!found.length && !explicitRelative && !target.path.startsWith('/')) {
-    found = candidates.filter((file) => names.some((name) => keyOf(file).endsWith('/' + keyOf(name))));
+  return { target, normalized, names, localNames: names.map((name) => folder ? `${folder}/${name}` : name),
+    fallback: !explicitRelative && !target.path.startsWith('/'), result };
+}
+
+/** Reusable normalized exact/suffix lookup; mutations preserve ambiguity. */
+export class TargetIndex {
+  private files = new Set<string>();
+  private exact = new Map<string, Set<string>>();
+  private suffix = new Map<string, Set<string>>();
+  constructor(files: Iterable<string> = []) { for (const file of files) this.add(file); }
+  keysFor(file: string): string[] {
+    const parts = keyOf(file).split('/');
+    return parts.map((_, i) => parts.slice(i).join('/'));
   }
-  if (found.length === 1) return result('resolved', found[0], found);
-  return result(found.length ? 'ambiguous' : 'missing', normalized, found.sort());
+  private change(map: Map<string, Set<string>>, key: string, file: string, add: boolean) {
+    if (add) { if (!map.has(key)) map.set(key, new Set()); map.get(key)!.add(file); }
+    else { const matches = map.get(key); matches?.delete(file); if (!matches?.size) map.delete(key); }
+  }
+  add(file: string): boolean {
+    if (this.files.has(file)) return false;
+    this.files.add(file);
+    const [exact, ...suffixes] = this.keysFor(file);
+    this.change(this.exact, exact, file, true);
+    for (const suffix of suffixes) this.change(this.suffix, suffix, file, true);
+    return true;
+  }
+  delete(file: string): boolean {
+    if (!this.files.delete(file)) return false;
+    const [exact, ...suffixes] = this.keysFor(file);
+    this.change(this.exact, exact, file, false);
+    for (const suffix of suffixes) this.change(this.suffix, suffix, file, false);
+    return true;
+  }
+  dependencies(raw: string, sourcePath: string): string[] {
+    const prepared = prepareTarget(raw, sourcePath);
+    if (prepared.terminal) return [];
+    return [...new Set([...prepared.names!, ...(prepared.fallback ? prepared.localNames! : [])].map(keyOf))];
+  }
+  resolve(raw: string, sourcePath = ''): ResolvedTarget {
+    const prepared = prepareTarget(raw, sourcePath);
+    if (prepared.terminal) return prepared.terminal;
+    const { names, localNames, fallback, normalized, result } = prepared;
+    const match = (map: Map<string, Set<string>>, names: string[]) => {
+      const found = new Set<string>();
+      for (const name of names) for (const file of map.get(keyOf(name)) ?? []) found.add(file);
+      return [...found];
+    };
+    let found = match(this.exact, names!);
+    if (!found.length && fallback) found = match(this.exact, localNames!);
+    if (!found.length && fallback) found = match(this.suffix, names!);
+    if (found.length === 1) return result!('resolved', found[0], found);
+    return result!(found.length ? 'ambiguous' : 'missing', normalized, found.sort());
+  }
+}
+
+export function resolveTarget(raw: string, sourcePath: string, files: readonly string[]): ResolvedTarget {
+  // One-shot callers need no index allocation. Long-lived services own TargetIndex.
+  const prepared = prepareTarget(raw, sourcePath);
+  if (prepared.terminal) return prepared.terminal;
+  const { names, localNames, fallback, normalized, result } = prepared;
+  const keyed = files.map((file) => ({ file, key: keyOf(file) }));
+  const match = (names: string[], suffix = false) => {
+    const keys = names.map(keyOf);
+    return keyed.filter(({ key }) => keys.some((name) => suffix ? key.endsWith('/' + name) : key === name)).map(({ file }) => file);
+  };
+  let found = match(names!);
+  if (!found.length && fallback) found = match(localNames!);
+  if (!found.length && fallback) found = match(names!, true);
+  if (found.length === 1) return result!('resolved', found[0], found);
+  return result!(found.length ? 'ambiguous' : 'missing', normalized, found.sort());
 }

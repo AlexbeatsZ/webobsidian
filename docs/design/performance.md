@@ -38,6 +38,18 @@ are preserved independently of the shared renderer's stricter ambiguity policy.
 
 ## User acceptance
 
+## Server link indexes
+
+TargetIndex precomputes NFC/case-normalized exact and suffix candidates, retaining
+the existing root/local/suffix precedence and explicit ambiguity. One-shot
+resolveTarget stays available without constructing a full index. File/embed
+resolution and the note graph each own a mutable index. The graph maintains
+outgoing resolved sets, incoming source sets and lookup-key dependencies;
+content edits update one source, path membership changes revisit affected
+resolved and unresolved sources. Backlinks read the incoming set directly.
+
+## User acceptance
+
 - Type continuously in a long note with backlinks/outline open; unsaved input
   must not issue backlinks/search/matches requests.
 - Save and modify other notes externally; backlinks and unlinked mentions refresh.

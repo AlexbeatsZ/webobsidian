@@ -1,10 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { resolveTarget } from '@webobsidian/markdown-core';
+import { TargetIndex } from '@webobsidian/markdown-core';
 import { getVaultRoot, toRel } from './vault.js';
 
 const IGNORED = new Set(['.git', 'node_modules']);
-let files = new Set<string>();
+let files = new TargetIndex();
 
 export async function buildFileIndex(): Promise<void> {
   const root = await getVaultRoot();
@@ -19,11 +19,11 @@ export async function buildFileIndex(): Promise<void> {
     }
   }
   await walk(root);
-  files = next;
+  files = new TargetIndex(next);
 }
 
 export function resolveIndexedTarget(target: string, sourcePath = '') {
-  return resolveTarget(target, sourcePath, [...files]);
+  return files.resolve(target, sourcePath);
 }
 export function resolveFile(target: string, sourcePath = ''): string | undefined {
   const result = resolveIndexedTarget(target, sourcePath);
