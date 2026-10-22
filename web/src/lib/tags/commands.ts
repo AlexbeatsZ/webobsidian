@@ -1,5 +1,5 @@
 import { useStore } from '../store';
-import { openTagOperation } from './actions';
+import { deleteNativeTag, openTagOperation } from './actions';
 
 export const tagCommands = [
   { id: 'tags-folder-rules', title: '按文件夹规则补标签（预览）', run: () =>
@@ -20,4 +20,5 @@ export const tagCommands = [
   } },
   { id: 'tags-rename', title: '重命名 / 合并 Vault 标签层级', run: () =>
     openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'rename', from: '', to: '' } }) },
+  { id: 'tags-delete', title: '删除 Vault 标签（预览）', run: () => deleteNativeTag() },
 ];

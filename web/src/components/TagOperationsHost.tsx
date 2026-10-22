@@ -124,13 +124,14 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
       <p className="native-tags-hint">范围：{request.scope.kind === 'vault' ? '整个 Vault' : request.scope.kind === 'folder' ? request.scope.path || '根目录及子目录' : `${request.scope.paths.length} 个所选文件`}。先预览，再逐个保存；打开文档包含当前未保存内容并保留撤销历史。</p>
       <fieldset disabled={busy} className="native-tags-fields">
         <label>操作<select value={kind} onChange={(e) => { invalidate(); setKind(e.target.value as TagOperation['kind']); }}>
-          <option value="add">添加至 YAML 标签</option><option value="remove">移除标签</option><option value="rename">替换 / 重命名标签</option>
+          <option value="add">添加至 YAML 标签</option><option value="remove">删除标签</option><option value="rename">替换 / 重命名标签</option>
           <option value="folder-rules">按已保存的文件夹规则补标签</option>
         </select></label>
         {kind === 'folder-rules' ? <p>使用“设置 → 标签”中已保存的规则，叠加匹配路径的固定标签。预览会显示逐文件改动。</p> : kind === 'rename' ? <><label>原标签<input autoFocus value={from} onChange={(e) => { invalidate(); setFrom(e.target.value); }} placeholder="原标签" /></label>
           <label>新标签<input value={to} onChange={(e) => { invalidate(); setTo(e.target.value); }} placeholder="新标签 / 子标签" /></label></> :
           <label>标签<input autoFocus value={tags} onChange={(e) => { invalidate(); setTags(e.target.value); }} placeholder="physics, chemistry/topic" /></label>}
         {(kind === 'remove' || kind === 'rename') && <label className="native-tags-check"><input type="checkbox" checked={descendants} onChange={(e) => { invalidate(); setDescendants(e.target.checked); }} />包含所有子标签（忽略大小写）</label>}
+        {kind === 'remove' && <p className="native-tags-hint">删除匹配的 YAML 标签和正文标签。标签页笔记及其 aliases 声明会保留；通过 aliases 声明的标签仍会显示，可在对应标签页中编辑。</p>}
       </fieldset>
       {error && <p role="alert" className="native-tags-error">{error}</p>}
       {preview && <div className="native-tags-preview">

@@ -48,6 +48,9 @@ export function openTagOperation(value: TagOperationRequest) { setRequest({ kind
 export function renameNativeTag(tag: string, destination = tag) {
   openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'rename', from: tagName(tag), to: tagName(destination) }, title: '重命名标签层级' });
 }
+export function deleteNativeTag(tag = '') {
+  openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'remove', tags: tag ? [tagName(tag)] : [], descendants: true }, title: '删除标签' });
+}
 export function searchNativeTag(tag: string, mode: 'new' | 'include' | 'exclude' = 'new') {
   const state = useStore.getState();
   state.searchFor(withTagFilter(state.searchQuery, tag, mode));
@@ -83,6 +86,7 @@ export function nativeTagMenuItems(options: TagMenuOptions): NativeTagMenuItem[]
     if (!options.readonly) items.push({ id: 'tags.rename', section: 'tag-rename', label: `重命名 #${tagName(tag)}`, icon: 'pencil', onClick: () => renameNativeTag(tag) });
     if (!options.readonly || hasPage) items.push({ id: 'tags.page', section: 'tag-page', label: hasPage ? '打开标签页' : '创建标签页', icon: 'file', onClick: () => { void openNativeTagPage(tag, false, !options.readonly); } });
   }
+  if (!options.readonly && options.batchEnabled !== false) items.push({ id: 'tags.delete', section: 'tag-delete', label: `删除 #${tagName(tag)}…`, icon: 'trash', danger: true, onClick: () => deleteNativeTag(tag) });
   items.push(
     { id: 'tags.search.new', section: 'tag-search', label: `搜索 #${tagName(tag)}`, icon: 'search', onClick: () => searchNativeTag(tag) },
     { id: 'tags.search.include', section: 'tag-search', label: '在当前搜索中包含此标签', onClick: () => searchNativeTag(tag, 'include') },
