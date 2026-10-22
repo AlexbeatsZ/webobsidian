@@ -157,6 +157,46 @@ test('table source entry reveals and closes without rewriting source', async ({ 
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw);
 });
 
+// Prepared regression only: execution remains subject to the static-only boundary.
+test('table fragments survive unrelated input and refresh changed equation labels', async ({ page }) => {
+  const raw = '| Reference |\n| --- |\n| [[#^eq-a]] |\n\n$$x$$ ^eq-a\n\nplain';
+  await page.evaluate(source => { window.renderHarness.reset(source); }, raw);
+  const table = page.locator('[data-slot="0"] .cm-table');
+  await expect(table).toHaveCount(1);
+  await expect(table.locator('.cm-wikilink')).toHaveText('(1-1)');
+  const original = await table.elementHandle();
+  expect(original).not.toBeNull();
+  await page.evaluate(() => {
+    const h = window.renderHarness, end = h.source(0).length;
+    h.edit(0, [{ from: end, to: end, insert: '!' }]);
+  });
+  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe(raw + '!');
+  expect(await original!.evaluate(node => node.isConnected)).toBe(true);
+  await page.evaluate(() => {
+    const h = window.renderHarness, from = h.source(0).indexOf('$$x$$');
+    h.edit(0, [{ from, to: from, insert: '$$y$$\n\n' }]);
+  });
+  await expect(table.locator('.cm-wikilink')).toHaveText('(1-2)');
+  expect(await original!.evaluate(node => node.isConnected)).toBe(false);
+  await original!.dispose();
+});
+
+test('table formulas refresh when an earlier macro changes without moving the table', async ({ page }) => {
+  const raw = '$$\\def\\sample{x}$$\n\n| Formula |\n| --- |\n| $\\sample$ |\n\nplain';
+  await page.evaluate(source => { window.renderHarness.reset(source); }, raw);
+  const table = page.locator('[data-slot="0"] .cm-table');
+  await expect(table).toHaveCount(1);
+  const original = await table.elementHandle();
+  expect(original).not.toBeNull();
+  await page.evaluate(() => {
+    const h = window.renderHarness, from = h.source(0).indexOf('{x}') + 1;
+    h.edit(0, [{ from, to: from + 1, insert: 'y' }]);
+  });
+  await expect.poll(() => original!.evaluate(node => node.isConnected)).toBe(false);
+  await expect(table).toHaveCount(1);
+  await original!.dispose();
+});
+
 test('wrapped list text aligns with the list body', async ({ page }) => {
   const raw = '- ' + 'word '.repeat(90) + '\n\nplain';
   await page.evaluate((source) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.reset(source), raw);

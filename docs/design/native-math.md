@@ -75,6 +75,8 @@ order. Only distinct definition prefixes need additional contexts, bounded to
 16; they do not depend on scrolling, virtual mounting or conversion order.
 Hosts with fragments pass their full-source `mathSource` projection. There is
 no extra whole-Vault body cache.
+Table-cell host equality uses these definition prefixes and referenced-equation
+presentation data, so a plain paragraph edit does not rebuild every table.
 
 Each conversion starts a MathJax `begingroupSandbox`; macro/global definitions
 cannot escape into the next conversion. Packages may also keep state outside

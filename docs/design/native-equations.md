@@ -84,6 +84,12 @@ display-only mapping; the default uses original source numbers. This delivery
 does not add the old plugin's automatic embed-ordinal prefix policy or editable
 note-embed controllers.
 
+Table cells compare preceding macro definitions and equation reference display
+data, not the whole source revision. Their existing table source/position checks
+still cover cell edits and movement. Unrelated paragraph input therefore keeps
+cell hosts alive; renumbering or a changed earlier macro refreshes their context.
+Only tables containing wiki-link syntax depend on equation-reference display data.
+
 MathJax configuration remains owned by `mathjax.ts` and the coordinated math
 feature. Widgets subscribe to its configuration invalidation, cancel stale
 renders and pass sourcePath / ordered preceding definitions. Private fragments

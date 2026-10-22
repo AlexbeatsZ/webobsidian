@@ -820,8 +820,8 @@ type TableBlock = TableModel;
 
 class TableWidget extends WidgetType {
   private cleanup = new WeakMap<HTMLElement, (() => void)[]>();
-  constructor(readonly block: TableBlock, readonly ro: boolean, readonly revision: string) { super(); }
-  eq(o: TableWidget) { return o.block.key === this.block.key && o.block.from === this.block.from && o.ro === this.ro && o.revision === this.revision; }
+  constructor(readonly block: TableBlock, readonly ro: boolean, readonly mathDependencies: string) { super(); }
+  eq(o: TableWidget) { return o.block.key === this.block.key && o.block.from === this.block.from && o.ro === this.ro && o.mathDependencies === this.mathDependencies; }
   ignoreEvent() { return true; }
   destroy(dom: HTMLElement) { this.cleanup.get(dom)?.forEach(stop => stop()); }
   toDOM(view: EditorView) {
@@ -2190,10 +2190,19 @@ function buildTables(state: EditorState): DecorationSet {
   const tables = state.field(blockModel).tables.filter((table) => !sourceIsOpen(state, table) && !blockEffectOwns(state, table));
   if (!tables.length) return Decoration.none;
   const ro = state.field(livePreviewReadonly, false) ?? false;
+  const source = state.facet(renderContext).mathSource;
+  const model = source?.model ?? state.field(syntaxModel);
+  const equations = equationsOf(state);
+  // Source version alone changes on every keystroke. Cells depend on prior
+  // definitions and reference presentation, not unrelated paragraph edits.
+  const referenceKey = tables.some(t => t.key.includes('[[')) ? JSON.stringify([equations.prefix,
+    equations.equations.map(e => [e.id, e.tag, e.number, e.ambiguous, e.tex])]) : '';
   // Like Obsidian, tables are ALWAYS shown as the interactive widget (never as raw
   // pipes) — editing happens in-cell, so the selection no longer reveals raw.
   const ranges: Range<Decoration>[] = tables.map((t) =>
-    Decoration.replace({ widget: new TableWidget(t, ro, equationsOf(state).revision), block: true }).range(t.from, t.to),
+    Decoration.replace({ widget: new TableWidget(t, ro, JSON.stringify([
+      t.key.includes('[[') ? referenceKey : '', mathDefinitionContext(model, t.to + (source?.from ?? 0)),
+    ])), block: true }).range(t.from, t.to),
   );
   return Decoration.set(ranges, true);
 }
