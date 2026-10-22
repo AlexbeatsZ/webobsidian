@@ -29,6 +29,7 @@ if (!existsSync(serverDistEntry) || !existsSync(serverPublic)) {
 }
 
 // 1) Electron main + preload -> dist/  (electron + node builtins stay external)
+rmSync(path.join(desktopDir, 'dist'), { recursive: true, force: true });
 await build({
   entryPoints: [path.join(desktopDir, 'src', 'main.ts'), path.join(desktopDir, 'src', 'preload.ts')],
   bundle: true,

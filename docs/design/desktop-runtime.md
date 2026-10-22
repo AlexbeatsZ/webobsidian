@@ -33,6 +33,20 @@ On Windows the log is under
 `%APPDATA%/@webobsidian/desktop/logs/server.log`. Startup diagnostics must never
 print the persisted secret or reset desktop config/vault data to fix packaging.
 
+## Local build retention
+
+Keep only the latest local desktop deliverables. The npm `dist`, `dist:dir`,
+and `dist:publish` commands run `clean:release` first, deleting the entire fixed
+`desktop/release/` directory before packaging to `release/<version>/`. The cleaner
+refuses a redirected release directory. `scripts/build.mjs` also clears desktop
+`dist/` and `.gen/server/` before generating their replacements. Vaults, user
+configuration, app data and dependencies are outside the cleanup scope.
+
+For isolated packaging that invokes electron-builder directly, explicitly run
+`npm --workspace desktop run clean:release` before the packaging step. Build web
+and server in `Temp/.agents/` when the existing app and `server/public` must be
+preserved; cleaning release outputs does not authorize replacing a live runtime.
+
 ## Verification boundary
 
 Use type checks, production builds and the static bundle check when the user

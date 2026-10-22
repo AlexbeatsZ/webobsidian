@@ -41,7 +41,14 @@ npm run build
 npm --workspace desktop run dist -- --win nsis portable --x64 --publish never
 ```
 
-The two outputs have separate names so they can coexist in `desktop/release/`:
+Every `dist`, `dist:dir`, or `dist:publish` run first deletes the entire previous
+`desktop/release/` directory, including older versions and unpacked outputs.
+Only the new build is retained in `desktop/release/<version>/`. Run packaging
+through these npm scripts so the cleanup hook is applied; direct
+`electron-builder` invocations bypass it. Desktop `dist/` and `.gen/server/`
+are also regenerated from scratch. This cleanup does not touch vaults or app data.
+
+The two outputs have separate names so they can coexist in that version directory:
 `WebObsidian-<version>-win-x64-setup.exe` and
 `WebObsidian-<version>-win-x64-portable.exe`.
 
