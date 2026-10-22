@@ -24,6 +24,7 @@ interface MathJaxRuntime {
 }
 interface Engine {
   profile: MathProfile; document: MathDocument; input: any;
+  commands: ReadonlySet<string>;
   stylesheet(): HTMLStyleElement;
   resetPackageState(): void;
 }
@@ -65,9 +66,9 @@ export function hasMathDefinitions(tex: string): boolean {
   refreshCommandPatterns();
   return effectPattern.test(tex);
 }
-export function hasOpaqueMathArguments(tex: string): boolean {
+export function canDecorateMath(tex: string): boolean {
   refreshCommandPatterns();
-  return opaquePattern.test(tex);
+  return !!profileEngine?.commands.has('\\class') && !effectPattern.test(tex) && !opaquePattern.test(tex);
 }
 const definitionContexts = new WeakMap<MarkdownModel, { revision: number; regions: { from: number; tex: string }[] }>();
 export function mathDefinitionContext(model: MarkdownModel, formulaFrom: number): readonly string[] {
@@ -166,7 +167,7 @@ async function createEngine(profile: MathProfile, definitions: readonly string[]
       const field = packageState(key); return { field, value: structuredClone(field.get()) };
     }));
     return {
-      profile, document: doc, input, stylesheet: () => output.styleSheet(doc),
+      profile, document: doc, input, commands: new Set(engineCommandNames({ input })), stylesheet: () => output.styleSheet(doc),
       resetPackageState() {
         input.parseOptions.tags.reset();
         for (const [key, value] of optionState) options[key] = structuredClone(value);
@@ -180,7 +181,7 @@ export async function validateMathProfile(profile: MathProfile): Promise<MathCan
   if (profile.key === active.key) return { commit() {}, dispose() {}, commands: mathCommandNames() };
   const engine = await enqueue(() => createEngine(profile));
   let committed = false;
-  return { commands: engineCommandNames(engine), dispose() { if (!committed) void enqueue(() => engine.document.done()); }, commit() {
+  return { commands: [...engine.commands], dispose() { if (!committed) void enqueue(() => engine.document.done()); }, commit() {
     committed = true;
     active = profile;
     const old = new Set([...engines.values(), ...(profileEngine ? [profileEngine] : [])]);
@@ -193,9 +194,9 @@ export async function activateMathProfile(profile: MathProfile) { (await validat
 
 /** Once per configuration, not on the input hot path. Private map shape is version-pinned. */
 export function mathCommandNames(): string[] {
-  return profileEngine ? engineCommandNames(profileEngine) : [];
+  return profileEngine ? [...profileEngine.commands] : [];
 }
-function engineCommandNames(engine: Engine): string[] {
+function engineCommandNames(engine: Pick<Engine, 'input'>): string[] {
   const handler = engine.input.parseOptions.handlers.get('macro'), names = new Set<string>();
   for (const { item } of handler?._configuration ?? [])
     if (item.map instanceof Map) for (const name of item.map.keys()) names.add('\\' + name);

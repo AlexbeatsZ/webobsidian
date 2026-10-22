@@ -109,6 +109,8 @@ cannot pollute future reloads. New snippets can use `hasMacroPrefix`.
 Shared argument metadata protects literal, chemical and unit arguments from
 ordinary math snippets. Unicode conceal remains optional editor presentation;
 it never substitutes source text or implements a package's semantic algorithm.
+Cursor decoration also checks the effective command Set; disabling the HTML
+package keeps the raw preview instead of injecting an unavailable `class` command.
 
 Core source segments provide tooltip offsets and quote-prefix removal. The code
 context consumes core blockContainers/MathBounds rather than splitting fences

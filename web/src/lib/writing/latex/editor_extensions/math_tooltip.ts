@@ -1,7 +1,7 @@
 // @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
 import { type Tooltip, showTooltip, EditorView, ViewUpdate, tooltips } from "@codemirror/view";
 import { StateField, EditorState, EditorSelection, StateEffect } from "@codemirror/state";
-import { renderMath, hasMathDefinitions, hasOpaqueMathArguments, mathDefinitionContext } from "../../../mathjax";
+import { renderMath, canDecorateMath, mathDefinitionContext } from "../../../mathjax";
 import { mathRegions, mathBodyOffset } from '@webobsidian/markdown-core';
 import { syntaxModel } from '../../../syntaxModel';
 import { contextOf } from '../../../renderContext';
@@ -120,7 +120,7 @@ export function handleMathTooltip(update: ViewUpdate) {
 			eqn.slice(eqnPos);
 	}
 	// Opaque chemistry/unit grammars cannot accept injected cursor/class macros.
-	if(hasMathDefinitions(eqn) || hasOpaqueMathArguments(eqn))eqnWithDecorations=eqn;
+	if(!canDecorateMath(eqn))eqnWithDecorations=eqn;
     const oldTooltips = update.state.field(cursorTooltipField);
 	// a little optimization: if the tooltip is currently shown and the equation with decorations is the same as the one in the tooltip, we don't need to update it.
 	if (
