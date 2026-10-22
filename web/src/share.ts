@@ -1,9 +1,11 @@
 import { mountMarkdownFragment } from './components/MarkdownFragment';
 import type { RenderContext } from './lib/renderContext';
 import './styles/obsidian.css';
+import { activateMathProfile } from './lib/mathjax';
+import type { MathProfile } from './lib/mathPreamble';
 
 interface SharedDocument { token: string; source: string; from: number; notes: Record<string, string> }
-interface SharedPayload { kind: 'markdown' | 'canvas'; documents: SharedDocument[] }
+interface SharedPayload { kind: 'markdown' | 'canvas'; documents: SharedDocument[]; mathProfile?: MathProfile }
 
 /** No vault/store/authenticated API imports. Every operation is share-scoped. */
 export async function enhanceSharedPage(id: string, payload?: SharedPayload): Promise<void> {
@@ -13,6 +15,7 @@ export async function enhanceSharedPage(id: string, payload?: SharedPayload): Pr
     if (!response.ok) throw new Error('Share unavailable');
     result = await response.json() as SharedPayload;
   }
+  if (result.mathProfile) await activateMathProfile(result.mathProfile);
   const docs = new Map(result.documents.map(doc => [doc.token, doc]));
   const root = docs.get('root'); if (!root) return;
   const stops: (() => void)[] = [];

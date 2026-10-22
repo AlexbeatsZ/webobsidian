@@ -19,7 +19,7 @@ import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePr
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, mathRegions, type MathRegion, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
-import { renderMath } from './mathjax';
+import { renderMath, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns, refreshBlockEffects } from './blocks/model';
 
@@ -376,12 +376,13 @@ class CalloutSourceWidget extends WidgetType {
 
 class MathWidget extends WidgetType {
   private controllers = new WeakMap<HTMLElement, AbortController>();
-  destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); }
-  constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }) {
+  private subscriptions = new WeakMap<HTMLElement, () => void>();
+  destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); this.subscriptions.get(dom)?.(); }
+  constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }, readonly definitions: readonly string[] = []) {
     super();
   }
   eq(o: MathWidget) {
-    return o.tex === this.tex && o.display === this.display && o.range?.from === this.range?.from && o.range?.to === this.range?.to;
+    return o.tex === this.tex && o.display === this.display && o.range?.from === this.range?.from && o.range?.to === this.range?.to && o.definitions.length === this.definitions.length && o.definitions.every((d, i) => d === this.definitions[i]);
   }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
@@ -390,16 +391,22 @@ class MathWidget extends WidgetType {
     body.textContent = this.tex;
     span.appendChild(body); // shown until MathJax finishes, or if loading fails
     span.dataset.renderPending = 'true';
-    const controller = new AbortController();
-    this.controllers.set(span, controller);
-    void renderMath(body, this.tex, this.display, controller.signal)
-      .catch(error => {
-        if (controller.signal.aborted) return;
-        span.classList.add('mod-error');
-        span.title = `Formula rendering failed: ${error instanceof Error ? error.message : String(error)}`;
-      })
-      .finally(() => { delete span.dataset.renderPending; if (!controller.signal.aborted) view.requestMeasure(); });
-    if (this.range && !view.state.readOnly) span.appendChild(sourceButton(view, this.range, 'formula'));
+    const render = () => {
+      this.controllers.get(span)?.abort();
+      const controller = new AbortController();
+      this.controllers.set(span, controller);
+      span.dataset.renderPending = 'true';
+      void renderMath(body, this.tex, this.display, controller.signal, { sourcePath: contextOf(view).sourcePath, definitions: mathDefinitionContext(view.state.field(syntaxModel), this.range?.from ?? 0) })
+        .then(() => { if (!controller.signal.aborted) { span.classList.remove("mod-error"); span.removeAttribute("title"); } })
+        .catch(error => {
+          if (controller.signal.aborted) return;
+          span.classList.add('mod-error');
+          span.title = `Formula rendering failed: ${error instanceof Error ? error.message : String(error)}`;
+        })
+        .finally(() => { if (!controller.signal.aborted) { delete span.dataset.renderPending; view.requestMeasure(); } });
+    };
+    this.subscriptions.set(span, subscribeMathConfiguration(render)); render();
+    if (this.display && this.range && !view.state.readOnly) span.appendChild(sourceButton(view, this.range, 'formula'));
     return span;
   }
   ignoreEvent() {
@@ -559,7 +566,7 @@ function buildMathBlocks(state: EditorState): DecorationSet {
   const ro = state.field(livePreviewReadonly, false) ?? false;
   return Decoration.set(state.field(blockModel).math.filter((block) =>
     !blockEffectOwns(state, block) && !sourceIsOpen(state, block) && (forceRendered(state, block) || !caretTouches(block, state.field(compositionSelection).selection.ranges, ro))
-  ).map((block) => Decoration.replace({ widget: new MathWidget(block.tex, true, block), block: true }).range(block.from, block.to)), true);
+  ).map((block) => Decoration.replace({ widget: new MathWidget(block.tex, true, block, mathDefinitionContext(state.field(syntaxModel), block.from)), block: true }).range(block.from, block.to)), true);
 }
 export const mathBlockField = StateField.define<DecorationSet>({
   create: buildMathBlocks, update: (value, transaction) => decorationInputsChanged(transaction) ? buildMathBlocks(transaction.state) : value,
@@ -1885,7 +1892,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       for (const formula of inlineMathByLine.get(line.number) ?? []) {
         const s=formula.from,e=formula.to;
         if(inCode(s,e))continue;
-        if(!touches(s,e))pushReplace(s,e,Decoration.replace({widget:new MathWidget(formula.tex,formula.display)}));
+        if(!touches(s,e))pushReplace(s,e,Decoration.replace({widget:new MathWidget(formula.tex,formula.display,formula,mathDefinitionContext(view.state.field(syntaxModel),formula.from))}));
         else all.push(Decoration.mark({class:'cm-math'}).range(s,e));
       }
 

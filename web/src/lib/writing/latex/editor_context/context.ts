@@ -15,6 +15,7 @@ import { Mode } from "./options";
 import type { Environment } from "../snippets/environment";
 import { getLatexSuiteConfig } from "../snippets/codemirror/config";
 import { syntaxModel } from "../../../syntaxModel";
+import { blockContainers } from "@webobsidian/markdown-core";
 import type { SyntaxNode } from "@lezer/common";
 import { type MacroArgs } from "./default_text_areas";
 import { getMathBoundsPlugin, type MathBounds } from "./mathbounds";
@@ -379,13 +380,7 @@ export class Context implements PluginValue {
 			return cached;
 		}
 
-		let bounds: Bounds | null;
-		if (this.mode.codeMath) {
-			// means a codeblock language triggered the math mode -> use the codeblock bounds instead
-			bounds = getCodeblockBounds(this.state, pos);
-		} else {
-			bounds = getMathBoundsPlugin(this.view).inMathBound(this.state, pos);
-		}
+		const bounds = getMathBoundsPlugin(this.view).inMathBound(this.state, pos);
 
 		this.boundsCache.set(pos, bounds);
 		return bounds;
@@ -470,59 +465,16 @@ const getInnerEquationBounds = (view: EditorView, pos?: number ):Bounds | null =
  *
  * **Note:** If you intend to use this directly, check out Context.getBounds instead, which caches and also takes care of codeblock languages which should behave like math mode.
  */
-const getCodeblockBounds = (
-	state: EditorState,
-	pos: number = state.selection.main.from,
-): Bounds | null => {
-	const bounds = getCodeblockBoundNodes(state, pos);
-	if (!bounds) return null;
-	const { begin: blockBegin, end: blockEnd } = bounds;
-	return {
-		inner_start: blockBegin.to,
-		inner_end: blockEnd.from,
-		outer_start: blockBegin.from,
-		outer_end: blockEnd.to,
-	};
+const langIfWithinCodeblock = (state: EditorState): (Bounds & { codeblockLanguage: string }) | null => {
+  const pos = state.selection.main.from, model = state.field(syntaxModel);
+  const block = blockContainers(model).find(block => block.kind === 'code' && pos > block.from && pos < block.to);
+  if (!block) return null;
+  return {
+    inner_start: block.bodyFrom,
+    inner_end: block.closed ? model.text.lastIndexOf('\n', block.to - 1) + 1 : block.to,
+    outer_start: block.from, outer_end: block.to, codeblockLanguage: block.language,
+  };
 };
-
-const getCodeblockBoundNodes = (state: EditorState, pos = state.selection.main.from) => {
- const model = state.field(syntaxModel); const node = model.nodes.find(n => n.name === 'FencedCode' && pos > n.from && pos < n.to);
- if(!node) return null; const raw=model.text.slice(node.from,node.to); const end=raw.lastIndexOf('\n');
- const openEnd=raw.indexOf('\n'); if(openEnd<0)return null;
- return {begin:{from:node.from,to:node.from+openEnd},end:{from:node.from+end+1,to:node.to}};
-};
-type CodeblockLangInfo = Bounds & { codeblockLanguage: string };
-const langIfWithinCodeblock = (
-	state: EditorState,
-): CodeblockLangInfo | null => {
-	const pos = state.selection.main.from;
-	const coddeblockBounds = getCodeblockBoundNodes(state, pos);
-	if (!coddeblockBounds) return null;
-	const { begin: codeblockBegin, end: codeblockEnd } = coddeblockBounds;
-
-	// extract the language
-	// codeblocks may start and end with an arbitrary number of backticks
-	const language = getLangFromCodeblockNode(state, codeblockBegin);
-
-	return {
-		inner_start: codeblockBegin.to,
-		inner_end: codeblockEnd.from,
-		outer_start: codeblockBegin.from,
-		outer_end: codeblockEnd.to,
-		codeblockLanguage: language,
-	};
-};
-
-function getLangFromCodeblockNode(
-	state: EditorState,
-	node: SyntaxNode,
-): string {
-	return state
-		.sliceDoc(node.from, node.to)
-		.replace(/`+|~+/g, "")
-		.split(" ")[0]!;
-}
-
 const withingCode = (state: EditorState): boolean => {
 	const pos = state.selection.main.head;
 	return state.field(syntaxModel).nodes.some(n=>n.name === "InlineCode" && pos > n.from && pos < n.to);

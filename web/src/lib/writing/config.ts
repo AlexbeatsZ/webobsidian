@@ -9,6 +9,10 @@ import { parseSnippets, parseSnippetVariables } from './latex/snippets/parse';
 import { parse } from 'valibot';
 import { MappingSchema } from './latex/editor_extensions/conceal_maps';
 import { mathlessArgsSchema } from './latex/editor_context/default_text_areas';
+import { mathArgumentInfo, mathBaseArguments, defaultMathConfiguration, type MathConfiguration } from '@webobsidian/markdown-core';
+import type { VaultConfigurationSource } from '../../../../server/src/services/vaultConfiguration';
+import { prepareMathProfile } from '../mathPreamble';
+import { validateMathProfile, type MathCandidate } from '../mathjax';
 
 export interface WritingSettings {
   version: 1;
@@ -16,6 +20,8 @@ export interface WritingSettings {
   latex: Record<string, any>;
   linter: Record<string, any>;
   hotkeys: Record<string, { modifiers: string[]; key: string }[]>;
+  math?: MathConfiguration;
+  mathSource?: VaultConfigurationSource;
 }
 let settings: WritingSettings = { version: 1, migration: '', latex: {}, linter: {}, hotkeys: {} };
 let cm = processLatexSuiteSettings(
@@ -26,6 +32,7 @@ let revision = 0,
   generation = 0,
   load: Promise<void> | undefined;
 let error = '';
+const compiledInputs = new WeakMap<LatexSuiteCMSettings, string>();
 const listeners = new Set<() => void>();
 export const subscribeWriting = (fn: () => void) => {
   listeners.add(fn);
@@ -97,9 +104,11 @@ async function sources(
   await visit(location.replaceAll('\\', '/'));
   return values;
 }
-async function compile(next: WritingSettings) {
+async function compile(next: WritingSettings, commands: readonly string[], force = false) {
   const { compileFormattingSettings } = await import('./format');
-  compileFormattingSettings(next.linter);
+  if (force || JSON.stringify(next.linter) !== JSON.stringify(settings.linter)) compileFormattingSettings(next.linter);
+  const inputKey = JSON.stringify([next.latex, commands, (next.math ?? defaultMathConfiguration()).packages]);
+  if (!force && inputKey === compiledInputs.get(cm)) return cm;
   const raw = {
     ...DEFAULT_SETTINGS,
     ...next.latex,
@@ -117,6 +126,7 @@ async function compile(next: WritingSettings) {
     macros: any[] = [],
     handlers: any[] = [];
   const extensionApi = {
+    commandNames: commands,
     addRawConcealMaps: (value: any) => {
       maps.push(parse(MappingSchema, value));
     },
@@ -129,6 +139,13 @@ async function compile(next: WritingSettings) {
   // Sequential imports preserve script extension registration order.
   for (const source of await sources('snippets', raw))
     snippets.push(...(await parseSnippets(source.text, variables, source.path, extensionApi)));
+  const packageArguments = mathArgumentInfo((next.math ?? defaultMathConfiguration()).packages);
+  macros.push({ text: [], restricted: Object.entries(packageArguments).flatMap(([name, args]) => {
+    // Base argument modes are already applied by the settings compiler.
+    if (args === mathBaseArguments[name]) return [];
+    const indexes = args.flatMap((kind, i) => kind === 'literal' || kind === 'chemistry' || kind === 'unit' ? [i] : []);
+    return indexes.length ? [{ name, arguments: indexes }] : [];
+  }) });
   if (macros.length) {
     const configured = JSON.parse(raw.textMacros || '{"text":[],"restricted":[]}');
     for (const value of macros) {
@@ -137,24 +154,33 @@ async function compile(next: WritingSettings) {
     }
     raw.textMacros = JSON.stringify(configured);
   }
-  return processLatexSuiteSettings(raw, {
+  const result = processLatexSuiteSettings(raw, {
     snippets,
     snippetVariables: variables,
     rawConcealMaps: maps,
     updateHandlers: handlers,
   });
+  compiledInputs.set(result, inputKey);
+  return result;
 }
-export async function refreshWriting() {
+export async function refreshWriting(forceRules = false) {
   const current = ++generation;
+  let candidate: MathCandidate | undefined;
   try {
     const next = await request<WritingSettings>('');
-    const compiled = await compile(next);
-    if (current !== generation) return;
+    candidate = await validateMathProfile(await prepareMathProfile(next.math));
+    // JSON responses create new objects. Reuse unchanged slices to avoid running
+    // snippet modules again when only Linter or math source metadata changed.
+    if (JSON.stringify(next.math) === JSON.stringify(settings.math)) next.math = settings.math;
+    const compiled = await compile(next, candidate.commands, forceRules);
+    if (current !== generation) { candidate.dispose(); return; }
     settings = next;
     cm = compiled;
+    candidate.commit();
     error = '';
     changed();
   } catch (cause) {
+    candidate?.dispose();
     if (current !== generation) return;
     error = String(cause);
     changed();
@@ -172,6 +198,8 @@ export function updateWriting(patch: Partial<WritingSettings>) {
   writes = writes
     .catch(() => {})
     .then(async () => {
+      const startingGeneration = ++generation;
+      if (patch.math && Object.keys(patch).some(key => key !== 'math')) throw new Error('Save math settings separately');
       const ruleConfigs = { ...settings.linter.ruleConfigs };
       for (const [id, value] of Object.entries(patch.linter?.ruleConfigs ?? {}))
         ruleConfigs[id] = { ...ruleConfigs[id], ...(value as object) };
@@ -181,11 +209,21 @@ export function updateWriting(patch: Partial<WritingSettings>) {
         latex: { ...settings.latex, ...patch.latex },
         linter: { ...settings.linter, ...patch.linter, ruleConfigs },
       };
-      const compiled = await compile(next);
-      const persisted = await request<WritingSettings>('', patch);
+      const candidate = await validateMathProfile(await prepareMathProfile(next.math));
+      let persisted: WritingSettings, compiled: LatexSuiteCMSettings;
+      try {
+        compiled = await compile(next, candidate.commands);
+        persisted = await request<WritingSettings>('', patch.math ? { math: patch.math, mathSource: settings.mathSource } : patch);
+      } catch (cause) { candidate.dispose(); throw cause; }
+      if (generation !== startingGeneration) {
+        candidate.dispose();
+        await refreshWriting();
+        return;
+      }
       generation++;
       settings = persisted;
       cm = compiled;
+      candidate.commit();
       error = '';
       changed();
     });
@@ -198,6 +236,8 @@ export function writingFileChanged(path: string) {
     raw.loadSnippetVariablesFromFile ? raw.snippetVariablesFileLocation : '',
   ].filter(Boolean);
   if (relevant.some((p) => path === p || path.startsWith(p.replace(/\/$/, '') + '/')))
+    void refreshWriting(true).catch(console.error);
+  else if (path === '.obsidian/webobsidian/math.jsonc' || path === settings.math?.preambleFile)
     void refreshWriting().catch(console.error);
 }
 
@@ -232,7 +272,7 @@ export function watchExternalWritingSources() {
           (_event: string, name: string) => {
             if (!dir && name && String(name) !== path.basename(p)) return;
             clearTimeout(timer);
-            timer = setTimeout(() => void refreshWriting().catch(console.error), 200);
+            timer = setTimeout(() => void refreshWriting(true).catch(console.error), 200);
           },
         );
         watcher.on('error', (cause: unknown) => console.error('Writing file watcher', cause));

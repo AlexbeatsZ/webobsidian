@@ -1,6 +1,7 @@
 import { Facet } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { MenuContext } from './configuredMenus/types';
+import type { MarkdownModel } from '@webobsidian/markdown-core';
 
 export interface RenderMenuItem {
   id?: string; label: string; icon?: string; disabled?: boolean; checked?: boolean;
@@ -22,6 +23,7 @@ export interface EmbeddedNote {
 /** Services are scoped to a view's source document and capability boundary. */
 export interface RenderContext {
   sourcePath: string;
+  mathSource?: { model: MarkdownModel; from: number };
   openLink: (target: string) => void;
   openMenu: (menu: { x: number; y: number; items: RenderMenuItem[]; context?: MenuContext }) => void;
   tagMenu?: (tag: string, event: MouseEvent, source: string) => void;

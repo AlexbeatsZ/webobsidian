@@ -1,11 +1,13 @@
 // @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
 import { type Tooltip, showTooltip, EditorView, ViewUpdate, tooltips } from "@codemirror/view";
 import { StateField, EditorState, EditorSelection, StateEffect } from "@codemirror/state";
-import { renderMath, hasMathDefinitions } from "../../../mathjax";
+import { renderMath, hasMathDefinitions, hasOpaqueMathArguments, mathDefinitionContext } from "../../../mathjax";
+import { mathRegions, mathBodyOffset } from '@webobsidian/markdown-core';
+import { syntaxModel } from '../../../syntaxModel';
+import { contextOf } from '../../../renderContext';
 import { livePreviewState as editorLivePreviewField } from "../../../renderState";
 import { type Bounds, Context, getContextPlugin } from "../editor_context/context";
 import { getLatexSuiteConfig } from "../snippets/codemirror/config";
-import { syntaxTree } from "@codemirror/language";
 import { cmDarkClass, cmLightClass, createElement } from "./obsidian_utils";
 import { isBoundMultiline } from "../utils/editor_utils";
 
@@ -82,19 +84,12 @@ export function handleMathTooltip(update: ViewUpdate) {
 	* process when there is a need to show the tooltip: from here
 	*/
 
-	const eqn = update.state.sliceDoc(eqnBounds.inner_start, eqnBounds.inner_end);
+	const model = update.state.field(syntaxModel);
+	const region = mathRegions(model, settings.forceMathLanguages).find(r => r.bodyFrom === eqnBounds.inner_start && r.bodyTo === eqnBounds.inner_end);
+	const eqn = region?.tex ?? update.state.sliceDoc(eqnBounds.inner_start, eqnBounds.inner_end);
 	const pos = ctx.pos;
 
-	const tree = ctx.getBounds()?.tree;
-	const cursor = tree?.cursor();
-	cursor?.moveTo(pos, -1);
-	let normalizedPos: number;
-	if (cursor?.name === "math_tag" && cursor.from < pos && cursor.to >= pos) {
-		normalizedPos = cursor.from;
-	} else {
-		normalizedPos = pos
-	}
-	const eqnPos = normalizedPos - eqnBounds.inner_start;
+	const eqnPos = region ? mathBodyOffset(region, pos) : pos - eqnBounds.inner_start;
 
 	let eqnWithDecorations: string;
 	// skip \{\} as thats not an argument to a macro
@@ -124,7 +119,8 @@ export function handleMathTooltip(update: ViewUpdate) {
 			mathPreviewCursor +
 			eqn.slice(eqnPos);
 	}
-	if(hasMathDefinitions(eqn))eqnWithDecorations=eqn;
+	// Opaque chemistry/unit grammars cannot accept injected cursor/class macros.
+	if(hasMathDefinitions(eqn) || hasOpaqueMathArguments(eqn))eqnWithDecorations=eqn;
     const oldTooltips = update.state.field(cursorTooltipField);
 	// a little optimization: if the tooltip is currently shown and the equation with decorations is the same as the one in the tooltip, we don't need to update it.
 	if (
@@ -142,20 +138,11 @@ export function handleMathTooltip(update: ViewUpdate) {
 		const dom = createElement("div")
 		dom.classList.add("cm-tooltip-cursor");
 		dom.classList.add(above ? "cm-tooltip-above" : "cm-tooltip-below");
-		// there is a plugin that can hide > in block math mode in the output.
-		if (ctx.mode.blockMath) {
-			// check if every newline is followed by the same amount of > as the line of the opening delimiters
-			// if so hide them. A maximum  of 3 spaces can be at the beginning of the line before its not a block-quote.
-			const blockQuoteCount = update.state.doc.lineAt(eqnBounds.inner_start).text.match(/^ {0,3}(>+)/)?.[1]!.length;
-			if (blockQuoteCount) {
-				const regex = new RegExp(`^ {0,3}>{${blockQuoteCount}}`, "gm");
-				if (regex.test(eqn)) {
-					eqnWithDecorations = eqnWithDecorations.replaceAll(regex, "");
-				}
-			}
-		}
         const controller = new AbortController();
-        void renderMath(dom, eqnWithDecorations, ctx.mode.inDisplayMath(), controller.signal, {transient:true})
+        void renderMath(dom, eqnWithDecorations, ctx.mode.inDisplayMath(), controller.signal, {transient:true,
+          sourcePath: contextOf(update.view).sourcePath,
+          definitions: mathDefinitionContext(contextOf(update.view).mathSource?.model ?? model,
+            (region?.from ?? eqnBounds.outer_start) + (contextOf(update.view).mathSource?.from ?? 0))})
           .then(()=>{if(!controller.signal.aborted)dom.querySelector('.'+CURSOR_CLASS)?.scrollIntoView({block:'nearest'});})
           .catch(error=>{if(!controller.signal.aborted){dom.textContent=eqn;dom.title=String(error);}});
         return {dom,destroy:()=>controller.abort()};

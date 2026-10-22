@@ -15,3 +15,5 @@ export * from './replacement.js';
 export * from './legacyReplacement.js';
 export * from './legacySubheadings.js';
 export * from './blockEffects.js';
+export * from './mathPackages.js';
+export * from './mathSource.js';

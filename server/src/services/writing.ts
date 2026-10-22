@@ -3,6 +3,7 @@ import path from 'node:path';
 import { migrateLinterReplacements, REPLACEMENT_SYNTAX } from '@webobsidian/markdown-core';
 import { getSettings, updateSettings } from './settings.js';
 import { resolveInVault } from './vault.js';
+import { readMathConfiguration } from './mathSettings.js';
 
 export interface WritingSettings {
   version: 1;
@@ -12,7 +13,7 @@ export interface WritingSettings {
   hotkeys: Record<string, { modifiers: string[]; key: string }[]>;
 }
 const migrating = new Map<string, Promise<WritingSettings>>();
-export async function writingSettings(): Promise<WritingSettings> {
+async function storedWritingSettings(): Promise<WritingSettings> {
   const settings = await getSettings(),
     key = path.resolve(settings.vault.path);
   const current = settings.writing[key] as WritingSettings | undefined;
@@ -23,6 +24,11 @@ export async function writingSettings(): Promise<WritingSettings> {
     migrating.set(key, operation);
   }
   return operation;
+}
+export async function writingSettings() {
+  const value = await storedWritingSettings();
+  const math = await readMathConfiguration();
+  return { ...value, math: math.configuration, mathSource: math.source };
 }
 async function migrate(key: string, current?: WritingSettings): Promise<WritingSettings> {
   if (current) {

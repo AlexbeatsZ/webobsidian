@@ -12,6 +12,7 @@ import {
   type ShareRecord,
 } from '../services/shares.js';
 import { buildShareScope } from '../services/shareScope.js';
+import { sharedMathProfile } from '../services/mathSettings.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 
@@ -174,7 +175,7 @@ publicSharesRouter.get('/:id/render', asyncHandler(async (req, res) => {
   if (!(await isUnlocked(req, share))) { res.status(401).json({ error: 'password required' }); return; }
   const scope = await buildShareScope(share.path, { read: vault.readFileText, resolve: resolveFile });
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ kind: isCanvas(share.path) ? 'canvas' : 'markdown', documents: [...scope.values()].map(doc => ({
+  res.json({ mathProfile: await sharedMathProfile(), kind: isCanvas(share.path) ? 'canvas' : 'markdown', documents: [...scope.values()].map(doc => ({
     token: doc.token, source: doc.source, from: doc.from, notes: Object.fromEntries(doc.notes),
   })) });
 }));

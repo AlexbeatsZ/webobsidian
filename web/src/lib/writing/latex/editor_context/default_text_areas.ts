@@ -1,5 +1,6 @@
 // @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
 import * as v from "valibot"
+import { mathBaseArguments } from '@webobsidian/markdown-core';
 const MacroArgsSchema = v.object({
 	name: v.string(),
 	arguments: v.optional(v.array(v.number())),
@@ -15,24 +16,10 @@ export const MacroArgsPipeSchema = v.pipe(
  * Macros should only take up the arguments they actually take to avoid seeing `$\text{world}{\color{red}\alpha}$` the second argument of `text` as an argument of `text`.
  */
 export const textMacroArgs = [
-	{ name: "text", arguments: [0] },
-	{ name: "textrm", arguments: [0] },
-	{ name: "textup", arguments: [0] },
-	{ name: "textit", arguments: [0] },
-	{ name: "textbf", arguments: [0] },
-	{ name: "textsf", arguments: [0] },
-	{ name: "texttt", arguments: [0] },
-	{ name: "textnormal", arguments: [0] },
-	{ name: "clap", arguments: [0] },
-	{ name: "textllap", arguments: [0] },
-	{ name: "textrlap", arguments: [0] },
-	{ name: "textclap", arguments: [0] },
-	{ name: "hbox", arguments: [0] },
-	{ name: "mbox", arguments: [0] },
-	{ name: "fbox", arguments: [0] },
-	{ name: "framebox", arguments: [0] },
-	{ name: "colorbox", arguments: [1] }, // has 2 inputs \colorbox{color}{text}
-	{ name: "fcolorbox", arguments: [2] }, // has 3 inputs \fcolorbox{color}{background-color}{text}
+  ...Object.entries(mathBaseArguments).flatMap(([name, args]) => {
+    const arguments_ = args.flatMap((kind, i) => kind === 'text' ? [i] : []);
+    return arguments_.length ? [{ name, arguments: arguments_ }] : [];
+  }),
 ] as const satisfies readonly MacroArgs[];
 
 /**
@@ -41,16 +28,10 @@ export const textMacroArgs = [
  * Snippets with `includedMacros` can expand in these.
  */
 export const restrictedMacroArgs = [
-	{ name: "tag", arguments: [0] },
-	{ name: "begin", arguments: [0] },
-	{ name: "end", arguments: [0] },
-	{ name: "mmlToken", arguments: [0, 1] }, // MathML token, also has two inputs
-	{ name: "unicode", arguments: [0] },
-	{ name: "textcolor", arguments: [0] }, // only the first argument is text/color, the second argument is math
-	{ name: "color", arguments: [0] },
-	{ name: "colorbox", arguments: [0] }, // has two inputs \colorbox{color}{text}, color is snippetless and text is text.
-	{ name: "fcolorbox", arguments: [0, 1] }, // has 3 inputs \fcolorbox{color}{background-color}{text}, of which the first 2 are snippetless and the last one is text.
-	{ name: "style", arguments: [0] },
+  ...Object.entries(mathBaseArguments).flatMap(([name, args]) => {
+    const arguments_ = args.flatMap((kind, i) => kind === 'literal' ? [i] : []);
+    return arguments_.length ? [{ name, arguments: arguments_ }] : [];
+  }),
 ] as const satisfies readonly MacroArgs[];
 
 

@@ -6,6 +6,10 @@ import { getVaultRoot } from './vault.js';
 import { readTextFile, writeTextFile } from './textFile.js';
 
 const DIRECTORY = '.obsidian/webobsidian';
+/** Configuration events bypass the note catalog and file tree. */
+export function isVaultConfigurationPath(relative: string): boolean {
+  return relative === DIRECTORY || relative.startsWith(DIRECTORY + '/');
+}
 const MAX_BYTES = 1024 * 1024;
 const failure = (message: string, status = 400) => Object.assign(new Error(message), { status });
 export interface VaultConfigurationSource {

@@ -2,11 +2,14 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { Plugin } from 'vite';
+import { fileURLToPath } from 'node:url';
+import { mathPackages, MATHJAX_PACKAGE_VERSION } from '../packages/markdown-core/src/mathPackages';
 
 const require = createRequire(import.meta.url);
 const root = dirname(require.resolve('mathjax/package.json'));
 const fontRoot = dirname(createRequire(join(root, 'package.json')).resolve('@mathjax/mathjax-newcm-font/package.json'));
 export const mathJaxVersion: string = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
+if (mathJaxVersion !== MATHJAX_PACKAGE_VERSION) throw new Error('MathJax package descriptors require a version review');
 
 /** Keep component-relative URLs intact for MathJax's extension/font loader. */
 export function mathJaxAssets(): Plugin {
@@ -20,6 +23,13 @@ export function mathJaxAssets(): Plugin {
     ['ui/safe.js', join(root, 'ui/safe.js')],
     ['LICENSE', join(root, 'LICENSE')],
   ]);
+  for (const entry of mathPackages) {
+    if (entry.component.startsWith('[webobsidian]/')) {
+      const file = entry.component.slice('[webobsidian]/'.length);
+      assets.set(`native/${file}`, fileURLToPath(new URL(`./mathjax/${entry.id}/${file}`, import.meta.url)));
+      assets.set(`native/${entry.id}-LICENSE`, fileURLToPath(new URL(`./mathjax/${entry.id}/LICENSE`, import.meta.url)));
+    }
+  }
   for (const extension of ['bbm', 'bboldx', 'dsfont', 'mhchem']) {
     const name = `mathjax-${extension}-font-extension`;
     const directory = dirname(require.resolve(`@mathjax/${name}/package.json`));

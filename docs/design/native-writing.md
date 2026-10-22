@@ -87,6 +87,8 @@ versions produce an error instead of silently changing meaning.
   committing. Honor document conflicts and ignore settings.
 - MathJax owns conversion, cancellation and output reuse for all formula hosts.
   Presentation never writes Unicode or preview markers into source.
+  Native package selection and preamble configuration now use the same lifecycle;
+  see native-math.md for configuration candidates, context state and command metadata.
 - Settings, commands and file events use the existing host services. Preserve
   code/HTML/public-share execution boundaries.
 

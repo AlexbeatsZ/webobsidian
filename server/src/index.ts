@@ -38,9 +38,10 @@ import { AttachmentCleanupService } from './services/attachment-cleanup/service.
 import { catalog } from './services/catalog.js';
 import { guardVaultMutations, bindMaintenanceClients, maintenanceClientConnected,
   maintenanceClientMessage, vaultGeneration, inspectMaintenanceWorkspace,
-  assertMaintenanceWorkspaceSafe, withVaultMaintenance } from './services/vaultMaintenance.js';
+  assertMaintenanceWorkspaceSafe, withVaultMaintenance, noteVaultMutation } from './services/vaultMaintenance.js';
 import { initSearch } from './services/search.js';
-import { setBroadcaster } from './services/realtime.js';
+import { setBroadcaster, broadcast } from './services/realtime.js';
+import { isVaultConfigurationPath } from './services/vaultConfiguration.js';
 import { getVaultRoot, ensureVault } from './services/vault.js';
 import { enableFileUpdates, queueFileUpdate, drainFileUpdates } from './services/fileupdates.js';
 import { startAutoSync } from './services/autosync.js';
@@ -255,10 +256,14 @@ async function setupWatcher() {
 
 function startWatcher(root: string, usePolling: boolean) {
   const watcher = chokidar.watch(root, {
-    // Ignore VCS/dep/trash dirs AND `.obsidian` — the desktop Obsidian app
-    // rewrites its workspace/state files constantly, which otherwise floods the
-    // server with events (→ broadcasts → full tree refetches) and pins the CPU.
-    ignored: (p) => /(^|[/\\])(\.git|\.obsidian|node_modules|\.trash)([/\\]|$)/.test(p),
+    // Keep Obsidian's frequently rewritten workspace/plugin state ignored.
+    // Native configuration alone reuses this watcher without touching note indexes.
+    ignored: (p) => {
+      const relative = path.relative(root, p).split(path.sep).join('/');
+      if (/(^|\/)(\.git|node_modules|\.trash)(\/|$)/.test(relative)) return true;
+      if (!relative.split('/').includes('.obsidian')) return false;
+      return relative !== '.obsidian' && !isVaultConfigurationPath(relative);
+    },
     ignoreInitial: true,
     persistent: true,
     usePolling,
@@ -290,6 +295,11 @@ function startWatcher(root: string, usePolling: boolean) {
 
   const onChange = async (absPath: string, type: string) => {
     const rel = path.relative(root, absPath).split(path.sep).join('/');
+    if (isVaultConfigurationPath(rel)) {
+      noteVaultMutation();
+      broadcast({ type: 'vault-configuration-changed', path: rel, event: type });
+      return;
+    }
     await queueFileUpdate(rel, type as Parameters<typeof queueFileUpdate>[1]);
   };
   watcher

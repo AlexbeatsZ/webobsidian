@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from '../lib/writing/latex/settings/settings';
 import { formatRules, formatterSettings } from '../lib/writing/format';
 import { DropdownOption, TextAreaOption } from '../lib/writing/linter/option';
 import { useStore } from '../lib/store';
+import MathSettings from './MathSettings';
 
 function JsonEditor({
   label,
@@ -75,7 +76,7 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
       {(failure || error) && <p role="alert">{failure || error}</p>}
       <button
         onClick={() =>
-          void refreshWriting()
+          void refreshWriting(true)
             .then(() => notify('配置已重新加载'))
             .catch((e) => setFailure(String(e)))
         }
@@ -202,6 +203,7 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
         </>
       ) : (
         <>
+          <MathSettings />
           <p>
             当前载入 {writingCMSettings().snippets.all.length}{' '}
             条片段。修改规则文件后自动重载；失败时继续使用上一次有效规则。

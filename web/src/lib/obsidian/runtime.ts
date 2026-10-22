@@ -557,6 +557,7 @@ Object.assign(window, {
   },
 });
 export const nativePluginReplacements:Record<string,string>={
+  'obsidian-latex':'已由内置 MathJax 宏包与导言区接管',
   ...migratedPluginIds,
   'fuzzy-chinese-pinyin':'已由内置中文搜索接管',
   'obsidian-latex-suite':'已由内置公式与片段接管',
@@ -615,6 +616,15 @@ export async function loadPlugin(id:string,manifest:any){
       const Type = module.exports.default ?? module.exports;
       instance = new Type(sharedApp, manifest);
       if (!(instance instanceof Plugin)) throw new Error('Plugin must extend obsidian.Plugin');
+      if (id === 'local-latex-renderer') {
+        // Preserve its data and complete local TeX compiler. Only its duplicated
+        // MathJax registration is replaced; do not write an emptied preamble.
+        const { ensureWriting } = await import('../writing/config');
+        await ensureWriting();
+        if (typeof (instance as any).initializeMathJaxPreamble !== 'function')
+          throw new Error('Local LaTeX Renderer MathJax adapter is incompatible with this version');
+        (instance as any).initializeMathJaxPreamble = async () => {};
+      }
       if (id === 'obsidian-plus') adaptNativePlusModules(instance);
       sharedApp.plugins.plugins[id] = instance;
       sharedApp.plugins.manifests[id] = manifest;

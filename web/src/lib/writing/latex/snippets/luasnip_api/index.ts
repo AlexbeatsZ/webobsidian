@@ -1,7 +1,7 @@
 // @ts-nocheck -- adapted upstream snippet node API.
 import type { MathlessMacroArgs } from "../../editor_context/default_text_areas";
 import type { SnippetVariables } from "../parse";
-import { ALL_MACROS } from "./macros";
+import { mathCommandNames } from '../../../../mathjax';
 import { ArrayNode, BaseNode, CaptureNode, SnippetStringNode, TabstopNode, TextNode } from "./node";
 import type { UpdateHandler } from "../../api";
 
@@ -34,13 +34,24 @@ function array_node(nodes: BaseNode[]) {
 	return new ArrayNode(nodes);
 }
 export type PluginSnippetApi = {
+  commandNames?: readonly string[];
 	addRawConcealMaps: (maps: Record<string, unknown>) => void;
 	addMathlessMacros: (macros: MathlessMacroArgs) => void;
 	addUpdateHandler: (handler: UpdateHandler) => void;
 }
 
 export const api = (snippetVariables: SnippetVariables, pluginApi: PluginSnippetApi) => {
+	const ALL_MACROS = [...(pluginApi.commandNames ?? mathCommandNames())];
+	let prefixNames = [...new Set(ALL_MACROS)].sort(), prefixLength = ALL_MACROS.length;
+	const hasMacroPrefix = (prefix: string) => {
+		if (prefixLength !== ALL_MACROS.length) { prefixNames = [...new Set(ALL_MACROS)].sort(); prefixLength = ALL_MACROS.length; }
+		const names = prefixNames;
+		let lo = 0, hi = names.length;
+		while (lo < hi) { const mid = (lo + hi) >>> 1; if (names[mid] < prefix) lo = mid + 1; else hi = mid; }
+		return names[lo]?.startsWith(prefix) ?? false;
+	};
 	return {
+		hasMacroPrefix,
 		snippetVariables,
 		tabstop_node,
 		text_node,
@@ -56,5 +67,5 @@ export const snippetApi = {
 	capture_node,
 	snippet_node,
 	array_node,
-	ALL_MACROS,
+	get ALL_MACROS() { return mathCommandNames(); },
 }
