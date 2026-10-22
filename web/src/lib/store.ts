@@ -572,8 +572,8 @@ export const useStore = create<AppState>()(
       },
 
       createNote: async (path, body) => {
-        await api.write(path, body ?? '');
-        await get().loadTree();
+        const { sharedApp } = await import('./plugins');
+        await sharedApp.vault.create(path, body ?? '');
         await get().openFile(path);
       },
 

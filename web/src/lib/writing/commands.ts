@@ -82,6 +82,11 @@ async function inputFeatures(value?: boolean) {
   });
 }
 export const writingCommands = [
+  { id: 'math:reload-config', title: '重新加载数学宏包与导言区', run: async () => {
+    const { refreshWriting } = await import('./config');
+    await refreshWriting();
+    useStore.getState().notify('数学配置已重新加载');
+  } },
   { id: 'format', title: '格式化当前文档', run: formatCurrent },
   { id: 'format-folder', title: '格式化当前文件夹', run: () => formatBatch(true) },
   { id: 'format-vault', title: '格式化整个 Vault', run: () => formatBatch(false) },
@@ -170,13 +175,8 @@ const aliases: Record<string, string> = {
   'obsidian-latex-suite:latex-suite-toggle-all-features': 'formula-input-toggle',
   'obsidian-latex-suite:latex-suite-toggle-conceal': 'formula-conceal',
 };
-export function runWritingCommand(id: string) {
-  const command = writingCommands.find((c) => c.id === (aliases[id] ?? id));
-  if (!command) return false;
-  Promise.resolve(command.run()).catch((error) => useStore.getState().notify(String(error)));
-  return true;
-}
-export function runWritingHotkey(event: KeyboardEvent) {
+export const writingCommandId = (id: string) => aliases[id] ?? id;
+export function runWritingHotkey(event: KeyboardEvent, execute: (id: string) => boolean) {
   for (const [old, bindings] of Object.entries(writingSettings().hotkeys)) {
     if (!aliases[old]) continue;
     for (const binding of bindings) {
@@ -189,7 +189,7 @@ export function runWritingHotkey(event: KeyboardEvent) {
         event.altKey === mods.includes('Alt') &&
         event.shiftKey === mods.includes('Shift')
       )
-        return runWritingCommand(old);
+        return execute(old);
     }
   }
   return false;

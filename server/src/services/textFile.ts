@@ -15,7 +15,7 @@ export async function readTextFile(absolutePath: string): Promise<{ content: str
   return { content, revision: revisionOf(bytes) };
 }
 
-export async function writeTextFile(absolutePath: string, content: string, baseRevision?: string): Promise<{ revision: string }> {
+export async function writeTextFile(absolutePath: string, content: string, baseRevision?: string, createOnly = false): Promise<{ revision: string }> {
   const key = process.platform === 'win32' ? absolutePath.toLowerCase() : absolutePath;
   const previous = queues.get(key) ?? Promise.resolve();
   let release!: () => void;
@@ -24,6 +24,13 @@ export async function writeTextFile(absolutePath: string, content: string, baseR
   queues.set(key, queued);
   await previous.catch(() => {});
   try {
+    if (createOnly) {
+      const bytes = Buffer.from(content, 'utf8');
+      await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+      try { await fs.writeFile(absolutePath, bytes, { flag: 'wx' }); }
+      catch (error: any) { if (error.code === 'EEXIST') throw Object.assign(new Error('File already exists; existing content preserved'), { status: 409 }); throw error; }
+      return { revision: revisionOf(bytes) };
+    }
     const existing = await fs.readFile(absolutePath).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return null;
       throw error;

@@ -50,7 +50,7 @@ filesRouter.get(
 filesRouter.put(
   '/content',
   asyncHandler(async (req, res) => {
-    const { path: rel, content, baseRevision } = req.body ?? {};
+    const { path: rel, content, baseRevision, createOnly } = req.body ?? {};
     if (typeof rel !== 'string' || typeof content !== 'string') {
       res.status(400).json({ error: 'path and content required' });
       return;
@@ -59,7 +59,10 @@ filesRouter.put(
       res.status(400).json({ error: 'baseRevision must be a string' });
       return;
     }
-    const snapshot = await vault.writeFileText(rel, content, baseRevision);
+    if (createOnly !== undefined && (typeof createOnly !== 'boolean' || (createOnly && baseRevision !== undefined))) {
+      res.status(400).json({ error: 'createOnly must be a boolean without baseRevision' }); return;
+    }
+    const snapshot = await vault.writeFileText(rel, content, baseRevision, createOnly === true);
     scheduleAutoCommitOnSave();
     res.json({ ok: true, path: rel, ...snapshot });
   }),

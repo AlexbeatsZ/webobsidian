@@ -111,7 +111,7 @@ export class Vault extends Events {
   private root = new TFolder('', '');
   private settings: Record<string, any> = {};
   private fallbackLinks: Map<string, TFile> | undefined;
-  constructor() {
+  constructor(private prepareNewNote?: (path: string, content: string) => Promise<string>) {
     super();
     this.root.vault = this;
     this.fileMap[''] = this.root;
@@ -224,10 +224,11 @@ export class Vault extends Events {
     this.trigger('modify', file);
     return result;
   }
-  async create(path: string, content: string) {
+  async create(path: string, content: string, applyTemplate = true) {
     if (await this.adapter.exists(path))
       throw new Error(`File already exists: ${path}`);
-    await api.write(path, content);
+    if (applyTemplate && this.prepareNewNote) content = await this.prepareNewNote(path, content);
+    await api.createText(path, content);
     await useStore.getState().loadTree();
     const file = this.getFileByPath(path)!;
     this.trigger('create', file);

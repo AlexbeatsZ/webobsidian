@@ -145,6 +145,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ path, content, baseRevision }),
     }),
+  createText: (path: string, content: string) => req<{ ok: true; revision: string }>('/api/files/content', {
+    method: 'PUT', body: JSON.stringify({ path, content, createOnly: true }),
+  }),
   createFolder: (path: string) =>
     req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
   rename: (from: string, to: string) =>

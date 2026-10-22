@@ -3,12 +3,28 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
 import { nativeFeatureSettings, patchNativeFeatureSettings } from '../services/nativeFeatureSettings.js';
+import { AutomationSchema, readAutomationConfiguration, saveAutomationConfiguration, importAutomationConfiguration } from '../services/automationSettings.js';
 import { promises as fs } from 'node:fs';
 import { readFileSnapshot, resolveInVault } from '../services/vault.js';
 import { broadcast } from '../services/realtime.js';
 
 export const nativeFeaturesRouter = Router();
 nativeFeaturesRouter.use(requireAuth);
+const configSource = z.object({ path: z.literal('automation.jsonc'), content: z.string().max(1024 * 1024),
+  exists: z.boolean(), revision: z.string().optional(), vault: z.string().min(1) }).strict();
+nativeFeaturesRouter.get('/automation', asyncHandler(async (_req, res) => { res.json(await readAutomationConfiguration()); }));
+nativeFeaturesRouter.put('/automation', asyncHandler(async (req, res) => {
+  const input = z.object({ source: configSource, settings: AutomationSchema }).strict().safeParse(req.body);
+  if (!input.success) { res.status(400).json({ error: input.error.issues.map(issue => issue.path.join('.') + ': ' + issue.message).join('; ') }); return; }
+  const value = await saveAutomationConfiguration(input.data);
+  broadcast({ type: 'automation-changed' }); res.json(value);
+}));
+nativeFeaturesRouter.post('/automation/import', asyncHandler(async (req, res) => {
+  const input = configSource.safeParse(req.body);
+  if (!input.success) { res.status(400).json({ error: 'Invalid configuration snapshot' }); return; }
+  const value = await importAutomationConfiguration(input.data);
+  broadcast({ type: 'automation-changed' }); res.json(value);
+}));
 nativeFeaturesRouter.get('/', asyncHandler(async (_req, res) => { res.json(await nativeFeatureSettings()); }));
 nativeFeaturesRouter.get('/folder-tags/import', asyncHandler(async (req, res) => {
   const before = await nativeFeatureSettings();

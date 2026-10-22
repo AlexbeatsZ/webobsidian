@@ -1,6 +1,6 @@
 import { useStore } from './store';
 import { api } from './api';
-import { writingCommands } from './writing/commands';
+import { writingCommands, writingCommandId } from './writing/commands';
 import { userscriptCommands } from './userscripts/commands';
 import { configuredMenuCommands } from './configuredMenus/commands';
 import { attachmentCleanupCommands, attachmentCleanupLegacyCommandIds } from './attachments/commands';
@@ -74,10 +74,8 @@ export const nativeCommands = [
     },
   },
 ];
-export function runNativeCommand(id: string): boolean {
+export function resolveNativeCommandId(id: string): string {
   if ((attachmentCleanupLegacyCommandIds as readonly string[]).includes(id)) id = attachmentCleanupCommands[0].id;
-  const command = nativeCommands.find((c) => c.id === id);
-  if (!command) return false;
-  Promise.resolve(command.run()).catch((error) => useStore.getState().notify(String(error)));
-  return true;
+  const aliases: Record<string, string> = { 'editor:save-file': 'save', 'command-palette:open': 'commands', 'switcher:open': 'files' };
+  return aliases[id] ?? writingCommandId(id);
 }

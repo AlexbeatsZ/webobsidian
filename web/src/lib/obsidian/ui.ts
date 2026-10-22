@@ -109,6 +109,7 @@ export class SuggestModal<T = any> extends Modal {
     this.contentEl.append(this.inputEl, this.resultContainerEl);
     this.inputEl.addEventListener('input', () => void this.update());
     this.inputEl.addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         this.selected = Math.max(
@@ -222,6 +223,46 @@ export class FuzzySuggestModal<T = any> extends SuggestModal<{
     this.onChooseItem(value.item, e);
   }
   onChooseItem(_item: T, _e: any) {}
+}
+/** Shared Promise dialogs for commands and templates. Cancel rejects without a value. */
+export function promptInput(app: unknown, message: string, initial = '', signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    let accepted = false;
+    const modal = new (class extends Modal {
+      onClose() {
+        signal?.removeEventListener('abort', abort);
+        if (!accepted) reject(new DOMException('已取消', 'AbortError'));
+      }
+    })(app);
+    const abort = () => modal.close();
+    modal.setTitle(message);
+    const input = document.createElement('input'); input.className = 'text-input'; input.value = initial;
+    const button = document.createElement('button'); button.textContent = '确定';
+    const submit = () => { accepted = true; resolve(input.value); modal.close(); };
+    input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); submit(); } });
+    button.onclick = submit; modal.contentEl.append(input, button);
+    signal?.addEventListener('abort', abort, { once: true }); modal.open(); input.select();
+  });
+}
+export function chooseInput<T>(app: unknown, message: string, items: readonly T[], label: (item: T) => string = String,
+  signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    let accepted = false;
+    const modal = new (class extends FuzzySuggestModal<T> {
+      getItems() { return [...items]; }
+      getItemText(item: T) { return label(item); }
+      onChooseItem(item: T) { accepted = true; resolve(item); }
+      onClose() {
+        signal?.removeEventListener('abort', abort);
+        if (!accepted) reject(new DOMException('已取消', 'AbortError'));
+      }
+    })(app);
+    const abort = () => modal.close();
+    modal.setTitle(message); modal.setPlaceholder(message);
+    signal?.addEventListener('abort', abort, { once: true }); modal.open();
+  });
 }
 export class AbstractInputSuggest<T = any> extends Component {
   scope = new Scope();

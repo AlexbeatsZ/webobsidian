@@ -1,4 +1,3 @@
-import { nativeCommands } from '../lib/nativeCommands';
 import { useSearch, fileCandidates, matchName, remember, updateSearch } from '../lib/search';
 import MatchLabel from './MatchLabel';
 import { documents } from '../lib/documents';
@@ -6,9 +5,8 @@ import { extractMetadata } from '@webobsidian/markdown-core';
 import { getEditorForPath } from '../lib/activeEditor';
 import { EditorView } from '@codemirror/view';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { pluginCommands, pluginRevision, subscribePlugins, runPluginCommand } from '../lib/plugins';
+import { sharedApp, pluginRevision, subscribePlugins } from '../lib/plugins';
 import { useStore } from '../lib/store';
-import { api } from '../lib/api';
 
 interface Cmd {
   id: string;
@@ -37,9 +35,9 @@ export default function CommandPalette() {
   const content = useStore((s) => s.content);
   const recent = useStore((s) => s.recent);
 
-  const commands: Cmd[] = nativeCommands;
-
   const items = useMemo<Cmd[]>(() => {
+    // A closed palette must not rank the whole catalog on every editor keystroke.
+    if (!open) return [];
     const query = q.replace(/^>/, '').trim();
     if (mode === 'headings') {
       const session = activePath ? documents.get(activePath) : undefined;
@@ -67,14 +65,15 @@ export default function CommandPalette() {
         ];
       });
     }
-    if (mode === 'templates' && !settings.templateFolder)
+    const templateFolder = sharedApp.automation.templateFolder;
+    if (mode === 'templates' && !templateFolder)
       return [
         {
           id: 'configure-templates',
           title: '设置模板目录…',
           run: () => {
             setSettings(true);
-            window.dispatchEvent(new CustomEvent('search-settings-open'));
+            window.dispatchEvent(new Event('automation:open-settings'));
           },
         },
       ];
@@ -82,7 +81,7 @@ export default function CommandPalette() {
       mode === 'templates'
         ? entries.filter(
             (e) =>
-              e.path.startsWith(settings.templateFolder.replace(/\/$/, '') + '/') &&
+              e.path.startsWith(templateFolder.replace(/\/$/, '') + '/') &&
               /\.(md|markdown)$/i.test(e.path),
           )
         : entries;
@@ -96,41 +95,23 @@ export default function CommandPalette() {
         hint: entry.path + (settings.showTags && entry.tags.length ? '  #' + entry.tags.join(' #') : ''),
         run: () => {
           if (mode === 'templates') {
-            const view = activePath ? getEditorForPath(activePath) : null;
-            if (!view || view.state.readOnly) return;
-            const state = view.state;
-            void api
-              .read(entry.path)
-              .then((f) => {
-                if (view.state !== state) {
-                  notify('编辑位置已变化，请重新插入模板');
-                  return;
-                }
-                view.dispatch({
-                  changes: {
-                    from: state.selection.main.from,
-                    to: state.selection.main.to,
-                    insert: f.content,
-                  },
-                  userEvent: 'input',
-                });
-                view.focus();
-              })
-              .catch((e) => notify(e.message));
+            void sharedApp.automation.templates.insert(entry.path).catch(error => {
+              if (!(error instanceof DOMException && error.name === 'AbortError')) notify(String(error));
+            });
           } else {
             void openFile(entry.path);
           }
         },
       }));
     if (mode === 'files' || mode === 'templates') return fileItems;
-    const extras: Cmd[] = [...pluginCommands.values()].map((c) => ({
+    const commands: Cmd[] = sharedApp.commands.listCommands().map((c) => ({
       id: c.id,
       title: c.name,
       run: () => {
-        runPluginCommand(c.id);
+        sharedApp.commands.executeCommandById(c.id);
       },
     }));
-    const commandItems = [...commands, ...extras]
+    const commandItems = commands
       .flatMap((c) => {
         const match = matchName(query, c.title);
         return match ? [{ ...c, ranges: match.matches, score: match.score }] : [];
@@ -146,7 +127,7 @@ export default function CommandPalette() {
     return mode === 'commands' || q.startsWith('>')
       ? commandItems
       : [...commandItems.slice(0, 3), ...fileItems];
-  }, [q, mode, entries, settings, commands, pluginVersion, activePath, content, recent]);
+  }, [open, q, mode, entries, settings, pluginVersion, activePath, content, recent]);
   const choose = (item: Cmd | undefined, event?: { ctrlKey: boolean; metaKey: boolean; altKey: boolean }) => {
     if (!item) return;
     setOpen(false);

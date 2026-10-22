@@ -158,7 +158,7 @@ export async function readFileBuffer(rel: string): Promise<Buffer> {
   return fs.readFile(abs);
 }
 
-export async function writeFileText(rel: string, content: string, baseRevision?: string): Promise<{ revision: string }> {
+export async function writeFileText(rel: string, content: string, baseRevision?: string, createOnly = false): Promise<{ revision: string }> {
   const abs = await resolveInVault(rel);
   // New notes have no existing document session. Apply the same native rules
   // before their initial bytes are written; established sessions prepare saves.
@@ -171,7 +171,7 @@ export async function writeFileText(rel: string, content: string, baseRevision?:
       catch (error) { console.warn('[folder tags] initial note preserved:', rel, error); }
     }
   }
-  const result = await writeTextFile(abs, content, baseRevision);
+  const result = await writeTextFile(abs, content, baseRevision, createOnly);
   void queueFileUpdate(rel);
   return result;
 }

@@ -1,7 +1,8 @@
 import { request, subscribeMutations } from './api';
 import { documents } from './documents';
 import { useStore } from './store';
-import { sharedApp, runPluginCommand, pluginCommands } from './plugins';
+import { sharedApp } from './plugins';
+import { commandContext } from './commands';
 import { getEditorForPath, getActiveEditor } from './activeEditor';
 import { initializeConfiguredMenus } from './configuredMenus/controller';
 import { configuredMenuStorage } from './configuredMenus/storage';
@@ -14,6 +15,8 @@ export { readNativeFeatures, saveNativeFeatures } from './nativeFeaturePreferenc
 export type { NativeFeaturePreferences } from './nativeFeaturePreferences';
 
 export function initializeNativeMenus(): () => void {
+  const invocationContext = (menu: MenuContext) => ({ ...commandContext('user',
+    ['file', 'folder', 'tab'].includes(menu.kind) ? menu.paths?.[0] : undefined), paths: menu.paths });
   const contextCurrent = (context: MenuContext) => {
     if (context.documentVersion === undefined) return true;
     const path = context.activePath;
@@ -28,7 +31,7 @@ export function initializeNativeMenus(): () => void {
       if (!sharedApp.commands.findCommand(id)) return false;
       if (context.paths?.length && !context.paths.includes(useStore.getState().activePath ?? '') &&
         /^(bookmark|move|save|split|reading|source|live|tags-batch-folder|editor:)/.test(id)) return false;
-      return !pluginCommands.has(id) || runPluginCommand(id, true);
+      return sharedApp.commands.canExecute(id, invocationContext(context));
     },
     executeCommand: async (id, context) => {
       if (id === 'tags-batch-selected' && context.paths?.length) {
@@ -36,7 +39,8 @@ export function initializeNativeMenus(): () => void {
         openTagOperation({ scope: { kind: 'files', paths } });
         return true;
       }
-      return sharedApp.commands.executeCommandById(id);
+      await sharedApp.commands.execute(id, {}, invocationContext(context));
+      return true;
     },
     isContextCurrent: contextCurrent,
     notify: message => useStore.getState().notify(message),

@@ -1,6 +1,7 @@
 import { matchName } from '../search';
-import { runWritingCommand } from '../writing/commands';
-import { nativeCommands, runNativeCommand } from '../nativeCommands';
+import { nativeCommands, resolveNativeCommandId } from '../nativeCommands';
+import { CommandManager, type Command } from '../commands';
+import { Automation } from '../userCommands';
 import { adaptNativePlusModules, migratedPluginIds } from '../nativePluginPolicy';
 import * as cmState from '@codemirror/state';
 import * as cmView from '@codemirror/view';
@@ -34,15 +35,6 @@ import { WebViewerView, promptWebViewer } from './webviewer';
 import { bindPluginMenus } from './menus';
 import { installJavascript } from '../javascript/runtime';
 
-type Command = {
-  id: string;
-  name: string;
-  hotkeys?: { modifiers: string[]; key: string }[];
-  callback?: () => any;
-  checkCallback?: (checking: boolean) => any;
-  editorCallback?: (editor: editor.Editor, view: workspace.MarkdownView) => any;
-  editorCheckCallback?: (checking: boolean, editor: editor.Editor, view: workspace.MarkdownView) => any;
-};
 export type PluginStatus = {
   id: string;
   state: 'loading' | 'loaded' | 'disabled' | 'error' | 'unsupported' | 'builtin';
@@ -75,35 +67,8 @@ function fail(id: string, error: unknown) {
   changed();
 }
 export function runPluginCommand(id: string, checking = false): boolean {
-  const command = pluginCommands.get(id);
-  if (!command) return false;
-  const view = sharedApp.workspace.getActiveViewOfType(workspace.MarkdownView);
-  try {
-    const check = (result: any) => {
-      if (!checking && result?.then) Promise.resolve(result).catch((e) => fail(id.split(':')[0], e));
-      return result !== false;
-    };
-    if (command.editorCheckCallback)
-      return (
-        !!view &&
-        !view.editor.cm.state.readOnly &&
-        check(command.editorCheckCallback(checking, view.editor, view))
-      );
-    if (command.checkCallback) return check(command.checkCallback(checking));
-    if (command.editorCallback) {
-      if (!view || view.editor.cm.state.readOnly) return false;
-      if (!checking)
-        Promise.resolve(command.editorCallback(view.editor, view)).catch((e) => fail(id.split(':')[0], e));
-      return true;
-    }
-    if (command.callback) {
-      if (!checking) Promise.resolve(command.callback()).catch((e) => fail(id.split(':')[0], e));
-      return true;
-    }
-  } catch (e) {
-    fail(id.split(':')[0], e);
-  }
-  return false;
+  if (!pluginCommands.has(id)) return false;
+  return checking ? sharedApp.commands.canExecute(id) : sharedApp.commands.executeCommandById(id);
 }
 export class Plugin extends events.Component {
   private extensions: cmState.Extension[] = [];
@@ -299,42 +264,12 @@ export class EditorSuggest extends events.Component {
     this.close();
   }
 }
-class CommandManager extends events.Events {
-  get commands() {
-    return Object.fromEntries(this.listCommands().map(command => [command.id, command]));
-  }
-  listCommands() {
-    return [
-      ...nativeCommands.map(command => ({ id: command.id, name: command.title, callback: command.run })),
-      ...[...pluginCommands.values()].filter(command => !nativeCommands.some(native => native.id === command.id)),
-    ];
-  }
-  executeCommandById(id: string) {
-    if (runNativeCommand(id)) return true;
-    if (runWritingCommand(id)) return true;
-    if (id === 'editor:save-file') {
-      void useStore.getState().save();
-      return true;
-    }
-    if (id === 'command-palette:open') {
-      useStore.getState().setPalette(true, 'commands');
-      return true;
-    }
-    if (id === 'switcher:open') {
-      useStore.getState().setPalette(true, 'files');
-      return true;
-    }
-    return runPluginCommand(id);
-  }
-  findCommand(id: string) {
-    return this.listCommands().find(command => command.id === id);
-  }
-}
 export class App {
-  vault = new files.Vault();
+  vault = new files.Vault((path, content) => this.automation.prepareNewNote(path, content));
   metadataCache = new files.MetadataCache(this.vault);
   workspace = new workspace.Workspace(this);
-  commands = new CommandManager();
+  commands = new CommandManager(this, () => nativeCommands, pluginCommands, changed, resolveNativeCommandId);
+  automation = new Automation(this);
   scope = new ui.Scope();
   protocolHandlers = new Map<string, Function>();
   cliHandlers = new Map<string, any>();
@@ -621,6 +556,7 @@ Object.assign(window, {
   },
 });
 export const nativePluginReplacements:Record<string,string>={
+  'obsidian-latex':'已由内置 MathJax 宏包与导言区接管',
   ...migratedPluginIds,
   'fuzzy-chinese-pinyin':'已由内置中文搜索接管',
   'obsidian-latex-suite':'已由内置公式与片段接管',
@@ -762,11 +698,8 @@ export async function loadPlugins(): Promise<void> {
     sharedApp.internalPlugins.plugins.templates = {
       enabled: true,
       instance: {
-        options: { folder: '' },
-        insertTemplate: async (file: files.TFile) => {
-          const view = sharedApp.workspace.getActiveViewOfType(workspace.MarkdownView);
-          if (view) view.editor.replaceSelection(await sharedApp.vault.cachedRead(file));
-        },
+        get options() { return { folder: sharedApp.automation.templateFolder }; },
+        insertTemplate: (file: files.TFile) => sharedApp.automation.templates.insert(file.path),
       },
     };
     sharedApp.internalPlugins.plugins['command-palette'] = {
@@ -841,16 +774,16 @@ export async function loadPlugins(): Promise<void> {
           command.hotkeys?.some(
             (h) => h.key.toLowerCase() === event.key.toLowerCase() && ui.matchesModifiers(event, h.modifiers),
           ) &&
-          runPluginCommand(command.id, true)
+          runPluginCommand(command.id)
         ) {
           event.preventDefault();
-          runPluginCommand(command.id);
           return;
         }
     };
     window.addEventListener('keydown', keys, true);
     const stopJavascript = installJavascript(sharedApp);
     stopHost = () => {
+      sharedApp.automation.dispose();
       stopJavascript();
       stopMenus();
       unsub();
@@ -869,6 +802,7 @@ export async function loadPlugins(): Promise<void> {
       if (p.enabled) await loadPlugin(p.id, p);
       else pluginStatuses.set(p.id, { id: p.id, state: 'disabled' });
     }
+    await sharedApp.automation.load();
     sharedApp.setting.pluginTabs = [...pluginTabs.values()];
     changed();
   })().catch((error) => {

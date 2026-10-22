@@ -21,7 +21,8 @@ export async function nativeFeatureSettings() {
     });
     value = updated.nativeFeatures[key];
   }
-  return { vault: vaultToken(key), ...value };
+  const { automation: _legacyAutomation, ...preferences } = value;
+  return { vault: vaultToken(key), ...preferences };
 }
 
 export async function patchNativeFeatureSettings(input: {

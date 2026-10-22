@@ -1,8 +1,6 @@
-import { nativeCommands } from '../lib/nativeCommands';
 import { useSearch, updateSearch } from '../lib/search';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  pluginCommands,
   pluginRevision,
   subscribePlugins,
   pluginTabs,
@@ -18,11 +16,12 @@ import WritingSettings from './WritingSettings';
 import { UserscriptSettings } from './UserscriptSettings';
 import ConfiguredMenuSettings from './ConfiguredMenuSettings';
 import TagSettings from './TagSettings';
+import AutomationSettings from './AutomationSettings';
 import { readNativeFeatures, saveNativeFeatures, type NativeFeaturePreferences } from '../lib/nativeFeatures';
 import { notifyIndexChanged } from '../lib/indexEvents';
 
 type Section =
-  'search' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
+  'search' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
@@ -43,9 +42,11 @@ export default function Settings() {
   useEffect(() => {
     const scripts = () => { setPluginTab(null); setSection('userscripts'); };
     const menus = () => { setPluginTab(null); setSection('menus'); };
+    const automation = () => { setPluginTab(null); setSection('automation'); };
     window.addEventListener('userscripts:open-settings', scripts);
     window.addEventListener('menus:open-settings', menus);
-    return () => { window.removeEventListener('userscripts:open-settings', scripts); window.removeEventListener('menus:open-settings', menus); };
+    window.addEventListener('automation:open-settings', automation);
+    return () => { window.removeEventListener('userscripts:open-settings', scripts); window.removeEventListener('menus:open-settings', menus); window.removeEventListener('automation:open-settings', automation); };
   }, []);
   useSyncExternalStore(subscribePlugins, pluginRevision);
   useEffect(() => {
@@ -81,6 +82,7 @@ export default function Settings() {
             {(
               [
                 'search',
+                'automation',
                 'writing',
                 'formatting',
                 'userscripts',
@@ -115,6 +117,7 @@ export default function Settings() {
           </div>
           <div className="settings-content" style={pluginTab ? { display: 'none' } : undefined}>
             {section === 'search' && <SearchSettingsPanel focus={shortcutFocus} />}
+            {section === 'automation' && <AutomationSettings />}
             {section === 'writing' && <WritingSettings />}
             {section === 'formatting' && <WritingSettings formatting />}
             {section === 'userscripts' && <UserscriptSettings />}
@@ -174,6 +177,7 @@ function PluginSettingsTab({ id }: { id: string }) {
 }
 
 const labels: Record<Section, string> = {
+  automation: '用户指令与模板',
   userscripts: '内置浏览器脚本',
   menus: '右键菜单',
   tags: '标签',
@@ -932,15 +936,6 @@ function SearchSettingsPanel({ focus }: { focus: string }) {
           }}
         />
       </Row>
-      <Row name="模板目录" desc="Vault 相对路径；模板按原文插入">
-        <input
-          className="text-input"
-          value={settings.templateFolder}
-          onChange={(e) =>
-            save({ templateFolder: e.target.value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') })
-          }
-        />
-      </Row>
       <Row name="历史文件选择键">
         <input
           className="text-input"
@@ -950,8 +945,7 @@ function SearchSettingsPanel({ focus }: { focus: string }) {
       </Row>
       {[
         ...new Set([
-          ...nativeCommands.map((c) => c.id),
-          ...pluginCommands.keys(),
+          ...sharedApp.commands.listCommands().map(c => c.id),
           ...Object.keys(settings.shortcuts),
         ]),
       ].map((id) => (

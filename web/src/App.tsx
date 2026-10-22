@@ -1,6 +1,5 @@
 import { ensureWriting, writingFileChanged, watchExternalWritingSources } from './lib/writing/config';
 import { runWritingHotkey, bindWritingNavigation } from './lib/writing/commands';
-import { runNativeCommand } from './lib/nativeCommands';
 import { refreshSearch, searchSettings } from './lib/search';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { api, ApiError, invalidateVaultRequests } from './lib/api';
@@ -137,6 +136,8 @@ export default function App() {
         } else if (msg.type === 'native-features-changed') {
           void readNativeFeatures().catch(error => useStore.getState().notify(String(error)));
           notifyIndexChanged();
+        } else if (msg.type === 'automation-changed') {
+          void sharedApp.automation.reload().catch(error => useStore.getState().notify(String(error)));
         } else if (msg.type === 'index') {
           window.clearTimeout(indexTimer);
           indexTimer = window.setTimeout(notifyIndexChanged, 800);
@@ -184,13 +185,13 @@ export default function App() {
             parts.includes('alt') === e.altKey &&
             parts.includes('shift') === e.shiftKey
           ) {
-            if (runNativeCommand(id) || sharedApp.commands.executeCommandById(id)) {
+            if (sharedApp.commands.executeCommandById(id)) {
               e.preventDefault();
               return;
             }
           }
         }
-      if (!reserved && runWritingHotkey(e)) { e.preventDefault(); return; }
+      if (!reserved && runWritingHotkey(e, id => sharedApp.commands.executeCommandById(id))) { e.preventDefault(); return; }
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
