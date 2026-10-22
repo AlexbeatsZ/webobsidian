@@ -33,6 +33,29 @@ On Windows the log is under
 `%APPDATA%/@webobsidian/desktop/logs/server.log`. Startup diagnostics must never
 print the persisted secret or reset desktop config/vault data to fix packaging.
 
+## Persisted Vault selection and local test data
+
+On Windows the desktop profile is
+`%APPDATA%/@webobsidian/desktop/`. `desktop-config.json` stores `vaultPath`,
+which the desktop passes as the server's `VAULT_PATH` startup default.
+`server-data/settings.json` stores the effective `vault.path`. An existing
+settings file takes precedence over that startup default; changing only the
+desktop file does not change the Vault used by an existing server settings file.
+When changing the saved selection offline, back up and update both files while
+preserving authentication secrets and unrelated preferences. An already running
+server retains its in-memory settings; offline edits take effect on next launch.
+
+For this checkout, disposable test data lives in `.local/test-vault/`, copied
+from the previously effective STEM Vault. The entire root `.local/` directory is
+Git-ignored, including configuration backups and `test-vault-manifest.json`.
+All program tests must use this copy or another disposable fixture, with no
+symlinks/junctions to live notes and no sync back to the source. The copied
+`obsidian-context-mcp` plugin is disabled to avoid reusing the real MCP endpoint.
+Both saved Vault paths point to this copy, and the server's saved allowed roots
+are limited to the test Vault. Verify the effective server and native desktop
+paths before any separately authorized runtime test. Creating a test Vault does
+not change the user's static-only acceptance instruction.
+
 ## Local build retention
 
 Windows builds use only the x64 portable target, producing

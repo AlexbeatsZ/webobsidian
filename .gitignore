@@ -5,6 +5,8 @@ data/
 *.log
 .env
 .env.local
+# Local test vaults and desktop configuration backups (private user data).
+/.local/
 .DS_Store
 web/dist/
 server/dist/
