@@ -53,6 +53,8 @@ export function markdownAst(text: string): Node {
   const math = mathRegions(model).filter((r) => r.closed && r.kind === 'dollar');
   const names: Record<string, string> = {
     Paragraph: 'paragraph',
+    // Referenceable body titles deliberately stay outside Linter's heading visitor.
+    BodyHeading: 'bodyHeading',
     Emphasis: 'emphasis',
     StrongEmphasis: 'strong',
     FencedCode: 'code',
@@ -108,11 +110,11 @@ export function markdownAst(text: string): Node {
   const fill = (n: Node) => {
     n.children?.sort((a, b) => a.position.start.offset - b.position.start.offset);
     for (const child of n.children ?? []) fill(child);
-    if (!['paragraph', 'heading', 'strong', 'emphasis', 'link'].includes(n.type)) return;
+    if (!['paragraph', 'heading', 'bodyHeading', 'strong', 'emphasis', 'link'].includes(n.type)) return;
     let from = n.position.start.offset,
       to = n.position.end.offset;
-    if (n.type === 'heading') {
-      const m = text.slice(from, to).match(/^#{1,6}[ \t]+/);
+    if (n.type === 'heading' || n.type === 'bodyHeading') {
+      const m = text.slice(from, to).match(/^#{1,7}[ \t]+/);
       if (m) from += m[0].length;
       to -= text.slice(from, to).match(/(?:\n[=-]+|[ \t]+#+[ \t]*)$/)?.[0].length ?? 0;
     }

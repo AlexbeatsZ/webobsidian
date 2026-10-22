@@ -3,7 +3,8 @@ import {getAllTablesInText} from './mdast';
 import {makeSureContentHasEmptyLinesAddedBeforeAndAfter, unescapeMarkdownSpecialCharacters} from './strings';
 
 // Useful regexes
-export const allHeadersRegex = /^([ \t]*)(#+)([ \t]+)([^\n\r]*?)([ \t]+#+)?$/gm;
+// BodyHeading (seven hashes) is referenceable, but never a structural heading.
+export const allHeadersRegex = /^([ \t]*)(#{1,6})([ \t]+)([^\n\r]*?)([ \t]+#+)?$/gm;
 export const fencedRegexTemplate = '^XXX\\.*?\n(?:((?:.|\n)*?)\n)?XXX(?=\\s|$)$';
 export const yamlRegex = /^---\n((?:(((?!---)(?:.|\n)*?)\n)?))---(?=\n|$)/;
 export const backtickBlockRegexTemplate = fencedRegexTemplate.replaceAll('X', '`');

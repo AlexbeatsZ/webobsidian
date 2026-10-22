@@ -1,7 +1,8 @@
 import { parser, GFM } from '@lezer/markdown';
 import { TreeFragment, type Tree, type ChangedRange } from '@lezer/common';
+import { bodyHeadingSyntax } from './bodyHeadings.js';
 
-export const markdownParser = parser.configure(GFM);
+export const markdownParser = parser.configure([GFM, bodyHeadingSyntax]);
 export interface SourceSpan { from: number; to: number }
 export interface SyntaxRange extends SourceSpan { name: string; parent: number | null }
 export interface HtmlToken extends SourceSpan { raw: string; tag: string; closing: boolean }

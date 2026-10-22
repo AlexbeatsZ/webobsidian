@@ -12,7 +12,7 @@ import { search, searchKeymap } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { syntaxHighlighting } from '@codemirror/language';
-import { analyzeMarkdown, changesBetween, type DocumentSnapshot, type SourceChange, type MarkdownModel, type EditHistoryState } from '@webobsidian/markdown-core';
+import { analyzeMarkdown, bodyHeadingSyntax, changesBetween, type DocumentSnapshot, type SourceChange, type MarkdownModel, type EditHistoryState } from '@webobsidian/markdown-core';
 import { obsidianHighlightStyle } from '../lib/highlight';
 import { obsidianKeymap } from '../lib/editorCommands';
 import { suggesterPlugin } from '../lib/suggest';
@@ -195,6 +195,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
             { id: 'editor:heading:1', label: 'Heading 1', onClick: () => prefixLines('# ') },
             { id: 'editor:heading:2', label: 'Heading 2', onClick: () => prefixLines('## ') },
             { id: 'editor:heading:3', label: 'Heading 3', onClick: () => prefixLines('### ') },
+            { id: 'editor:body-heading', label: '正文内小标题', onClick: () => prefixLines('####### ') },
             { id: 'editor:list:bullet', label: 'Bullet list', onClick: () => prefixLines('- ') },
             { id: 'editor:list:ordered', label: 'Numbered list', onClick: () => prefixLines('1. ') },
             { id: 'editor:list:task', label: 'Task list', onClick: () => prefixLines('- [ ] ') },
@@ -264,7 +265,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         ])),
         search({ top: true }),
         keymap.of([...defaultKeymap, ...searchKeymap, indentWithTab]),
-        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax] }),
         suggesterPlugin,
         ...(p.context.allowPlugins ? [nativeWritingExtensions()] : []),
         syntaxHighlighting(obsidianHighlightStyle),

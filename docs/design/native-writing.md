@@ -15,6 +15,12 @@ automatic input-method switching and Vim. Matrix template snippets remain valid.
 Normal IME composition handling remains necessary. Future Excalidraw formula
 editors must consume these same native editing capabilities.
 
+Body-local titles (`####### 标题`) are shared `BodyHeading` syntax, outside
+structural H1–H6 formatting. The common heading matcher and AST heading visitors
+exclude them; Header Increment must neither rewrite them nor use them to map
+the following ordinary headings. General body/whitespace rules and explicit
+custom regexes retain their configured scope. See body-headings.md.
+
 Linter imports all rule settings, ordered custom regexes, ignore paths and
 timestamp policy. Rules retain pre/regular/custom/post ordering. Paste formatting
 is a separate entry point. Snippets and formatting share LaTeX Suite replacement

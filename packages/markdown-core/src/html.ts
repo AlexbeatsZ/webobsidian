@@ -10,7 +10,7 @@ export const htmlSchema: Schema = {
     ...defaultSchema.attributes,
     '*': [...(defaultSchema.attributes?.['*'] ?? []), 'className'],
     a: [...(defaultSchema.attributes?.a ?? []).filter((rule) => !(Array.isArray(rule) && rule[0] === 'className')), 'className', 'dataWikilink', 'dataHref'],
-    div: [...(defaultSchema.attributes?.div ?? []), 'className', 'dataCallout', 'dataCalloutFold'],
+    div: [...(defaultSchema.attributes?.div ?? []), 'className', 'dataCallout', 'dataCalloutFold', ['role', 'heading'], ['ariaLevel', 7]],
     span: [...(defaultSchema.attributes?.span ?? []), 'className', 'dataTex', 'dataTexDisplay', 'dataCalloutIcon'],
     li: [...(defaultSchema.attributes?.li ?? []), 'dataTask'],
     input: ['type', 'checked', 'disabled', 'className', 'dataTask'],

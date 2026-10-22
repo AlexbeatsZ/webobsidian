@@ -9,7 +9,7 @@ export interface NoteRecord extends CatalogEntry {
 }
 export const CORE_LIST_PROPS = new Set(['tags', 'aliases', 'cssclasses']);
 /** Metadata normalization is part of persisted cache compatibility. */
-export const CATALOG_SCHEMA_VERSION = 2;
+export const CATALOG_SCHEMA_VERSION = 3;
 function propertyType(key: string, value: unknown): string {
   if (CORE_LIST_PROPS.has(key) || Array.isArray(value)) return 'list';
   if (typeof value === 'number') return 'number';

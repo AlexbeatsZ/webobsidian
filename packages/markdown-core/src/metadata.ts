@@ -1,7 +1,8 @@
 import { analyzeMarkdown, type MarkdownModel, type SourceSpan } from './syntax.js';
 import { parseLinkTarget } from './links.js';
+import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts } from './bodyHeadings.js';
 
-export interface Heading extends SourceSpan { level: number; text: string }
+export interface Heading extends SourceSpan { level: number; text: string; kind?: 'body' }
 export interface Metadata {
   tags: string[]; links: string[]; headings: Heading[]; comments: SourceSpan[];
   blockIds: (SourceSpan & { id: string })[];
@@ -38,10 +39,13 @@ export function extractMetadata(source: string | MarkdownModel): Metadata {
   const headings: Heading[] = [];
   for (const node of model.nodes) {
     const match = node.name.match(/^(?:ATX|Setext)Heading([1-6])$/);
-    if (!match || intersects(node.from, node.to)) continue;
-    const label = text.slice(node.from, node.to).replace(/^#{1,6}[ \t]+/, '')
+    const body = node.name === BODY_HEADING_NODE;
+    if ((!match && !body) || intersects(node.from, node.to)) continue;
+    const raw = text.slice(node.from, node.to);
+    const parts = body ? bodyHeadingParts(raw)! : null;
+    const label = parts ? raw.slice(parts.contentFrom, parts.contentTo).trim() : raw.replace(/^#{1,6}[ \t]+/, '')
       .replace(/\n[ \t]*[=-]+[ \t]*$/, '').replace(/[ \t]+#+[ \t]*$/, '').trim();
-    headings.push({ from: node.from, to: node.to, level: Number(match[1]), text: label });
+    headings.push({ from: node.from, to: node.to, level: body ? BODY_HEADING_LEVEL : Number(match![1]), text: label, ...(body ? { kind: 'body' as const } : {}) });
   }
   const blockIds: Metadata['blockIds'] = [];
   for (const match of text.matchAll(/(?:^|[ \t])(\^[\p{L}\p{N}-]+)[ \t]*$/gmu)) {

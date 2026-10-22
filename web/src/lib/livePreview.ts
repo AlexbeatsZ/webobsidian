@@ -17,7 +17,7 @@ import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered, toggleSourceRegion } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { mathRegions, type MathRegion, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
+import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, mathRegions, type MathRegion, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { renderMath } from './mathjax';
 import { decorationInputsChanged } from './decorationDependencies';
@@ -1644,6 +1644,22 @@ function buildDecorations(view: EditorView): DecorationSet {
             if (!blockTouched && isFence && (i === first || i === last) && l.to > l.from) {
               pushReplace(l.from, l.to, hidden);
             } else if (!blockTouched && prefixLength) pushReplace(l.from, l.from + prefixLength, hidden);
+          }
+          return;
+        }
+
+        // Body-local titles keep native text/caret ownership and ordinary link targets.
+        if (name === BODY_HEADING_NODE) {
+          const line = doc.lineAt(node.from);
+          const parts = bodyHeadingParts(doc.sliceString(node.from, node.to))!;
+          all.push(Decoration.line({ class: 'cm-body-heading', attributes: {
+            role: 'heading', 'aria-level': String(BODY_HEADING_LEVEL),
+          } }).range(line.from));
+          const marks = [{ from: node.from, to: node.from + parts.contentFrom }];
+          if (parts.closingFrom !== null) marks.push({ from: node.from + parts.closingFrom, to: node.to });
+          for (const mark of marks) {
+            if (!lineActive(node.from)) pushReplace(mark.from, mark.to, hidden);
+            else if (mark.to > mark.from) all.push(Decoration.mark({ class: 'cm-formatting cm-formatting-header' }).range(mark.from, mark.to));
           }
           return;
         }

@@ -215,7 +215,7 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
       closed = false;
     for (; end < text.length; end++) {
       if (!display && text[end] === '\n') break;
-      if (display && text[end] === '\n' && /^\n(?: {0,3}> ?)*#{1,6}\s/.test(text.slice(end))) break;
+      if (display && text[end] === '\n' && /^\n(?: {0,3}> ?)*#{1,7}\s/.test(text.slice(end))) break;
       if (text[end] !== '$' || isEscaped(text, end)) continue;
       if (
         display
