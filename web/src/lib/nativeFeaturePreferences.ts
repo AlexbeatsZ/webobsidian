@@ -8,6 +8,8 @@ export interface NativeFeaturePreferences {
 let current: NativeFeaturePreferences | undefined;
 let generation = 0;
 export const tagPreferences = (): TagPreferences => current?.tags ?? { batchEnabled: false, wranglerEnabled: false };
+export const haveNativeFeaturePreferences = () => current !== undefined;
+export const importFolderTagNote = (vault: string) => request<{ content: string }>('/api/native-features/folder-tags/import?vault=' + encodeURIComponent(vault));
 export function clearNativeFeaturePreferences() { current = undefined; generation++; }
 export async function readNativeFeatures() {
   const started = generation;

@@ -18,7 +18,11 @@ const ApiKeySchema = z.object({
 
 const SettingsSchema = z.object({
   nativeFeatures: z.record(z.object({
-    tags: z.object({ batchEnabled: z.boolean(), wranglerEnabled: z.boolean(), migration: z.string().optional() }),
+    tags: z.object({ batchEnabled: z.boolean(), wranglerEnabled: z.boolean(), migration: z.string().optional(),
+      folderTags: z.object({ enabled: z.boolean(), pruneAncestors: z.boolean(), rules: z.array(z.object({
+        folder: z.string(), tags: z.array(z.string()), recursive: z.boolean(),
+      })) }).default({ enabled: false, pruneAncestors: true, rules: [] }),
+    }),
     attachments: z.object({ excludeDirectories: z.array(z.string()), excludeExtensions: z.array(z.string()) }),
   })).default({}),
   writing: z.record(z.object({

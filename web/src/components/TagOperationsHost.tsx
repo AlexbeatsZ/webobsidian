@@ -49,7 +49,7 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
     const abort = new AbortController(); controller.current = abort;
     try {
       const inputTags = tags.split(/[,，\s]+/u).filter(Boolean);
-      const operation = validateTagOperation(kind === 'rename' ? { kind, from, to, descendants } :
+      const operation = validateTagOperation(kind === 'folder-rules' ? { kind } : kind === 'rename' ? { kind, from, to, descendants } :
         kind === 'remove' ? { kind, tags: inputTags, descendants } : { kind, tags: inputTags });
       const snapshots = documents.snapshots().filter((s) => /\.(md|markdown)$/i.test(s.id));
       const state = useStore.getState();
@@ -125,11 +125,12 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
       <fieldset disabled={busy} className="native-tags-fields">
         <label>操作<select value={kind} onChange={(e) => { invalidate(); setKind(e.target.value as TagOperation['kind']); }}>
           <option value="add">添加至 YAML 标签</option><option value="remove">移除标签</option><option value="rename">替换 / 重命名标签</option>
+          <option value="folder-rules">按已保存的文件夹规则补标签</option>
         </select></label>
-        {kind === 'rename' ? <><label>原标签<input autoFocus value={from} onChange={(e) => { invalidate(); setFrom(e.target.value); }} placeholder="原标签" /></label>
+        {kind === 'folder-rules' ? <p>使用“设置 → 标签”中已保存的规则，叠加匹配路径的固定标签。预览会显示逐文件改动。</p> : kind === 'rename' ? <><label>原标签<input autoFocus value={from} onChange={(e) => { invalidate(); setFrom(e.target.value); }} placeholder="原标签" /></label>
           <label>新标签<input value={to} onChange={(e) => { invalidate(); setTo(e.target.value); }} placeholder="新标签 / 子标签" /></label></> :
           <label>标签<input autoFocus value={tags} onChange={(e) => { invalidate(); setTags(e.target.value); }} placeholder="physics, chemistry/topic" /></label>}
-        {kind !== 'add' && <label className="native-tags-check"><input type="checkbox" checked={descendants} onChange={(e) => { invalidate(); setDescendants(e.target.checked); }} />包含所有子标签（忽略大小写）</label>}
+        {(kind === 'remove' || kind === 'rename') && <label className="native-tags-check"><input type="checkbox" checked={descendants} onChange={(e) => { invalidate(); setDescendants(e.target.checked); }} />包含所有子标签（忽略大小写）</label>}
       </fieldset>
       {error && <p role="alert" className="native-tags-error">{error}</p>}
       {preview && <div className="native-tags-preview">

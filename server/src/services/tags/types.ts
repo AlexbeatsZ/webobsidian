@@ -1,7 +1,8 @@
 import type { SourceChange } from '@webobsidian/markdown-core';
 
 export type TagOperation =
-  | { kind: 'add'; tags: string[] }
+  | { kind: 'add'; tags: string[]; pruneAncestors?: boolean }
+  | { kind: 'folder-rules' }
   | { kind: 'remove'; tags: string[]; descendants?: boolean }
   | { kind: 'rename'; from: string; to: string; descendants?: boolean };
 export type TagScope = { kind: 'vault' } | { kind: 'folder'; path: string } | { kind: 'files'; paths: string[] };
@@ -27,4 +28,6 @@ export interface TagPreview {
 }
 export interface TagPreviewRequest { operation: TagOperation; scope: TagScope; overlays?: TagOverlay[] }
 export interface TagApplyResult { path: string; status: 'written' | 'local'; revision?: string }
-export interface TagPreferences { batchEnabled: boolean; wranglerEnabled: boolean; migration?: string }
+export interface FolderTagRule { folder: string; tags: string[]; recursive: boolean }
+export interface FolderTagSettings { enabled: boolean; pruneAncestors: boolean; rules: FolderTagRule[] }
+export interface TagPreferences { batchEnabled: boolean; wranglerEnabled: boolean; migration?: string; folderTags?: FolderTagSettings }

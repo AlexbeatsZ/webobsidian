@@ -5,6 +5,7 @@ import { catalog, type VaultCatalog } from '../catalog.js';
 import * as vault from '../vault.js';
 import { scheduleAutoCommitOnSave } from '../git.js';
 import { queueFileUpdate } from '../fileupdates.js';
+import { folderRuleTags, planFolderTags } from './folderRules.js';
 import { inTagScope, planTagSource, transformTag, validateTagOperation } from './source.js';
 import { matchesTag, normalizeStoredTags, tagKey, tagName, tagPageAliases, validTag } from './query.js';
 import type { TagApplyResult, TagCollision, TagFilePreview, TagOperation, TagPreferences, TagPreview, TagPreviewRequest, TagSummary } from './types.js';
@@ -18,6 +19,7 @@ interface PreviewRecord {
   cancelled: boolean;
   applying: boolean;
   generated: Set<string>;
+  folderConfiguration?: string;
 }
 let readPreferences: () => Promise<TagPreferences> = async () => ({ batchEnabled: true, wranglerEnabled: true });
 /** Coordinator connects this to the existing per-vault settings object. */
@@ -80,12 +82,17 @@ export class NativeTagService {
   }
   private async allowed(operation: TagOperation) {
     const preferences = await readPreferences();
+    if (operation.kind === 'folder-rules') {
+      if (!preferences.folderTags?.rules.length) fail('请先在标签设置中配置文件夹规则', 403);
+      return preferences;
+    }
     if ((operation.kind === 'rename' ? !preferences.wranglerEnabled && !preferences.batchEnabled : !preferences.batchEnabled))
       fail('This native tag operation is disabled in settings', 403);
+    return preferences;
   }
   async preview(input: TagPreviewRequest): Promise<TagPreview> {
     const operation = validateTagOperation(input.operation);
-    await this.allowed(operation);
+    const preferences = await this.allowed(operation);
     const current = catalog, root = await vault.getVaultRoot();
     const overlays = new Map((input.overlays ?? []).map((o) => [o.path, o]));
     const candidates = new Set<string>();
@@ -94,6 +101,10 @@ export class NativeTagService {
     const notes = selectedFiles ? [...selectedFiles].flatMap((path) => { const note = current.notes.get(path); return note ? [note] : []; }) : current.notes.values();
     for (const note of notes) {
       if (!inScope(note.path)) continue;
+      if (operation.kind === 'folder-rules') {
+        if (folderRuleTags(note.path, preferences.folderTags).length) candidates.add(note.path);
+        continue;
+      }
       if (operation.kind === 'add' || [...note.tags, ...(operation.kind === 'rename' ? note.aliases.flatMap(tagPageAliases) : [])]
         .some((tag) => operation.kind === 'rename' ? matchesTag(tag, operation.from, operation.descendants !== false) :
           operation.tags.some((wanted) => matchesTag(tag, wanted, operation.descendants !== false)))) candidates.add(note.path);
@@ -115,7 +126,8 @@ export class NativeTagService {
         // Resolve even client-owned sessions through the existing Vault boundary.
         await vault.resolveInVault(file);
         const snapshot = overlay ?? await vault.readFileSnapshot(file);
-        const plan = planTagSource('raw' in snapshot ? snapshot.raw : snapshot.content, operation);
+        const raw = 'raw' in snapshot ? snapshot.raw : snapshot.content;
+        const plan = operation.kind === 'folder-rules' ? planFolderTags(raw, file, preferences.folderTags) : planTagSource(raw, operation);
         if (plan.changes.length && operation.kind === 'rename') generatedByFile.set(file,
           [...extractMetadata(new SourceDocument(plan.raw).text).tags, ...readTagSourceNames(plan.raw)].map(tagKey));
         files.push({ path: file, status: plan.changes.length ? 'ready' : 'unchanged',
@@ -127,10 +139,11 @@ export class NativeTagService {
     }
     this.prune();
     const preview: TagPreview = { id: randomUUID(), expiresAt: Date.now() + 15 * 60_000,
-      operation, files, collisions: tagCollisions(operation, [...allTagNames(current), ...extraTags]) };
+      operation, files, collisions: operation.kind === 'rename' ? tagCollisions(operation, [...allTagNames(current), ...extraTags]) : [] };
     // Keep only revision/ownership markers. Patches are returned to the client,
     // then recomputed from the revision-checked current snapshot on remote apply.
     this.previews.set(preview.id, { public: { ...preview, files: [] }, root, cancelled: false, applying: false, generated: new Set(),
+      folderConfiguration: operation.kind === 'folder-rules' ? JSON.stringify(preferences.folderTags) : undefined,
       files: new Map(files.filter((file) => file.status === 'ready').map((file) => [file.path,
         { revision: file.revision, version: file.version, local: file.local, applied: false, generated: generatedByFile.get(file.path) ?? [] }])) });
     return preview;
@@ -141,7 +154,9 @@ export class NativeTagService {
     if (!item || item.public.expiresAt < Date.now()) fail('Tag preview expired; preview again', 409);
     if (item.cancelled) fail('Tag operation cancelled', 409);
     if (item.root !== await vault.getVaultRoot()) fail('Vault changed after tag preview', 409);
-    await this.allowed(item.public.operation);
+    const preferences = await this.allowed(item.public.operation);
+    if (item.folderConfiguration !== undefined && item.folderConfiguration !== JSON.stringify(preferences.folderTags))
+      fail('文件夹规则在预览后已改变，请重新预览', 409);
     return item;
   }
   async apply(id: string, path: string, confirmMerge: boolean, local = false): Promise<TagApplyResult> {
@@ -167,7 +182,10 @@ export class NativeTagService {
       }
       const snapshot = await vault.readFileSnapshot(path);
       if (snapshot.revision !== file.revision) fail('File changed after preview; preview again', 409);
-      const plan = planTagSource(snapshot.content, item.public.operation);
+      const plan = item.public.operation.kind === 'folder-rules'
+        ? planFolderTags(snapshot.content, path, (await readPreferences()).folderTags)
+        : planTagSource(snapshot.content, item.public.operation);
+      await this.transaction(id);
       if (item.cancelled) fail('Tag operation cancelled', 409);
       const result = await vault.writeFileText(path, plan.raw, snapshot.revision);
       file.applied = true;

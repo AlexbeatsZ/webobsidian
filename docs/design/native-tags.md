@@ -1,5 +1,10 @@
 # Native tags
 
+Folder-based fixed tags are now configured in Settings → 标签. Automatic create/
+session-save additions and the existing-note preview command share this module's
+source planner and history. Rule import, ancestor pruning, timing and limitations
+are specified in [folder tag rules](folder-tag-rules.md).
+
 ## Scope and source inventory
 
 This module replaces only the `multiTag` and `tagWrangler` children of Obsidian

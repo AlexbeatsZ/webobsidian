@@ -8,6 +8,7 @@ import { matchesTag, normalizeStoredTags, tagKey, tagName, validTag } from './qu
 import type { TagOperation } from './types.js';
 
 export function validateTagOperation(operation: TagOperation): TagOperation {
+  if (operation.kind === 'folder-rules') return operation;
   const values = operation.kind === 'rename' ? [operation.from, operation.to] : operation.tags;
   if (!values.length || values.length > 128 || values.some((value) => !validTag(value)))
     throw Object.assign(new Error('Tags must contain letters, marks, numbers, _, - or /; numeric-only names and empty path segments are unsupported'), { status: 400 });
@@ -87,6 +88,7 @@ export interface TagSourcePlan { changes: SourceChange[]; expected: string[]; ra
 /** Entire-file validation precedes patches; one unsupported field aborts every edit. */
 export function planTagSource(raw: string, input: TagOperation, analysis?: MarkdownModel): TagSourcePlan {
   const operation = validateTagOperation(input), source = new SourceDocument(raw);
+  if (operation.kind === 'folder-rules') throw new Error('Resolve folder rules for the file before source planning');
   const text = source.text;
   const model = analysis?.text === text ? analysis : analyzeMarkdown(text);
   const changes: SourceChange[] = [];
@@ -99,22 +101,27 @@ export function planTagSource(raw: string, input: TagOperation, analysis?: Markd
     const targets = rows.filter((row) => /^tags?$/i.test(row.key) || (operation.kind === 'rename' && /^alias(?:es)?$/i.test(row.key)));
     if (targets.some((row) => !row.editable)) throw new Error('Anchored, aliased, block or complex tag/alias values require source editing; file skipped');
     const existing = new Set(targets.filter((row) => /^tags?$/i.test(row.key)).flatMap((row) => row.values.flatMap(normalizeStoredTags)).map(tagKey));
+    const mergedKeys = operation.kind === 'add' ? [...existing, ...operation.tags.map(tagKey)] : [];
+    const ancestors = new Set(operation.kind === 'add' && operation.pruneAncestors ? mergedKeys.filter(key => mergedKeys.some(other => other.startsWith(key + '/'))) : []);
     let added = false;
     const desired = rows.map((row) => {
       const alias = /^alias(?:es)?$/i.test(row.key);
       if (!/^tags?$/i.test(row.key) && !(operation.kind === 'rename' && alias)) return row;
       let values = row.values.map((value) => fieldValue(value, alias, operation));
+      if (operation.kind === 'add' && ancestors.size) values = values.map(value =>
+        value.split(/([,，\s]+)/u).map((part, index) => index % 2 || !ancestors.has(tagKey(part)) ? part : '').join('')
+          .replace(/^[,，\s]+|[,，\s]+$/gu, '')).filter(Boolean);
       if (operation.kind === 'remove' && row.list) values = values.filter((v) => normalizeStoredTags(v).length > 0);
       if (operation.kind === 'add' && !alias && !added) {
-        const additions = operation.tags.filter((tag) => !existing.has(tagKey(tag)));
+        const additions = operation.tags.filter((tag) => !existing.has(tagKey(tag)) && !ancestors.has(tagKey(tag)));
         added = true;
-        if (additions.length) values = [...(row.list ? values : values.flatMap(normalizeStoredTags)), ...additions];
-        else return row;
+        if (additions.length) values = [...(row.list ? values : values.flatMap(value => value.split(/[,，\s]+/u).filter(Boolean))), ...additions];
+        else return ancestors.size && JSON.stringify(values) !== JSON.stringify(row.values) ? { ...row, values } : row;
         return { ...row, values, list: true, forceList: !row.list };
       }
       return { ...row, values };
     });
-    if (operation.kind === 'add' && !added) desired.push({ key: 'tags', values: operation.tags, list: true });
+    if (operation.kind === 'add' && !added) desired.push({ key: 'tags', values: operation.tags.filter(tag => !ancestors.has(tagKey(tag))), list: true });
     const patches = patchPropertyRows(yaml, desired);
     // The shared property patcher may need to remove a sequence item. Refuse a
     // structural span containing a comment rather than deleting that comment.
@@ -130,7 +137,8 @@ export function planTagSource(raw: string, input: TagOperation, analysis?: Markd
       throw new Error('Tag YAML token validation failed; file skipped');
     changes.push(...patches.map((patch) => ({ ...patch, from: patch.from + fm.from, to: patch.to + fm.from })));
   } else if (operation.kind === 'add') {
-    changes.push({ from: 0, to: 0, insert: `---\ntags: [${operation.tags.map((tag) => JSON.stringify(tag)).join(', ')}]\n---\n` });
+    const tags = operation.tags.filter(tag => !operation.pruneAncestors || !operation.tags.some(other => tagKey(other).startsWith(tagKey(tag) + '/')));
+    changes.push({ from: 0, to: 0, insert: `---\ntags: [${tags.map((tag) => JSON.stringify(tag)).join(', ')}]\n---\n` });
   }
   if (operation.kind !== 'add') for (const span of inlineTagRanges(model)) {
     // Empty frontmatter isn't recognized by older shared syntax. Always exclude

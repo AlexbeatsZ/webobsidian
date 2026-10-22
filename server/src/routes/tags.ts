@@ -8,6 +8,7 @@ const tag = z.string().min(1).max(260);
 const relative = z.string().max(4096).refine((p) => !p.includes('\\') && !p.startsWith('/') &&
   p.split('/').every((part) => part !== '..' && part !== '.' && !part.startsWith('.')), 'Invalid visible Vault path');
 const operation = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('folder-rules') }),
   z.object({ kind: z.literal('add'), tags: z.array(tag).min(1).max(128) }),
   z.object({ kind: z.literal('remove'), tags: z.array(tag).min(1).max(128), descendants: z.boolean().optional() }),
   z.object({ kind: z.literal('rename'), from: tag, to: tag, descendants: z.boolean().optional() }),

@@ -2,6 +2,8 @@ import { useStore } from '../store';
 import { openTagOperation } from './actions';
 
 export const tagCommands = [
+  { id: 'tags-folder-rules', title: '按文件夹规则补标签（预览）', run: () =>
+    openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'folder-rules' }, title: '按文件夹规则补标签' }) },
   { id: 'tags', title: '显示标签层级', run: () => {
     const state = useStore.getState(); state.setLeftPanel('tags'); if (!state.leftOpen) state.toggleLeft();
   } },

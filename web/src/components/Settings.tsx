@@ -119,7 +119,7 @@ export default function Settings() {
             {section === 'formatting' && <WritingSettings formatting />}
             {section === 'userscripts' && <UserscriptSettings />}
             {section === 'menus' && <ConfiguredMenuSettings />}
-            {section === 'tags' && (features ? <TagSettings value={features.tags} onChange={async patch => {
+            {section === 'tags' && (features ? <TagSettings value={features.tags} vault={features.vault} onChange={async patch => {
               setFeatures(await saveNativeFeatures({ vault: features.vault, tags: patch }));
               notifyIndexChanged();
             }} /> : <p role="status">{featureError || '正在读取标签设置…'}</p>)}

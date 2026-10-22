@@ -122,6 +122,9 @@ export default function App() {
           void readNativeFeatures().then(value => { attachmentDialogHost.initialOptions = value.attachments; }).catch(console.error);
           loadTree();
           notifyIndexChanged();
+        } else if (msg.type === 'native-features-changed') {
+          void readNativeFeatures().catch(error => useStore.getState().notify(String(error)));
+          notifyIndexChanged();
         } else if (msg.type === 'index') {
           window.clearTimeout(indexTimer);
           indexTimer = window.setTimeout(notifyIndexChanged, 800);

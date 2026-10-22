@@ -1,5 +1,6 @@
 import { DocumentSession, type DocumentSnapshot } from '@webobsidian/markdown-core';
 import { api } from './api';
+import { WorkspaceDocumentSession } from './tags/folderSession';
 
 /** Workspace service, deliberately outside the renderer. */
 export class DocumentRegistry {
@@ -22,7 +23,7 @@ export class DocumentRegistry {
     if (pending) return pending;
     const loading = api.read(path).then((file) => {
       if (existing) { existing.acceptExternal(file.content, file.revision); return existing; }
-      const session = new DocumentSession(path, file.content, file.revision, (id, raw, revision) => api.write(id, raw, revision));
+      const session = new WorkspaceDocumentSession(path, file.content, file.revision, (id, raw, revision) => api.write(id, raw, revision));
       this.sessions.set(path, session);
       session.subscribe(() => { for (const listener of this.listeners) listener(session.snapshot); });
       return session;

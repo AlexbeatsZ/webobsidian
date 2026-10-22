@@ -4,6 +4,7 @@ import { queueFileUpdate } from './fileupdates.js';
 import { indexedFilesUnder } from './fileindex.js';
 import { getSettings } from './settings.js';
 import { readTextFile, writeTextFile } from './textFile.js';
+import { planFolderTags } from './tags/folderRules.js';
 
 export interface TreeNode {
   name: string;
@@ -159,6 +160,17 @@ export async function readFileBuffer(rel: string): Promise<Buffer> {
 
 export async function writeFileText(rel: string, content: string, baseRevision?: string): Promise<{ revision: string }> {
   const abs = await resolveInVault(rel);
+  // New notes have no existing document session. Apply the same native rules
+  // before their initial bytes are written; established sessions prepare saves.
+  if (/\.(md|markdown)$/i.test(rel) && baseRevision === undefined && !await exists(rel)) {
+    const settings = await getSettings();
+    const root = path.resolve(settings.vault.path), key = process.platform === 'win32' ? root.toLowerCase() : root;
+    const rules = settings.nativeFeatures[key]?.tags.folderTags;
+    if (rules?.enabled) {
+      try { content = planFolderTags(content, rel, rules).raw; }
+      catch (error) { console.warn('[folder tags] initial note preserved:', rel, error); }
+    }
+  }
   const result = await writeTextFile(abs, content, baseRevision);
   void queueFileUpdate(rel);
   return result;

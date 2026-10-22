@@ -5,6 +5,7 @@ import { userscriptCommands } from './userscripts/commands';
 import { configuredMenuCommands } from './configuredMenus/commands';
 import { attachmentCleanupCommands, attachmentCleanupLegacyCommandIds } from './attachments/commands';
 import { tagCommands } from './tags/commands';
+import { headingLevelCommands } from './headingLevelCommands';
 
 /** Native command definitions shared by the palette and configurable shortcuts. */
 export const nativeCommands = [
@@ -13,6 +14,7 @@ export const nativeCommands = [
   ...configuredMenuCommands,
   ...attachmentCleanupCommands,
   ...tagCommands,
+  ...headingLevelCommands,
   { id: 'files', title: '打开文件', run: () => useStore.getState().setPalette(true, 'files') },
   { id: 'commands', title: '执行命令', run: () => useStore.getState().setPalette(true, 'commands') },
   { id: 'headings', title: '搜索当前文档标题', run: () => useStore.getState().setPalette(true, 'headings') },
