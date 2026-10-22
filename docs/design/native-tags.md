@@ -21,8 +21,10 @@ and `modules.tagWrangler` as `wranglerEnabled`; malformed JSON/flags report an
 error and remain unchanged. Native preferences live in the existing settings
 service under the current Vault key. No original plugin file or flag is rewritten.
 The coordinator's pinned Plus adapter suppresses only these two child modules
-(other separately migrated children have their own adapters), preserving AnyBlock,
-STEM references, translation, live references and all original configuration.
+(other separately migrated children have their own adapters), preserving STEM
+references, translation, live references and all original configuration. AnyBlock
+now has its own native [Vault-defined block effect](native-block-effects.md)
+Adapter; its personal registrations are independent of this tag Module.
 
 ## Feature matrix
 

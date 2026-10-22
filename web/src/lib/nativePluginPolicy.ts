@@ -1,5 +1,6 @@
 /** Compatibility policy for modules whose implementation now belongs to core. */
 export const nativePlusModules = {
+  anyBlock: '自定义块效果',
   menuManager: '右键菜单',
   unusedImages: '未引用附件清理',
   multiTag: '批量标签',
@@ -7,6 +8,8 @@ export const nativePlusModules = {
 } as const;
 
 export const migratedPluginIds: Record<string, string> = {
+  'any-block': '已由内置自定义块效果接管，请在 Vault 中注册效果',
+  'any-block-local': '已由内置自定义块效果接管，请在 Vault 中注册效果',
   'webviewer-userscripts': '已由内置浏览器脚本管理接管',
   'obsidian-menu-manager': '已由内置配置式右键菜单接管',
   'oz-clear-unused-images': '已由内置未引用附件清理接管',

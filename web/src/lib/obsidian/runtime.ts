@@ -34,6 +34,7 @@ import * as markdown from './markdown';
 import { WebViewerView, promptWebViewer } from './webviewer';
 import { bindPluginMenus } from './menus';
 import { installJavascript } from '../javascript/runtime';
+import { installBlockEffects } from '../blocks/runtime';
 
 export type PluginStatus = {
   id: string;
@@ -781,9 +782,11 @@ export async function loadPlugins(): Promise<void> {
     };
     window.addEventListener('keydown', keys, true);
     const stopJavascript = installJavascript(sharedApp);
+    const stopBlocks = installBlockEffects(sharedApp);
     stopHost = () => {
       sharedApp.automation.dispose();
       stopJavascript();
+      stopBlocks();
       stopMenus();
       unsub();
       metadataStopped = true;

@@ -8,6 +8,7 @@ import { sourceIsOpen } from './sourceControls';
 import { contextOf } from './renderContext';
 import { decorationInputsChanged } from './decorationDependencies';
 import { overlapIndex } from './rangeIndex';
+import { blockEffectOwns } from './blocks/model';
 
 class ReferenceLink extends WidgetType {
   constructor(readonly label: string, readonly target: string) { super(); }
@@ -87,7 +88,7 @@ function build(state: EditorState): DecorationSet {
   const selections = state.field(compositionSelection).selection.ranges;
   const decorations: Range<Decoration>[] = [];
   for (const { span, decoration } of items(state.field(syntaxModel), state.field(documentMetadata))) {
-    if (!sourceIsOpen(state, span) && !caretTouches(span, selections, readonly)) decorations.push(decoration.range(span.from, span.to));
+    if (!blockEffectOwns(state, span) && !sourceIsOpen(state, span) && !caretTouches(span, selections, readonly)) decorations.push(decoration.range(span.from, span.to));
   }
   return Decoration.set(decorations, true);
 }

@@ -39,6 +39,8 @@ export interface RenderContext {
   allowHtmlExecution?: boolean;
   /** Trusted private-note code; independent of plugin loading and text readOnly. */
   allowScriptExecution?: boolean;
+  /** Vault-owned block styles/definitions; absent from public-share contexts. */
+  allowBlockEffects?: boolean;
   allowPlugins?: boolean;
   bindEditor?: (view: EditorView, commands: { undo: () => boolean; redo: () => boolean }) => () => void;
   mountFragment?: (host: HTMLElement, source: string, options: FragmentOptions) => () => void;

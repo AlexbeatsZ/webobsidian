@@ -7,6 +7,7 @@ import { compositionSelection } from './inlineHtml';
 import { sourceOwns } from './sourceControls';
 import { CALLOUT_SLOT } from './callouts';
 import { decorationInputsChanged } from './decorationDependencies';
+import { blockEffectOwns } from './blocks/model';
 
 export const blockLayout = StateField.define<RangeSet<BlockWrapper>>({
   create: build,
@@ -18,7 +19,7 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
   const readonly = state.field(livePreviewReadonly);
   const ranges: Range<BlockWrapper>[] = [];
   for (const block of state.field(blockModel).containers) {
-    if (block.to <= block.from || sourceOwns(state, block)) continue;
+    if (block.to <= block.from || sourceOwns(state, block) || blockEffectOwns(state, block)) continue;
     if (block.kind === 'code' && block.language.toLowerCase() === 'mermaid' &&
       !caretTouches(block, state.field(compositionSelection).selection.ranges, readonly)) continue;
     const attributes: Record<string, string> = {

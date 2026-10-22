@@ -7,9 +7,11 @@ import { AutomationSchema, readAutomationConfiguration, saveAutomationConfigurat
 import { promises as fs } from 'node:fs';
 import { readFileSnapshot, resolveInVault } from '../services/vault.js';
 import { broadcast } from '../services/realtime.js';
+import { readBlockEffects } from '../services/blockEffects.js';
 
 export const nativeFeaturesRouter = Router();
 nativeFeaturesRouter.use(requireAuth);
+nativeFeaturesRouter.get('/blocks', asyncHandler(async (_req, res) => { res.json(await readBlockEffects()); }));
 const configSource = z.object({ path: z.literal('automation.jsonc'), content: z.string().max(1024 * 1024),
   exists: z.boolean(), revision: z.string().optional(), vault: z.string().min(1) }).strict();
 nativeFeaturesRouter.get('/automation', asyncHandler(async (_req, res) => { res.json(await readAutomationConfiguration()); }));

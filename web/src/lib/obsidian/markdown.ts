@@ -19,6 +19,7 @@ import { forceRendered, sourceIsOpen, sourceButton } from '../sourceControls';
 import { contextOf, renderContext, type RenderContext } from '../renderContext';
 import { Component } from './events';
 import { decorationInputsChanged } from '../decorationDependencies';
+import { blockEffectOwns } from '../blocks/model';
 
 export class MarkdownRenderChild extends Component {
   constructor(public containerEl: HTMLElement) {
@@ -153,6 +154,7 @@ function build(state: EditorState, previous?: DecorationSet, tr?: Transaction): 
   const context = state.facet(renderContext);
   for (const block of state.field(blockModel).containers) {
     if (block.kind !== 'code') continue;
+    if (blockEffectOwns(state, block)) continue;
     const processor = codeProcessors.get(block.language.toLowerCase());
     if (
       !processor ||

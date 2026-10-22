@@ -24,8 +24,11 @@ shares and print do not execute scripts. Keep HTML's iframe execution separate.
 - `javascript/execute.ts` is the shared strict AsyncFunction compiler for note
   blocks and the concurrently implemented user-command/template entry points.
   It has no DOM/chart/lifecycle dependency; each caller owns its run resources.
-- `javascript/runtime.ts` owns one controller per mounted block and one Component
-  per run. Source, declared dependency changes and explicit rerun replace a run.
+- `javascript/runtime.ts` owns one controller per mounted block. Its run is
+  `JavascriptRun` from `javascript/lifetime.ts`, also used by Vault-defined block
+  effects. This extraction preserves one implementation of abort, late cleanup,
+  dependency subscriptions and non-executing Markdown mounts without bringing
+  widgets/chart installation into effects. Source, dependency changes and rerun replace a run.
   Disposal aborts helpers, detaches old output and releases owned resources.
 - `javascript/charts.ts` loads in a dynamic chunk before the first script runs.
   Share one loading promise and retain synchronous chart/echarts interfaces.

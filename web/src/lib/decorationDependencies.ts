@@ -2,11 +2,15 @@ import type { Transaction } from '@codemirror/state';
 import { compositionSelection } from './inlineHtml';
 import { livePreviewState, livePreviewReadonly } from './renderState';
 import { sourceRegion, forcedRenderedRegion } from './sourceControls';
+import { refreshBlockEffects } from './blocks/model';
+import { renderContext } from './renderContext';
 
 /** Layout/semantic decorations use the frozen IME selection, not every effect. */
 export function decorationInputsChanged(tr: Transaction, selection = true): boolean {
+  if (tr.effects.some(e => e.is(refreshBlockEffects))) return true;
   if (tr.docChanged) return true;
   const before = tr.startState, after = tr.state;
+  if (before.facet(renderContext) !== after.facet(renderContext)) return true;
   if (before.field(livePreviewState) !== after.field(livePreviewState) ||
       before.field(livePreviewReadonly) !== after.field(livePreviewReadonly) || before.readOnly !== after.readOnly) return true;
   const a = before.field(sourceRegion, false), b = after.field(sourceRegion, false);

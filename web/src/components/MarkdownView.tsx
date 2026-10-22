@@ -22,6 +22,8 @@ import { sourceControls } from '../lib/sourceControls';
 import { semanticDecorations } from '../lib/semanticDecorations';
 import { listLayout } from '../lib/listLayout';
 import { blockLayout } from '../lib/blockLayout';
+import { blockEffects } from '../lib/blocks/view';
+import { blockEffectSyntax } from '@webobsidian/markdown-core';
 import { renderContext, type RenderContext } from '../lib/renderContext';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import { attachMenuContext } from '../lib/configuredMenus/transform';
@@ -265,7 +267,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         ])),
         search({ top: true }),
         keymap.of([...defaultKeymap, ...searchKeymap, indentWithTab]),
-        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax] }),
+        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax, blockEffectSyntax] }),
         suggesterPlugin,
         ...(p.context.allowPlugins ? [nativeWritingExtensions()] : []),
         syntaxHighlighting(obsidianHighlightStyle),
@@ -273,7 +275,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         livePreviewState.init(() => isMd && p.mode !== 'source'),
         livePreviewReadonly.init(() => p.mode === 'reading'),
         noteTitleField.init(() => p.showTitle === false ? '' : titleOf(p.snapshot.id)),
-        sourceControls, inlineTitleField, frontmatterField, tableField, htmlBlockField, mermaidField,
+        sourceControls, blockEffects, inlineTitleField, frontmatterField, tableField, htmlBlockField, mermaidField,
         codeBlocks,
         ...(p.context.allowPlugins ? [pluginPostProcessing] : []),
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,

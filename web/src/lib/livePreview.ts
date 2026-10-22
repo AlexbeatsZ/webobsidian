@@ -21,6 +21,7 @@ import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, mathRegions, t
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { renderMath } from './mathjax';
 import { decorationInputsChanged } from './decorationDependencies';
+import { blockEffectOwns, refreshBlockEffects } from './blocks/model';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -546,7 +547,7 @@ function buildMermaid(state: EditorState): DecorationSet {
   const ro = state.field(livePreviewReadonly, false) ?? false;
   const ranges: Range<Decoration>[] = [];
   for (const block of state.field(blockModel).containers) {
-    if (block.kind !== 'code' || block.language.toLowerCase() !== 'mermaid' || sourceIsOpen(state, block)) continue;
+    if (block.kind !== 'code' || block.language.toLowerCase() !== 'mermaid' || sourceIsOpen(state, block) || blockEffectOwns(state, block)) continue;
     if (!forceRendered(state, block) && caretTouches(block, state.field(compositionSelection).selection.ranges, ro)) continue;
     ranges.push(Decoration.replace({ widget: new MermaidWidget(block.body, block), block: true }).range(block.from, block.to));
   }
@@ -557,7 +558,7 @@ function buildMathBlocks(state: EditorState): DecorationSet {
   if (!state.field(livePreviewState, false)) return Decoration.none;
   const ro = state.field(livePreviewReadonly, false) ?? false;
   return Decoration.set(state.field(blockModel).math.filter((block) =>
-    !sourceIsOpen(state, block) && (forceRendered(state, block) || !caretTouches(block, state.field(compositionSelection).selection.ranges, ro))
+    !blockEffectOwns(state, block) && !sourceIsOpen(state, block) && (forceRendered(state, block) || !caretTouches(block, state.field(compositionSelection).selection.ranges, ro))
   ).map((block) => Decoration.replace({ widget: new MathWidget(block.tex, true, block), block: true }).range(block.from, block.to)), true);
 }
 export const mathBlockField = StateField.define<DecorationSet>({
@@ -568,7 +569,7 @@ export const mathBlockField = StateField.define<DecorationSet>({
 export const mermaidField = StateField.define<DecorationSet>({
   create: (state) => buildMermaid(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))) {
+    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(refreshBlockEffects))) {
       return buildMermaid(tr.state);
     }
     return value.map(tr.changes);
@@ -657,6 +658,7 @@ function buildHtmlPreview(state: EditorState): DecorationSet {
     const line = doc.line(n);
     const open = line.text.match(/^\s*(`{3,}|~{3,})\s*html\s*$/i);
     if (!open) continue;
+    if (blockEffectOwns(state, line)) continue;
     let end = -1;
     for (let j = n + 1; j <= doc.lines; j++) {
       if (doc.line(j).text.trim().startsWith(open[1][0].repeat(3))) {
@@ -691,7 +693,7 @@ export const htmlPreviewField = StateField.define<DecorationSet>({
   update(value, tr) {
     if (
       tr.docChanged ||
-      tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(toggleHtmlRender))
+      tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(refreshBlockEffects) || e.is(toggleHtmlRender))
     ) {
       return buildHtmlPreview(tr.state);
     }
@@ -737,7 +739,7 @@ function buildCalloutFolds(state: EditorState): DecorationSet {
   const claimed: { from: number; to: number }[] = [];
   const ranges: Range<Decoration>[] = [];
   for (const block of state.field(blockModel).containers) {
-    if (block.kind !== 'callout' || !block.fold || !isCalloutFolded(state, block.from, block.fold) || sourceIsOpen(state, block)) continue;
+    if (block.kind !== 'callout' || !block.fold || !isCalloutFolded(state, block.from, block.fold) || sourceIsOpen(state, block) || blockEffectOwns(state, block)) continue;
     if (caretTouches(block, state.field(compositionSelection).selection.ranges, ro)) continue;
     if (block.bodyFrom >= block.to) continue;
     const from = Math.max(block.from, block.bodyFrom - 1);
@@ -755,7 +757,7 @@ export const calloutFoldDeco = StateField.define<DecorationSet>({
     if (
       tr.docChanged ||
       tr.selection ||
-      tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))
+      tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(refreshBlockEffects))
     ) {
       return buildCalloutFolds(tr.state);
     }
@@ -1594,7 +1596,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       to,
       enter: (node) => {
         const name = node.name;
-        if (sourceOwns(view.state, node) || view.state.field(blockModel).math.some((block) => node.from >= block.from && node.to <= block.to)) return false;
+        if (blockEffectOwns(view.state, node) || sourceOwns(view.state, node) || view.state.field(blockModel).math.some((block) => node.from >= block.from && node.to <= block.to)) return false;
 
         // Record code spans/blocks so the regex passes below can skip them.
         if (name === 'InlineCode' || name === 'FencedCode' || name === 'CodeBlock') {
@@ -1711,7 +1713,7 @@ function buildDecorations(view: EditorView): DecorationSet {
     for (let ln = startLine; ln <= endLine; ln++) {
       const line = doc.line(ln);
       const text = line.text;
-      if (sourceOwns(view.state, line)) continue;
+      if (blockEffectOwns(view.state, line) || sourceOwns(view.state, line)) continue;
 
       // Skip lines covered by a rendered table / HTML block widget.
       if (renderedTable(line.from, line.to) || renderedHtml(line.from, line.to)) continue;
@@ -2128,7 +2130,7 @@ export const frontmatterField = StateField.define<DecorationSet>({
 
 function buildTables(state: EditorState): DecorationSet {
   if (!state.field(livePreviewState, false)) return Decoration.none;
-  const tables = state.field(blockModel).tables.filter((table) => !sourceIsOpen(state, table));
+  const tables = state.field(blockModel).tables.filter((table) => !sourceIsOpen(state, table) && !blockEffectOwns(state, table));
   if (!tables.length) return Decoration.none;
   const ro = state.field(livePreviewReadonly, false) ?? false;
   // Like Obsidian, tables are ALWAYS shown as the interactive widget (never as raw
@@ -2159,7 +2161,7 @@ function buildHtmlBlocks(state: EditorState): DecorationSet {
   const ro = state.field(livePreviewReadonly, false) ?? false;
   const ranges: Range<Decoration>[] = [];
   for (const b of blocks) {
-    if (sourceIsOpen(state, b)) continue;
+    if (sourceIsOpen(state, b) || blockEffectOwns(state, b)) continue;
     let touched = false;
     if (!ro && !forceRendered(state, b))
       for (const r of state.selection.ranges) {
@@ -2178,7 +2180,7 @@ function buildHtmlBlocks(state: EditorState): DecorationSet {
 export const htmlBlockField = StateField.define<DecorationSet>({
   create: (state) => buildHtmlBlocks(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion))) {
+    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(refreshBlockEffects))) {
       return buildHtmlBlocks(tr.state);
     }
     return value.map(tr.changes);

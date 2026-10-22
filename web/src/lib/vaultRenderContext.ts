@@ -14,7 +14,7 @@ type Services = Pick<RenderContext, 'openMenu' | 'files' | 'reportError' | 'bind
 export function createVaultRenderContext(path: string, services: Services): RenderContext {
   let types = services.initialPropertyTypes ?? {};
   return {
-    ...services, sourcePath: path, allowHtmlExecution: true, allowScriptExecution: true, allowPlugins: true, openLink: target => services.openLink(target, path),
+    ...services, sourcePath: path, allowHtmlExecution: true, allowScriptExecution: true, allowBlockEffects: true, allowPlugins: true, openLink: target => services.openLink(target, path),
     tagMenu: (tag, event, source) => {
       services.openMenu({ x: event.clientX, y: event.clientY,
         items: nativeTagMenuItems({ tag, ...tagPreferences(), readonly: source === 'reading' }),
