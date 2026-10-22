@@ -232,7 +232,10 @@ class SuggestState {
   }
 
   private async formulaItems(ctx: Ctx) {
-    const generation = ++this.generation, captured = this.view.state;
+    // A different target may need IO. Never accept the previous target's list
+    // while its replacement is loading.
+    this.hide(); this.ctx = ctx;
+    const generation = this.generation, captured = this.view.state;
     const [target, query = ''] = ctx.query.split('#^');
     const formulaMode = query.startsWith('eq');
     try {
