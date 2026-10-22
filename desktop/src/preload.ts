@@ -1,4 +1,4 @@
-// Desktop chrome is installed by the preload, leaving the browser SPA unchanged.
+// Preload supplies native chrome; React shares the compact workspace tab row.
 import { contextBridge } from 'electron';
 import { installTitleBar } from './titlebar';
 

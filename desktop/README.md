@@ -15,12 +15,14 @@ the matching prebuilt Electron binary — no cross-compilation, no `node-gyp`.
 - App data (`settings.json`, search index) lives in Electron's per-user `userData` dir.
 - A random per-install password is generated, passed to the server as
   `WEBOBSIDIAN_PASSWORD`, and used to **auto-login** — no password prompt.
-- Menu **File → Switch Vault…** changes the vault (relaunches to re-index);
+- **F10 → File → Switch Vault…** changes the vault on Windows/Linux (relaunches to re-index);
   **Open Vault/Data Folder** and **Open Logs** help debugging.
-- On Windows/Linux, **File / Edit / View / Window / Help** share a single 32px
-  title bar with native window controls. No app icon or app-name label is drawn
-  in this bar. Drag its empty area to move the window; use F10, Alt or Alt + a
-  menu initial for keyboard access. macOS keeps its system menu bar.
+- On Windows/Linux, compact **file tabs and sidebar toggles** share a single 32px
+  row with native window controls. Drag its empty area to move the window; F10
+  opens the native application menu. The extra note and formatting headers are
+  removed. Right-click a tab for file actions; use the bottom-right icon menu for
+  reading/source/live views. The left ribbon hides with the left sidebar.
+  macOS keeps its system menu bar (including File → Switch Vault…).
 - Git sync needs `git` on the machine; without it the app still works for local editing.
 
 ## Build locally

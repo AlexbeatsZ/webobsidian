@@ -4,7 +4,19 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-10-19 (editing performance implementation; static-only validation)
+Cập nhật lần cuối: 2026-10-22 (compact workspace chrome; static-only validation)
+
+## Compact workspace chrome (PRD 1.11)
+
+- [x] One shared tab/sidebar-toggle row aligned with the native 32px caption overlay.
+- [x] Remove visible File/Edit labels, duplicate note header and formatting toolbar.
+- [x] Preserve native actions through F10 and file actions through tab context menus.
+- [x] Bottom-right reading/source/live menu; ribbon/left sidebar visibility linked.
+- [x] Isolated current-core/web/desktop types and production web/main/preload bundles.
+- [ ] User titlebar/drag/menu/sidebar/mobile acceptance; runtime runs remain deferred.
+
+Current layout supersedes the historical menu/toolbar layout below. See
+[desktop/workspace chrome](docs/design/desktop-window.md).
 
 ## Editing performance (PRD 1.10)
 
@@ -450,9 +462,9 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       (`.cm-image-resize`) + `.image-lightbox*` + cursor `zoom-in`. Typecheck sạch.
 
 ## Phase 27 — Desktop app (Electron, multi-platform) — FR-13, PRD 1.6 (theo yêu cầu người dùng)
-- [~] M27.5 Compact menu title bar (PRD 1.6): implementation complete on Windows/Linux;
-      no app icon/name, native window controls/submenus, keyboard access, drag area and themes.
-      Validation intentionally skipped at the user's request; not marked verified.
+- [~] M27.5 Compact title bar (PRD 1.11): tabs/sidebar toggles now share the native
+      caption row; visible menu labels removed. F10/actions, drag area and themes retained.
+      Types/bundles pass; interactive validation intentionally deferred to the user.
 - [x] M27.1 Workspace `desktop/` (Electron shell). `src/main.ts`: single-instance lock; chọn vault lần đầu
       (dialog, default `~/Documents/WebObsidianVault`); `DATA_DIR`/config/logs trong `userData`; **spawn server
       hiện có như tiến trình con** qua `ELECTRON_RUN_AS_NODE` bind `127.0.0.1` + cổng trống ngẫu nhiên; chờ

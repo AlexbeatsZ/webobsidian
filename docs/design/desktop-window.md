@@ -1,37 +1,70 @@
-# Desktop window chrome
+# Compact workspace and desktop chrome
 
 ## Required layout
 
-Windows/Linux use one 32px top row. The left edge starts with File, Edit, View,
-Window and Help. Do not draw the application icon or application name in this
-row. Keep native minimize/maximize/close controls at the right and allow dragging
-through the empty area. Support light and dark themes.
+Windows/Linux use one 32px top row containing the left-sidebar toggle, compact
+file tabs, new-note button, a draggable empty area and the right-sidebar toggle.
+Native minimize/maximize/close controls occupy the right end of that same row.
+Do not display File / Edit / View / Window / Help, an app icon/name, an extra note
+header or a formatting toolbar. Tabs use 12px UI text, compact gaps, a maximum
+width of 180px and horizontal scrolling; sidebar/new-note controls remain pinned.
+The row height matches the existing native overlay height; native button widths
+remain controlled by the OS.
 
-The window title and application icon remain available to the taskbar and app
-switcher. macOS retains its native title and system menu bars. Ordinary browser
-tabs retain the existing web layout.
+The left vertical ribbon shares the left sidebar's visibility: collapsing the
+left sidebar unmounts both and reduces both grid tracks to zero. The top-row
+toggle remains available to restore them. The right sidebar keeps its own toggle.
+Mobile keeps its device-local drawers; the ribbon and left panel slide together.
+
+The Markdown view selector is a single icon in the bottom-right status bar. It
+opens an upward menu containing 阅读视图, 源码模式 and 实时预览 with a check beside
+the current mode. It supports keyboard navigation, Escape, focus/outside-click
+dismissal and closes when the active file changes. It is hidden for non-Markdown
+tabs. On mobile only this status control is shown. No Source/Live/Reading strip
+remains above the editor.
+
+File actions formerly available from the note header's More button are available
+from the corresponding tab's context menu (including bookmark, split, properties,
+PDF, history and sharing). The document title remains part of the document view.
+Native vault/window actions and accelerators remain available through F10 on
+Windows/Linux. macOS retains the system title/menu bars; browsers share the new
+workspace layout without native caption insets or draggable regions.
 
 ## Implementation
 
-- `desktop/src/main.ts` hides the system title and native menu rows on
-  Windows/Linux, enables a native title bar overlay, and retains the application
-  menu for its actions and accelerators.
-- `desktop/src/titlebar.ts`, bundled into preload, inserts the header before the
-  SPA root and subtracts its height from that root. Only the menu buttons are
-  excluded from the draggable area. The overlay's safe-area variables reserve
-  space for native window buttons.
-- Top-level buttons open their original native submenus through IPC. Restore
-  editor focus before opening a submenu so Edit actions retain their target.
-- F10 / Alt enter the menu bar; left/right select a menu; down/Enter/Space open
-  it; Escape restores content focus. Alt + a menu initial opens it directly.
-- IPC is restricted to the main window's top-level localhost frame. The renderer
-  can request only existing top-level submenus and fixed light/dark colors.
-- Watch the SPA root and theme wrapper, not the editor subtree, to update title
-  bar and native caption-button colors when the theme changes.
+- web/src/components/WorkspaceTabs.tsx owns the shared tab row and tab context
+  menus. It is a direct child of .app, spanning all grid columns in row 1.
+  The ribbon, sidebars and editor are explicitly placed in row 2.
+- Workspace.tsx owns only editor/split content, paste/drop and the status bar.
+  The redundant note header and FormatToolbar component/styles are removed.
+- ViewModeMenu.tsx reads/writes the existing store mode; no new view or document
+  state is introduced. StatusBar.tsx hosts it alongside existing plugin items.
+- App.tsx mounts ribbon and left sidebar from the same showLeft condition.
+  The desktop left-closed rule sets both ribbon/sidebar widths to zero without
+  overriding the mobile drawer width.
+- desktop/src/main.ts keeps titleBarStyle: hidden and the native 32px overlay.
+  The native application menu has no visible row. A fixed F10 popup IPC is
+  restricted to the main local top-level frame. Fullscreen events remove caption
+  reservations while the native overlay is absent.
+- desktop/src/titlebar.ts, bundled into preload, marks the native titlebar
+  layout and synchronizes native caption colors. It observes only the root and
+  theme wrapper, never editor descendants. A blank draggable fallback is present
+  during loading/login and hidden when the React workspace mounts; it never
+  subtracts another row from the root height.
+- obsidian.css uses native titlebar-area-x/width safe-area variables (138px
+  caption-width fallback), keeps controls/tabs no-drag, and reserves at least
+  40px of empty drag space. Narrow Electron windows retain the native 32px row
+  instead of the mobile browser's 48px row.
 
-## Delivery status
+## Verification and delivery
 
-Implemented on 2026-10-18. The user subsequently requested a build: core, server,
-web and desktop type checks and the Windows x64 installer/portable build passed.
-Runtime and UI acceptance remain skipped at the user's request. The existing
-running app was not replaced or restarted.
+2026-10-22: isolated current-core declarations, web/desktop type checks, production
+SPA and main/preload bundles, generated JS syntax and all 186 manifest resources
+passed. The ordinary web typecheck initially found stale project-local core
+declarations; compiling current core into the isolated build resolves them.
+
+No browser, Electron, server, installer or interactive tests were launched, in
+accordance with the standing static-only boundary. Actual titlebar geometry,
+native dragging/Snap behavior, mobile touch and view-menu interaction remain
+user acceptance. Existing app, vault, server/public and desktop 0.1.4 packages
+were preserved; this change updates source and has not been packaged or installed.

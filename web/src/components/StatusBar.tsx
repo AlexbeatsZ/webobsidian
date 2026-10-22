@@ -3,6 +3,7 @@ import { useStore } from '../lib/store';
 import { api } from '../lib/api';
 import Icon from './Icon';
 import PluginElements from './PluginElements';
+import ViewModeMenu from './ViewModeMenu';
 import { pluginStatusItems } from '../lib/plugins';
 
 export default function StatusBar() {
@@ -49,6 +50,7 @@ export default function StatusBar() {
   return (
     <div className="status-bar">
       <PluginElements items={pluginStatusItems} />
+      <ViewModeMenu />
       {dirty && <span>Saving…</span>}
       {isText && <span>{words} words</span>}
       {isText && <span>{content.length} characters</span>}

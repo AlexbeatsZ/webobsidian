@@ -310,8 +310,7 @@ function createWindow(): void {
     },
   });
 
-  // Keep the application menu for its native actions and accelerators, but draw
-  // its top-level buttons in the title bar instead of a second native row.
+  // Retain native actions/accelerators behind F10, without a visible menu row.
   if (process.platform !== 'darwin') mainWindow.setMenuBarVisibility(false);
 
   mainWindow.loadURL(baseUrl(serverPort));
@@ -337,6 +336,9 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 
+  const syncFullscreen = () => mainWindow?.webContents.send('desktop:fullscreen', mainWindow.isFullScreen());
+  mainWindow.on('enter-full-screen', syncFullscreen);
+  mainWindow.on('leave-full-screen', syncFullscreen);
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -406,7 +408,7 @@ function buildMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-// Only the local app's top-level frame may operate its native desktop menus.
+// Only the local app's top-level frame may operate native desktop chrome.
 function desktopWindow(event: IpcMainEvent | IpcMainInvokeEvent): BrowserWindow | null {
   const frame = event.senderFrame;
   if (!mainWindow || !frame || event.sender !== mainWindow.webContents || frame !== event.sender.mainFrame) return null;
@@ -418,22 +420,14 @@ function desktopWindow(event: IpcMainEvent | IpcMainInvokeEvent): BrowserWindow 
 }
 
 function registerTitleBar(): void {
-  ipcMain.handle('desktop:menu-items', (event) => {
-    if (!desktopWindow(event)) return [];
-    return Menu.getApplicationMenu()?.items
-      .filter((item) => item.visible && item.submenu)
-      .map((item) => ({ id: item.commandId, label: item.label.replace(/&/g, '') })) ?? [];
-  });
-  ipcMain.handle('desktop:open-menu', (event, id: number, x: number, y: number) => {
+  ipcMain.handle('desktop:open-application-menu', (event) => {
     const win = desktopWindow(event);
-    if (!win || !Number.isFinite(x) || !Number.isFinite(y)) return;
-    const item = Menu.getApplicationMenu()?.items.find((entry) => entry.commandId === id && entry.visible);
-    if (!item?.submenu) return;
-    const [width, height] = win.getContentSize();
-    return new Promise<void>((resolve) => item.submenu!.popup({
+    const menu = Menu.getApplicationMenu();
+    if (!win || !menu) return;
+    return new Promise<void>((resolve) => menu.popup({
       window: win,
-      x: Math.max(0, Math.min(width, Math.round(x))),
-      y: Math.max(0, Math.min(height, Math.round(y))),
+      x: 0,
+      y: 32,
       callback: resolve,
     }));
   });

@@ -1,7 +1,13 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.10 · Cập nhật: 2026-10-19 · Trạng thái: Draft
+> Phiên bản: 1.11 · Cập nhật: 2026-10-22 · Trạng thái: Draft
+> Changelog 1.11 (compact workspace): remove the visible desktop File/Edit menu;
+> share one 32px row between tabs, sidebar toggles and native window controls.
+> Remove the redundant note/format headers; move file actions to tab context menus
+> and Markdown modes to a bottom-right icon menu. Collapse the ribbon with the left
+> sidebar. See [workspace chrome](docs/design/desktop-window.md) for platform scope
+> and the static-only acceptance boundary.
 > Changelog 1.10 (editing performance): index-driven backlinks; dependency-aware
 > decorations; cached plugin metadata and incremental links; reusable target and
 > reverse-link indexes; shared syntax/Lezer fragments; sparse raw-source mappings;
@@ -371,10 +377,9 @@ cùng một codebase React.
   trên điện thoại không ảnh hưởng trạng thái sidebar của desktop đang đồng bộ chung `uistate`.
 - **Touch targets**: hàng cây thư mục, nút công cụ, tab ≥ 44px; tăng padding chạm; bỏ hover-only affordance
   (nút close tab luôn hiện trên mobile).
-- **Format toolbar**: thanh công cụ định dạng khi soạn thảo (Live/Source): bold, italic, heading, list,
-  checklist, quote, link, internal link `[[`, code, tag, indent/outdent, undo/redo. Mỗi nút thao tác trực
-  tiếp lên editor đang active. **Mobile**: nổi phía trên bàn phím (neo qua visualViewport) như Obsidian
-  Mobile. **Desktop**: thanh in-flow ngay dưới view-header (theo yêu cầu người dùng).
+- **Compact editor chrome (1.11)**: no formatting strip or duplicate note header.
+  Source/live/reading modes use a bottom-right icon menu, also reachable on mobile.
+  File actions live in the tab context menu. Existing editor shortcuts remain.
 - **Viewport & safe-area**: `viewport-fit=cover`; chừa `env(safe-area-inset-*)` cho notch/home-indicator;
   không cho double-tap zoom (app-like) nhưng giữ pinch-zoom ảnh trong reading.
 
@@ -420,11 +425,13 @@ chúng bằng đường có mũi tên, dùng cho brainstorm, moodboard, sơ đ�
   không portal/embed canvas-trong-canvas; không liên kết backlink graph từ node file (giữ đơn giản).
 
 ### FR-13 · Desktop app (Electron, multi-platform)
-Desktop title bar (1.6): on Windows/Linux, replace the separate system title and menu rows
-with a 32px menu title bar. The left edge starts with File / Edit / View / Window / Help;
-no app icon/name is drawn in this bar. Retain native window controls, native submenu actions,
-keyboard access (F10 / Alt and menu initials), window dragging and theme switching. Keep
-the macOS system menu bar and browser rendering unchanged.
+Desktop/workspace chrome (1.11): on Windows/Linux, tabs and both sidebar toggles share
+one 32px row with native minimize/maximize/close controls. No visible File/Edit menu,
+app branding, duplicate note header or formatting toolbar. Keep compact scrollable tabs,
+native caption safe areas, a draggable empty region and themes. F10 opens the native
+application menu; existing accelerators remain. The vertical ribbon collapses together
+with the left sidebar. Markdown modes move into a bottom-right icon menu. macOS retains
+its system title/menu bars; browsers share the workspace layout without native insets.
 
 Mục tiêu: đóng gói WebObsidian thành **app cài đặt trên máy** (macOS/Windows/Linux) để người dùng tải về dùng
 như app native, không cần tự dựng server hay Docker. Bản chất là một **Electron shell** bọc quanh đúng server

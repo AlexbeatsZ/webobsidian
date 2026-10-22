@@ -7,6 +7,7 @@ import Ribbon from './components/Ribbon';
 import Sidebar from './components/Sidebar';
 import RightSidebar from './components/RightSidebar';
 import Workspace from './components/Workspace';
+import WorkspaceTabs from './components/WorkspaceTabs';
 import CommandPalette from './components/CommandPalette';
 import Settings from './components/Settings';
 import ShareDialog from './components/ShareDialog';
@@ -183,7 +184,8 @@ export default function App() {
   return (
     <div className={theme}>
       <div className={appCls}>
-        <Ribbon onTheme={() => setTheme((t) => (t === 'theme-dark' ? 'theme-light' : 'theme-dark'))} />
+        <WorkspaceTabs />
+        {showLeft && <Ribbon onTheme={() => setTheme((t) => (t === 'theme-dark' ? 'theme-light' : 'theme-dark'))} />}
         {showLeft && <Sidebar />}
         <Workspace />
         {showRight && <RightSidebar />}
