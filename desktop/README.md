@@ -75,7 +75,9 @@ npm run dist:dir     # fast unpacked build (no installer), for smoke testing
 Startup failures report the server log path. On Windows it is
 `%APPDATA%/@webobsidian/desktop/logs/server.log`. A child that exits before its
 health check passes is reported with its exit status, rather than waiting for
-the full startup deadline.
+the full startup deadline. Version 0.1.6 allows up to 120 seconds for a live
+server to finish cold Vault indexing before the HTTP listener opens. The log
+records each startup time and elapsed time until its health check succeeds.
 
 The 2026-10-18 Windows 0.1.1 build could fail with
 `Cannot find module './impl/format'`: the standalone bundle had selected

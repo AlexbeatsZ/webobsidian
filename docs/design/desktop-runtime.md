@@ -26,8 +26,14 @@ it is not a general proof that every dynamic import or startup path will work.
 Open the server log before spawning the child. Capture both stdout and stderr
 until the child's streams close, and finish writing them before reporting its
 exit. Record spawn errors and early exits while polling `/healthz` so a crashed
-child fails promptly with its exit status and log path. The 30-second deadline
-still applies to a live process that never becomes healthy.
+child fails promptly with its exit status and log path. A live child has a
+120-second startup deadline because the HTTP listener opens only after the
+initial Vault index is ready. On 2026-10-22 the 0.1.5 cold start wrote settings at
+23:32:34 UTC and its rebuilt index at 23:33:14 UTC, then logged its listener;
+the former 30-second deadline had already displayed a startup failure. Version
+0.1.6 allows this indexing time and logs each startup's UTC time, port, deadline
+and elapsed time until health succeeds. Child-exit failures still report promptly;
+the longer deadline does not conceal missing dependencies or other child exits.
 
 On Windows the log is under
 `%APPDATA%/@webobsidian/desktop/logs/server.log`. Startup diagnostics must never

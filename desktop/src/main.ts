@@ -17,6 +17,8 @@ import { UserscriptService } from './userscripts/service';
 const CONFIG_FILE = () => path.join(app.getPath('userData'), 'desktop-config.json');
 const DATA_DIR = () => path.join(app.getPath('userData'), 'server-data');
 const LOG_FILE = () => path.join(app.getPath('userData'), 'logs', 'server.log');
+// Cold starts rebuild the Vault index before opening the HTTP listener.
+const SERVER_STARTUP_TIMEOUT_MS = 120_000;
 
 interface DesktopConfig {
   vaultPath?: string;
@@ -107,6 +109,8 @@ async function startServer(cfg: DesktopConfig): Promise<void> {
 
   // Run the bundled server with Electron's own Node (no external node needed).
   const log = (await fs.open(LOG_FILE(), 'a')).createWriteStream();
+  const startedAt = Date.now();
+  log.write(`\n[desktop] starting server at ${new Date(startedAt).toISOString()} (port=${serverPort}, timeout=${SERVER_STARTUP_TIMEOUT_MS}ms)\n`);
   const child = spawn(process.execPath, [serverEntry()], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   serverProc = child;
   let startupError: Error | undefined;
@@ -129,6 +133,7 @@ async function startServer(cfg: DesktopConfig): Promise<void> {
   });
 
   await waitForHealth(serverPort, () => startupError);
+  log.write(`[desktop] server healthy after ${Date.now() - startedAt}ms\n`);
   await autoLogin(serverPort, cfg.secret);
 }
 
@@ -141,7 +146,7 @@ function delay(ms: number): Promise<void> {
 }
 
 async function waitForHealth(port: number, failure: () => Error | undefined): Promise<void> {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + SERVER_STARTUP_TIMEOUT_MS;
   for (;;) {
     const startupError = failure();
     if (startupError) throw startupError;
@@ -151,7 +156,7 @@ async function waitForHealth(port: number, failure: () => Error | undefined): Pr
     } catch {
       /* not up yet */
     }
-    if (Date.now() > deadline) throw failure() ?? new Error(`Server did not become healthy in time.\nServer log: ${LOG_FILE()}`);
+    if (Date.now() > deadline) throw failure() ?? new Error(`Server did not become healthy within ${SERVER_STARTUP_TIMEOUT_MS / 1000} seconds.\nServer log: ${LOG_FILE()}`);
     await delay(250);
   }
 }
