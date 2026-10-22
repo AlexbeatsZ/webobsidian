@@ -32,6 +32,7 @@ import * as editor from './editor';
 import * as markdown from './markdown';
 import { WebViewerView, promptWebViewer } from './webviewer';
 import { bindPluginMenus } from './menus';
+import { installJavascript } from '../javascript/runtime';
 
 type Command = {
   id: string;
@@ -624,6 +625,7 @@ export const nativePluginReplacements:Record<string,string>={
   'fuzzy-chinese-pinyin':'已由内置中文搜索接管',
   'obsidian-latex-suite':'已由内置公式与片段接管',
   'obsidian-linter':'已由内置文档格式化接管',
+  'interactive-js':'已由内置 JavaScript 执行与交互控件接管',
 };
 export async function loadPlugin(id:string,manifest:any){
   if(nativePluginReplacements[id]){pluginStatuses.set(id,{id,state:'builtin',error:nativePluginReplacements[id]});changed();return;}
@@ -847,7 +849,9 @@ export async function loadPlugins(): Promise<void> {
         }
     };
     window.addEventListener('keydown', keys, true);
+    const stopJavascript = installJavascript(sharedApp);
     stopHost = () => {
+      stopJavascript();
       stopMenus();
       unsub();
       metadataStopped = true;

@@ -1,0 +1,98 @@
+.interactive-js-chart {
+  width: 100%;
+  min-height: 240px;
+}
+
+.interactive-js-error {
+  color: var(--text-error);
+  white-space: pre-wrap;
+}
+
+/* Preserved from the former pure-subheading-outline DataviewJS view. */
+.pure-subheading-tree {
+  --tree-line: var(--background-modifier-border);
+  --tree-text: var(--text-normal);
+  --tree-muted: var(--text-muted);
+  --tree-hover: var(--background-modifier-hover);
+  --tree-accent: var(--interactive-accent);
+  font-size: 0.95em;
+  line-height: 1.45;
+}
+
+.pure-subheading-tree ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 0.2em;
+  position: relative;
+}
+
+.pure-subheading-tree > ul {
+  padding-left: 0.1em;
+}
+
+.pure-subheading-tree ul ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.38em;
+  border-left: 1px solid var(--tree-line);
+}
+
+.pure-subheading-tree li {
+  position: relative;
+  margin: 0.12em 0;
+  padding-left: 0;
+}
+
+.pure-subheading-tree .tree-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.38em;
+  padding: 0.08em 0.28em;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--tree-text);
+  line-height: 1.4;
+}
+
+.pure-subheading-tree .tree-item:hover {
+  background: var(--tree-hover);
+  text-decoration: none;
+}
+
+.pure-subheading-tree .tree-dot {
+  width: 0.42em;
+  height: 0.42em;
+  margin-top: 0.42em;
+  border-radius: 50%;
+  background: var(--tree-accent);
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+
+.pure-subheading-tree .tree-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.pure-subheading-tree .heading-level-1 > .tree-item {
+  font-weight: 700;
+}
+
+.pure-subheading-tree .heading-level-2 > .tree-item {
+  font-weight: 600;
+}
+
+.pure-subheading-tree .subheading-node > .tree-item {
+  color: var(--tree-muted);
+}
+
+.native-js-code-block { position: relative; padding-block: 8px; }
+.native-js-code-block:hover > .cm-source-toggle, .native-js-code-block:focus-within > .cm-source-toggle { opacity: 1; }
+.interactive-js-toolbar { display: flex; justify-content: flex-end; gap: 8px; padding: 4px 28px 8px 0; }
+.interactive-js-toolbar button { font: inherit; font-size: 12px; }
+.interactive-js-output { min-width: 0; overflow-wrap: anywhere; }
+.interactive-js-output canvas, .interactive-js-output svg { max-width: 100%; }

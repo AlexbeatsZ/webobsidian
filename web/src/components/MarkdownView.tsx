@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
-import { pluginCodeBlocks, pluginPostProcessing } from '../lib/obsidian/markdown';
+import { codeBlocks, pluginPostProcessing } from '../lib/obsidian/markdown';
 import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
@@ -274,7 +274,8 @@ export default function MarkdownView(props: MarkdownViewProps) {
         livePreviewReadonly.init(() => p.mode === 'reading'),
         noteTitleField.init(() => p.showTitle === false ? '' : titleOf(p.snapshot.id)),
         sourceControls, inlineTitleField, frontmatterField, tableField, htmlBlockField, mermaidField,
-        ...(p.context.allowPlugins ? [pluginCodeBlocks, pluginPostProcessing] : []),
+        codeBlocks,
+        ...(p.context.allowPlugins ? [pluginPostProcessing] : []),
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,
         inlineHtml, semanticDecorations, mathBlockField, blockLayout, livePreviewPlugin, livePreviewTheme, listLayout,
         EditorView.updateListener.of((u) => {

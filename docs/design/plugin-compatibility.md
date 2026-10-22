@@ -1,5 +1,10 @@
 # 现用 Obsidian 插件兼容宿主
 
+2026-10-22：Interactive JS 0.1.0 已迁入原生代码块宿主、可信 JS 运行与便捷 widgets。
+普通 JS 使用现有 CodeMirror；`js-widget` / `javascript-widget` 和旧 `// @obsidian-js`
+显式块由内置实现接管，原插件不再重复加载。原文件和启用配置保留。只有类型与隔离
+构建检查；实际控件、图表及原笔记验收尚未进行。详见 [原生 JS](native-javascript.md)。
+
 2026-10-22：`fuzzy-chinese-pinyin` 已由原生中文搜索取代；加载器阻止重复执行，
 保留原插件文件与 Obsidian 启用配置。下方原包加载记录仅为历史证据。
 详见 [内置中文搜索](chinese-search.md)。

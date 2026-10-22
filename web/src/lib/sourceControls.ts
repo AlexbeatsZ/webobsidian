@@ -37,7 +37,7 @@ export function sourceOwns(state: EditorState, range: SourceSpan): boolean {
   return Boolean(source && range.from >= source.from && range.to <= source.to);
 }
 
-export function sourceButton(view: EditorView, range: SourceSpan, label: string): HTMLButtonElement {
+export function sourceButton(view: EditorView, range: SourceSpan | (() => SourceSpan), label: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'cm-source-toggle';
@@ -50,7 +50,8 @@ export function sourceButton(view: EditorView, range: SourceSpan, label: string)
   button.addEventListener('click', (event) => {
     event.preventDefault(); event.stopPropagation();
     if (view.state.readOnly) return;
-    view.dispatch({ effects: toggleSourceRegion.of(range), selection: { anchor: range.from }, scrollIntoView: true });
+    const current = typeof range === 'function' ? range() : range;
+    view.dispatch({ effects: toggleSourceRegion.of(current), selection: { anchor: current.from }, scrollIntoView: true });
     view.focus();
   });
   return button;

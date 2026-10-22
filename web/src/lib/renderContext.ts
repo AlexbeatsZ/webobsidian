@@ -37,6 +37,8 @@ export interface RenderContext {
   renderEmbed: (target: string, signal: AbortSignal) => Promise<EmbeddedNote | null>;
   embedTrail?: readonly string[];
   allowHtmlExecution?: boolean;
+  /** Trusted private-note code; independent of plugin loading and text readOnly. */
+  allowScriptExecution?: boolean;
   allowPlugins?: boolean;
   bindEditor?: (view: EditorView, commands: { undo: () => boolean; redo: () => boolean }) => () => void;
   mountFragment?: (host: HTMLElement, source: string, options: FragmentOptions) => () => void;
@@ -53,3 +55,13 @@ export const renderContext = Facet.define<RenderContext, RenderContext>({
 });
 
 export const contextOf = (view: EditorView): RenderContext => view.state.facet(renderContext);
+
+/** Print and generated Markdown must not regain execution through nested embeds. */
+export function nonExecutingContext(context: RenderContext): RenderContext {
+  return { ...context, bindEditor: undefined, allowScriptExecution: false, allowPlugins: false, allowHtmlExecution: false,
+    renderEmbed: async (target, signal) => {
+      const note = await context.renderEmbed(target, signal);
+      return note ? { ...note, context: nonExecutingContext(note.context) } : null;
+    },
+  };
+}

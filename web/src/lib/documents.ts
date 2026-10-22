@@ -35,9 +35,14 @@ export class DocumentRegistry {
   async refresh(path: string): Promise<DocumentSession> {
     const existing = this.sessions.get(path);
     if (!existing) return this.open(path);
-    const file = await api.read(path);
-    existing.acceptExternal(file.content, file.revision);
-    return existing;
+    const pending = this.pending.get(path);
+    if (pending) return pending;
+    const loading = api.read(path).then(file => {
+      existing.acceptExternal(file.content, file.revision);
+      return existing;
+    }).finally(() => this.pending.delete(path));
+    this.pending.set(path, loading);
+    return loading;
   }
 }
 

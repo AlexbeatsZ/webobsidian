@@ -1,5 +1,6 @@
 import { analyzeMarkdown, type MarkdownModel, type SourceSpan } from './syntax.js';
 import { parseLinkTarget } from './links.js';
+import { legacySubheadings } from './legacySubheadings.js';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts } from './bodyHeadings.js';
 
 export interface Heading extends SourceSpan { level: number; text: string; kind?: 'body' }
@@ -68,6 +69,14 @@ export function fragmentRange(model: MarkdownModel, fragment: string): SourceSpa
     const paragraph = model.nodes.filter((node) => ['Paragraph', 'ListItem', 'Blockquote'].includes(node.name) && node.from <= block.from && node.to >= block.to)
       .sort((a, b) => a.to - a.from - (b.to - b.from))[0];
     return paragraph ? { from: paragraph.from, to: paragraph.to } : { from: model.text.lastIndexOf('\n', block.from - 1) + 1, to: block.to };
+  }
+  if (decoded.startsWith('-')) {
+    const subheadings = legacySubheadings(model, meta.comments);
+    const item = subheadings.find(candidate => candidate.fragment.normalize('NFC') === decoded.normalize('NFC'));
+    if (item) {
+      const next = [...subheadings, ...meta.headings].filter(candidate => candidate.from > item.from).sort((a, b) => a.from - b.from)[0];
+      return { from: item.from, to: next?.from ?? model.text.length };
+    }
   }
   const index = meta.headings.findIndex((heading) => heading.text.normalize('NFC').toLocaleLowerCase() === decoded.normalize('NFC').toLocaleLowerCase());
   if (index < 0) return null;

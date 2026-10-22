@@ -32,6 +32,7 @@
     "@webobsidian/search-core": "*",
     "codemirror": "^5.65.21",
     "d3-force": "^3.0.0",
+    "echarts": "6.1.0",
     "jsonc-parser": "3.3.1",
     "loglevel": "^1.9.2",
     "mathjax": "4.1.3",

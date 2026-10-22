@@ -1,6 +1,6 @@
 import type { DocumentSnapshot } from '@webobsidian/markdown-core';
 import { mountMarkdownFragment } from '../components/MarkdownFragment';
-import type { RenderContext } from './renderContext';
+import { nonExecutingContext, type RenderContext } from './renderContext';
 
 const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
@@ -20,7 +20,7 @@ export async function preparePrintDocument(snapshot: DocumentSnapshot, context: 
   const dispose = () => { stop?.(); frame.remove(); };
   try {
     await Promise.all([...doc.querySelectorAll('link')].map(link => link.sheet ? Promise.resolve() : new Promise<void>(resolve => { link.onload = () => resolve(); link.onerror = () => resolve(); })));
-    await new Promise<void>(resolve => { stop = mountMarkdownFragment(host, snapshot.text, { id: snapshot.id, context: { ...context, bindEditor: undefined, allowHtmlExecution: false, allowPlugins: false }, onReady: resolve }); });
+    await new Promise<void>(resolve => { stop = mountMarkdownFragment(host, snapshot.text, { id: snapshot.id, context: nonExecutingContext(context), onReady: resolve }); });
     const deadline = performance.now() + 20000; let stable = 0;
     while (stable < 3) {
       const height = Math.ceil(Math.max(doc.body.scrollHeight + 2000, 2000));
