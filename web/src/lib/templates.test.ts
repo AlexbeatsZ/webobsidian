@@ -166,4 +166,14 @@ describe('single template insertion', () => {
     await templates.insert('Templates/实验.md', context);
     expect(insertion).toHaveBeenCalledExactlyOnceWith(view, 7, 15, 'generated', [{ order: 1, from: 9, to: 9 }]);
   });
+  it('rejects insertion if the target becomes readonly while awaiting a command', async () => {
+    const { templates, context, view, execute } = insertionFixture('<% command "user:fetch" {} %>');
+    execute.mockImplementation(async () => {
+      (view as unknown as { state: EditorState }).state = EditorState.create({ doc: view.state.doc,
+        selection: view.state.selection, extensions: EditorState.readOnly.of(true) });
+      return 'late';
+    });
+    await expect(templates.insert('Templates/实验.md', context)).rejects.toThrow('只读');
+    expect(insertion).not.toHaveBeenCalled();
+  });
 });

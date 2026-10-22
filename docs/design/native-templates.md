@@ -136,7 +136,7 @@ performance remain pending user acceptance after static verification.
 
 An isolated source snapshot containing only this task's changes passed fresh
 core/search compilation, Web types (including 24 prepared command/template
-regression cases), server compilation and desktop types. The production Web build
+regression cases, later extended with a readonly-transition case), server compilation and desktop types. The production Web build
 and standalone server bundle/relative-require guard/syntax checks passed. Known
 dependency externalization/dynamic-import and large-chunk warnings remain. No
 test cases or runtime/HTTP/browser/Electron acceptance were executed. The live

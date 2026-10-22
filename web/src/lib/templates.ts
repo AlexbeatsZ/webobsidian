@@ -192,6 +192,7 @@ export class Templates {
     if (!file) throw new Error(`模板不存在：${path}`);
     const result = await this.render(file, context);
     context.assertCurrent(); context.signal?.throwIfAborted();
+    if (view.state.readOnly) throw new Error('文档已切换为只读，模板未插入');
     const selection = view.state.selection.main;
     insertWritingTemplate(view, selection.from, selection.to, result.text, result.cursors);
     view.focus();
