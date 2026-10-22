@@ -556,7 +556,6 @@ Object.assign(window, {
   },
 });
 export const nativePluginReplacements:Record<string,string>={
-  'obsidian-latex':'已由内置 MathJax 宏包与导言区接管',
   ...migratedPluginIds,
   'fuzzy-chinese-pinyin':'已由内置中文搜索接管',
   'obsidian-latex-suite':'已由内置公式与片段接管',
@@ -842,3 +841,4 @@ export function bindPluginEditor(view: cmView.EditorView, path: string) {
   });
   return detach;
 }
+
