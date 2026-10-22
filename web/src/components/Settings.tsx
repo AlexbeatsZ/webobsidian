@@ -32,6 +32,7 @@ export default function Settings() {
   const [pluginTab, setPluginTab] = useState<string | null>(null);
   const [features, setFeatures] = useState<NativeFeaturePreferences | null>(null);
   const [featureError, setFeatureError] = useState('');
+  const [navQuery, setNavQuery] = useState('');
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -79,6 +80,8 @@ export default function Settings() {
       <div className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-layout">
           <div className="settings-nav">
+            <label className="settings-search"><Icon name="search" size={15} /><input aria-label="搜索设置" placeholder="搜索设置…" value={navQuery} onChange={event => setNavQuery(event.target.value)} /></label>
+            <div className="settings-nav-label">设置</div>
             {(
               [
                 'search',
@@ -97,7 +100,7 @@ export default function Settings() {
                 'account',
                 'about',
               ] as Section[]
-            ).map((s) => (
+            ).filter(s => labels[s].toLowerCase().includes(navQuery.toLowerCase())).map((s) => (
               <button
                 key={s}
                 className={!pluginTab && section === s ? 'active' : ''}
@@ -106,12 +109,13 @@ export default function Settings() {
                   setPluginTab(null);
                 }}
               >
-                {labels[s]}
+                <Icon name={sectionIcons[s]} size={16} /><span>{labels[s]}</span>
               </button>
             ))}
-            {[...pluginTabs].map(([id, tab]) => (
+            {pluginTabs.size > 0 && <div className="settings-nav-label">第三方插件</div>}
+            {[...pluginTabs].filter(([, tab]) => tab.name.toLowerCase().includes(navQuery.toLowerCase())).map(([id, tab]) => (
               <button key={id} className={pluginTab === id ? 'active' : ''} onClick={() => setPluginTab(id)}>
-                {tab.name}
+                <Icon name="puzzle" size={16} /><span>{tab.name}</span>
               </button>
             ))}
           </div>
@@ -183,15 +187,19 @@ const labels: Record<Section, string> = {
   tags: '标签',
   writing: '公式与片段',
   formatting: '文档格式化',
-  search: 'Search & Shortcuts',
-  vault: 'Vault & Files',
-  git: 'GitHub Sync',
-  api: 'API Keys',
-  sharing: 'Sharing',
-  plugins: 'Community Plugins',
-  appearance: 'Appearance',
-  account: 'Account',
-  about: 'About',
+  search: '搜索与快捷键',
+  vault: '仓库与文件',
+  git: 'GitHub 同步',
+  api: 'API 密钥',
+  sharing: '分享',
+  plugins: '第三方插件',
+  appearance: '外观',
+  account: '账户',
+  about: '关于',
+};
+const sectionIcons: Record<Section, string> = {
+  search: 'search', automation: 'command', writing: 'code', formatting: 'pencil', userscripts: 'globe', menus: 'list',
+  tags: 'hash', vault: 'folder', git: 'refresh-cw', api: 'key', sharing: 'link', plugins: 'puzzle', appearance: 'palette', account: 'user', about: 'info',
 };
 
 function Row({ name, desc, children }: { name: string; desc?: string; children: React.ReactNode }) {

@@ -5,9 +5,21 @@ import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
 import { parseLinkTarget } from '@webobsidian/markdown-core';
 import { openFragment } from './fragmentNavigation';
+import { sidebarTab, restoreSidebarTabs, type SidebarTab } from './sidebarTabs';
+import { getActiveEditor } from './activeEditor';
+import { contextOf } from './renderContext';
 import type { MenuContext } from './configuredMenus/types';
 let openGeneration = 0;
 let splitGeneration = 0;
+const rightGenerations = new Map<string, number>();
+let rightGeneration = 0;
+
+async function saveLeavingSidebarTab(tab: SidebarTab | undefined): Promise<void> {
+  const session = tab?.type === 'markdown' ? documents.get(tab.state.file) : undefined;
+  if (!session?.snapshot.dirty) return;
+  await session.save();
+  if (session.snapshot.dirty) throw new Error('笔记保存期间又有修改，请保存后重试');
+}
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
 export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -157,10 +169,16 @@ interface AppState {
   clipboard: { path: string; mode: 'copy' | 'cut' } | null;
   setClipboard: (c: { path: string; mode: 'copy' | 'cut' } | null) => void;
 
-  leftPanel: 'files' | 'search' | 'tags' | 'bookmarks';
-  setLeftPanel: (p: 'files' | 'search' | 'tags' | 'bookmarks') => void;
+  leftPanel: 'files' | 'search';
+  setLeftPanel: (p: 'files' | 'search') => void;
   rightPanel: 'backlinks' | 'outgoing' | 'tags' | 'outline';
   setRightPanel: (p: 'backlinks' | 'outgoing' | 'tags' | 'outline') => void;
+  rightTabs: SidebarTab[];
+  rightActiveId: string | null;
+  openRightTab: (type: string, state?: Record<string, any>, id?: string) => Promise<string | null>;
+  updateRightTab: (id: string, patch: Partial<Omit<SidebarTab, 'id'>>) => void;
+  selectRightTab: (id: string) => void;
+  closeRightTab: (id: string) => Promise<void>;
   /** Query pushed into the search panel (e.g. clicking a tag node in the graph). */
   searchQuery: string;
   searchFor: (q: string) => void;
@@ -175,6 +193,8 @@ interface AppState {
   paletteOpen: boolean;
   paletteMode: 'all' | 'commands' | 'files' | 'headings' | 'templates';
   setPalette: (v: boolean, mode?: 'all' | 'commands' | 'files' | 'headings' | 'templates') => void;
+  paletteRightTab: string | null;
+  pickRightNote: (id: string) => void;
   settingsOpen: boolean;
   setSettings: (v: boolean) => void;
   /** Open (true) or close (false) the Trash modal. */
@@ -222,7 +242,6 @@ interface AppState {
   /** Tree path currently being inline-renamed (null = none); FileTree shows an input for it. */
   renamingPath: string | null;
   setRenamingPath: (path: string | null) => void;
-  openDailyNote: () => Promise<void>;
   /** Re-fetch content for the active/split tabs (after reload or remote sync). */
   hydrate: () => Promise<void>;
   /** Load persisted workspace state from the server and apply it. */
@@ -238,6 +257,7 @@ const PERSIST_KEYS = [
   'tabs', 'activePath', 'viewMode', 'expanded', 'splitPath', 'splitDirection',
   'recent', 'bookmarks', 'leftPanel', 'rightPanel', 'leftOpen', 'rightOpen', 'graphSettings',
   'treeSort', 'autoReveal',
+  'rightTabs', 'rightActiveId',
 ] as const;
 
 function pickPersisted(s: any): Record<string, unknown> {
@@ -266,6 +286,9 @@ function migrateGraphSettings(gs: unknown): GraphSettings {
 }
 
 function applyPersisted(s: any, set: (p: any) => void): void {
+  rightGenerations.clear();
+  const rightTabs = restoreSidebarTabs(s.rightTabs);
+  if (s.leftPanel === 'bookmarks' && !rightTabs.some(tab => tab.type === 'bookmarks')) rightTabs.push(sidebarTab('bookmarks', {}, 'legacy-bookmarks'));
   set({
     tabs: Array.isArray(s.tabs) ? s.tabs : [],
     activePath: typeof s.activePath === 'string' ? s.activePath : null,
@@ -277,8 +300,11 @@ function applyPersisted(s: any, set: (p: any) => void): void {
     splitDirection: s.splitDirection === 'down' ? 'down' : 'right',
     recent: Array.isArray(s.recent) ? s.recent : [],
     bookmarks: Array.isArray(s.bookmarks) ? s.bookmarks : [],
-    leftPanel: ['files', 'search', 'tags', 'bookmarks'].includes(s.leftPanel) ? s.leftPanel : 'files',
-    rightPanel: ['backlinks', 'outgoing', 'tags', 'outline'].includes(s.rightPanel) ? s.rightPanel : 'backlinks',
+    leftPanel: s.leftPanel === 'search' ? 'search' : 'files',
+    rightPanel: s.leftPanel === 'tags' ? 'tags' : ['backlinks', 'outgoing', 'tags', 'outline'].includes(s.rightPanel) ? s.rightPanel : 'backlinks',
+    rightTabs,
+    rightActiveId: s.leftPanel === 'bookmarks' ? rightTabs.find(tab => tab.type === 'bookmarks')!.id
+      : rightTabs.some(tab => tab.id === s.rightActiveId) ? s.rightActiveId : null,
     leftOpen: s.leftOpen !== false,
     rightOpen: s.rightOpen !== false,
     graphSettings: migrateGraphSettings(s.graphSettings),
@@ -423,7 +449,47 @@ export const useStore = create<AppState>()(
       leftPanel: 'files',
       setLeftPanel: (p) => set({ leftPanel: p, leftOpen: true }),
       rightPanel: 'backlinks',
-      setRightPanel: (p) => set({ rightPanel: p, rightOpen: true }),
+      setRightPanel: (p) => set({ rightPanel: p, rightActiveId: null, rightOpen: true }),
+      rightTabs: [],
+      rightActiveId: null,
+      openRightTab: async (type, state = {}, id) => {
+        const tab = sidebarTab(type, state, id);
+        const generation = ++rightGeneration;
+        rightGenerations.set(tab.id, generation);
+        const previous = get().rightTabs.find(item => item.id === tab.id);
+        try {
+          if (type !== previous?.type || state.file !== previous?.state.file) await saveLeavingSidebarTab(previous);
+        } catch (error) {
+          if (rightGenerations.get(tab.id) === generation) rightGenerations.delete(tab.id);
+          get().notify(String(error)); return null;
+        }
+        if (rightGenerations.get(tab.id) !== generation) return null;
+        set(s => ({ rightTabs: s.rightTabs.some(item => item.id === tab.id)
+          ? s.rightTabs.map(item => item.id === tab.id ? tab : item) : [...s.rightTabs, tab], rightActiveId: tab.id, rightOpen: true }));
+        rightGenerations.delete(tab.id);
+        return tab.id;
+      },
+      updateRightTab: (id, patch) => set(s => ({ rightTabs: s.rightTabs.map(tab => tab.id === id ? { ...tab, ...patch } : tab) })),
+      selectRightTab: (id) => set(s => s.rightTabs.some(tab => tab.id === id) ? { rightActiveId: id, rightOpen: true } : {}),
+      closeRightTab: async (id) => {
+        const generation = ++rightGeneration;
+        rightGenerations.set(id, generation);
+        const tab = get().rightTabs.find(tab => tab.id === id);
+        try { await saveLeavingSidebarTab(tab); }
+        catch (error) {
+          if (rightGenerations.get(id) === generation) rightGenerations.delete(id);
+          get().notify(String(error)); return;
+        }
+        if (rightGenerations.get(id) !== generation) return;
+        set(s => {
+          const current = s.rightTabs.find(tab => tab.id === id);
+          if (current?.type !== tab?.type || current?.state.file !== tab?.state.file) return {};
+          const index = s.rightTabs.findIndex(tab => tab.id === id);
+          const rightTabs = s.rightTabs.filter(tab => tab.id !== id);
+          return { rightTabs, rightActiveId: s.rightActiveId === id ? rightTabs[Math.min(index, rightTabs.length - 1)]?.id ?? null : s.rightActiveId };
+        });
+        rightGenerations.delete(id);
+      },
       searchQuery: '',
       searchFor: (q) => set({ searchQuery: q, leftPanel: 'search', leftOpen: true }),
       leftOpen: true,
@@ -435,7 +501,9 @@ export const useStore = create<AppState>()(
 
       paletteOpen: false,
       paletteMode: 'all',
-      setPalette: (v, mode = 'all') => set({ paletteOpen: v, paletteMode: mode }),
+      paletteRightTab: null,
+      pickRightNote: (id) => set({ paletteOpen: true, paletteMode: 'files', paletteRightTab: id }),
+      setPalette: (v, mode = 'all') => set({ paletteOpen: v, paletteMode: mode, paletteRightTab: null }),
       settingsOpen: false,
       setSettings: (v) => set({ settingsOpen: v }),
       trashOpen: false,
@@ -570,7 +638,8 @@ export const useStore = create<AppState>()(
       },
 
       save: async (cause = 'manual') => {
-        const path = get().activePath;
+        const editor = cause === 'manual' ? getActiveEditor() : null;
+        const path = editor && !editor.state.readOnly ? contextOf(editor).sourcePath : get().activePath;
         if (path && TEXT_RE.test(path)) {
           if(cause==='manual')await manualSave(path);else await documents.get(path)?.save();
         }
@@ -630,25 +699,6 @@ export const useStore = create<AppState>()(
         set({ leftPanel: 'files', leftOpen: true, renamingPath: path });
       },
 
-      openDailyNote: async () => {
-        const d = new Date();
-        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-          d.getDate(),
-        ).padStart(2, '0')}`;
-        const path = `Daily/${iso}.md`;
-        try {
-          const { path: existing } = await api.resolve(iso);
-          if (existing) {
-            await get().openFile(existing);
-            return;
-          }
-        } catch {
-          /* none */
-        }
-        await get().createNote(path, `# ${iso}\n\n`);
-        get().notify(`Daily note ${iso} ready`);
-      },
-
       hydrate: async () => {
         // Active tab + split pane content aren't persisted (only the paths) —
         // re-read them from the vault after a reload. Drop tabs whose file is gone.
@@ -695,6 +745,12 @@ export const useStore = create<AppState>()(
         const prevActive = get().activePath;
         const prevSplit = get().splitPath;
         if (get().dirty) await get().save('background'); // don't lose local edits when switching
+        const incoming = restoreSidebarTabs(state.rightTabs);
+        for (const tab of get().rightTabs) {
+          const next = incoming.find(next => next.id === tab.id);
+          if (tab.type !== 'markdown' || next?.type === 'markdown' && next.state.file === tab.state.file) continue;
+          await saveLeavingSidebarTab(tab);
+        }
         suppressSave = true;
         applyPersisted(state, set);
         lastSaved = JSON.stringify(pickPersisted(get()));
@@ -713,7 +769,7 @@ useStore.subscribe((state, prev) => {
     if (doc) useStore.setState({ content: doc.snapshot.raw, dirty: doc.snapshot.dirty });
   }
   if (!canSave || suppressSave) return;
-  if (JSON.stringify(pickPersisted(state)) !== JSON.stringify(pickPersisted(prev))) {
+  if (PERSIST_KEYS.some(key => state[key] !== prev[key])) {
     scheduleSave();
   }
 });

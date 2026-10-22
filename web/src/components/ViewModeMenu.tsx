@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useStore, type ViewMode } from '../lib/store';
 import Icon from './Icon';
+import { MenuList } from './ContextMenu';
 
 const modes: { mode: ViewMode; label: string; icon: string }[] = [
   { mode: 'reading', label: '阅读视图', icon: 'book-open' },
@@ -22,7 +23,7 @@ export default function ViewModeMenu() {
   useEffect(() => { setOpen(false); }, [activePath]);
   useEffect(() => {
     if (!open) return;
-    host.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
+    host.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
     const dismiss = (event: PointerEvent) => {
       if (!host.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -36,13 +37,6 @@ export default function ViewModeMenu() {
       setOpen(false); trigger.current?.focus();
     } else if (event.key === 'Tab') {
       setOpen(false);
-    } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-      event.preventDefault();
-      const buttons = [...host.current!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];
-      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-        : (index + (event.key === 'ArrowDown' ? 1 : buttons.length - 1)) % buttons.length;
-      buttons[next]?.focus();
     }
   };
 
@@ -64,14 +58,8 @@ export default function ViewModeMenu() {
       </button>
       {open && (
         <div id={menuId} className="view-mode-menu" role="menu" aria-label="切换视图" onKeyDown={onKeyDown}>
-          {modes.map((item) => (
-            <button key={item.mode} type="button" role="menuitemradio" aria-checked={item.mode === viewMode}
-              onClick={() => { setViewMode(item.mode); setOpen(false); trigger.current?.focus(); }}>
-              <Icon name={item.icon} size={15} />
-              <span>{item.label}</span>
-              {item.mode === viewMode && <Icon name="check" size={14} />}
-            </button>
-          ))}
+          <MenuList items={modes.map(item => ({ label: item.label, icon: item.icon, checked: item.mode === viewMode,
+            onClick: () => setViewMode(item.mode) }))} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
         </div>
       )}
     </div>

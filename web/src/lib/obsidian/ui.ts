@@ -2,6 +2,7 @@ import { matchName } from '../search';
 import { Component } from './events';
 import { createDiv, createEl } from './dom';
 import moment from 'moment';
+import { iconPaths } from '../icons';
 import { applyConfiguredMenu, subscribeMenuConfiguration } from '../configuredMenus/controller';
 import { menuModifiers, snapshotMenuContext } from '../configuredMenus/transform';
 import type { ConfiguredMenuItem, MenuContext } from '../configuredMenus/types';
@@ -638,19 +639,12 @@ export function getIcon(name: string): SVGElement {
   svg.setAttribute('height', '18');
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-width', '1.75');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
   svg.classList.add('svg-icon');
   if (icons.has(name)) svg.innerHTML = icons.get(name)!;
-  else {
-    const title = document.createElementNS(svg.namespaceURI, 'title');
-    title.textContent = name;
-    svg.append(title);
-    const circle = document.createElementNS(svg.namespaceURI, 'circle');
-    circle.setAttribute('cx', '12');
-    circle.setAttribute('cy', '12');
-    circle.setAttribute('r', '8');
-    svg.append(circle);
-  }
+  else svg.innerHTML = iconPaths[name.replace(/^lucide-/, '')] ?? iconPaths.file;
   return svg;
 }
 export function setIcon(el: HTMLElement, name: string) {
@@ -784,11 +778,14 @@ export class Menu extends Component {
         continue;
       }
       const el = createEl('button', {
-        cls: 'menu-item',
-        text: `${item.checked ? '✓ ' : ''}${item.label}`,
+        cls: 'menu-item context-item',
         parent: this.dom,
       }) as HTMLButtonElement;
-      if (item.icon && !item.checked) el.prepend(getIcon(item.icon));
+      const icon = createDiv({ cls: 'ctx-icon', parent: el });
+      if (item.icon) icon.append(getIcon(item.icon));
+      createEl('span', { cls: 'ctx-label', text: item.label, parent: el });
+      if (item.checked) el.append(getIcon('check'));
+      if (item.submenu) el.append(getIcon('chevron-right'));
       el.disabled = item.disabled ?? false;
       el.setAttribute('role', item.checked === undefined ? 'menuitem' : 'menuitemcheckbox');
       if (item.checked !== undefined) el.setAttribute('aria-checked', String(item.checked));

@@ -78,8 +78,10 @@ export class UserscriptService {
     contents.on('did-start-navigation', (_event, _url, same, main) => { if (main && !same) this.resetGuest(g); });
     contents.on('did-navigate-in-page', (_event, _url, main) => { if (main && !contents.isDestroyed()) contents.send('userscripts:page'); });
     contents.setWindowOpenHandler(({ url }) => {
-      // Remote popups follow the shell's existing external-browser policy.
-      if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+      const host = this.options.window();
+      if (/^https?:\/\//i.test(url) && host && !host.isDestroyed()) {
+        host.webContents.send('webviewer:open-tab', { sourceGuestId: contents.id, url });
+      }
       return { action: 'deny' };
     });
     contents.once('render-process-gone', () => this.resetGuest(g));

@@ -11,6 +11,13 @@ const desktopApi = {
   isDesktop: true,
   platform: process.platform,
   nativePlugins: !!nativeArg,
+  webviewer: {
+    subscribe: (listener: (page: { sourceGuestId: number; url: string }) => void) => {
+      const handler = (_event: unknown, page: { sourceGuestId: number; url: string }) => listener(page);
+      ipcRenderer.on('webviewer:open-tab', handler);
+      return () => ipcRenderer.removeListener('webviewer:open-tab', handler);
+    },
+  },
   userscripts: {
     request: (action: string, payload?: unknown) => ipcRenderer.invoke('userscripts:manage', action, payload ?? {}),
     subscribe: (listener: () => void) => {

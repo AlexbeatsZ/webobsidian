@@ -8,6 +8,7 @@ import CanvasView from './CanvasView';
 import FolderView from './FolderView';
 import Icon from './Icon';
 import StatusBar from './StatusBar';
+import WorkspaceLauncher from './WorkspaceLauncher';
 
 function EditorPane() {
   const activePath = useStore((s) => s.activePath);
@@ -97,15 +98,7 @@ export default function Workspace() {
       <div className={`editor-area ${splitDirection === 'down' ? 'split-down' : ''}`}>
         {!activePath && (
           <div className="empty-state">
-            <div>
-              <div className="big">
-                <Icon name="file-text" size={48} />
-              </div>
-              <p>No file is open — pick a note, or press ⌘O</p>
-              <button className="btn" onClick={() => useStore.getState().setPalette(true, 'files')}>
-                打开文件
-              </button>
-            </div>
+            <WorkspaceLauncher />
           </div>
         )}
         {activePath === GRAPH_PATH && (

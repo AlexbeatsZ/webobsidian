@@ -5,6 +5,7 @@ import { getActiveEditor } from '../activeEditor';
 import { Editor, editorEntries, refreshPluginExtensions } from './editor';
 import type { TFile } from './vault';
 import { Modal } from './ui';
+import type { SidebarTab } from '../sidebarTabs';
 
 export class View extends Component {
   containerEl = createDiv({ cls: 'workspace-leaf-content' });
@@ -69,18 +70,21 @@ export class MarkdownView extends ItemView {
     this.editor.setValue(data);
   }
   async save() {
-    await useStore.getState().save();
+    if (this.file) await (await import('../writing/format')).manualSave(this.file.path);
   }
 }
 export class WorkspaceLeaf extends Events {
-  id = crypto.randomUUID();
+  id: string = crypto.randomUUID();
   pinned = false;
   view: View;
   parent: any;
   private modal?: Modal;
+  private generation = 0;
+  private mounting: Promise<void> = Promise.resolve();
+  private mountedState = '';
   constructor(
     public workspace: Workspace,
-    public slot: 'main' | 'split' | 'custom' = 'main'
+    public slot: 'main' | 'split' | 'custom' | 'right' = 'main'
   ) {
     super();
     this.view = new MarkdownView(this);
@@ -89,6 +93,10 @@ export class WorkspaceLeaf extends Events {
     return this.view.containerEl;
   }
   async openFile(file: TFile, state?: any) {
+    if (this.slot === 'right') {
+      await this.setViewState({ type: 'markdown', state: { file: file.path } });
+      return;
+    }
     if (this.slot === 'split') await useStore.getState().openToSide(file.path);
     else await useStore.getState().openFile(file.path);
     this.view =
@@ -98,38 +106,92 @@ export class WorkspaceLeaf extends Events {
       (this.view as MarkdownView).editor?.setCursor(state.eState.line, 0);
   }
   async setViewState(state: any) {
+    // The same view object/lifecycle can be hosted by a dock instead of a modal.
+    if (state.type === 'webviewer' && this.slot !== 'right') {
+      await this.closeView();
+      this.slot = 'right';
+    }
+    if (this.slot === 'right') {
+      const retained = this.workspace.custom.has(this);
+      this.workspace.custom.add(this);
+      if (!await useStore.getState().openRightTab(state.type, state.state ?? {}, this.id) && !retained) this.workspace.custom.delete(this);
+      return;
+    }
     if (state.type === 'markdown') {
       const file = this.workspace.app.vault.getFileByPath(state.state?.file);
       if (file) await this.openFile(file);
       return;
     }
-    const creator = this.workspace.viewRegistry.get(state.type);
-    if (!creator) throw new Error(`Unsupported view type: ${state.type}`);
     await this.closeView();
     this.slot = 'custom';
-    this.view = creator(this);
-    this.workspace.custom.add(this);
-    await this.view.load();
     this.modal = new Modal(this.workspace.app);
-    this.modal.setTitle(this.view.getDisplayText());
-    this.modal.contentEl.append(this.view.containerEl);
     this.modal.onClose = () => {
       void this.closeView();
     };
     this.modal.open();
-    await this.view.setState(state.state ?? {}, {});
-    await this.view.onOpen();
+    await this.mountView(state, this.modal.contentEl);
+    this.modal?.setTitle(this.view.getDisplayText());
     this.workspace.trigger('layout-change');
   }
+  mountView(state: { type: string; state: any }, host: HTMLElement): Promise<void> {
+    const generation = this.generation;
+    return this.mounting = this.mounting.catch(() => {}).then(async () => {
+      if (generation === this.generation) await this.mountViewNow(state, host);
+    });
+  }
+  private async mountViewNow(state: { type: string; state: any }, host: HTMLElement) {
+    const generation = this.generation;
+    if (this.workspace.custom.has(this) && this.view.getViewType() === state.type) {
+      if (this.view.containerEl.parentElement !== host) host.replaceChildren(this.view.containerEl);
+      const next = JSON.stringify(state.state ?? {});
+      if (this.mountedState !== next) {
+        await this.view.setState(state.state ?? {}, {});
+        this.mountedState = next;
+      }
+      return;
+    }
+    const creator = this.workspace.viewRegistry.get(state.type);
+    if (!creator) throw new Error(`视图尚未注册：${state.type}`);
+    const previous = this.view;
+    if (this.workspace.custom.delete(this)) { try { await previous.onClose(); } finally { previous.unload(); } }
+    if (generation !== this.generation) return;
+    const view = this.view = creator(this);
+    this.workspace.custom.add(this);
+    try {
+      await view.load();
+      if (generation !== this.generation) return;
+      // A guest must have its validated URL before Electron attaches the element.
+      if (state.type !== 'webviewer') host.replaceChildren(view.containerEl);
+      await view.setState(state.state ?? {}, {});
+      this.mountedState = JSON.stringify(state.state ?? {});
+      if (generation !== this.generation) return;
+      if (state.type === 'webviewer') host.replaceChildren(view.containerEl);
+      await view.onOpen();
+      if (generation === this.generation) this.workspace.updateRightLeaf(this);
+    } catch (error) {
+      if (generation === this.generation) {
+        this.workspace.custom.delete(this);
+        try { await view.onClose(); } finally { view.unload(); }
+      }
+      throw error;
+    }
+  }
   getViewState() {
+    if (this.slot === 'right') {
+      const tab = useStore.getState().rightTabs.find(tab => tab.id === this.id);
+      if (tab) return { type: tab.type, state: tab.state };
+    }
     return { type: this.view.getViewType(), state: this.view.getState() };
   }
   async closeView() {
+    this.generation++;
+    this.mountedState = '';
     const modal = this.modal;
     this.modal = undefined;
+    const view = this.view;
     if (this.workspace.custom.delete(this)) {
-      await this.view.onClose();
-      this.view.unload();
+      await this.mounting.catch(() => {});
+      try { await view.onClose(); } finally { view.unload(); }
     }
     if (modal) {
       modal.onClose = () => {};
@@ -137,7 +199,8 @@ export class WorkspaceLeaf extends Events {
     }
   }
   detach() {
-    if (this.slot === 'custom') void this.closeView();
+    if (this.slot === 'right') void useStore.getState().closeRightTab(this.id);
+    else if (this.slot === 'custom') void this.closeView();
     else {
       const file = (this.view as MarkdownView).file;
       if (file) useStore.getState().closeTab(file.path);
@@ -229,24 +292,45 @@ export class Workspace extends Events {
     this.readyQueue = [];
     for (const leaf of this.custom) leaf.detach();
   }
+  rightLeaf(tab: SidebarTab): WorkspaceLeaf {
+    let leaf = [...this.custom].find(leaf => leaf.id === tab.id && leaf.slot === 'right');
+    if (!leaf) { leaf = new WorkspaceLeaf(this, 'right'); leaf.id = tab.id; this.custom.add(leaf); }
+    return leaf;
+  }
+  updateRightLeaf(leaf: WorkspaceLeaf) {
+    if (leaf.slot !== 'right' || leaf.view instanceof MarkdownView) return;
+    const tab = useStore.getState().rightTabs.find(tab => tab.id === leaf.id);
+    if (!tab || tab.type !== leaf.view.getViewType()) return;
+    const patch = { state: leaf.view.getState(), title: leaf.view.getDisplayText(), icon: leaf.view.getIcon() };
+    if (JSON.stringify(patch) !== JSON.stringify({ state: tab.state, title: tab.title, icon: tab.icon })) useStore.getState().updateRightTab(leaf.id, patch);
+  }
   getActiveFile() {
     const active = getActiveEditor();
-    const path =
-      active?.dom.closest<HTMLElement>('[data-document-id]')?.dataset
-        .documentId ?? useStore.getState().activePath;
+    const path = active?.dom.closest<HTMLElement>('[data-document-id]')?.dataset.documentId ?? useStore.getState().activePath;
     return path ? this.app.vault.getFileByPath(path) : null;
   }
-  markdown(slot: 'main' | 'split'): MarkdownView | null {
+  markdown(slot: 'main' | 'split' | 'right', id?: string): MarkdownView | null {
+    if (slot === 'right') {
+      const tab = useStore.getState().rightTabs.find(tab => tab.id === id && tab.type === 'markdown');
+      if (!tab) return null;
+      const entry = editorEntries().find(entry => entry.cm.dom.closest<HTMLElement>('[data-sidebar-tab]')?.dataset.sidebarTab === id);
+      if (!entry) return null;
+      const view = this.rightLeaf(tab).view as MarkdownView;
+      view.file = entry.info.file; view.editor = new Editor(entry.cm);
+      view.containerEl = entry.cm.dom.closest<HTMLElement>('.cm-host') ?? entry.cm.dom; view.contentEl = view.containerEl;
+      return view;
+    }
     const path =
       slot === 'split'
         ? useStore.getState().splitPath
         : useStore.getState().activePath;
+    const entries = editorEntries().filter(entry => !entry.cm.dom.closest('[data-sidebar-tab]'));
     const entry =
-      editorEntries().find(
+      entries.find(
         (e) =>
           e.info.file?.path === path &&
           (slot === 'split' ? e.cm.state.readOnly : !e.cm.state.readOnly)
-      ) ?? editorEntries().find((e) => e.info.file?.path === path);
+      ) ?? entries.find((e) => e.info.file?.path === path);
     if (!entry) return null;
     const leaf = slot === 'main' ? this.main : this.split;
     const view = leaf.view as MarkdownView;
@@ -259,14 +343,17 @@ export class Workspace extends Events {
   }
   get activeLeaf() {
     const cm = getActiveEditor();
+    const id = (document.activeElement?.closest<HTMLElement>('[data-sidebar-tab]')
+      ?? cm?.dom.closest<HTMLElement>('[data-sidebar-tab]'))?.dataset.sidebarTab;
+    const tab = id && useStore.getState().rightTabs.find(tab => tab.id === id);
+    if (tab) { const leaf = this.rightLeaf(tab); if (tab.type === 'markdown') this.markdown('right', tab.id); return leaf; }
     return cm && cm === this.markdown('split')?.editor?.cm
       ? this.split
       : this.main;
   }
   getActiveViewOfType<T>(Type: new (...args: any[]) => T): T | null {
-    const view = this.markdown(
-      this.activeLeaf.slot === 'split' ? 'split' : 'main'
-    );
+    const leaf = this.activeLeaf;
+    const view = leaf.slot === 'right' || leaf.slot === 'custom' ? leaf.view : this.markdown(leaf.slot);
     return view instanceof Type ? view : null;
   }
   getMostRecentLeaf() {
@@ -286,18 +373,24 @@ export class Workspace extends Events {
     return new WorkspaceLeaf(this, 'custom');
   }
   getRightLeaf(_split?: boolean) {
-    return new WorkspaceLeaf(this, 'custom');
+    const state = useStore.getState();
+    const tab = !_split && state.rightTabs.find(tab => tab.id === state.rightActiveId);
+    return tab ? this.rightLeaf(tab) : new WorkspaceLeaf(this, 'right');
   }
   getLeavesOfType(type: string) {
-    const leaves: WorkspaceLeaf[] = [...this.custom];
+    const leaves: WorkspaceLeaf[] = [...this.custom].filter(leaf => {
+      if (leaf.slot !== 'right') return true;
+      const tab = useStore.getState().rightTabs.find(tab => tab.id === leaf.id);
+      if (tab?.type === 'markdown') return !!this.markdown('right', tab.id);
+      return tab?.type === leaf.view.getViewType();
+    });
     for (const slot of ['main', 'split'] as const)
       if (this.markdown(slot))
         leaves.push(slot === 'main' ? this.main : this.split);
     return leaves.filter((l) => l.view.getViewType() === type);
   }
   iterateAllLeaves(cb: (leaf: WorkspaceLeaf) => void) {
-    this.getLeavesOfType('markdown').forEach(cb);
-    this.custom.forEach(cb);
+    new Set([...this.getLeavesOfType('markdown'), ...this.custom]).forEach(cb);
   }
   getUnpinnedLeaf() {
     return this.getLeaf();
@@ -306,6 +399,12 @@ export class Workspace extends Events {
     await this.setActiveLeaf(leaf);
   }
   async setActiveLeaf(leaf: WorkspaceLeaf, _options?: any) {
+    if (leaf.slot === 'right') {
+      useStore.getState().selectRightTab(leaf.id);
+      leaf.view instanceof MarkdownView && leaf.view.editor?.focus();
+      this.trigger('active-leaf-change', leaf);
+      return;
+    }
     const file = (leaf.view as MarkdownView).file;
     if (file) await useStore.getState().openFile(file.path);
     leaf.view instanceof MarkdownView && leaf.view.editor?.focus();
@@ -330,6 +429,7 @@ export class Workspace extends Events {
     this.trigger('layout-change');
   }
   requestSaveLayout() {
+    for (const leaf of this.custom) this.updateRightLeaf(leaf);
     this.trigger('layout-change');
   }
 }

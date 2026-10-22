@@ -10,12 +10,20 @@ import MarkdownView from './MarkdownView';
 import { analyzeMarkdown, fragmentRange, equationContext } from '@webobsidian/markdown-core';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
-export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment }: { path?: string; reading?: boolean; embedded?: boolean; fragment?: string }) {
-  const activePath = useStore((s) => s.activePath);
+export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment, sidebar = false, onOpenLink, onReady }: {
+  path?: string; reading?: boolean; embedded?: boolean; fragment?: string; sidebar?: boolean;
+  onOpenLink?: (target: string, sourcePath?: string) => Promise<void>;
+  onReady?: (view: import('@codemirror/view').EditorView | null) => void;
+}) {
+  const activePath = useStore((s) => suppliedPath ? null : s.activePath);
   const path = suppliedPath ?? activePath;
-  const mode = useStore((s) => s.viewMode);
-  const setMode = useStore((s) => s.setViewMode);
-  const openLink = useStore((s) => s.openWikilink);
+  const workspaceMode = useStore((s) => sidebar ? 'live' : s.viewMode);
+  const workspaceSetMode = useStore((s) => s.setViewMode);
+  const [sidebarMode, setSidebarMode] = useState<import('../lib/store').ViewMode>('live');
+  const mode = sidebar ? sidebarMode : workspaceMode;
+  const setMode = sidebar ? setSidebarMode : workspaceSetMode;
+  const workspaceOpenLink = useStore((s) => s.openWikilink);
+  const openLink = onOpenLink ?? workspaceOpenLink;
   const openMenu = useStore((s) => s.openContextMenu);
   const setLeftPanel = useStore((s) => s.setLeftPanel);
   const notify = useStore((s) => s.notify);
@@ -64,6 +72,7 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
         const stopPlugins = bindPluginEditor(view, path ?? '');
         unregister.current = () => { stopPlugins(); stopEditor(); };
       } else unregister.current = undefined;
+      onReady?.(view);
     }} />;
 }
 

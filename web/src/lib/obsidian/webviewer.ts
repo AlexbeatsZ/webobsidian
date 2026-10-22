@@ -1,6 +1,6 @@
 import { ItemView, type WorkspaceLeaf } from './workspace';
 import { createEl } from './dom';
-import { Modal, Setting } from './ui';
+import { Modal, Setting, setIcon } from './ui';
 import { bootstrapUserscripts, subscribeUserscripts, userscriptBridge, userscriptMenus, userscriptRequest, userscriptSnapshot } from '../userscripts/client';
 
 /** Native remote content always lives in a sandboxed guest, never the host. */
@@ -12,23 +12,26 @@ export class WebViewerView extends ItemView {
   private status: HTMLElement;
   private menu: HTMLSelectElement;
   private closed = false;
+  private title = '';
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
     const controls = createEl('div');
-    Object.assign(controls.style, { display: 'flex', gap: '6px', alignItems: 'center', width: 'min(1000px,80vw)' });
-    const button = (text: string, title: string, action: () => void) => {
-      const el = createEl('button'); el.textContent = text; el.title = title;
+    this.containerEl.classList.add('webviewer-view');
+    controls.className = 'webviewer-controls';
+    const button = (icon: string, title: string, action: () => void) => {
+      const el = createEl('button'); setIcon(el, icon); el.title = title; el.setAttribute('aria-label', title);
       el.addEventListener('click', action); controls.append(el); return el;
     };
-    button('←', '后退', () => { if (this.webview?.canGoBack()) this.webview.goBack(); });
-    button('→', '前进', () => { if (this.webview?.canGoForward()) this.webview.goForward(); });
-    button('↻', '重新加载页面及用户脚本', () => this.webview?.reload());
-    this.address = createEl('input'); this.address.type = 'url'; this.address.setAttribute('aria-label', '浏览器地址'); this.address.style.flex = '1';
+    button('arrow-left', '后退', () => { if (this.webview?.canGoBack()) this.webview.goBack(); });
+    button('arrow-right', '前进', () => { if (this.webview?.canGoForward()) this.webview.goForward(); });
+    button('refresh-cw', '重新加载页面及用户脚本', () => this.webview?.reload());
+    this.address = createEl('input'); this.address.type = 'url'; this.address.className = 'text-input'; this.address.setAttribute('aria-label', '浏览器地址');
     this.address.addEventListener('keydown', e => { if (e.key === 'Enter') void this.setState({ url: this.address.value }).catch(error => this.status.textContent = String(error)); });
     controls.append(this.address);
     this.menu = createEl('select'); this.menu.setAttribute('aria-label', '当前页面脚本菜单');
     controls.append(this.menu);
     this.status = createEl('div'); this.status.setAttribute('role', 'status');
+    this.status.className = 'webviewer-status';
     this.contentEl.append(controls, this.status);
     if (!userscriptBridge()) {
       this.status.textContent = '内置浏览器及用户脚本需要原生桌面客户端';
@@ -36,8 +39,8 @@ export class WebViewerView extends ItemView {
     }
     this.webview = createEl('webview');
     Object.assign(this.webview.style, {
-      width: 'min(1000px,80vw)',
-      height: '70vh',
+      width: '100%',
+      flex: '1', minHeight: '0',
       display: 'flex',
     });
     this.contentEl.append(this.webview);
@@ -45,10 +48,14 @@ export class WebViewerView extends ItemView {
     const navigated = () => {
       this.url = this.webview.getURL(); this.address.value = this.url;
       this.updateStatus(); void this.updateMenus();
+      this.leaf.workspace.updateRightLeaf(this.leaf);
     };
     this.webview.addEventListener('dom-ready', navigated);
     this.webview.addEventListener('did-navigate', navigated);
     this.webview.addEventListener('did-navigate-in-page', navigated);
+    this.webview.addEventListener('page-title-updated', (event: { title: string }) => {
+      this.title = event.title; this.leaf.workspace.updateRightLeaf(this.leaf);
+    });
     this.webview.addEventListener('did-fail-load', (e: any) => { if (e.isMainFrame && e.errorCode !== -3) this.status.textContent = `页面加载失败：${e.errorDescription}`; });
     this.menu.addEventListener('focus', () => void this.updateMenus());
     this.menu.addEventListener('change', () => {
@@ -58,7 +65,7 @@ export class WebViewerView extends ItemView {
     });
     void this.updateMenus();
   }
-  private guestId() { try { return this.webview?.getWebContentsId(); } catch { return undefined; } }
+  guestId() { try { return this.webview?.getWebContentsId(); } catch { return undefined; } }
   private updateStatus() {
     if (this.closed) return;
     const states = userscriptSnapshot()?.statuses.filter(s => s.guestId === this.guestId()) ?? [];
@@ -77,13 +84,16 @@ export class WebViewerView extends ItemView {
     return 'webviewer';
   }
   getDisplayText() {
-    return this.url || 'Web viewer';
+    return this.title || this.url || '浏览器';
   }
+  getIcon() { return 'globe'; }
   async setState(state: any) {
     const url = new URL(state.url);
     if (!['http:', 'https:'].includes(url.protocol))
       throw new Error('Web viewer requires an HTTP(S) URL');
+    if (this.url === url.href && this.webview?.src) return;
     this.url = url.href;
+    this.title = '';
     this.address.value = this.url;
     if (!this.webview) throw new Error('Web viewer requires the native desktop client');
     this.webview.src = this.url;

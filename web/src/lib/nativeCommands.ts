@@ -29,7 +29,6 @@ export const nativeCommands = [
   },
   { id: 'new', title: 'New note', run: () => useStore.getState().newNote() },
   { id: 'new-canvas', title: 'New canvas', run: () => useStore.getState().newCanvas() },
-  { id: 'daily', title: 'Open today’s daily note', run: () => useStore.getState().openDailyNote() },
   { id: 'save', title: 'Save current file', run: () => useStore.getState().save() },
   {
     id: 'bookmark',
@@ -51,7 +50,11 @@ export const nativeCommands = [
   {
     id: 'bookmarks',
     title: 'Open bookmarks & recent',
-    run: () => useStore.getState().setLeftPanel('bookmarks'),
+    run: () => {
+      const s = useStore.getState();
+      const tab = s.rightTabs.find(tab => tab.type === 'bookmarks');
+      if (tab) s.selectRightTab(tab.id); else s.openRightTab('bookmarks');
+    },
   },
   { id: 'graph', title: 'Open graph view', run: () => useStore.getState().setGraph(true) },
   { id: 'settings', title: 'Open settings', run: () => useStore.getState().setSettings(true) },

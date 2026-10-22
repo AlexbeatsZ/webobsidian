@@ -24,6 +24,7 @@ export default function CommandPalette() {
   const setOpen = useStore((s) => s.setPalette);
   const activePath = useStore((s) => s.activePath);
   const openFile = useStore((s) => s.openFile);
+  const rightTabId = useStore((s) => s.paletteRightTab);
   const openToSide = useStore((s) => s.openToSide);
   const setSettings = useStore((s) => s.setSettings);
   const notify = useStore((s) => s.notify);
@@ -86,6 +87,7 @@ export default function CommandPalette() {
           )
         : entries;
     const fileItems: Cmd[] = fileCandidates(query, source, recent)
+      .filter(({ entry }) => !rightTabId || /\.(md|markdown)$/i.test(entry.path))
       .slice(0, 60)
       .map(({ entry, label, match }) => ({
         id: `f:${entry.path}`,
@@ -99,7 +101,8 @@ export default function CommandPalette() {
               if (!(error instanceof DOMException && error.name === 'AbortError')) notify(String(error));
             });
           } else {
-            void openFile(entry.path);
+            if (rightTabId) useStore.getState().openRightTab('markdown', { file: entry.path }, rightTabId);
+            else void openFile(entry.path);
           }
         },
       }));
@@ -127,11 +130,11 @@ export default function CommandPalette() {
     return mode === 'commands' || q.startsWith('>')
       ? commandItems
       : [...commandItems.slice(0, 3), ...fileItems];
-  }, [open, q, mode, entries, settings, pluginVersion, activePath, content, recent]);
+  }, [open, q, mode, entries, settings, pluginVersion, activePath, content, recent, rightTabId]);
   const choose = (item: Cmd | undefined, event?: { ctrlKey: boolean; metaKey: boolean; altKey: boolean }) => {
     if (!item) return;
     setOpen(false);
-    if (item.path && mode !== 'templates' && event?.altKey) {
+    if (item.path && !rightTabId && mode !== 'templates' && event?.altKey) {
       void openToSide(item.path);
       return;
     }

@@ -7,6 +7,7 @@ import { nativeBatchTagMenuItems } from '../lib/tags/actions';
 import { extendFileMenu } from '../lib/obsidian/menus';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import Icon from './Icon';
+import { MenuList } from './ContextMenu';
 
 type SortMode = 'relevance' | 'name-asc' | 'name-desc' | 'path-asc';
 
@@ -247,20 +248,9 @@ export default function SearchPanel() {
               {sortOpen && (
                 <>
                   <div className="search-sort-backdrop" onClick={() => setSortOpen(false)} />
-                  <div className="search-sort-menu">
-                    {(Object.keys(SORT_LABELS) as SortMode[]).map((m) => (
-                      <button
-                        key={m}
-                        className={sort === m ? 'active' : ''}
-                        onClick={() => {
-                          setSort(m);
-                          setSortOpen(false);
-                        }}
-                      >
-                        <Icon name="check" size={14} style={{ opacity: sort === m ? 1 : 0 }} />
-                        {SORT_LABELS[m]}
-                      </button>
-                    ))}
+                  <div className="search-sort-menu" role="menu" aria-label="搜索排序">
+                    <MenuList items={(Object.keys(SORT_LABELS) as SortMode[]).map(mode => ({ label: SORT_LABELS[mode],
+                      checked: sort === mode, onClick: () => setSort(mode) }))} onClose={() => setSortOpen(false)} />
                   </div>
                 </>
               )}

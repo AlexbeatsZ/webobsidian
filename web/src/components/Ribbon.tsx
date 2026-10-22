@@ -5,13 +5,22 @@ import Icon from './Icon';
 import PluginElements from './PluginElements';
 import { pluginRibbon } from '../lib/plugins';
 
-export default function Ribbon({ onTheme }: { onTheme: () => void }) {
+export default function Ribbon() {
   const setLeftPanel = useStore((s) => s.setLeftPanel);
   const leftPanel = useStore((s) => s.leftPanel);
-  const setGraph = useStore((s) => s.setGraph);
+  return <nav className="ribbon ribbon-left" aria-label="左侧固定功能">
+    <button className={leftPanel === 'files' ? 'active' : ''} title="文件" aria-label="文件" onClick={() => setLeftPanel('files')}>
+      <Icon name="file-text" size={18} />
+    </button>
+    <button className={leftPanel === 'search' ? 'active' : ''} title="搜索 (Ctrl/⌘⇧F)" aria-label="搜索" onClick={() => setLeftPanel('search')}>
+      <Icon name="search" size={18} />
+    </button>
+  </nav>;
+}
+
+export function RibbonUtilities({ onTheme }: { onTheme: () => void }) {
   const setSettings = useStore((s) => s.setSettings);
   const setPalette = useStore((s) => s.setPalette);
-  const openDailyNote = useStore((s) => s.openDailyNote);
   const notify = useStore((s) => s.notify);
   const loadTree = useStore((s) => s.loadTree);
 
@@ -41,29 +50,10 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
   };
 
   return (
-    <div className="ribbon">
-      <button className={leftPanel === 'files' ? 'active' : ''} title="Files" onClick={() => setLeftPanel('files')}>
-        <Icon name="file-text" size={18} />
-      </button>
-      <button className={leftPanel === 'search' ? 'active' : ''} title="Search (⌘⇧F)" onClick={() => setLeftPanel('search')}>
-        <Icon name="search" size={18} />
-      </button>
-      <button title="Graph view" onClick={() => setGraph(true)}>
-        <Icon name="graph" size={18} />
-      </button>
-      <button className={leftPanel === 'bookmarks' ? 'active' : ''} title="Bookmarks & recent" onClick={() => setLeftPanel('bookmarks')}>
-        <Icon name="bookmark" size={18} />
-      </button>
-      <button title="Daily note" onClick={() => openDailyNote()}>
-        <Icon name="calendar" size={18} />
-      </button>
-      <button className={leftPanel === 'tags' ? 'active' : ''} title="Tags" onClick={() => setLeftPanel('tags')}>
-        <Icon name="hash" size={18} />
-      </button>
+    <div className="ribbon-utilities">
       <button title="Command palette (⌘P)" onClick={() => setPalette(true, 'commands')}>
         <Icon name="command" size={18} />
       </button>
-      <div className="spacer" />
       <PluginElements items={pluginRibbon} />
       {gitEnabled && (
         <button title={syncing ? 'Syncing…' : 'Sync now'} onClick={sync} disabled={syncing}>

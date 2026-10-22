@@ -690,6 +690,13 @@ export async function loadPlugins(): Promise<void> {
     const settings = await api.getSettings();
     sharedApp.vault.adapter.basePath = (window as any).webobsidianDesktop?.vaultPath ?? settings.vault.path;
     const stopMenus = bindPluginMenus(sharedApp);
+    const stopWebPages = (window as any).webobsidianDesktop?.webviewer?.subscribe((page: { sourceGuestId: number; url: string }) => {
+      // Only pages from a still-mounted application guest can create dock tabs.
+      const source = [...sharedApp.workspace.custom].find(leaf => leaf.view instanceof WebViewerView
+        && (leaf.view as WebViewerView).guestId() === page.sourceGuestId);
+      if (source && /^https?:\/\//i.test(page.url)) void sharedApp.workspace.getRightLeaf(true)
+        .setViewState({ type: 'webviewer', state: { url: page.url } }).catch(error => useStore.getState().notify(String(error)));
+    });
     if ((window as any).webobsidianDesktop?.userscripts) {
       sharedApp.workspace.viewRegistry.set('webviewer', (leaf) => new WebViewerView(leaf));
       sharedApp.internalPlugins.plugins.webviewer = {
@@ -798,6 +805,7 @@ export async function loadPlugins(): Promise<void> {
       stopJavascript();
       stopBlocks();
       stopMenus();
+      stopWebPages?.();
       unsub();
       metadataStopped = true;
       window.clearTimeout(metadataTimer);
@@ -854,4 +862,3 @@ export function bindPluginEditor(view: cmView.EditorView, path: string) {
   });
   return detach;
 }
-

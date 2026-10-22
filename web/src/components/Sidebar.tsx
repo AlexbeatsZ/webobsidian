@@ -1,16 +1,11 @@
-import { useEffect } from 'react';
 import { useStore } from '../lib/store';
 import FileTree, { collectFolderPaths } from './FileTree';
 import SearchPanel from './SearchPanel';
-import TagsPanel from './TagsPanel';
-import BookmarksPanel from './BookmarksPanel';
 import Icon from './Icon';
 
 const TITLES: Record<string, string> = {
   files: 'Files',
   search: 'Search',
-  tags: 'Tags',
-  bookmarks: 'Bookmarks',
 };
 
 export default function Sidebar() {
@@ -18,7 +13,6 @@ export default function Sidebar() {
   const newNote = useStore((s) => s.newNote);
   const newCanvas = useStore((s) => s.newCanvas);
   const newFolder = useStore((s) => s.newFolder);
-  const setSettings = useStore((s) => s.setSettings);
   const setTrash = useStore((s) => s.setTrash);
   const tree = useStore((s) => s.tree);
   const expanded = useStore((s) => s.expanded);
@@ -32,40 +26,6 @@ export default function Sidebar() {
 
   const allCollapsed = expanded.length === 0;
   const toggleCollapseAll = () => setExpanded(allCollapsed ? collectFolderPaths(tree) : []);
-
-  // Restore the user's saved sidebar width (device-local) on mount.
-  useEffect(() => {
-    try {
-      const w = localStorage.getItem('wo-sidebar-width');
-      if (w) document.documentElement.style.setProperty('--sidebar-width', `${w}px`);
-    } catch { /* ignore */ }
-  }, []);
-
-  // Drag the inner-edge splitter to resize the sidebar (clamped 180–560px). Updates
-  // the --sidebar-width CSS var live (the .app grid track follows it) and persists.
-  const onResizeDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const handle = e.currentTarget as HTMLElement;
-    const startX = e.clientX;
-    const startW = handle.parentElement?.getBoundingClientRect().width ?? 252;
-    handle.classList.add('active');
-    document.body.classList.add('wo-col-resizing');
-    const move = (ev: PointerEvent) => {
-      const w = Math.min(560, Math.max(180, Math.round(startW + (ev.clientX - startX))));
-      document.documentElement.style.setProperty('--sidebar-width', `${w}px`);
-    };
-    const up = () => {
-      handle.classList.remove('active');
-      document.body.classList.remove('wo-col-resizing');
-      const w = parseInt(document.documentElement.style.getPropertyValue('--sidebar-width'), 10);
-      if (w) try { localStorage.setItem('wo-sidebar-width', String(w)); } catch { /* ignore */ }
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
 
   const openSortMenu = (e: React.MouseEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -126,19 +86,13 @@ export default function Sidebar() {
       <div className="sidebar-body">
         {leftPanel === 'files' && <FileTree />}
         {leftPanel === 'search' && <SearchPanel />}
-        {leftPanel === 'tags' && <TagsPanel />}
-        {leftPanel === 'bookmarks' && <BookmarksPanel />}
       </div>
       <div className="vault-footer">
         <span className="vault-name">
           <Icon name="gem" size={15} /> {vaultName}
         </span>
         <span className="grow" />
-        <button title="Settings" onClick={() => setSettings(true)}>
-          <Icon name="settings" size={16} />
-        </button>
       </div>
-      <div className="sidebar-resizer" title="Drag to resize" onPointerDown={onResizeDown} />
     </div>
   );
 }

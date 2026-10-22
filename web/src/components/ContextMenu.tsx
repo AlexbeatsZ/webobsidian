@@ -4,7 +4,7 @@ import { applyConfiguredMenu, getMenuConfigurationController, getMenuConfigurati
 import type { ConfiguredMenuItem } from '../lib/configuredMenus/types';
 import Icon from './Icon';
 
-function MenuList({ items, onClose }: { items: ConfiguredMenuItem[]; onClose: () => void }) {
+export function MenuList({ items, onClose }: { items: ConfiguredMenuItem[]; onClose: () => void }) {
   const [openSub, setOpenSub] = useState<number | null>(null);
   useEffect(() => setOpenSub(null), [items]);
   return (
@@ -17,11 +17,30 @@ function MenuList({ items, onClose }: { items: ConfiguredMenuItem[]; onClose: ()
             key={`${it.id ?? 'item'}:${i}`}
             className={`context-item ${it.danger ? 'danger' : ''} ${it.submenu ? 'has-sub' : ''} ${it.disabled ? 'is-disabled' : ''}`}
             role={it.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+            tabIndex={it.disabled ? undefined : -1}
             aria-disabled={it.disabled || undefined}
             aria-checked={it.checked}
             aria-haspopup={it.submenu ? 'menu' : undefined}
             style={it.disabled ? { opacity: 0.45, cursor: 'default' } : undefined}
             onMouseEnter={() => setOpenSub(!it.disabled && it.submenu ? i : null)}
+            onKeyDown={event => {
+              const row = event.currentTarget;
+              const rows = [...row.parentElement!.children].filter(el => el.getAttribute('role')?.startsWith('menuitem') && el.getAttribute('aria-disabled') !== 'true') as HTMLElement[];
+              if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                event.preventDefault(); event.stopPropagation();
+                const index = rows.indexOf(row);
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length;
+                rows[next]?.focus();
+              } else if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault(); event.stopPropagation();
+                if (it.submenu) setOpenSub(i); else row.click();
+              } else if (event.key === 'ArrowRight' && it.submenu) {
+                event.preventDefault(); event.stopPropagation(); setOpenSub(i);
+                requestAnimationFrame(() => row.querySelector<HTMLElement>('[role^="menuitem"]')?.focus());
+              } else if (event.key === 'ArrowLeft' && row.parentElement?.classList.contains('submenu')) {
+                event.preventDefault(); event.stopPropagation(); (row.parentElement.parentElement as HTMLElement)?.focus();
+              }
+            }}
             onClick={(e) => {
               e.stopPropagation();
               if (it.disabled) return;
@@ -33,8 +52,9 @@ function MenuList({ items, onClose }: { items: ConfiguredMenuItem[]; onClose: ()
               finally { onClose(); }
             }}
           >
-            {it.checked ? <Icon name="check" size={15} /> : it.icon && <Icon name={it.icon} size={15} />}
+            <span className="ctx-icon">{it.icon && <Icon name={it.icon} size={15} />}</span>
             <span className="ctx-label">{it.label}</span>
+            {it.checked && <Icon name="check" size={14} />}
             {it.submenu && <Icon name="chevron-right" size={14} className="ctx-arrow" />}
             {it.submenu && !it.disabled && openSub === i && (
               <div className="context-menu submenu" role="menu">
@@ -54,6 +74,13 @@ export default function ContextMenu() {
   const revision = useSyncExternalStore(subscribeMenuConfiguration, getMenuConfigurationRevision);
   const sessionId = getMenuConfigurationController()?.sessionId;
   const previousSession = useRef(sessionId);
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const previous = document.activeElement as HTMLElement | null;
+    host.current?.querySelector<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"])')?.focus();
+    return () => { if (host.current?.contains(document.activeElement) || document.activeElement === document.body) previous?.isConnected && previous.focus(); };
+  }, [menu]);
   useEffect(() => {
     if (previousSession.current === sessionId) return;
     previousSession.current = sessionId;
@@ -90,7 +117,7 @@ export default function ContextMenu() {
   const y = Math.max(margin, Math.min(menu.y, window.innerHeight - estHeight - margin));
 
   return (
-    <div className="context-menu" role="menu" style={{ left: x, top: y }} onClick={(e) => e.stopPropagation()}>
+    <div ref={host} className="context-menu" role="menu" style={{ left: x, top: y }} onClick={(e) => e.stopPropagation()}>
       <MenuList key={revision} items={items} onClose={close} />
     </div>
   );

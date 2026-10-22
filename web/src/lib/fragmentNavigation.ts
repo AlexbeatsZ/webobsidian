@@ -15,9 +15,10 @@ function reveal(view: EditorView, fragment: string) {
   return true;
 }
 /** One navigation path for headings, ordinary blocks and formula blocks. */
-export function openFragment(path: string, fragment: string) {
-  const mounted = [...(views.get(path) ?? [])].filter(([, full]) => full).map(([view]) => view);
-  const view = mounted.find(v => v.hasFocus) ?? mounted[0];
+export function openFragment(path: string, fragment: string, target?: EditorView) {
+  const mounted = [...(views.get(path) ?? [])].filter(([view, full]) => full && view.dom.isConnected
+    && !view.dom.closest('[hidden], [aria-hidden="true"]')).map(([view]) => view);
+  const view = target && mounted.includes(target) ? target : mounted.find(v => v.hasFocus) ?? mounted[0];
   pending.set(path, fragment);
   if (view) requestAnimationFrame(() => { if (views.get(path)?.has(view) && reveal(view, fragment)) pending.delete(path); });
 }

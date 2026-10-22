@@ -11,10 +11,12 @@ width of 180px and horizontal scrolling; sidebar/new-note controls remain pinned
 The row height matches the existing native overlay height; native button widths
 remain controlled by the OS.
 
-The left vertical ribbon shares the left sidebar's visibility: collapsing the
-left sidebar unmounts both and reduces both grid tracks to zero. The top-row
-toggle remains available to restore them. The right sidebar keeps its own toggle.
-Mobile keeps its device-local drawers; the ribbon and left panel slide together.
+Both vertical ribbons share their sidebar's visibility. The two SidebarDock hosts
+float over the workspace below the titlebar without reserving document columns;
+the top-row toggles remain available to restore them. Left contains Files/Search;
+right contains the four existing fixed panels, a + entry and independent note,
+browser or plugin-view tabs. Mobile keeps device-local drawer visibility.
+See workspace-sidebars.md for ownership, persistence and lifecycle contracts.
 
 The Markdown view selector is a single icon in the bottom-right status bar. It
 opens an upward menu containing 阅读视图, 源码模式 and 实时预览 with a check beside
@@ -34,14 +36,13 @@ workspace layout without native caption insets or draggable regions.
 
 - web/src/components/WorkspaceTabs.tsx owns the shared tab row and tab context
   menus. It is a direct child of .app, spanning all grid columns in row 1.
-  The ribbon, sidebars and editor are explicitly placed in row 2.
+  The editor occupies row 2; SidebarDock overlays are positioned below row 1.
 - Workspace.tsx owns only editor/split content, paste/drop and the status bar.
   The redundant note header and FormatToolbar component/styles are removed.
 - ViewModeMenu.tsx reads/writes the existing store mode; no new view or document
   state is introduced. StatusBar.tsx hosts it alongside existing plugin items.
-- App.tsx mounts ribbon and left sidebar from the same showLeft condition.
-  The desktop left-closed rule sets both ribbon/sidebar widths to zero without
-  overriding the mobile drawer width.
+- App.tsx selects device-local or shared open state. SidebarDock owns both side
+  layouts and resizing; right guest hosts survive hiding the dock or tab.
 - desktop/src/main.ts keeps titleBarStyle: hidden and the native 32px overlay.
   The native application menu has no visible row. A fixed F10 popup IPC is
   restricted to the main local top-level frame. Fullscreen events remove caption

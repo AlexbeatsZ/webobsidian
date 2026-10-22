@@ -89,7 +89,9 @@ Templater 的模板解析和公开文件/交互入口已接入；系统命令调
 禁用后同样在下次启动恢复隔离设置；菜单动作不自动重启或丢弃会话。
 
 原生模式使用独立、无 Node 的 sandboxed `<webview>` 承载远程网页；拒绝非 HTTP(S)
-guest URL、guest preload 和主窗口跳转到远程页面。新窗口链接交给系统浏览器。
+guest URL、guest preload 和主窗口跳转到远程页面。WebViewer 内 HTTP(S) 新页面进入
+右侧竖栏标签；普通主应用外链仍交给系统浏览器。右侧标签复用 WorkspaceLeaf/View
+的加载与卸载，而不是给每个浏览器另开 Modal。详见 workspace-sidebars.md。
 Web Viewer 可从命令面板打开；Userscripts 插件能在 `webviewer` 叶子上找到实际 webview。
 桌面 requestUrl 经受限 IPC 使用 Electron net，遵循应用网络会话配置。
 

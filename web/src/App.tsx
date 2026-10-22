@@ -9,6 +9,7 @@ import ForceChangePassword from './components/ForceChangePassword';
 import Ribbon from './components/Ribbon';
 import Sidebar from './components/Sidebar';
 import RightSidebar from './components/RightSidebar';
+import SidebarDock from './components/SidebarDock';
 import Workspace from './components/Workspace';
 import WorkspaceTabs from './components/WorkspaceTabs';
 import CommandPalette from './components/CommandPalette';
@@ -289,11 +290,10 @@ export default function App() {
       </div>
     );
 
-  // On mobile the sidebars are overlay drawers (always mounted, slid in/out by
-  // CSS), driven by the device-local `mobileDrawer` state — not the persisted
-  // leftOpen/rightOpen that sync across desktops.
-  const showLeft = isMobile || leftOpen;
-  const showRight = isMobile || rightOpen;
+  // Both sidebars float; mobile visibility stays device-local. Keep guest hosts
+  // mounted when hidden so changing panels doesn't restart a web page.
+  const showLeft = isMobile ? mobileDrawer === 'left' : leftOpen;
+  const showRight = isMobile ? mobileDrawer === 'right' : rightOpen;
   const appCls = [
     'app',
     leftOpen ? '' : 'left-closed',
@@ -309,12 +309,11 @@ export default function App() {
     <div className={theme}>
       <div className={appCls}>
         <WorkspaceTabs />
-        {showLeft && (
-          <Ribbon onTheme={() => setTheme((t) => (t === 'theme-dark' ? 'theme-light' : 'theme-dark'))} />
-        )}
-        {showLeft && <Sidebar />}
+        <SidebarDock side="left" open={showLeft} rail={<Ribbon />}>
+          {showLeft && <Sidebar />}
+        </SidebarDock>
         <Workspace />
-        {showRight && <RightSidebar />}
+        <RightSidebar open={showRight} onTheme={() => setTheme((t) => (t === 'theme-dark' ? 'theme-light' : 'theme-dark'))} />
         {isMobile && mobileDrawer && (
           <div className="drawer-backdrop" onClick={() => setMobileDrawer(null)} />
         )}

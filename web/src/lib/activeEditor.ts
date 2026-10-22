@@ -10,6 +10,7 @@ interface EditorCommands {
 }
 const mounted = new Map<EditorView, EditorCommands>();
 let active: EditorView | null = null;
+const available = (view: EditorView) => view.dom.isConnected && !view.dom.closest('[hidden], [aria-hidden="true"]');
 
 export function registerEditor(view: EditorView, commands: EditorCommands): () => void {
   mounted.set(view, commands);
@@ -24,11 +25,13 @@ export function registerEditor(view: EditorView, commands: EditorCommands): () =
   };
 }
 export function getActiveEditor(): EditorView | null {
-  return active && mounted.has(active) ? active : null;
+  const page = document.activeElement?.closest('[data-sidebar-tab]');
+  if (page && !active?.dom.closest('[data-sidebar-tab]')?.isSameNode(page)) return null;
+  return active && mounted.has(active) && available(active) ? active : null;
 }
 export function getEditorForPath(path: string): EditorView | null {
-  if (active && mounted.has(active) && contextOf(active).sourcePath === path) return active;
-  return [...mounted.keys()].find((view) => contextOf(view).sourcePath === path) ?? null;
+  if (active && mounted.has(active) && available(active) && contextOf(active).sourcePath === path) return active;
+  return [...mounted.keys()].find((view) => available(view) && contextOf(view).sourcePath === path) ?? null;
 }
 const editable = () => {
   const view = getActiveEditor();

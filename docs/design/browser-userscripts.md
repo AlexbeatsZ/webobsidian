@@ -137,6 +137,11 @@ noframes 的脚本在设置中显示限制。BFCache 恢复时重新读取文档
 - `UserscriptSettings` 无 Props；`userscriptCommands` 汇入既有命令表。
   设置页事件 `userscripts:open-settings`；不另建命令/热键注册表。
 - `WebViewerView` 复用既有 guest，增加导航/重载、脚本菜单与可读执行状态。
+- WebViewer 使用右侧标签宿主（见 workspace-sidebars.md）。guest 的 HTTP(S)
+  新页面由既有 setWindowOpenHandler 拒绝原生弹窗后转发给本地 host，再创建右侧标签；
+  host 按 sourceGuestId 对照仍挂载的 WebViewer。切换标签不移除 webview，关闭才清理。
+  这不保留 window.opener，也不支持 about:blank/document.write 弹窗或非 HTTP(S) URL；
+  主应用外链的系统浏览器策略保持原有行为。
 - 无 server route、API 依赖、manifest/lock 或新构建 entry。协调者负责 App、Settings、
   runtime、nativeCommands 与旧插件接管；精确接线留在忽略的 integration.md。
 

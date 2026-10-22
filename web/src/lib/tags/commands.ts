@@ -5,7 +5,7 @@ export const tagCommands = [
   { id: 'tags-folder-rules', title: '按文件夹规则补标签（预览）', run: () =>
     openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'folder-rules' }, title: '按文件夹规则补标签' }) },
   { id: 'tags', title: '显示标签层级', run: () => {
-    const state = useStore.getState(); state.setLeftPanel('tags'); if (!state.leftOpen) state.toggleLeft();
+    useStore.getState().setRightPanel('tags');
   } },
   { id: 'tags-batch-selected', title: '批量修改所选文件的标签', run: () => {
     const s = useStore.getState(), paths = s.selected.length ? s.selected : s.activePath ? [s.activePath] : [];
