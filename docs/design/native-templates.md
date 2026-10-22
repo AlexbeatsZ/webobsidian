@@ -109,8 +109,10 @@ Configuration reads/writes share menu storage: UTF-8, directory traversal/symlin
 refusal, bounded file size, Vault token, revisions and exclusive new-file creation.
 Existing JSONC comments are retained through structural edits. Invalid reloads
 keep the prior registered definitions; explicit reload and application save events
-replace only changed definitions. External editor changes are applied with the
-reload command, avoiding a second watcher.
+replace only changed definitions. External editor changes also use the shared
+`vault-configuration-changed` socket event when the narrow native-configuration
+watcher is available; the reload command remains available. No second watcher or
+file-tree/index invalidation is introduced by automation.
 
 `Vault.create` prepares an automatic template before writing. The server then adds
 fixed folder tags using the existing planner before the initial bytes are stored.

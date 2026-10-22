@@ -138,6 +138,10 @@ export default function App() {
           notifyIndexChanged();
         } else if (msg.type === 'automation-changed') {
           void sharedApp.automation.reload().catch(error => useStore.getState().notify(String(error)));
+        } else if (msg.type === 'vault-configuration-changed') {
+          writingFileChanged(msg.path);
+          if (msg.path === '.obsidian/webobsidian/automation.jsonc')
+            void sharedApp.automation.reload().catch(error => useStore.getState().notify(String(error)));
         } else if (msg.type === 'index') {
           window.clearTimeout(indexTimer);
           indexTimer = window.setTimeout(notifyIndexChanged, 800);
