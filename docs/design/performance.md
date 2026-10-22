@@ -108,6 +108,26 @@ appearing concurrently. No time-only suppression can swallow an external write.
 
 No speedup percentage is claimed before measurements on the user's workflow.
 
+## Native writing integration (2026-10-22)
+
+Formula boundaries now come from one cached core source model, reused by live
+preview, snippet contexts, delimiter checks and the formatting adapter. TeX trees
+are parsed per formula and reused by source/layout features. Safe unrelated
+edits map cached regions; structural edits use a full scan. No second Markdown
+parser or independent background parser is introduced.
+
+Snippet matching filters string triggers by their last character and uses bounded
+source windows where safe; regexes that cannot be proven line-local retain full
+prefix semantics. Recursive expansion retains the complete eligible rule list.
+Templates and custom regexes compile at configuration load, not on every key.
+Capture data is appended literally, and optional prefix/suffix substitutions
+read their source lazily. Large spelling data loads on demand. Formatting runs
+on explicit saves/commands or configured file changes/paste, never background
+autosave. It commits source patches through the shared session history.
+
+These are architectural reductions in repeated work. Runtime throughput, typing
+latency and IME acceptance remain unmeasured under the static-only boundary.
+
 ## Static evidence (2026-10-19)
 
 - Core compiled to an isolated temporary output; server/web/desktop type checks

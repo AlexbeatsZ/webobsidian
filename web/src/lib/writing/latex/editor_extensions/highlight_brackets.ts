@@ -1,0 +1,539 @@
+// @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
+import { EditorView, ViewUpdate, Decoration, type DecorationSet, ViewPlugin } from "@codemirror/view";
+import { Prec, Range } from "@codemirror/state";
+import { tempKeyPress } from "../snippets/snippet_management";
+import { EquationText, findIndexReverse, iterateTreeCursor } from "../utils/tokenizer";
+import { walkPairedBrackets } from "../utils/tokenizer";
+import { type SyntaxNode, TreeCursor } from "@lezer/common";
+import { type CMBound, getContextPlugin } from "../editor_context/context";
+import { getMathBoundsPlugin } from "../editor_context/mathbounds";
+import { latex } from "../parser/latex-terms";
+import { cmDarkClass, cmLightClass } from "./obsidian_utils";
+
+const Ncolors = 3;
+const HIGHLIGHTED_BRACKET_CLASS = "latex-suite-highlighted-bracket";
+const COLOR_BRACKET_CLASS = "latex-suite-color-bracket";
+const MISMATCHED_BRACKET_CLASS = "latex-suite-mismatched-bracket";
+
+/**
+ * Helper function to create a decoration to highlight a bracket at a given position
+ * @param pos the start position of the bracket in the document
+ * @param className Css class to apply to the decoration
+ * @param bracket the bracket character(s) to highlight
+ * @returns
+ */
+function getHighlightBracketMark(pos: number, className: string, bracket: number):Range<Decoration> {
+	return Decoration.mark({
+		inclusive: true,
+		attributes: {},
+		class: className
+	}).range(pos, pos + bracket);
+}
+
+type BracketConcealment = {
+	pos: number,
+	className: string,
+	bracket: number,
+};
+
+const bracket_delimiters = {
+	"{": "}",
+	"[": "}",
+	"(": ")",
+	"\\{": "\\}",
+	// these don't neccessarily have to be paired: but they often do so we treat them like a pair.
+	"\\left<": "\\right>",
+	"\\langle ": "\\rangle",
+	"\\lvert": "\\rvert",
+	"\\lVert": "\\rVert",
+	"\\right\\lt": "\\right\\gt",
+	"\\lbrace": "\\rbrace",
+	"\\lbrack": "\\rbrack",
+	"\\lceil": "\\rceil",
+	"\\lfloor": "\\rfloor",
+	"\\lgroup": "\\rgroup",
+	"\\llcorner": "\\lrcorner",
+	"\\lmoustache": "\\rmoustache",
+	"\\lparen": "\\rparen",
+};
+
+const reverse_bracket_delimiters = Object.fromEntries(
+	Object.entries(bracket_delimiters).map(([open, close]) => [close, open])
+);
+
+function handleDelimitedGroup(cursor: TreeCursor, doc: EquationText): BracketResult[] {
+	const open = cursor.node.getChild(latex.MathOpening);
+	const close = cursor.node.getChild(latex.MathClosing);
+	const mathNode = cursor.node.getChild(latex.Math)
+	const mathDelimiters = mathNode
+		? traverseTree(
+				mathNode,
+				new EquationText(
+					doc.eqn,
+					mathNode.from,
+					mathNode.to,
+					doc.offset,
+				),
+			)
+		: [];
+	if (!open || !close) {
+		return []
+	}
+	const to = close?.to ?? open.to;
+	if (to) {
+		doc.moveTo(cursor, to, -1)
+	}
+	let bracket: BracketResult
+	if (open && close) {
+		bracket = {
+			kind: "bracket",
+			open,
+			close,
+			children: mathDelimiters,
+		}
+		return [bracket]
+	} else if (open) {
+		bracket =  {
+			kind: "error_open",
+			open,
+			bracket: doc.slice(open.from, open.to),
+		}
+		return [bracket, ...mathDelimiters]
+	} else if (close) {
+		const closeBracket = doc.slice(close.from, close.to);
+		bracket =  {
+			kind: "error_close",
+			close,
+			bracket: closeBracket,
+		}
+		return [...mathDelimiters, bracket]
+	}
+	return []
+}
+
+
+type BracketOpen = {
+	kind: "error_open";
+	bracket: string;
+	open: CMBound;
+}
+
+type BracketClose = {
+	kind: "error_close";
+	bracket: string;
+	close: CMBound;
+}
+
+type BracketPair = {
+	kind: "bracket";
+	open: CMBound;
+	close: CMBound;
+	children: BracketResult[];
+}
+
+
+type BracketResult = BracketPair | BracketOpen | BracketClose;
+
+function handleCtrlSeq(cursor: TreeCursor, doc: EquationText): BracketResult[] {
+	const node = cursor.node
+	const macro = doc.slice(node.from, node.to);
+	const isOpen = macro in bracket_delimiters;
+	const isClose = macro in reverse_bracket_delimiters;
+	let bracket: BracketResult;
+	if (isOpen) {
+		bracket = {
+			kind: "error_open",
+			open: node,
+			bracket: doc.slice(node.from, node.to),
+		}
+	} else if (isClose) {
+		bracket = {
+			kind: "error_close",
+			close: node,
+			bracket: doc.slice(node.from, node.to),
+		}
+	} else {
+		return [];
+	}
+	return [bracket];
+}
+
+const openBraceMap = {
+	"OpenBrace": "CloseBrace",
+	"OpenBracket": "CloseBracket",
+	"OpenParenMath": "CloseParenMath"
+}
+
+function handleOpenBrace(cursor: TreeCursor, doc: EquationText): BracketResult[] {
+	const node = cursor.node;
+	const open = node;
+	const closeName = openBraceMap[node.name as keyof typeof openBraceMap];
+	const inBetween: BracketResult[] = [];
+	while (cursor.nextSibling()) {
+		const sibling = cursor.node;
+		if (sibling && sibling.name === closeName) {
+			const close = sibling;
+			return [{
+				kind: "bracket",
+				open,
+				close,
+				children: inBetween,
+			}]
+		} else if (sibling) {
+			const newDoc = new EquationText(doc.eqn, sibling.from, sibling.to, doc.offset);
+			inBetween.push(...traverseTree(sibling, newDoc));
+		}
+	}
+	return [{
+		kind: "error_open",
+		open,
+		bracket: doc.slice(open.from, open.to),
+	}, ...inBetween]
+}
+
+function handleMathSpecialChar(cursor: TreeCursor, doc: EquationText): BracketResult[] {
+	const chars = doc.slice(cursor.from, cursor.to)
+	const brackets: BracketResult[] = []
+	for (let i=0; i < chars.length; i++) {
+		const char = chars[i]!;
+		const bound = {from: cursor.from + i, to: cursor.from + i + 1};
+		const isOpen = char in bracket_delimiters;
+		const isClose = char in reverse_bracket_delimiters;
+		if (isOpen) {
+			brackets.push({
+				kind: "error_open",
+				open: bound,
+				bracket: doc.slice(bound.from, bound.to),
+			})
+		} else if (isClose) {
+			brackets.push({
+				kind: "error_close",
+				close: bound,
+				bracket: doc.slice(bound.from, bound.to),
+			})
+		}
+	}
+	return brackets
+}
+
+type Handler = (cursor: TreeCursor, doc: EquationText) => BracketResult[];
+
+export function traverseTree(topNode: SyntaxNode, doc: EquationText): BracketResult[] {
+	const specs: BracketResult[] = [];
+	const nameMap: Record<number, Handler> = {
+		[latex.MathDelimitedGroup]: handleDelimitedGroup
+	}
+	for (const cursor of iterateTreeCursor(topNode, doc)) {
+		const node = cursor.node;
+		const handler = nameMap[node.type.id];
+		if (handler) {
+			const region = handler(cursor, doc);
+			specs.push(...region);
+		} else if (node.name.endsWith("CtrlSeq") || node.type.is(latex.CtrlSym)) {
+			specs.push(...handleCtrlSeq(cursor, doc));
+		} else if (node.type.is(latex.MathSpecialChar)) {
+			specs.push(...handleMathSpecialChar(cursor, doc))
+		} else if (
+			node.type.is(latex.OpenBrace) ||
+			node.type.is(latex.OpenBracket) ||
+			node.type.is(latex.OpenParenMath)
+		) {
+			specs.push(...handleOpenBrace(cursor, doc));
+		} else if (
+			node.type.is(latex.CloseBrace) ||
+			node.type.is(latex.CloseBracket)
+		) {
+			specs.push({
+				kind: "error_close",
+				close: node,
+				bracket: doc.slice(node.from, node.to),
+			});
+		}
+	}
+	return specs;
+}
+
+type PairedBracketParent = PairedBrackets & {kind: "error_open" | "bracket"} | null;
+export type PairedBrackets = BracketResult & {
+	parent: PairedBracketParent;
+	children: PairedBrackets[];
+}
+
+// syntax brackets like \left...\right and {} have priority over normal brackets like () or \lvert \rvert.
+// This does make parsing a bit awkward.
+export function pairBrackets(specs: BracketResult[]) {
+	const paired: PairedBrackets[] = [];
+	let parent: PairedBracketParent = null;
+	const openStack: (PairedBrackets & {kind: "error_open"})[] = [];
+	for (const spec of specs) {
+		const children = parent?.children ?? paired;
+		const pairedSpec: PairedBrackets = {
+			...spec,
+			parent,
+			children: [],
+		};
+		if (pairedSpec.kind === "error_open") {
+			openStack.push(pairedSpec);
+			children.push(pairedSpec);
+			parent = pairedSpec;
+		} else if (pairedSpec.kind === "error_close") {
+			const bracket: string = reverse_bracket_delimiters[pairedSpec.bracket]!;
+			const index = findIndexReverse(openStack, (open) => open.bracket === bracket);
+
+			if (index !== null) {
+				const open = openStack[index]!;
+				parent = open
+				openStack.length = index;
+				Object.assign(open, {
+					kind: "bracket",
+					close: pairedSpec.close,
+				});
+				parent = open.parent;
+			} else {
+				children.push(pairedSpec);
+			}
+		} else if (pairedSpec.kind === "bracket" && spec.kind === "bracket") {
+			children.push(pairedSpec);
+			const pairChildrenResults = pairBrackets(spec.children)
+
+			pairChildrenResults.forEach((child) => {
+				child.parent = pairedSpec;
+				pairedSpec.children.push(child);
+			});
+		}
+	}
+	return paired
+}
+
+type ColorBracketsCachedEquations = Record<string, BracketConcealment[]>;
+/**
+ * Colorizes paired brackets just like in VSCode. Mismatched brackets are highlighted in red,
+ * this includes macros that act like brackets excluding \left and \right.
+ * @param view current editor view
+ * @param cached_equations previously cached equations to avoid re-tokenizing them
+ * @returns new decorations and the updated cached equations
+ */
+export function colorPairedBrackets(view: EditorView, cached_equations: ColorBracketsCachedEquations) {
+	const overlays = getMathBoundsPlugin(view).getEquationOverlays(view.state);
+	const new_equations: typeof cached_equations = {};
+	const widgets: Range<Decoration>[] = [];
+	for (const eqn_info of overlays) {
+		const cached = cached_equations[eqn_info.text];
+		if (cached) {
+			new_equations[eqn_info.text] = cached
+			for (const spec of cached) {
+				widgets.push(getHighlightBracketMark(spec.pos + eqn_info.overlay.from, spec.className, spec.bracket));
+			}
+			continue
+		}
+		const doc = new EquationText(eqn_info.text, eqn_info.overlay.from, eqn_info.overlay.to);
+		const traversedTokens = traverseTree(eqn_info.bound.tree, doc);
+		const tokens = pairBrackets(traversedTokens);
+		const localSpecs: BracketConcealment[] = [];
+		for (const {region: token, depth} of walkPairedBrackets(tokens)) {
+			if (token.kind === "error_close" || token.kind === "error_open") {
+				const pos = token.kind === "error_open" ? token.open.from : token.close.from;
+				localSpecs.push({
+					pos,
+					className: MISMATCHED_BRACKET_CLASS,
+					bracket: token.bracket.length,
+				});
+				continue;
+			}
+
+			const colorIndex = depth % Ncolors;
+			localSpecs.push({
+				pos: token.open.from,
+				className: `${COLOR_BRACKET_CLASS}-${colorIndex}`,
+				bracket: token.open.to - token.open.from,
+			});
+			localSpecs.push({
+				pos: token.close.from,
+				className: `${COLOR_BRACKET_CLASS}-${colorIndex}`,
+				bracket: token.close.to - token.close.from
+			});
+		}
+		widgets.push(
+			...localSpecs.map(spec => getHighlightBracketMark(
+				spec.pos,
+				spec.className,
+				spec.bracket,
+			))
+		)
+
+		new_equations[eqn_info.text] = localSpecs.map((spec) => ({
+			...spec,
+			pos: spec.pos - doc.offset,
+		}));
+	}
+	cached_equations = new_equations;
+
+	const decorations = Decoration.set(widgets, true);
+	return { decorations, cached_equations  };
+}
+
+function highlightCursorBrackets(view: EditorView) {
+
+	const widgets: Range<Decoration>[] = []
+	const selection = view.state.selection;
+	const ranges = selection.ranges;
+	const ctx = getContextPlugin(view);
+
+	if (!ctx.mode.inMath()) {
+		return Decoration.none;
+	}
+
+	const overlays = getMathBoundsPlugin(view).getEquationOverlays(view.state);
+	for (const range of ranges) {
+		const covered_overlays = overlays.find((o) => o.overlay.from <= range.from && o.bound.inner_end >= o.overlay.to);
+		if (!covered_overlays) {
+			continue;
+		}
+		const doc = new EquationText(covered_overlays.text, covered_overlays.overlay.from, covered_overlays.overlay.to);
+		const tokens = pairBrackets(traverseTree(covered_overlays.bound.tree, doc));
+		let prev_token: null | {
+			region: PairedBrackets & { kind: "bracket" };
+			depth: number;
+		} = null;
+		const eqn_range = {from: range.from, to: range.to, empty: range.empty}
+		for (const {region: token, depth} of walkPairedBrackets(tokens)) {
+			if (token.kind !== "bracket") {
+				continue;
+			}
+			// highlight closest matching brackets inside the selection where the ends are included
+			if (
+				!eqn_range.empty &&
+				((token.close.to <= eqn_range.to &&
+					token.close.to >= eqn_range.from) ||
+					(token.open.from >= eqn_range.to &&
+						token.open.from <= eqn_range.from))
+			) {
+				prev_token = {
+					region: token,
+					depth: depth,
+				};
+				break;
+			}
+			// highlight the innermost enclosing matching brackets if the selection is empty
+			if (token.open.from <= eqn_range.to && token.close.to >= eqn_range.to) {
+				prev_token = {
+					region: token,
+					depth: depth,
+				};
+				continue;
+			}
+			if (token.open.from > eqn_range.to) {
+				break
+			}
+		}
+		if (!prev_token) continue
+		widgets.push(
+			getHighlightBracketMark(
+				prev_token.region.open.from,
+				HIGHLIGHTED_BRACKET_CLASS,
+				prev_token.region.open.to - prev_token.region.open.from,
+			),
+			getHighlightBracketMark(
+				prev_token.region.close.from,
+				HIGHLIGHTED_BRACKET_CLASS,
+				prev_token.region.close.to - prev_token.region.close.from,
+			),
+		);
+	}
+
+	return Decoration.set(widgets, true);
+}
+
+
+export const colorPairedBracketsPlugin = ViewPlugin.fromClass(class {
+	decorations: DecorationSet;
+	cached_equations: ColorBracketsCachedEquations={};
+
+	constructor(view: EditorView) {
+		({
+			decorations: this.decorations,
+			cached_equations: this.cached_equations,
+		} = colorPairedBrackets(view, this.cached_equations));
+	}
+
+	update(update: ViewUpdate) {
+		if (update.transactions.some(tr => tr.annotation(tempKeyPress))) {
+			return;
+		}
+		if (update.docChanged || update.viewportChanged) {
+			({
+				decorations: this.decorations,
+				cached_equations: this.cached_equations,
+			} = colorPairedBrackets(update.view, this.cached_equations));
+		}
+	}
+
+}, { decorations: v => v.decorations, });
+
+
+const colorPairedBracketsTheme = EditorView.baseTheme({
+	[`${cmLightClass} .${COLOR_BRACKET_CLASS}-0, ${cmLightClass} .${COLOR_BRACKET_CLASS}-0 .cm-bracket`]:
+		{
+			color: "#527aff",
+		},
+	[`${cmDarkClass} .${COLOR_BRACKET_CLASS}-0, ${cmDarkClass} .${COLOR_BRACKET_CLASS}-0 .cm-bracket`]:
+		{
+			color: "#47b8ff",
+		},
+	[`${cmLightClass} .${COLOR_BRACKET_CLASS}-1, ${cmLightClass} .${COLOR_BRACKET_CLASS}-1 .cm-bracket`]:
+		{
+			color: "#ff50b7",
+		},
+	[`${cmDarkClass} .${COLOR_BRACKET_CLASS}-1, ${cmDarkClass} .${COLOR_BRACKET_CLASS}-1 .cm-bracket`]:
+		{
+			color: "#ff55cd",
+		},
+	[`${cmLightClass} .${COLOR_BRACKET_CLASS}-2, ${cmLightClass} .${COLOR_BRACKET_CLASS}-2 .cm-bracket`]:
+		{
+			color: "#69ba00",
+		},
+	[`${cmDarkClass} .${COLOR_BRACKET_CLASS}-2, ${cmDarkClass} .${COLOR_BRACKET_CLASS}-2 .cm-bracket`]:
+		{
+			color: "#73ff63",
+		},
+	[`${cmLightClass} .${MISMATCHED_BRACKET_CLASS}, ${cmLightClass} .${MISMATCHED_BRACKET_CLASS} .cm-bracket`]:
+		{
+			color: "rgb(255 18 18 / 80%)",
+		},
+	[`${cmDarkClass} .${MISMATCHED_BRACKET_CLASS}, ${cmDarkClass} .${MISMATCHED_BRACKET_CLASS} .cm-bracket`]:
+		{
+			color: "rgb(255 18 18 / 80%)",
+		},
+});
+
+export const colorPairedBracketsPluginLowestPrec = Prec.lowest([colorPairedBracketsPlugin, colorPairedBracketsTheme]);
+
+export const highlightCursorBracketsPlugin = ViewPlugin.fromClass(class {
+	decorations: DecorationSet;
+
+	constructor(view: EditorView) {
+		this.decorations = highlightCursorBrackets(view);
+	}
+
+	update(update: ViewUpdate) {
+		if (update.transactions.some(tr => tr.annotation(tempKeyPress))) {
+			return;
+		}
+		if (update.docChanged || update.selectionSet)
+			this.decorations = highlightCursorBrackets(update.view);
+	}
+
+}, { decorations: v => v.decorations, });
+
+const HIGHLIGHT_ACCENT_COLOR = "hsl(var(--accent-h) var(--accent-s)";
+
+export const highlightBracketsTheme = EditorView.baseTheme({
+	[`${cmLightClass} .${HIGHLIGHTED_BRACKET_CLASS}, ${cmLightClass} .${HIGHLIGHTED_BRACKET_CLASS} [class^="${COLOR_BRACKET_CLASS}-"]`]: {
+		backgroundColor: `${HIGHLIGHT_ACCENT_COLOR} 40% / 30%)`,
+	},
+	[`${cmDarkClass} .${HIGHLIGHTED_BRACKET_CLASS}, ${cmDarkClass} .${HIGHLIGHTED_BRACKET_CLASS} [class^="${COLOR_BRACKET_CLASS}-"]`]: {
+		backgroundColor: `${HIGHLIGHT_ACCENT_COLOR} 70% / 60%)`,
+	}
+});
+
+export const highlightCursorBracketsExtension = [highlightCursorBracketsPlugin, highlightBracketsTheme];

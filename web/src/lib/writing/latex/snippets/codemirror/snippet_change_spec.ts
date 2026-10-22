@@ -1,0 +1,45 @@
+// @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
+import { ChangeSet, type ChangeSpec } from "@codemirror/state"
+import type { TabstopSpec } from "../tabstop";
+import type { ResultInsert } from "../luasnip_api/node";
+
+export class SnippetChangeSpec {
+
+	constructor(
+		public from: number,
+		public to: number,
+		public insert: ResultInsert,
+		public keyPressed?: string,
+		public after?: number,
+	) {}
+
+	getTabstops(): TabstopSpec[] {
+		return this.insert.tabstops.map((ts) => {
+			return {
+				index: ts.index,
+				from: this.from + ts.from,
+				to: this.from + ts.to,
+			};
+		});
+	}
+
+	applyChange(change: ChangeSet): SnippetChangeSpec {
+		const newFrom = change.mapPos(this.from, 1);
+		const newTo = change.mapPos(this.to, -1);
+		return new SnippetChangeSpec(
+			newFrom,
+			newTo,
+			this.insert,
+			this.keyPressed,
+			this.after,
+		);
+	}
+
+	toChangeSpec(): ChangeSpec {
+		return {
+			from: this.from,
+			to: this.to,
+			insert: this.insert.insert,
+		};
+	}
+}

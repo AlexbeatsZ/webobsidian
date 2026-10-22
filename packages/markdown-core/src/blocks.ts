@@ -1,5 +1,5 @@
 import type { MarkdownModel, SourceSpan, SyntaxRange } from './syntax.js';
-import { extractMetadata } from './metadata.js';
+import { mathRegions } from './math.js';
 
 export interface BlockContainer extends SourceSpan {
   kind: 'quote' | 'callout' | 'code'; depth: number;
@@ -41,27 +41,6 @@ export function blockContainers(model: MarkdownModel): BlockContainer[] {
 
 export interface MathBlock extends SourceSpan { tex: string }
 export function mathBlocks(model: MarkdownModel): MathBlock[] {
-  const ranges: MathBlock[] = [];
-  const lines = model.text.split('\n');
-  const offsets: number[] = [];
-  let offset = 0;
-  for (const line of lines) { offsets.push(offset); offset += line.length + 1; }
-  const excluded = [...model.literal, ...model.htmlBlocks, ...extractMetadata(model).comments, ...(model.frontmatter ? [model.frontmatter] : [])];
-  const blocked = (from: number, to: number) => excluded.some((range) => from < range.to && to > range.from);
-  for (let index = 0; index < lines.length; index++) {
-    const raw = lines[index];
-    const prefix = raw.match(/^(?: {0,3}> ?)*/)?.[0] ?? '';
-    const depth = (prefix.match(/>/g) ?? []).length;
-    if (!/^\s*\$\$\s*$/.test(raw.slice(prefix.length)) || blocked(offsets[index], offsets[index] + raw.length)) continue;
-    let end = index + 1;
-    for (; end < lines.length; end++) {
-      const line = stripQuotePrefix(lines[end], depth);
-      if (/^\s*\$\$\s*$/.test(line)) break;
-    }
-    if (end === lines.length) continue;
-    ranges.push({ from: offsets[index], to: offsets[end] + lines[end].length,
-      tex: lines.slice(index + 1, end).map((line) => stripQuotePrefix(line, depth)).join('\n') });
-    index = end;
-  }
-  return ranges;
+  return mathRegions(model).filter(r => r.closed && r.block && r.kind === 'dollar')
+    .map(r => ({ from: r.from, to: r.to, tex: r.tex.trim() }));
 }

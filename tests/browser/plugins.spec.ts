@@ -5,6 +5,7 @@ import os from 'node:os';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { createServer } from 'node:http';
+import { migrateLinterReplacements } from '../../packages/markdown-core/src/legacyReplacement';
 
 const fixtureCode = `
 const {Plugin,PluginSettingTab,Setting,MarkdownRenderChild} = require('obsidian');
@@ -39,6 +40,7 @@ async function setup(
       url = new URL(request.url()),
       body = request.postDataJSON?.();
     const json = (value: any) => route.fulfill({ json: value });
+    if(url.pathname==='/api/writing')return json({version:1,migration:'fixture',latex:{snippets:'[]',snippetVariables:'{}',...data['obsidian-latex-suite']},linter:migrateLinterReplacements(data['obsidian-linter']??{}),hotkeys:{}});
     if (url.pathname === '/api/plugins/')
       return json({ plugins: entries.map(({ code, ...m }) => m) });
     if (url.pathname.endsWith('/main.js')) {
@@ -86,6 +88,7 @@ async function setup(
       });
     }
     if (url.pathname === '/api/plugins/adapter') {
+      if(body.op==='stat')return json({stat:body.path in contents?{type:'file',ctime:1,mtime:1,size:contents[body.path].length}:null});
       if (body.op === 'exists') return json({ exists: body.path in contents });
       if (body.op === 'read')
         return body.path in contents
@@ -316,7 +319,7 @@ test('current original plugins load against the host', async ({ page }) => {
       ed.focus();
     });
     await page.keyboard.type('mk');
-    // updateOptions reconfiguration was corrected after the last runtime run.
+    // Native snippets replace plugin loading; keep actual mk typing as a regression.
     // Kept as an explicit regression for the user's unified acceptance run.
     await expect
       .poll(() =>

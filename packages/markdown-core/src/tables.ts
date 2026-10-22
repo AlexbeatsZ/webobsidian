@@ -32,8 +32,10 @@ function row(text: string, from: number, to: number): TableRow {
   return { from, to, text: value, prefix, cells };
 }
 
+const tablesByModel=new WeakMap<MarkdownModel,TableModel[]>();
 export function tableModels(model: MarkdownModel): TableModel[] {
-  return model.nodes.filter(n => n.name === 'Table' && !(model.frontmatter && n.from < model.frontmatter.to)).map(n => {
+  const existing=tablesByModel.get(model);if(existing)return existing;
+  const tables=model.nodes.filter(n => n.name === 'Table' && !(model.frontmatter && n.from < model.frontmatter.to)).map(n => {
     const from = model.text.lastIndexOf('\n', n.from - 1) + 1;
     const lines: TableRow[] = [];
     let p = from;
@@ -47,6 +49,7 @@ export function tableModels(model: MarkdownModel): TableModel[] {
     return { from, to: n.to, key: model.text.slice(from, n.to), rows: lines, delimiter, align,
       editable: count > 0 && delimiter.cells.length === count && lines.every(r => r.cells.length === count) };
   });
+  tablesByModel.set(model,tables);return tables;
 }
 
 export function editTableCell(table: TableModel, rowIndex: number, column: number, value: string): SourceChange {

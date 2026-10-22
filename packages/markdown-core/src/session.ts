@@ -1,7 +1,8 @@
-import { SourceDocument, type SourceChange } from './source.js';
+import { SourceDocument, changesBetween, type SourceChange } from './source.js';
 import { analyzeMarkdown, updateMarkdown, type MarkdownModel } from './syntax.js';
 
 export interface DocumentSnapshot {
+  readonly historyState?: { owner: string; value: unknown };
   readonly id: string;
   readonly version: number;
   readonly text: string;
@@ -12,7 +13,8 @@ export interface DocumentSnapshot {
   readonly conflict: boolean;
 }
 export type DocumentWriter = (id: string, raw: string, baseRevision?: string) => Promise<{ revision?: string }>;
-type UndoGroup = { edits: SourceChange[][]; origin: string; at: number };
+export interface EditHistoryState { owner: string; before: unknown; after: unknown }
+type UndoGroup = { edits: SourceChange[][]; origin: string; at: number; state?: EditHistoryState };
 
 /** One session per document. Views own selections; only this object owns saves. */
 export class DocumentSession {
@@ -29,6 +31,9 @@ export class DocumentSession {
   private redoStack: UndoGroup[] = [];
   private current: DocumentSnapshot;
   private model: MarkdownModel | undefined;
+  private historyState: DocumentSnapshot['historyState'];
+  private userEdits = 0;
+  get userEditVersion(): number { return this.userEdits; }
 
   constructor(readonly id: string, raw: string, revision: string | undefined, private writer: DocumentWriter) {
     this.source = new SourceDocument(raw);
@@ -62,18 +67,21 @@ export class DocumentSession {
     return () => { this.listeners.delete(listener); };
   };
 
-  edit(baseVersion: number, changes: readonly SourceChange[], origin = 'edit'): void {
+  edit(baseVersion: number, changes: readonly SourceChange[], origin = 'edit', state?: EditHistoryState): void {
     if (baseVersion !== this.version) throw new Error('Document changed before edit could be applied');
     if (!changes.length) return;
+    this.historyState = undefined;
     const before = this.source.raw;
     const inverse = this.source.apply(changes);
     if (this.source.raw === before) return;
+    if (origin !== 'format') this.userEdits++;
     const now = Date.now();
     const previous = this.undoStack.at(-1);
-    if (origin.startsWith('input.type:') && previous?.origin === origin && now - previous.at < 500) {
+    if (previous?.origin === origin && (origin.startsWith('input.type:') && now - previous.at < 500 || origin.startsWith('snippet:'))) {
       previous.edits.push(inverse);
       previous.at = now;
-    } else this.undoStack.push({ edits: [inverse], origin, at: now });
+      if (previous.state && state?.owner === previous.state.owner) previous.state.after = state.after;
+    } else this.undoStack.push({ edits: [inverse], origin, at: now, state });
     this.redoStack = [];
     this.version++;
     this.emit();
@@ -93,19 +101,17 @@ export class DocumentSession {
     const normalized = text.replace(/^\ufeff/, '').replace(/\r\n|\r/g, '\n');
     const before = this.source.text;
     if (before === normalized) return;
-    let from = 0;
-    while (from < before.length && from < normalized.length && before[from] === normalized[from]) from++;
-    let to = before.length;
-    let insertTo = normalized.length;
-    while (to > from && insertTo > from && before[to - 1] === normalized[insertTo - 1]) { to--; insertTo--; }
     const raw = preserveRaw ? new SourceDocument(text) : undefined;
-    this.edit(this.version, [{ from, to, insert: normalized.slice(from, insertTo),
-      ...(raw ? { rawInsert: raw.raw.slice(raw.rawOffset(from), raw.rawOffset(insertTo)) } : {}),
-    }], origin);
+    let delta=0;
+    const changes=changesBetween(before,normalized).map(change=>{
+      const start=change.from+delta;delta+=change.insert.length-(change.to-change.from);
+      return {...change,...(raw?{rawInsert:raw.raw.slice(raw.rawOffset(start),raw.rawOffset(start+change.insert.length))}:{})};
+    });
+    this.edit(this.version, changes, origin);
   }
 
-  undo(): boolean { return this.moveHistory(this.undoStack, this.redoStack); }
-  redo(): boolean { return this.moveHistory(this.redoStack, this.undoStack); }
+  undo(): boolean { return this.moveHistory(this.undoStack, this.redoStack, false); }
+  redo(): boolean { return this.moveHistory(this.redoStack, this.undoStack, true); }
 
   /** External updates are accepted only when they cannot discard local work. */
   acceptExternal(raw: string, revision?: string): boolean {
@@ -117,6 +123,7 @@ export class DocumentSession {
     this.version++;
     this.undoStack = [];
     this.redoStack = [];
+    this.historyState = undefined;
     this.conflict = false;
     this.emit();
     return true;
@@ -150,12 +157,14 @@ export class DocumentSession {
     }
   }
 
-  private moveHistory(from: UndoGroup[], to: UndoGroup[]): boolean {
+  private moveHistory(from: UndoGroup[], to: UndoGroup[], redo: boolean): boolean {
     const group = from.pop();
     if (!group) return false;
     const inverse: SourceChange[][] = [];
     for (const edit of [...group.edits].reverse()) inverse.push(this.source.apply(edit));
-    to.push({ edits: inverse, origin: group.origin, at: 0 });
+    to.push({ edits: inverse, origin: group.origin, at: 0, state: group.state });
+    this.historyState = group.state ? { owner: group.state.owner, value: redo ? group.state.after : group.state.before } : undefined;
+    this.userEdits++;
     this.version++;
     this.emit();
     return true;
@@ -163,6 +172,7 @@ export class DocumentSession {
 
   private createSnapshot(): DocumentSnapshot {
     return Object.freeze({ id: this.id, version: this.version, text: this.source.text, raw: this.source.raw,
+      historyState: this.historyState,
       revision: this.revision, dirty: this.source.raw !== this.savedRaw, saving: this.saving, conflict: this.conflict });
   }
   private emit(): void {

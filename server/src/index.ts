@@ -1,4 +1,5 @@
 import { migrateSearchSettings } from './services/searchmigration.js';
+import { writingRouter } from './routes/writing.js';
 import express, { type Response } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -117,6 +118,7 @@ async function main() {
   app.use('/api/v1', agentRouter); // agent API (api-key auth)
   app.use('/api/files', filesRouter);
   app.use('/api/settings', settingsRouter);
+  app.use('/api/writing', writingRouter);
   app.use('/api/git', gitRouter);
   app.use('/api/keys', keysRouter);
   app.use('/api/plugins', pluginsRouter);

@@ -4,12 +4,15 @@ import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { editorSelection } from '../lib/editorSelection';
+import { nativeWritingExtensions } from '../lib/writing/extensions';
+import { captureWritingState, restoreWritingState, snippetChangeEffects, writingOperation, snippetGroup, type WritingViewState } from '../lib/writing/editing';
+import { formatPaste } from '../lib/writing/format';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { search, searchKeymap } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { syntaxHighlighting } from '@codemirror/language';
-import { analyzeMarkdown, type DocumentSnapshot, type SourceChange, type MarkdownModel } from '@webobsidian/markdown-core';
+import { analyzeMarkdown, changesBetween, type DocumentSnapshot, type SourceChange, type MarkdownModel, type EditHistoryState } from '@webobsidian/markdown-core';
 import { obsidianHighlightStyle } from '../lib/highlight';
 import { obsidianKeymap } from '../lib/editorCommands';
 import { suggesterPlugin } from '../lib/suggest';
@@ -31,7 +34,7 @@ export interface MarkdownViewProps {
   analysis?: MarkdownModel;
   mode: MarkdownMode;
   context: RenderContext;
-  onChange?: (changes: SourceChange[], baseVersion: number, origin: string, model: MarkdownModel) => DocumentSnapshot;
+  onChange?: (changes: SourceChange[], baseVersion: number, origin: string, model: MarkdownModel, history?: EditHistoryState) => DocumentSnapshot;
   onUndo?: () => DocumentSnapshot;
   onRedo?: () => DocumentSnapshot;
   onSave?: () => void;
@@ -69,12 +72,11 @@ export default function MarkdownView(props: MarkdownViewProps) {
     version.current = next.version;
     const before = v.state.doc.toString();
     if (before === next.text) return;
-    let from = 0, to = before.length, insertTo = next.text.length;
-    while (from < to && from < insertTo && before[from] === next.text[from]) from++;
-    while (to > from && insertTo > from && before[to - 1] === next.text[insertTo - 1]) { to--; insertTo--; }
     const model = latest.current.analysis;
-    v.dispatch({ changes: { from, to, insert: next.text.slice(from, insertTo) },
-      effects: model?.text === next.text ? adoptSyntaxModel.of(model) : [], annotations: externalUpdate.of(true) });
+    const restored=next.historyState?.owner===instanceId?restoreWritingState(next.historyState.value as WritingViewState):undefined;
+    const changes=changesBetween(before,next.text);
+    v.dispatch({ changes, ...restored,
+      effects: [...(model?.text === next.text ? [adoptSyntaxModel.of(model)] : []),...(restored?.effects??snippetChangeEffects(v.state,changes))], annotations: externalUpdate.of(true) });
   };
   // --- editor formatting actions (used by the right-click menu) ---
   const wrap = (before: string, after = before) => {
@@ -122,7 +124,10 @@ export default function MarkdownView(props: MarkdownViewProps) {
   };
   const paste = async () => {
     const t = await navigator.clipboard.readText().catch(() => '');
-    if (t) insert(t);
+    const v=view.current;if(!t||!v||v.state.readOnly)return;
+    try{const s=v.state.selection.main;const result=formatPaste(t,latest.current.context.sourcePath,v.state.doc.lineAt(s.from).text,v.state.sliceDoc(s.from,s.to));
+      v.dispatch({...v.state.replaceSelection(result),annotations:writingOperation.of('paste'),userEvent:'input.paste'});}
+    catch(error){latest.current.context.reportError?.(String(error));}
   };
   const selectAll = () => {
     const v = view.current;
@@ -228,6 +233,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         keymap.of([...defaultKeymap, ...searchKeymap, indentWithTab]),
         markdown({ base: markdownLanguage, codeLanguages: languages }),
         suggesterPlugin,
+        ...(p.context.allowPlugins ? [nativeWritingExtensions()] : []),
         syntaxHighlighting(obsidianHighlightStyle),
         EditorView.lineWrapping,
         livePreviewState.init(() => isMd && p.mode !== 'source'),
@@ -242,8 +248,11 @@ export default function MarkdownView(props: MarkdownViewProps) {
           const changes: SourceChange[] = [];
           u.changes.iterChanges((from, to, _a, _b, inserted) => changes.push({ from, to, insert: inserted.toString() }));
           const typing = u.transactions.some((tr) => tr.isUserEvent('input.type'));
+          const operation=u.transactions.map(tr=>tr.annotation(writingOperation)).find(Boolean);
+          const snippet=u.transactions.map(tr=>tr.annotation(snippetGroup)).find(Boolean);
+          const history={owner:instanceId,before:captureWritingState(u.startState),after:captureWritingState(u.state)};
           const next = latest.current.onChange?.(changes, version.current,
-            typing ? 'input.type:' + instanceId : 'edit', u.state.field(syntaxModel));
+            operation??snippet??(typing ? 'input.type:' + instanceId : 'edit'), u.state.field(syntaxModel),history);
           if (next) version.current = next.version;
         }),
       ],

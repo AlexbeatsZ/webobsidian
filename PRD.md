@@ -1,7 +1,14 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.12 · Cập nhật: 2026-10-22 · Trạng thái: Draft
+> Phiên bản: 1.13 · Cập nhật: 2026-10-22 · Trạng thái: Draft
+> Changelog 1.13 (native writing): integrate LaTeX Suite snippets/formula helpers
+> and Linter formatting with shared source analysis, session history and MathJax.
+> One LaTeX replacement language serves both; legacy Linter replacements migrate
+> once. Preserve user snippet files and rule ordering; Conceal defaults off;
+> matrix shortcuts, input-method switching and Vim are excluded. Manual save
+> formats; background autosave only persists. See [native writing](docs/design/native-writing.md).
+> Types and isolated bundles are static evidence; runtime acceptance is deferred.
 > Changelog 1.12 (native Chinese search): one VaultCatalog, one scoped path index,
 > and one MiniSearch instance for original/phonetic fields; native file/command/
 > folder/heading/template pickers and link/tag completion replace Fuzzy Chinese

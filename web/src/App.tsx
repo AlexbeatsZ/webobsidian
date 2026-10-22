@@ -1,3 +1,5 @@
+import { ensureWriting, writingFileChanged, watchExternalWritingSources } from './lib/writing/config';
+import { runWritingHotkey, bindWritingNavigation } from './lib/writing/commands';
 import { runNativeCommand } from './lib/nativeCommands';
 import { refreshSearch, searchSettings } from './lib/search';
 import { useEffect, useState } from 'react';
@@ -57,6 +59,9 @@ export default function App() {
     if (!authed) return;
     loadTree();
     void refreshSearch().catch(console.error);
+    const stopWritingFiles=watchExternalWritingSources();
+    const stopWritingNavigation=bindWritingNavigation();
+    void ensureWriting().catch(error=>useStore.getState().notify(String(error)));
     // Deep link (/note/<path>) wins over the restored workspace's active note.
     const deepLink = initUrlSync();
     useStore
@@ -83,6 +88,7 @@ export default function App() {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'fs') {
+          writingFileChanged(msg.path);
           // Content saves update one stat; structure/unknown paths refresh the tree.
           if (!(
             msg.event === 'change' &&
@@ -107,6 +113,8 @@ export default function App() {
       window.clearTimeout(treeTimer);
       window.clearTimeout(indexTimer);
       ws.close();
+      stopWritingFiles();
+      stopWritingNavigation();
     };
   }, [authed, loadTree]);
 
@@ -139,6 +147,7 @@ export default function App() {
             }
           }
         }
+      if (!reserved && runWritingHotkey(e)) { e.preventDefault(); return; }
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();

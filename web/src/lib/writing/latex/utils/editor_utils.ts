@@ -1,0 +1,195 @@
+// @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
+const Platform = {isIosApp: false, isAndroidApp: false, isMobileApp: false, isDesktopApp: true};
+import { EditorView } from "@codemirror/view";
+import { type NodeIterator, type SyntaxNode, Tree, TreeCursor } from "@lezer/common";
+import { EditorState } from "@codemirror/state";
+import type { Bounds } from "../editor_context/context";
+
+export function replaceRange(view: EditorView, start: number, end: number, replacement: string) {
+	view.dispatch({
+		changes: {from: start, to: end, insert: replacement}
+	});
+}
+
+export function getCharacterAtPos(viewOrState: EditorView | EditorState, pos: number) {
+	const state = viewOrState instanceof EditorView ? viewOrState.state : viewOrState;
+	const doc = state.doc;
+	return doc.sliceString(pos, pos+1);
+}
+
+
+export function setCursor(view: EditorView, pos: number) {
+	view.dispatch({
+		selection: {anchor: pos, head: pos}
+	});
+
+	resetCursorBlink(view);
+}
+
+
+export function setSelection(view: EditorView, start: number, end: number) {
+	view.dispatch({
+		selection: {anchor: start, head: end}
+	});
+
+	resetCursorBlink(view);
+}
+
+
+export function resetCursorBlink(view: EditorView) {
+	if (Platform.isMobile) return;
+
+	const cursorLayer = view.dom.getElementsByClassName("cm-cursorLayer")[0] as HTMLElement;
+
+	if (cursorLayer) {
+		const curAnim = cursorLayer.style.animationName;
+		cursorLayer.style.animationName = curAnim === "cm-blink" ? "cm-blink2" : "cm-blink";
+	}
+}
+
+
+export function reverse(s: string){
+	return s.split("").reverse().join("");
+}
+
+
+export function findMatchingBracket(text: string, start: number, openBracket: string, closeBracket: string, searchBackwards: boolean, end?: number):number | null {
+	if (searchBackwards) {
+		const reversedIndex = findMatchingBracket(reverse(text), text.length - (start + closeBracket.length), reverse(closeBracket), reverse(openBracket), false);
+
+		if (reversedIndex === null) return null;
+
+		return text.length - (reversedIndex + openBracket.length)
+	}
+
+	let brackets = 0;
+	const stop = end ? end : text.length;
+
+	for (let i = start; i < stop; i++) {
+		if (text.startsWith(openBracket, i)) {
+			brackets++;
+		}
+		else if (text.startsWith(closeBracket, i)) {
+			brackets--;
+
+			if (brackets === 0) {
+				return i;
+			}
+		}
+	}
+
+	return null;
+}
+
+
+export function getOpenBracket(closeBracket: string) {
+	const openBrackets:{[closeBracket: string]: string} = {")": "(", "]": "[", "}": "{"};
+
+	return openBrackets[closeBracket];
+}
+
+
+export function getCloseBracket(openBracket: string) {
+	const closeBrackets:{[openBracket: string]: string} = {"(": ")", "[": "]", "{": "}"};
+
+	return closeBrackets[openBracket];
+}
+
+
+export enum Direction {
+	Backward,
+	Forward,
+}
+
+/**
+  * Searches for a token in siblings and parents, in only one direction.
+  *
+  * @param cursor: Where to start iteration
+  * @param dir: In which direction to look for the target node
+  * @param target: What substring the target node should have
+  *
+  * @returns The node found or null if none was found.
+  */
+export function escalateToToken(cursor: TreeCursor, dir: Direction, target: string): SyntaxNode | null {
+	// Allow the starting node to be a match
+	if (cursor.name.includes(target)) {
+		return cursor.node;
+	}
+
+	while (
+		(cursor.name != "Document") &&
+		((dir == Direction.Backward && cursor.prev())
+		|| (dir == Direction.Forward && cursor.next())
+		|| cursor.parent())
+	) {
+		if (cursor.name.includes(target)) {
+			return cursor.node;
+		}
+	}
+
+	return null;
+}
+
+
+/**
+ * Check if the user is typing in an IME composition.
+ * Returns true even if the given event is the first keydown event of an IME composition.
+ */
+export function isComposing(view: EditorView, event: KeyboardEvent): boolean {
+	// view.composing and event.isComposing are false for the first keydown event of an IME composition,
+	// so we need to check for event.keyCode === 229 to prevent IME from triggering keydown events.
+	// Note that keyCode is deprecated - it is used here because it is apparently the only way to detect the first keydown event of an IME composition.
+	return view.composing || (event as unknown as Record<string, unknown>).keyCode === 229;
+}
+
+export function isBoundMultiline(view: EditorView, bounds: Bounds): boolean {
+	const doc = view.state.doc;
+	const startLine = doc.lineAt(bounds.outer_start);
+	const endLine = doc.lineAt(bounds.outer_end);
+
+	return startLine.number !== endLine.number;
+}
+
+export function* stackResolveIterate(tree: Tree, pos: number, side: -1 | 0 | 1) {
+	let nodeRef: NodeIterator | null = tree.resolveStack(pos, side);
+	while (nodeRef) {
+		yield nodeRef.node;
+		nodeRef = nodeRef.next;
+	}
+}
+
+export function* stackResolveNodeIterate(node: SyntaxNode, pos: number, side: -1 | 0 | 1) {
+	const cursor = node.cursor()
+	cursor.moveTo(pos, side)
+	let parent: SyntaxNode | null = cursor.node
+	while (parent) {
+		yield parent
+		parent = parent.parent
+	}
+}
+
+export function* getChildren(node: SyntaxNode) {
+	let child = node.firstChild;
+	while (child) {
+		yield child;
+		child = child.nextSibling;
+	}
+}
+
+
+export function cumulativeSum(arr: number[]) {
+	const result: number[] = [];
+	let sum = 0;
+	for (const num of arr) {
+		sum += num;
+		result.push(sum);
+	}
+	return result;
+}
+
+export function* enumerate<T>(iterable: Iterable<T>) {
+	let i = 0;
+	for (const item of iterable) {
+		yield [i++, item] as const;
+	}
+}

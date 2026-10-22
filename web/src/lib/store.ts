@@ -1,3 +1,4 @@
+import { manualSave } from './writing/format';
 import { create } from 'zustand';
 import { api, type TreeNode, type ShareRecord } from './api';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
@@ -200,7 +201,7 @@ interface AppState {
   openWikilink: (target: string, sourcePath?: string) => Promise<void>;
   closeTab: (path: string) => void;
   setContent: (c: string) => void;
-  save: () => Promise<void>;
+  save: (cause?: 'manual' | 'background') => Promise<void>;
   createNote: (path: string, body?: string) => Promise<void>;
   /** Obsidian-style: create & open a fresh "Untitled" note (no prompt). `dir` = target folder, '' = vault root. */
   newNote: (dir?: string) => Promise<void>;
@@ -432,7 +433,7 @@ export const useStore = create<AppState>()(
         else get().closeTab(GRAPH_PATH);
       },
       openGraph: async () => {
-        if (get().dirty) await get().save();
+        if (get().dirty) await get().save('background');
         set((s) => ({
           tabs: s.tabs.some((t) => t.path === GRAPH_PATH)
             ? s.tabs
@@ -497,7 +498,7 @@ export const useStore = create<AppState>()(
       openFile: async (path) => {
         const generation = ++openGeneration;
         if (path === GRAPH_PATH) return get().openGraph();
-        if (get().dirty) await get().save();
+        if (get().dirty) await get().save('background');
         // A folder path (e.g. deep-link /note/<folder>) opens a folder content
         // view — never read it as a note nor pollute Recent with it.
         const isFolder = findNode(get().tree, path)?.type === 'folder';
@@ -552,9 +553,11 @@ export const useStore = create<AppState>()(
         doc.setRawText(content);
       },
 
-      save: async () => {
+      save: async (cause = 'manual') => {
         const path = get().activePath;
-        if (path && TEXT_RE.test(path)) await documents.get(path)?.save();
+        if (path && TEXT_RE.test(path)) {
+          if(cause==='manual')await manualSave(path);else await documents.get(path)?.save();
+        }
       },
 
       createNote: async (path, body) => {
@@ -675,7 +678,7 @@ export const useStore = create<AppState>()(
         if (originId === CLIENT_ID) return; // ignore echo of our own change
         const prevActive = get().activePath;
         const prevSplit = get().splitPath;
-        if (get().dirty) await get().save(); // don't lose local edits when switching
+        if (get().dirty) await get().save('background'); // don't lose local edits when switching
         suppressSave = true;
         applyPersisted(state, set);
         lastSaved = JSON.stringify(pickPersisted(get()));

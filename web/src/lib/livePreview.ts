@@ -17,7 +17,7 @@ import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered, toggleSourceRegion } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
+import { mathRegions, type MathRegion, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { renderMath } from './mathjax';
 import { decorationInputsChanged } from './decorationDependencies';
@@ -1579,6 +1579,12 @@ function buildDecorations(view: EditorView): DecorationSet {
 
   const tree = view.state.field(syntaxModel).tree;
 
+  const inlineMathByLine = new Map<number,MathRegion[]>();
+  for(const formula of mathRegions(view.state.field(syntaxModel))) {
+    if(!formula.closed||formula.block||formula.kind!=='dollar')continue;
+    const number=doc.lineAt(formula.from).number;
+    const list=inlineMathByLine.get(number)??[];list.push(formula);inlineMathByLine.set(number,list);
+  }
   for (const { from, to } of view.visibleRanges) {
     tree.iterate({
       from,
@@ -1854,24 +1860,12 @@ function buildDecorations(view: EditorView): DecorationSet {
         all.push(Decoration.mark({ class: 'cm-comment' }).range(s, e));
       }
 
-      // $$Display math$$ (single-line) — rendered via MathJax when the caret is outside.
-      const dmathRe = /\$\$(.+?)\$\$/g;
-      while ((m = dmathRe.exec(text))) {
-        const s = line.from + m.index;
-        const e = s + m[0].length;
-        if (inCode(s, e)) continue;
-        if (!touches(s, e)) pushReplace(s, e, Decoration.replace({ widget: new MathWidget(m[1], true) }));
-        else all.push(Decoration.mark({ class: 'cm-math' }).range(s, e));
-      }
-
-      // Inline $math$ — open not followed by space, close not preceded by space (§7).
-      const mathRe = /(?<![$\\])\$(?![\s$])((?:\\\$|[^$\n])+?)(?<![\s\\])\$(?!\d|\$)/g;
-      while ((m = mathRe.exec(text))) {
-        const s = line.from + m.index;
-        const e = s + m[0].length;
-        if (inCode(s, e)) continue;
-        if (!touches(s, e)) pushReplace(s, e, Decoration.replace({ widget: new MathWidget(m[1], false) }));
-        else all.push(Decoration.mark({ class: 'cm-math' }).range(s, e));
+      // Formula boundaries are shared with snippets, diagnostics and formatting.
+      for (const formula of inlineMathByLine.get(line.number) ?? []) {
+        const s=formula.from,e=formula.to;
+        if(inCode(s,e))continue;
+        if(!touches(s,e))pushReplace(s,e,Decoration.replace({widget:new MathWidget(formula.tex,formula.display)}));
+        else all.push(Decoration.mark({class:'cm-math'}).range(s,e));
       }
 
       // Footnote refs [^id] (not a definition) → superscript.

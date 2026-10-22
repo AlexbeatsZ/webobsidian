@@ -1,3 +1,4 @@
+import {ensureWriting} from '../lib/writing/config';
 import { useEffect, useState } from 'react';
 import Editor from '../components/Editor';
 import Settings from '../components/Settings';
@@ -14,6 +15,7 @@ export default function PluginHarness() {
       pluginHarness: { ...host, store: useStore, documents },
     });
     void host.loadPlugins().then(async () => {
+      await ensureWriting();
       await useStore.getState().openFile('fixture.md');
       if (alive) setReady(true);
     });

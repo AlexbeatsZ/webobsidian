@@ -1,6 +1,15 @@
 import { parseDocument, isMap, isScalar, isSeq, isAlias, isNode, stringify, type Node, type Scalar, type YAMLSeq } from 'yaml';
 import type { SourceChange } from './source.js';
 
+const yamlDocuments=new Map<string,ReturnType<typeof parseDocument>>();
+/** Property editing and formatting share token-preserving YAML parsing. */
+export function parseYamlSource(source:string,mutable=false){
+  let document=yamlDocuments.get(source);
+  if(!document){document=parseDocument(source,{keepSourceTokens:true,uniqueKeys:true});yamlDocuments.set(source,document);
+    while(yamlDocuments.size>16)yamlDocuments.delete(yamlDocuments.keys().next().value!);}
+  return mutable?document.clone():document;
+}
+
 export interface PropertyRow {
   key: string; values: string[]; list: boolean; editable?: boolean;
   scalarType?: string; forceList?: boolean;
@@ -11,7 +20,7 @@ const simpleScalar = (node: unknown): node is Scalar => isScalar(node) && !node.
   node.type !== 'BLOCK_LITERAL' && node.type !== 'BLOCK_FOLDED' && (node.value === null || ['string', 'number', 'boolean'].includes(typeof node.value));
 
 function entries(yaml: string): Entry[] {
-  const document = parseDocument(yaml, { keepSourceTokens: true, uniqueKeys: true });
+  const document = parseYamlSource(yaml);
   if (document.errors.length) throw new Error('Invalid or duplicate YAML keys; edit source');
   if (document.contents === null) return [];
   if (!isMap(document.contents)) throw new Error('Properties must be a YAML mapping; edit source');

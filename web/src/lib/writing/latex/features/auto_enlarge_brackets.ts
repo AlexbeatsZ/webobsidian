@@ -1,0 +1,84 @@
+// @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
+import { EditorView } from "@codemirror/view";
+import { queueSnippet } from "../snippets/codemirror/snippet_queue_state_field";
+import { expandSnippets } from "../snippets/snippet_management";
+import { getLatexSuiteConfig } from "../snippets/codemirror/config";
+import { isContains } from "../utils/type_utils";
+import { emptyInsertOptions, TextNode } from "../snippets/luasnip_api/node";
+import { pairBrackets, traverseTree } from "../editor_extensions/highlight_brackets";
+import { EquationText } from "../utils/tokenizer";
+import { walkPairedBrackets } from "../utils/tokenizer";
+import type { SyntaxNode } from "@lezer/common";
+import { getMathBoundsPlugin } from "../editor_context/mathbounds";
+import { latex } from "../parser/latex-terms";
+
+
+const sizeControls = [
+	"\\big",
+	"\\Big",
+	"\\bigg",
+	"\\Bigg",
+	"\\bigl",
+	"\\Bigl",
+	"\\biggl",
+	"\\Biggl",
+	"\\bigr",
+	"\\Bigr",
+	"\\biggr",
+	"\\Biggr",
+	"\\left",
+	"\\right",
+] as const;
+
+// math delimiters can't be enlarged, but \[\] is not valid in mathjax so only match \(\).
+
+function isSizeControl(tree: SyntaxNode, from: number, doc: EquationText) {
+	const node = tree.resolveInner(from, -1)
+	if (!node.type.is(latex.CtrlSeq)) {
+		return false
+	}
+	const token = doc.slice(node.from, node.to)
+	return isContains(sizeControls, token)
+}
+
+export const autoEnlargeBrackets = (view: EditorView) => {
+	const settings = getLatexSuiteConfig(view);
+	if (!settings.autoEnlargeBrackets) return false;
+	const overlays = getMathBoundsPlugin(view).getEquationOverlays(view.state)
+	const pos = view.state.selection.main.head
+	const covered_overlay = overlays.filter(o => o.bound.inner_start <= pos && o.bound.inner_end >= pos)[0]
+	if (!covered_overlay) {
+		return false;
+	}
+
+	const left = "\\left"
+	const right = "\\right"
+
+	const doc = new EquationText(covered_overlay.text, covered_overlay.overlay.from, covered_overlay.overlay.to)
+	const tokens = pairBrackets(traverseTree(covered_overlay.bound.tree, doc))
+	for (const {region: bracket} of walkPairedBrackets(tokens)) {
+		if (bracket.kind !== "bracket") {
+			continue
+		}
+		const openBracket = doc.slice(bracket.open.from, bracket.open.to)
+		const closeBracket = doc.slice(bracket.close.from, bracket.close.to)
+		if (openBracket === "{" || openBracket === "\\(" || openBracket.startsWith("\\left") || closeBracket.startsWith("\\right")) {
+			continue;
+		}
+		if (isSizeControl(covered_overlay.bound.tree, bracket.open.from, doc)) {
+			continue
+		}
+		const bracketContent = doc.slice(bracket.open.to, bracket.close.from)
+		if (settings.autoEnlargeBracketsTriggers.every(trigger => !bracketContent.includes(trigger))) {
+			continue
+		}
+		const space = settings.autoEnlargeBracketsSpace ? " " : "";
+		const leftNode = new TextNode(left + openBracket + space);
+		const rightNode = new TextNode(space + right + closeBracket);
+		queueSnippet(view, bracket.open.from, bracket.open.to, leftNode.applyInsert(emptyInsertOptions));
+		queueSnippet(view, bracket.close.from, bracket.close.to, rightNode.applyInsert(emptyInsertOptions));
+
+	}
+
+	return expandSnippets(view);
+}

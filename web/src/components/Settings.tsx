@@ -7,15 +7,17 @@ import {
   subscribePlugins,
   pluginTabs,
   pluginStatuses,
+  nativePluginReplacements,
   setPluginEnabled,
   sharedApp,
 } from '../lib/plugins';
 import { useStore } from '../lib/store';
 import { api } from '../lib/api';
 import Icon from './Icon';
+import WritingSettings from './WritingSettings';
 
 type Section =
-  'search' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
+  'search' | 'writing' | 'formatting' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
@@ -58,6 +60,8 @@ export default function Settings() {
             {(
               [
                 'search',
+                'writing',
+                'formatting',
                 'vault',
                 'git',
                 'api',
@@ -87,6 +91,8 @@ export default function Settings() {
           </div>
           <div className="settings-content" style={pluginTab ? { display: 'none' } : undefined}>
             {section === 'search' && <SearchSettingsPanel focus={shortcutFocus} />}
+            {section === 'writing' && <WritingSettings />}
+            {section === 'formatting' && <WritingSettings formatting />}
             {settings && section === 'vault' && (
               <VaultSettings s={settings} reload={() => api.getSettings().then(setSettings)} />
             )}
@@ -138,6 +144,8 @@ function PluginSettingsTab({ id }: { id: string }) {
 }
 
 const labels: Record<Section, string> = {
+  writing: '公式与片段',
+  formatting: '文档格式化',
   search: 'Search & Shortcuts',
   vault: 'Vault & Files',
   git: 'GitHub Sync',
@@ -677,8 +685,8 @@ function Plugins() {
             <label>
               <input
                 type="checkbox"
-                disabled={p.id === 'fuzzy-chinese-pinyin'}
-                checked={p.id === 'fuzzy-chinese-pinyin' ? false : p.enabled}
+                disabled={Boolean(nativePluginReplacements[p.id])}
+                checked={nativePluginReplacements[p.id] ? false : p.enabled}
                 onChange={async (e) => {
                   try {
                     await setPluginEnabled(p.id, e.target.checked);

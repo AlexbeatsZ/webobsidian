@@ -1,8 +1,10 @@
 import { useStore } from './store';
 import { api } from './api';
+import { writingCommands } from './writing/commands';
 
 /** Native command definitions shared by the palette and configurable shortcuts. */
 export const nativeCommands = [
+  ...writingCommands,
   { id: 'files', title: '打开文件', run: () => useStore.getState().setPalette(true, 'files') },
   { id: 'commands', title: '执行命令', run: () => useStore.getState().setPalette(true, 'commands') },
   { id: 'headings', title: '搜索当前文档标题', run: () => useStore.getState().setPalette(true, 'headings') },

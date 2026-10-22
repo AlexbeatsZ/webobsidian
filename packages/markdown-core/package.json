@@ -17,10 +17,14 @@
   "dependencies": {
     "@lezer/common": "^1.5.3",
     "@lezer/markdown": "^1.6.4",
+    "diff": "^7.0.0",
     "hast-util-from-html": "^2.0.3",
     "hast-util-sanitize": "^5.0.2",
     "hast-util-to-html": "^9.0.5",
     "jsonc-parser": "^3.3.1",
     "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2"
   }
 }

@@ -4,7 +4,19 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-10-22 (native Chinese search; static-only validation)
+Cập nhật lần cuối: 2026-10-22 (native writing and Chinese search; static-only validation)
+
+## Native writing (PRD 1.13)
+
+- [x] Joint native LaTeX Suite 1.14.0 / Linter 1.31.2 migration with original licenses.
+- [x] Shared formula regions, formula-local TeX trees, table/YAML reuse and source patches.
+- [x] Native snippet/input/presentation extensions and one session history/save owner.
+- [x] One LaTeX template compiler; one-time legacy replacement conversion and syntax marker.
+- [x] Per-Vault settings import, native rule/options/commands UI and duplicate plugin suppression.
+- [x] Manual-save/paste/configured navigation formatting; background autosave remains persistence only.
+- [x] Core/web/server/desktop types and isolated production web/standalone server checks.
+- [ ] Run prepared regressions and accept actual input/IME/UI/migration/performance (user-deferred).
+- [ ] New desktop portable deliverable (not requested in this task).
 
 ## Native Chinese search (PRD 1.12)
 

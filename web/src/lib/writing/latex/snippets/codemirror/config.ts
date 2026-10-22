@@ -1,0 +1,26 @@
+// @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
+import { EditorView } from "@codemirror/view";
+import { Facet, EditorState } from "@codemirror/state";
+import { type LatexSuiteCMSettings, processLatexSuiteSettings, DEFAULT_SETTINGS } from "../../settings/settings";
+
+export const latexSuiteConfig = Facet.define<LatexSuiteCMSettings, LatexSuiteCMSettings>({
+    combine: (input) => {
+        const settings = input[0] ?? processLatexSuiteSettings(DEFAULT_SETTINGS, {
+			snippets: [],
+			snippetVariables: {},
+			rawConcealMaps: [],
+			updateHandlers: [],
+		});
+        return settings;
+    }
+});
+
+export function getLatexSuiteConfig(viewOrState: EditorView | EditorState) {
+    const state = viewOrState instanceof EditorView ? viewOrState.state : viewOrState;
+
+    return state.facet(latexSuiteConfig);
+}
+
+export function getLatexSuiteConfigExtension(pluginSettings: LatexSuiteCMSettings) {
+    return latexSuiteConfig.of(pluginSettings);
+}

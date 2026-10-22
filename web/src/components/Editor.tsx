@@ -5,6 +5,7 @@ import { useDocumentSession } from '../lib/useDocumentSession';
 import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { registerEditor } from '../lib/activeEditor';
 import { bindPluginEditor } from '../lib/plugins';
+import { manualSave, bindTimestampUpdates } from '../lib/writing/format';
 import MarkdownView from './MarkdownView';
 import { analyzeMarkdown, fragmentRange } from '@webobsidian/markdown-core';
 
@@ -25,6 +26,7 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     return () => { current = false; };
   }, []);
   const { session, snapshot, error } = useDocumentSession(path);
+  useEffect(() => session && !reading ? bindTimestampUpdates(session, notify) : undefined, [session, reading, notify]);
   const unregister = useRef<(() => void) | undefined>(undefined);
   const context = useMemo(() => createVaultRenderContext(path ?? '', {
     bindEditor: registerEditor, openLink: (target, sourcePath) => { void openLink(target, sourcePath ?? path ?? undefined); }, openMenu, reportError: notify, initialPropertyTypes: propertyTypes,
@@ -43,10 +45,10 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   const displayed = range ? { ...snapshot, text: snapshot.text.slice(range.from, range.to), raw: snapshot.text.slice(range.from, range.to) } : snapshot;
   return <MarkdownView snapshot={displayed} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={context}
     autoFocus={!reading} showTitle={!embedded} layout={embedded ? 'embedded' : 'page'}
-    onChange={(changes, version, origin, model) => { session.edit(version, changes, origin); session.acceptAnalysis(model); return session.snapshot; }}
+    onChange={(changes, version, origin, model, history) => { session.edit(version, changes, origin, history); session.acceptAnalysis(model); return session.snapshot; }}
     onUndo={() => { session.undo(); return session.snapshot; }}
     onRedo={() => { session.redo(); return session.snapshot; }}
-    onSave={() => { if (!reading) void session.save().catch((cause) => notify(cause.message)); }}
+    onSave={() => { if (!reading) void manualSave(session.id).catch((cause) => notify(cause.message)); }}
     onModeChange={reading ? undefined : setMode}
     onSearch={() => setLeftPanel('search')}
     onReady={(view) => {

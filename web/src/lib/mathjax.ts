@@ -24,6 +24,7 @@ const CACHE_LIMIT = 256;
 // Definitions have persistent TeX state: do not reuse their output or results
 // from before a preamble change. External plugin conversions invalidate too.
 const changesDefinitions = /\\(?:[gex]?def|let|global|(?:re|provide|new)command|(?:re|new)environment|DeclareMathOperator|require)\b/;
+export const hasMathDefinitions=(tex:string)=>changesDefinitions.test(tex);
 function invalidate() { revision++; cache.clear(); }
 
 export function loadMathJax(): Promise<MathJaxRuntime> {
@@ -83,12 +84,12 @@ export function loadMathJax(): Promise<MathJaxRuntime> {
   return runtime;
 }
 
-async function convertFormula(mathjax: MathJaxRuntime, tex: string, options: MathOptions, signal: AbortSignal) {
+async function convertFormula(mathjax: MathJaxRuntime, tex: string, options: MathOptions, signal: AbortSignal, transient = false) {
   const definition = changesDefinitions.test(tex);
   if (definition) invalidate();
   const generation = revision;
-  const key = JSON.stringify([generation, tex, options.display, options.em, options.containerWidth]);
-  const cached = !definition && cache.get(key);
+  const key = JSON.stringify([generation, transient, tex, options.display, options.em, options.containerWidth]);
+  const cached = !definition && !transient && cache.get(key);
   if (cached) { cache.delete(key); cache.set(key, cached); return cached; }
   let job = !definition ? pending.get(key) : undefined;
   if (!job) {
@@ -105,7 +106,7 @@ async function convertFormula(mathjax: MathJaxRuntime, tex: string, options: Mat
       let output: HTMLElement;
       try { output = await converters.get(mathjax)!(tex, options); }
       finally { if (definition) invalidate(); }
-      if (!definition && generation === revision) {
+      if (!definition && !transient && generation === revision) {
         cache.set(key, output);
         while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
       }
@@ -144,7 +145,7 @@ function cloneOutput(template: HTMLElement, doc: Document): HTMLElement {
 }
 
 /** Convert once per formula/layout/preamble and reuse SVG across editor remounts. */
-export async function renderMath(body: HTMLElement, tex: string, display: boolean, signal: AbortSignal): Promise<void> {
+export async function renderMath(body: HTMLElement, tex: string, display: boolean, signal: AbortSignal, options: {transient?: boolean} = {}): Promise<void> {
   if (signal.aborted) return;
   const mathjax = await loadMathJax();
   if (signal.aborted) return;
@@ -152,7 +153,7 @@ export async function renderMath(body: HTMLElement, tex: string, display: boolea
   const em = parseFloat(doc.defaultView!.getComputedStyle(body).fontSize) || 18;
   const template = await convertFormula(mathjax, tex, {
     display, em, ex: em / 2, containerWidth: body.closest('.cm-content')?.clientWidth || 720,
-  }, signal);
+  }, signal, options.transient);
   if (signal.aborted || !template) return;
   // Print uses a separate document; stylesheet and SVG must travel together.
   if (!doc.getElementById('MJX-SVG-styles')) doc.head.appendChild(doc.importNode(mathjax.svgStylesheet(), true));

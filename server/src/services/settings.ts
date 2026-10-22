@@ -17,6 +17,11 @@ const ApiKeySchema = z.object({
 });
 
 const SettingsSchema = z.object({
+  writing: z.record(z.object({
+    version: z.literal(1), migration: z.string(),
+    latex: z.record(z.unknown()), linter: z.record(z.unknown()),
+    hotkeys: z.record(z.array(z.object({modifiers:z.array(z.string()),key:z.string()}))).default({}),
+  })).default({}),
   version: z.number().default(1),
   auth: z
     .object({
@@ -194,20 +199,26 @@ export async function getSettings(): Promise<Settings> {
 }
 
 /** Mutate settings via an updater fn, validate, persist, and refresh cache. */
-export async function updateSettings(mutator: (draft: Settings) => void | Promise<void>): Promise<Settings> {
-  const current = await getSettings();
-  const draft: Settings = JSON.parse(JSON.stringify(current));
-  await mutator(draft);
-  const validated = SettingsSchema.parse(draft);
-  cache = validated;
-  await persist(validated);
-  return validated;
+let updateQueue:Promise<unknown>=Promise.resolve();
+export function updateSettings(mutator: (draft: Settings) => void | Promise<void>): Promise<Settings> {
+  const operation=updateQueue.catch(()=>{}).then(async()=>{
+    const current = await getSettings();
+    const draft: Settings = JSON.parse(JSON.stringify(current));
+    await mutator(draft);
+    const validated = SettingsSchema.parse(draft);
+    await persist(validated);
+    cache = validated;
+    return validated;
+  });
+  updateQueue=operation;return operation;
 }
 
 /** Redact secrets for sending to the client. */
 export function redactSettings(s: Settings) {
+  // Writing rules have a dedicated Vault-scoped endpoint, not every settings payload.
+  const {writing,...publicSettings}=s;
   return {
-    ...s,
+    ...publicSettings,
     auth: {
       // hasCustomPassword=false nghĩa là đang dùng mật khẩu mặc định (123456).
       hasCustomPassword: Boolean(s.auth.userPasswordHash),

@@ -1,3 +1,4 @@
+import { diffLines, diffChars, type BaseOptions, type Change } from 'diff';
 /** Positions are UTF-16 offsets in the LF editor text, never DOM offsets. */
 export interface SourceChange {
   from: number;
@@ -5,6 +6,29 @@ export interface SourceChange {
   insert: string;
   /** Used by inverse edits to restore the exact removed line endings. */
   rawInsert?: string;
+}
+
+/** Range patches for text transforms. Unchanged lines and character runs stay raw. */
+export function changesBetween(before: string, after: string): SourceChange[] {
+  if(before===after)return [];
+  const output:SourceChange[]=[];let offset=0;
+  const lines=diffLines(before,after);
+  for(let i=0;i<lines.length;){
+    if(!lines[i].added&&!lines[i].removed){offset+=lines[i++].value.length;continue;}
+    let removed='',inserted='';const from=offset;
+    while(i<lines.length&&(lines[i].added||lines[i].removed)){
+      const part=lines[i++];if(part.removed){removed+=part.value;offset+=part.value.length;}else inserted+=part.value;
+    }
+    const chars = (diffChars as (a:string,b:string,o:BaseOptions & {timeout:number})=>Change[]|undefined)(removed,inserted,{timeout:20});
+    if(!chars){output.push({from,to:offset,insert:inserted});continue;}
+    let p=from,start=from,insert='';let active=false;
+    const flush=()=>{if(active)output.push({from:start,to:p,insert});active=false;insert='';};
+    for(const part of chars){if(part.added){if(!active){active=true;start=p;}insert+=part.value;}
+      else if(part.removed){if(!active){active=true;start=p;}p+=part.value.length;}
+      else {flush();p+=part.value.length;}}
+    flush();
+  }
+  return output;
 }
 
 export class SourceDocument {

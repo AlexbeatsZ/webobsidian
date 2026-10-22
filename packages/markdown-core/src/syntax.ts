@@ -11,6 +11,8 @@ export interface MarkdownModel {
   nodes: SyntaxRange[]; literal: SourceSpan[]; html: HtmlToken[]; htmlBlocks: SourceSpan[];
   entities: SourceSpan[]; frontmatter: SourceSpan | null;
 }
+const predecessors=new WeakMap<MarkdownModel,{previous:WeakRef<MarkdownModel>;changes:readonly ChangedRange[]}>();
+export const syntaxPredecessor=(model:MarkdownModel)=>predecessors.get(model);
 
 /** One full-source grammar for views, fragments and metadata; never serializes Markdown. */
 export function analyzeMarkdown(text: string, id = '', version = 0): MarkdownModel {
@@ -20,7 +22,8 @@ export function analyzeMarkdown(text: string, id = '', version = 0): MarkdownMod
 /** Reuse unchanged grammar fragments; derived ranges still cover the full source. */
 export function updateMarkdown(previous: MarkdownModel, text: string, changes: readonly ChangedRange[], version = previous.version + 1): MarkdownModel {
   const fragments = TreeFragment.applyChanges(TreeFragment.addTree(previous.tree), changes);
-  return modelFromTree(text, previous.id, version, markdownParser.parse(text, fragments));
+  const next=modelFromTree(text, previous.id, version, markdownParser.parse(text, fragments));
+  predecessors.set(next,{previous:new WeakRef(previous),changes});return next;
 }
 
 function modelFromTree(text: string, id: string, version: number, tree: Tree): MarkdownModel {

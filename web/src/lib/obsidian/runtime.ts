@@ -1,4 +1,5 @@
 import { matchName } from '../search';
+import { runWritingCommand } from '../writing/commands';
 import * as cmState from '@codemirror/state';
 import * as cmView from '@codemirror/view';
 import * as cmLanguage from '@codemirror/language';
@@ -41,7 +42,7 @@ type Command = {
 };
 export type PluginStatus = {
   id: string;
-  state: 'loading' | 'loaded' | 'disabled' | 'error' | 'unsupported';
+  state: 'loading' | 'loaded' | 'disabled' | 'error' | 'unsupported' | 'builtin';
   error?: string;
 };
 const listeners = new Set<() => void>();
@@ -303,6 +304,7 @@ class CommandManager extends events.Events {
     return [...pluginCommands.values()];
   }
   executeCommandById(id: string) {
+    if (runWritingCommand(id)) return true;
     if (id === 'editor:save-file') {
       void useStore.getState().save();
       return true;
@@ -611,12 +613,13 @@ Object.assign(window, {
     },
   },
 });
-export async function loadPlugin(id: string, manifest: any) {
-  if (id === 'fuzzy-chinese-pinyin') {
-    pluginStatuses.set(id, { id, state: 'unsupported', error: 'Replaced by built-in Chinese search' });
-    changed();
-    return;
-  }
+export const nativePluginReplacements:Record<string,string>={
+  'fuzzy-chinese-pinyin':'已由内置中文搜索接管',
+  'obsidian-latex-suite':'已由内置公式与片段接管',
+  'obsidian-linter':'已由内置文档格式化接管',
+};
+export async function loadPlugin(id:string,manifest:any){
+  if(nativePluginReplacements[id]){pluginStatuses.set(id,{id,state:'builtin',error:nativePluginReplacements[id]});changed();return;}
   if (loaded.has(id)) return;
   if (pending.has(id)) return pending.get(id);
   const operation = (async () => {
@@ -709,9 +712,8 @@ export function unloadPlugin(id: string) {
     changed();
   }
 }
-export async function setPluginEnabled(id: string, enabled: boolean) {
-  if (id === 'fuzzy-chinese-pinyin')
-    throw new Error('Chinese search is built in; configure Search settings instead.');
+export async function setPluginEnabled(id:string,enabled:boolean){
+  if(nativePluginReplacements[id])throw new Error(nativePluginReplacements[id]+'，请使用原生设置');
   await api.setPluginEnabled(id, enabled);
   if (enabled) {
     const { plugins } = await api.listPlugins();
