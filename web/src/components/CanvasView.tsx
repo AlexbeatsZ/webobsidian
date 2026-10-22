@@ -94,6 +94,12 @@ export default function CanvasView() {
   const [sel, setSel] = useState<Sel>(EMPTY_SEL);
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [editingEdge, setEditingEdge] = useState<string | null>(null);
+  const hasDraft = Boolean(editingNode || editingEdge);
+  useEffect(() => {
+    if (!hasDraft) return;
+    useStore.setState(s => ({ pendingCanvasEdits: s.pendingCanvasEdits + 1 }));
+    return () => useStore.setState(s => ({ pendingCanvasEdits: Math.max(0, s.pendingCanvasEdits - 1) }));
+  }, [hasDraft]);
   const [hoverNode, setHoverNode] = useState<string | null>(null);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // Alignment guide lines shown while dragging nodes (Obsidian's canvas-snaps).

@@ -2,6 +2,9 @@ import { matchName } from '../search';
 import { Component } from './events';
 import { createDiv, createEl } from './dom';
 import moment from 'moment';
+import { applyConfiguredMenu, subscribeMenuConfiguration } from '../configuredMenus/controller';
+import { menuModifiers, snapshotMenuContext } from '../configuredMenus/transform';
+import type { ConfiguredMenuItem, MenuContext } from '../configuredMenus/types';
 export class Notice {
   noticeEl = createDiv({ cls: 'toast plugin-notice' });
   constructor(message: string | DocumentFragment, timeout = 4000) {
@@ -616,10 +619,14 @@ export function setTooltip(el: HTMLElement, text: string, _options?: any) {
   el.title = text;
 }
 export class MenuItem {
+  id?: string;
   title = '';
   icon = '';
   disabled = false;
-  checked = false;
+  checked?: boolean;
+  section = '';
+  group?: string;
+  danger = false;
   callback?: (e: MouseEvent) => void;
   submenu?: Menu;
   setTitle(v: string) {
@@ -638,7 +645,16 @@ export class MenuItem {
     this.checked = v;
     return this;
   }
-  setSection(_v: string) {
+  setId(v: string) {
+    this.id = v;
+    return this;
+  }
+  setSection(v: string) {
+    this.section = v;
+    return this;
+  }
+  setWarning(v = true) {
+    this.danger = v;
     return this;
   }
   onClick(cb: (e: MouseEvent) => void) {
@@ -652,6 +668,37 @@ export class MenuItem {
 export class Menu extends Component {
   items: (MenuItem | null)[] = [];
   dom = createDiv({ cls: 'menu plugin-menu' });
+  context: MenuContext = { kind: 'generic' };
+  private shownChildren = new Set<Menu>();
+  private rootMenu?: Menu;
+  private unsubscribeConfiguration?: () => void;
+  setContext(context: MenuContext) {
+    this.context = snapshotMenuContext(context);
+    return this;
+  }
+  /** Lossless bridge; no rules run until the completed model is rendered. */
+  toContextMenuItems(): ConfiguredMenuItem[] {
+    return this.items.map((item) => item ? {
+      id: item.id, label: item.title, icon: item.icon, disabled: item.disabled,
+      checked: item.checked, section: item.section, group: item.group, danger: item.danger,
+      onClick: (event?: MouseEvent) => item.callback?.(event ?? new MouseEvent('click')),
+      submenu: item.submenu?.toContextMenuItems(),
+    } : { label: '', separator: true });
+  }
+  loadContextMenuItems(items: readonly ConfiguredMenuItem[]) {
+    for (const item of items) {
+      if (item.separator) { this.addSeparator(); continue; }
+      this.addItem((m) => {
+        m.setTitle(item.label).setDisabled(item.disabled ?? false);
+        if (item.checked !== undefined) m.setChecked(item.checked);
+        m.id = item.id; m.section = item.section ?? ''; m.group = item.group; m.danger = item.danger ?? false;
+        if (item.icon) m.setIcon(item.icon);
+        m.onClick((event) => item.onClick?.(event));
+        if (item.submenu) m.setSubmenu().loadContextMenuItems(item.submenu);
+      });
+    }
+    return this;
+  }
   addItem(cb: (item: MenuItem) => void) {
     const item = new MenuItem();
     cb(item);
@@ -663,45 +710,88 @@ export class Menu extends Component {
     return this;
   }
   showAtMouseEvent(e: MouseEvent) {
+    this.context = snapshotMenuContext({ ...this.context, modifiers: menuModifiers(e) });
     this.showAtPosition({ x: e.clientX, y: e.clientY });
   }
   showAtPosition(pos: { x: number; y: number }) {
+    this.hide();
+    const items = applyConfiguredMenu(this.toContextMenuItems(), this.context);
+    if (!items.length) return;
+    this.showItemsAtPosition(items, pos);
+    // Closing an already-open imperative menu on reload avoids retaining stale
+    // callbacks/selection. The next open uses the new compiled configuration.
+    this.unsubscribeConfiguration = subscribeMenuConfiguration(() => this.hide());
+  }
+  private containsTarget(target: Node): boolean {
+    return this.dom.contains(target) || [...this.shownChildren].some((child) => child.containsTarget(target));
+  }
+  private showItemsAtPosition(items: ConfiguredMenuItem[], pos: { x: number; y: number }, root?: Menu) {
+    this.rootMenu = root;
     this.dom.replaceChildren();
+    this.dom.setAttribute('role', 'menu');
     Object.assign(this.dom.style, {
       position: 'fixed',
       left: `${pos.x}px`,
       top: `${pos.y}px`,
       zIndex: '10000',
     });
-    for (const item of this.items) {
-      if (!item) {
-        this.dom.append(createEl('hr'));
+    for (const item of items) {
+      if (item.separator) {
+        const separator = createEl('hr');
+        separator.setAttribute('role', 'separator');
+        this.dom.append(separator);
         continue;
       }
       const el = createEl('button', {
         cls: 'menu-item',
-        text: `${item.checked ? '✓ ' : ''}${item.title}`,
+        text: `${item.checked ? '✓ ' : ''}${item.label}`,
         parent: this.dom,
       }) as HTMLButtonElement;
-      el.disabled = item.disabled;
+      if (item.icon && !item.checked) el.prepend(getIcon(item.icon));
+      el.disabled = item.disabled ?? false;
+      el.setAttribute('role', item.checked === undefined ? 'menuitem' : 'menuitemcheckbox');
+      if (item.checked !== undefined) el.setAttribute('aria-checked', String(item.checked));
+      if (item.danger) el.classList.add('danger');
+      if (item.submenu) el.setAttribute('aria-haspopup', 'menu');
       el.onclick = (e) => {
-        if (item.submenu) item.submenu.showAtPosition({ x: e.clientX, y: e.clientY });
+        e.stopPropagation();
+        if (item.disabled) return;
+        if (item.submenu) {
+          for (const child of this.shownChildren) child.hide();
+          this.shownChildren.clear();
+          const child = new Menu();
+          this.shownChildren.add(child);
+          const bounds = el.getBoundingClientRect();
+          child.showItemsAtPosition(item.submenu, { x: bounds.right, y: bounds.top }, this.rootMenu ?? this);
+        }
         else {
-          item.callback?.(e);
-          this.hide();
+          try { item.onClick?.(e); }
+          finally { (this.rootMenu ?? this).hide(); }
         }
       };
     }
     document.body.append(this.dom);
     this.closeListener = (e: Event) => {
-      if (!this.dom.contains(e.target as Node)) this.hide();
+      if (!this.containsTarget(e.target as Node)) this.hide();
     };
     document.addEventListener('pointerdown', this.closeListener);
+    this.keyListener = (event: KeyboardEvent) => { if (event.key === 'Escape') (this.rootMenu ?? this).hide(); };
+    document.addEventListener('keydown', this.keyListener);
   }
   private closeListener?: EventListener;
+  private keyListener?: (event: KeyboardEvent) => void;
   hide() {
+    for (const child of this.shownChildren) child.hide();
+    this.shownChildren.clear();
     this.dom.remove();
     if (this.closeListener) document.removeEventListener('pointerdown', this.closeListener);
     this.closeListener = undefined;
+    if (this.keyListener) document.removeEventListener('keydown', this.keyListener);
+    this.keyListener = undefined;
+    this.unsubscribeConfiguration?.();
+    this.unsubscribeConfiguration = undefined;
+  }
+  onunload() {
+    this.hide();
   }
 }

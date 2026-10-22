@@ -1,10 +1,18 @@
 import { useStore } from './store';
 import { api } from './api';
 import { writingCommands } from './writing/commands';
+import { userscriptCommands } from './userscripts/commands';
+import { configuredMenuCommands } from './configuredMenus/commands';
+import { attachmentCleanupCommands, attachmentCleanupLegacyCommandIds } from './attachments/commands';
+import { tagCommands } from './tags/commands';
 
 /** Native command definitions shared by the palette and configurable shortcuts. */
 export const nativeCommands = [
   ...writingCommands,
+  ...userscriptCommands,
+  ...configuredMenuCommands,
+  ...attachmentCleanupCommands,
+  ...tagCommands,
   { id: 'files', title: '打开文件', run: () => useStore.getState().setPalette(true, 'files') },
   { id: 'commands', title: '执行命令', run: () => useStore.getState().setPalette(true, 'commands') },
   { id: 'headings', title: '搜索当前文档标题', run: () => useStore.getState().setPalette(true, 'headings') },
@@ -65,6 +73,7 @@ export const nativeCommands = [
   },
 ];
 export function runNativeCommand(id: string): boolean {
+  if ((attachmentCleanupLegacyCommandIds as readonly string[]).includes(id)) id = attachmentCleanupCommands[0].id;
   const command = nativeCommands.find((c) => c.id === id);
   if (!command) return false;
   Promise.resolve(command.run()).catch((error) => useStore.getState().notify(String(error)));

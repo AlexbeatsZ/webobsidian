@@ -1,12 +1,24 @@
 // Preload supplies native chrome; React shares the compact workspace tab row.
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 import { installTitleBar } from './titlebar';
+import { installGuestUserscripts } from './userscripts/guest';
 
+if (process.argv.includes('--webobsidian-userscript-guest')) {
+  installGuestUserscripts();
+} else {
 const nativeArg = process.argv.find(arg => arg.startsWith('--webobsidian-native-vault='));
 const desktopApi = {
   isDesktop: true,
   platform: process.platform,
   nativePlugins: !!nativeArg,
+  userscripts: {
+    request: (action: string, payload?: unknown) => ipcRenderer.invoke('userscripts:manage', action, payload ?? {}),
+    subscribe: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on('userscripts:changed', handler);
+      return () => ipcRenderer.removeListener('userscripts:changed', handler);
+    },
+  },
   vaultPath: nativeArg ? decodeURIComponent(nativeArg.slice('--webobsidian-native-vault='.length)) : undefined,
 };
 if (process.contextIsolated) contextBridge.exposeInMainWorld('webobsidianDesktop', desktopApi);
@@ -18,4 +30,5 @@ else {
 
 if (process.platform !== 'darwin' && process.isMainFrame) {
   window.addEventListener('DOMContentLoaded', () => void installTitleBar(), { once: true });
+}
 }

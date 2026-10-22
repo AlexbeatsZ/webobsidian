@@ -91,6 +91,7 @@ class WikilinkWidget extends WidgetType {
   toDOM(view: EditorView) {
     const a = document.createElement('a');
     a.className = 'cm-hmd-internal-link cm-wikilink internal-link' + (this.embed ? ' embed' : '');
+    a.dataset.menuLink = this.target;
     a.textContent = this.label;
     if (this.aria) a.setAttribute('aria-label', this.aria);
     a.onmousedown = (e) => {
@@ -115,6 +116,7 @@ class MdLinkWidget extends WidgetType {
     const external = /^https?:\/\//i.test(this.href);
     const a = document.createElement('a');
     a.className = 'cm-md-link' + (external ? ' external-link' : ' internal-link');
+    a.dataset.menuLink = this.href;
     a.textContent = this.label;
     a.title = this.href;
     if (external) a.appendChild(externalLinkIcon());
@@ -1314,6 +1316,7 @@ class FrontmatterWidget extends WidgetType {
           const pill = document.createElement('span');
           pill.className = 'prop-pill';
           pill.dataset.val = val;
+          if (/^tags?$/i.test(p.key)) pill.dataset.nativeTag = val.replace(/^#/, '');
           const txt = document.createElement('span');
           txt.className = 'prop-pill-text';
           txt.textContent = val;
@@ -1818,8 +1821,8 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (/^#\d+$/.test(tag) || !/\p{L}/u.test(tag)) continue;
         const s = line.from + tm.index + tm[1].length;
         if (inCode(s, s + tag.length)) continue;
-        all.push(Decoration.mark({ class: 'cm-hashtag cm-hashtag-begin cm-tag' }).range(s, s + 1));
-        all.push(Decoration.mark({ class: 'cm-hashtag cm-hashtag-end cm-tag' }).range(s + 1, s + tag.length));
+        all.push(Decoration.mark({ class: 'cm-hashtag cm-hashtag-begin cm-tag', attributes: { 'data-native-tag': tag.slice(1) } }).range(s, s + 1));
+        all.push(Decoration.mark({ class: 'cm-hashtag cm-hashtag-end cm-tag', attributes: { 'data-native-tag': tag.slice(1) } }).range(s + 1, s + tag.length));
       }
 
       // Footnote definition `[^1]: text` → superscript marker, brackets concealed.

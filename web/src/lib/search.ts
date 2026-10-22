@@ -30,6 +30,15 @@ export function useSearch() {
 }
 export const searchSettings = () => settings;
 export const searchEntries = () => entries;
+let tagEntries: CatalogEntry[] | undefined, tagChoices: string[] = [];
+/** Small derived completion list, invalidated by the existing catalog snapshot. */
+export function searchTags(): string[] {
+  if (tagEntries !== entries) {
+    tagEntries = entries;
+    tagChoices = [...new Set(entries.flatMap(entry => entry.tags.map(tag => tag.replace(/^#/, ''))))].sort();
+  }
+  return tagChoices;
+}
 export async function refreshSearch() {
   const current = ++generation;
   const [result, config] = await Promise.all([api.catalog(), api.getSettings()]);

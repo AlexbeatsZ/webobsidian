@@ -15,9 +15,14 @@ import { useStore } from '../lib/store';
 import { api } from '../lib/api';
 import Icon from './Icon';
 import WritingSettings from './WritingSettings';
+import { UserscriptSettings } from './UserscriptSettings';
+import ConfiguredMenuSettings from './ConfiguredMenuSettings';
+import TagSettings from './TagSettings';
+import { readNativeFeatures, saveNativeFeatures, type NativeFeaturePreferences } from '../lib/nativeFeatures';
+import { notifyIndexChanged } from '../lib/indexEvents';
 
 type Section =
-  'search' | 'writing' | 'formatting' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
+  'search' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
@@ -26,6 +31,22 @@ export default function Settings() {
   const [shortcutFocus, setShortcutFocus] = useState('');
   const [settings, setSettings] = useState<any>(null);
   const [pluginTab, setPluginTab] = useState<string | null>(null);
+  const [features, setFeatures] = useState<NativeFeaturePreferences | null>(null);
+  const [featureError, setFeatureError] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    setFeatures(null); setFeatureError('');
+    void readNativeFeatures().then(value => { if (live) setFeatures(value); }).catch(error => { if (live) setFeatureError(String(error)); });
+    return () => { live = false; };
+  }, [open]);
+  useEffect(() => {
+    const scripts = () => { setPluginTab(null); setSection('userscripts'); };
+    const menus = () => { setPluginTab(null); setSection('menus'); };
+    window.addEventListener('userscripts:open-settings', scripts);
+    window.addEventListener('menus:open-settings', menus);
+    return () => { window.removeEventListener('userscripts:open-settings', scripts); window.removeEventListener('menus:open-settings', menus); };
+  }, []);
   useSyncExternalStore(subscribePlugins, pluginRevision);
   useEffect(() => {
     const listener = (e: Event) => setPluginTab((e as CustomEvent<string>).detail);
@@ -62,6 +83,9 @@ export default function Settings() {
                 'search',
                 'writing',
                 'formatting',
+                'userscripts',
+                'menus',
+                'tags',
                 'vault',
                 'git',
                 'api',
@@ -93,6 +117,12 @@ export default function Settings() {
             {section === 'search' && <SearchSettingsPanel focus={shortcutFocus} />}
             {section === 'writing' && <WritingSettings />}
             {section === 'formatting' && <WritingSettings formatting />}
+            {section === 'userscripts' && <UserscriptSettings />}
+            {section === 'menus' && <ConfiguredMenuSettings />}
+            {section === 'tags' && (features ? <TagSettings value={features.tags} onChange={async patch => {
+              setFeatures(await saveNativeFeatures({ vault: features.vault, tags: patch }));
+              notifyIndexChanged();
+            }} /> : <p role="status">{featureError || '正在读取标签设置…'}</p>)}
             {settings && section === 'vault' && (
               <VaultSettings s={settings} reload={() => api.getSettings().then(setSettings)} />
             )}
@@ -144,6 +174,9 @@ function PluginSettingsTab({ id }: { id: string }) {
 }
 
 const labels: Record<Section, string> = {
+  userscripts: '内置浏览器脚本',
+  menus: '右键菜单',
+  tags: '标签',
   writing: '公式与片段',
   formatting: '文档格式化',
   search: 'Search & Shortcuts',

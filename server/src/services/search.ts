@@ -3,7 +3,8 @@ import MiniSearch from 'minisearch';
 import { getSettings } from './settings.js';
 import { INDEX_FILE, config } from '../config.js';
 import { getVaultRoot, readFileText } from './vault.js';
-import { catalog as activeCatalog, VaultCatalog, CORE_LIST_PROPS } from './catalog.js';
+import { catalog as activeCatalog, VaultCatalog, CORE_LIST_PROPS, CATALOG_SCHEMA_VERSION } from './catalog.js';
+import { parseTagFilters, matchesTagFilters } from './tags/query.js';
 import {
   findText,
   phoneticTokens,
@@ -141,8 +142,9 @@ export class QmdEngine {
       return qmd.search(query, limit, mode);
     }
     const s = await getSettings();
-    const { filterText, fields } = parseFielded(query);
-    const q = filterText.trim() || query.trim();
+    const tagFilters = parseTagFilters(query);
+    const { filterText, fields } = parseFielded(tagFilters.text);
+    const q = filterText.trim();
     const selected = fields.length ? fields : [...FIELDS];
     const results = q
       ? this.mini.search(q, {
@@ -153,9 +155,15 @@ export class QmdEngine {
         })
       : [];
     const hits = new Map<string, SearchHit>();
+    if (!q && (tagFilters.include.length || tagFilters.exclude.length))
+      for (const record of this.catalog.notes.values()) {
+        if (!matchesTagFilters(record.tags, tagFilters)) continue;
+        hits.set(record.path, { path: record.path, title: record.title, score: 1,
+          tags: record.tags, snippet: record.snippet, matchedField: 'tags', matchKind: 'literal' });
+      }
     for (const result of results) {
       const record = this.catalog.notes.get(result.id);
-      if (!record) continue;
+      if (!record || !matchesTagFilters(record.tags, tagFilters)) continue;
       hits.set(record.path, {
         path: record.path,
         title: record.title,
@@ -182,7 +190,7 @@ export class QmdEngine {
           candidates.slice(at, at + 4).map(async (candidate) => {
             if (hits.has(candidate.id)) return;
             const record = this.catalog.notes.get(candidate.id);
-            if (!record) return;
+            if (!record || !matchesTagFilters(record.tags, tagFilters)) return;
             const values: Record<string, string> = {
               title: record.title,
               headings: record.headings.join(' '),
@@ -224,12 +232,10 @@ export class QmdEngine {
   /** Free-text terms from a query (operators like `tag:`/`path:` stripped),
    *  used to scan note bodies for highlightable occurrences. */
   queryText(query: string): string {
-    const { filterText } = parseFielded(query);
-    return filterText || query;
+    return parseFielded(parseTagFilters(query).text).filterText;
   }
   queryTerms(query: string): string[] {
-    const { filterText } = parseFielded(query);
-    return (filterText || query)
+    return this.queryText(query)
       .split(/\s+/)
       .map((t) => t.replace(/^["']|["']$/g, '').trim())
       .filter((t) => t.length >= 2);
@@ -369,6 +375,7 @@ export class QmdEngine {
       await fs.mkdir(config.dataDir, { recursive: true });
       const payload = {
         version: SEARCH_VERSION,
+        catalogSchema: CATALOG_SCHEMA_VERSION,
         root: await getVaultRoot(),
         mini: this.mini.toJSON(),
         catalog: this.catalog.serialize(),

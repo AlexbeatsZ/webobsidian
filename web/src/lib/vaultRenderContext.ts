@@ -2,6 +2,10 @@ import { fragmentRange, parseLinkTarget } from '@webobsidian/markdown-core';
 import { api } from './api';
 import { documents } from './documents';
 import type { RenderContext } from './renderContext';
+import { nativeTagMenuItems, openNativeTagPage, searchNativeTag, showNativeTagHover, hideNativeTagHover } from './tags/actions';
+import { tagPreferences } from './nativeFeaturePreferences';
+import { menuModifiers } from './configuredMenus/transform';
+import { searchTags } from './search';
 
 type Services = Pick<RenderContext, 'openMenu' | 'files' | 'reportError' | 'bindEditor'> & {
   openLink: (target: string, sourcePath?: string) => void;
@@ -11,8 +15,20 @@ export function createVaultRenderContext(path: string, services: Services): Rend
   let types = services.initialPropertyTypes ?? {};
   return {
     ...services, sourcePath: path, allowHtmlExecution: true, allowPlugins: true, openLink: target => services.openLink(target, path),
+    tagMenu: (tag, event, source) => {
+      services.openMenu({ x: event.clientX, y: event.clientY,
+        items: nativeTagMenuItems({ tag, ...tagPreferences(), readonly: source === 'reading' }),
+        context: { kind: 'tag-menu', tag, source, activePath: path, modifiers: menuModifiers(event) },
+      });
+    },
+    openTag: (tag, toSide) => {
+      if (tagPreferences().wranglerEnabled) void openNativeTagPage(tag, toSide, false);
+      else searchNativeTag(tag);
+    },
+    tagHover: (tag, event) => { if (tagPreferences().wranglerEnabled) showNativeTagHover(tag, event); },
+    tagLeave: hideNativeTagHover,
     rawUrl: target => api.rawUrl(target, path),
-    tags: () => api.tags().then(r => r.tags.map(t => t.tag.replace(/^#/, ''))).catch(() => []),
+    tags: async () => searchTags(),
     properties: () => api.properties().then(r => r.properties).catch(() => []),
     propertyTypes: () => types,
     setPropertyType: async (key, type) => { types = (await api.setPropertyType(key, type)).types; return types; },

@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { UserscriptService } from './userscripts/service';
 
 // ---------------------------------------------------------------------------
 // Paths & persisted desktop config
@@ -28,6 +29,7 @@ let serverProc: ChildProcess | null = null;
 let serverPort = 0;
 let mainWindow: BrowserWindow | null = null;
 let desktopConfig: DesktopConfig | undefined;
+let userscripts: UserscriptService | undefined;
 
 async function readConfig(): Promise<DesktopConfig> {
   try {
@@ -254,6 +256,7 @@ async function ensureVault(cfg: DesktopConfig): Promise<DesktopConfig> {
   const picked = await pickVaultDialog(true);
   cfg.vaultPath = picked;
   await writeConfig(cfg);
+  await userscripts?.stop();
   return cfg;
 }
 
@@ -305,7 +308,7 @@ function createWindow(): void {
       contextIsolation: !desktopConfig?.trustedPlugins,
       nodeIntegration: !!desktopConfig?.trustedPlugins,
       sandbox: !desktopConfig?.trustedPlugins,
-      webviewTag: !!desktopConfig?.trustedPlugins,
+      webviewTag: true,
       additionalArguments: desktopConfig?.trustedPlugins ? [`--webobsidian-native-vault=${encodeURIComponent(desktopConfig.vaultPath ?? '')}`] : [],
     },
   });
@@ -326,9 +329,17 @@ function createWindow(): void {
   });
   mainWindow.webContents.on('will-attach-webview', (event, preferences, params) => {
     if (!/^https?:\/\//i.test(params.src)) { event.preventDefault(); return; }
-    delete preferences.preload;
+    // Only our bundled sandbox preload may enter remote guests. No host Node.
+    preferences.preload = path.join(__dirname, 'preload.js');
+    preferences.additionalArguments = ['--webobsidian-userscript-guest'];
     preferences.nodeIntegration = false; preferences.contextIsolation = true; preferences.sandbox = true;
+    preferences.nodeIntegrationInSubFrames = false;
+    preferences.nodeIntegrationInWorker = false;
+    preferences.webviewTag = false;
+    preferences.webSecurity = true;
+    preferences.allowRunningInsecureContent = false;
   });
+  mainWindow.webContents.on('did-attach-webview', (_event, contents) => userscripts?.attach(contents));
 
   // Open external links (http/https not on our origin) in the system browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -473,6 +484,9 @@ if (!app.requestSingleInstanceLock()) {
       buildMenu();
       if (process.platform !== 'darwin') registerTitleBar();
       registerNativePlugins();
+      userscripts = new UserscriptService({ dataDir: DATA_DIR(), fallbackVault: cfg.vaultPath!,
+        window: () => mainWindow, hostAllowed: event => !!desktopWindow(event) });
+      await userscripts.start();
       createWindow();
     } catch (err) {
       dialog.showErrorBox('WebObsidian failed to start', String(err instanceof Error ? err.stack ?? err.message : err));
@@ -488,7 +502,13 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') app.quit();
   });
 
-  app.on('before-quit', () => {
+  let finishingQuit = false;
+  app.on('before-quit', (event) => {
+    if (!finishingQuit && userscripts) {
+      event.preventDefault(); finishingQuit = true;
+      void userscripts.stop().catch(error => console.error('Userscript shutdown:', error)).finally(() => app.quit());
+      return;
+    }
     if (serverProc) {
       serverProc.kill();
       serverProc = null;

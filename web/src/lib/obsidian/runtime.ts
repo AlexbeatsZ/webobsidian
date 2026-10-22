@@ -1,5 +1,7 @@
 import { matchName } from '../search';
 import { runWritingCommand } from '../writing/commands';
+import { nativeCommands, runNativeCommand } from '../nativeCommands';
+import { adaptNativePlusModules, migratedPluginIds } from '../nativePluginPolicy';
 import * as cmState from '@codemirror/state';
 import * as cmView from '@codemirror/view';
 import * as cmLanguage from '@codemirror/language';
@@ -298,12 +300,16 @@ export class EditorSuggest extends events.Component {
 }
 class CommandManager extends events.Events {
   get commands() {
-    return Object.fromEntries(pluginCommands);
+    return Object.fromEntries(this.listCommands().map(command => [command.id, command]));
   }
   listCommands() {
-    return [...pluginCommands.values()];
+    return [
+      ...nativeCommands.map(command => ({ id: command.id, name: command.title, callback: command.run })),
+      ...[...pluginCommands.values()].filter(command => !nativeCommands.some(native => native.id === command.id)),
+    ];
   }
   executeCommandById(id: string) {
+    if (runNativeCommand(id)) return true;
     if (runWritingCommand(id)) return true;
     if (id === 'editor:save-file') {
       void useStore.getState().save();
@@ -320,7 +326,7 @@ class CommandManager extends events.Events {
     return runPluginCommand(id);
   }
   findCommand(id: string) {
-    return pluginCommands.get(id);
+    return this.listCommands().find(command => command.id === id);
   }
 }
 export class App {
@@ -614,6 +620,7 @@ Object.assign(window, {
   },
 });
 export const nativePluginReplacements:Record<string,string>={
+  ...migratedPluginIds,
   'fuzzy-chinese-pinyin':'已由内置中文搜索接管',
   'obsidian-latex-suite':'已由内置公式与片段接管',
   'obsidian-linter':'已由内置文档格式化接管',
@@ -670,6 +677,7 @@ export async function loadPlugin(id:string,manifest:any){
       const Type = module.exports.default ?? module.exports;
       instance = new Type(sharedApp, manifest);
       if (!(instance instanceof Plugin)) throw new Error('Plugin must extend obsidian.Plugin');
+      if (id === 'obsidian-plus') adaptNativePlusModules(instance);
       sharedApp.plugins.plugins[id] = instance;
       sharedApp.plugins.manifests[id] = manifest;
       await instance.load();
@@ -734,7 +742,7 @@ export async function loadPlugins(): Promise<void> {
     const settings = await api.getSettings();
     sharedApp.vault.adapter.basePath = (window as any).webobsidianDesktop?.vaultPath ?? settings.vault.path;
     const stopMenus = bindPluginMenus(sharedApp);
-    if (nativeRequire) {
+    if ((window as any).webobsidianDesktop?.userscripts) {
       sharedApp.workspace.viewRegistry.set('webviewer', (leaf) => new WebViewerView(leaf));
       sharedApp.internalPlugins.plugins.webviewer = {
         enabled: true,

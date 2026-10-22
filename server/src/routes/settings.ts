@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getSettings, updateSettings, redactSettings, ensureVaultBrowsable } from '../services/settings.js';
 import { config } from '../config.js';
+import { broadcast } from '../services/realtime.js';
 
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
@@ -22,6 +23,7 @@ settingsRouter.put(
   '/',
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
+    const previousRoot = (await getSettings()).vault.path;
     // A changed vault.path turns the whole files API into read/write over that
     // tree, so constrain it to the allowed roots (same gate as Browse…) and
     // require it to be an existing directory before persisting.
@@ -51,6 +53,7 @@ settingsRouter.put(
         d.api.rateLimitPerMin = body.api.rateLimitPerMin;
       }
     });
+    if (updated.vault.path !== previousRoot) broadcast({ type: 'vault-changed' });
     res.json(redactSettings(updated));
   }),
 );

@@ -17,6 +17,10 @@ const ApiKeySchema = z.object({
 });
 
 const SettingsSchema = z.object({
+  nativeFeatures: z.record(z.object({
+    tags: z.object({ batchEnabled: z.boolean(), wranglerEnabled: z.boolean(), migration: z.string().optional() }),
+    attachments: z.object({ excludeDirectories: z.array(z.string()), excludeExtensions: z.array(z.string()) }),
+  })).default({}),
   writing: z.record(z.object({
     version: z.literal(1), migration: z.string(),
     latex: z.record(z.unknown()), linter: z.record(z.unknown()),
@@ -216,7 +220,7 @@ export function updateSettings(mutator: (draft: Settings) => void | Promise<void
 /** Redact secrets for sending to the client. */
 export function redactSettings(s: Settings) {
   // Writing rules have a dedicated Vault-scoped endpoint, not every settings payload.
-  const {writing,...publicSettings}=s;
+  const {writing,nativeFeatures,...publicSettings}=s;
   return {
     ...publicSettings,
     auth: {

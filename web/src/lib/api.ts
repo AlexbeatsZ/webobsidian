@@ -59,14 +59,33 @@ export interface GitCommit {
   author: string;
 }
 
+let mutations = 0;
+let vaultSessionStale = false;
+export function invalidateVaultRequests() { vaultSessionStale = true; }
+export const pendingMutations = () => mutations;
+const mutationListeners = new Set<() => void>();
+export function subscribeMutations(listener: () => void) {
+  mutationListeners.add(listener);
+  return () => { mutationListeners.delete(listener); };
+}
+const mutationChanged = () => { for (const listener of mutationListeners) listener(); };
+
 async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
+  if (vaultSessionStale && !['GET', 'HEAD', 'OPTIONS'].includes((opts.method ?? 'GET').toUpperCase()) &&
+    !url.startsWith('/api/settings') && !url.startsWith('/auth/')) {
+    throw new ApiError('Vault 已切换，请重新加载应用；旧文档会话保留', 409);
+  }
+  const mutation = !['GET', 'HEAD', 'OPTIONS'].includes((opts.method ?? 'GET').toUpperCase()) &&
+    !['/api/attachments/execute', '/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(url.split('?')[0]);
+  if (mutation) { mutations++; mutationChanged(); }
+  try {
   const { headers: optHeaders, ...rest } = opts;
   const res = await fetch(url, {
     credentials: 'include',
     ...rest,
     // headers MUST be merged last — spreading ...opts after a `headers` literal
     // would drop Content-Type whenever a caller passes its own headers.
-    headers: { 'Content-Type': 'application/json', ...(optHeaders ?? {}) },
+    headers: { ...(opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(optHeaders ?? {}) },
   });
   if (res.status === 401) {
     throw new ApiError('Unauthorized', 401);
@@ -81,8 +100,12 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
     throw new ApiError(msg, res.status);
   }
   const ct = res.headers.get('content-type') ?? '';
-  return (ct.includes('application/json') ? res.json() : (res.text() as unknown)) as Promise<T>;
+  return await (ct.includes('application/json') ? res.json() : res.text()) as T;
+  } finally { if (mutation) { mutations--; mutationChanged(); } }
 }
+
+// Feature modules share authentication and error handling with the core client.
+export { req as request };
 
 export class ApiError extends Error {
   constructor(
@@ -147,10 +170,7 @@ export const api = {
     const fd = new FormData();
     fd.append('dir', dir);
     fd.append('file', file);
-    const res = await fetch('/api/files/upload', { method: 'POST', credentials: 'include', body: fd });
-    if (!res.ok)
-      throw new ApiError((await res.json().catch(() => ({}))).error ?? 'Upload failed', res.status);
-    return res.json() as Promise<{ ok: true; path: string; size: number }>;
+    return req<{ ok: true; path: string; size: number }>('/api/files/upload', { method: 'POST', body: fd });
   },
   rawUrl: (path: string, sourcePath = '') =>
     `/api/files/content?path=${encodeURIComponent(path)}&sourcePath=${encodeURIComponent(sourcePath)}`,

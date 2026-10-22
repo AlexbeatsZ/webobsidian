@@ -1,8 +1,10 @@
 import { Facet } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
+import type { MenuContext } from './configuredMenus/types';
 
 export interface RenderMenuItem {
-  label: string; icon?: string; onClick?: () => void;
+  id?: string; label: string; icon?: string; disabled?: boolean; checked?: boolean;
+  section?: string; group?: string; onClick?: (event?: MouseEvent) => void;
   submenu?: RenderMenuItem[]; separator?: boolean;
 }
 export interface PropertySuggestion { key: string; type: string; count: number }
@@ -21,7 +23,11 @@ export interface EmbeddedNote {
 export interface RenderContext {
   sourcePath: string;
   openLink: (target: string) => void;
-  openMenu: (menu: { x: number; y: number; items: RenderMenuItem[] }) => void;
+  openMenu: (menu: { x: number; y: number; items: RenderMenuItem[]; context?: MenuContext }) => void;
+  tagMenu?: (tag: string, event: MouseEvent, source: string) => void;
+  openTag?: (tag: string, toSide: boolean) => void;
+  tagHover?: (tag: string, event: MouseEvent) => void;
+  tagLeave?: () => void;
   rawUrl: (target: string) => string;
   files: () => string[];
   tags: () => Promise<string[]>;

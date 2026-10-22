@@ -3,7 +3,7 @@ import path from 'node:path';
 import { getVaultRoot, readFileSnapshot } from './vault.js';
 import { INDEX_FILE } from '../config.js';
 import { SEARCH_VERSION } from '@webobsidian/search-core';
-import { VaultCatalog, replaceCatalog } from './catalog.js';
+import { VaultCatalog, replaceCatalog, CATALOG_SCHEMA_VERSION } from './catalog.js';
 import { QmdEngine, replaceSearch } from './search.js';
 import { parseNote } from './markdown.js';
 import { rebuildGraphFromCatalog } from './links.js';
@@ -29,7 +29,7 @@ export async function rebuildVaultIndex(restore = false): Promise<void> {
   if (restore)
     try {
       const saved = JSON.parse(await fs.readFile(INDEX_FILE, 'utf8'));
-      if (saved.version === SEARCH_VERSION && saved.root === root) {
+      if (saved.version === SEARCH_VERSION && saved.catalogSchema === CATALOG_SCHEMA_VERSION && saved.root === root) {
         const cached = VaultCatalog.restore(saved.catalog);
         if (
           cached.entries.size === next.entries.size &&

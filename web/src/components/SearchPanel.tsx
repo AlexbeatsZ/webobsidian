@@ -3,6 +3,9 @@ import { useSearch } from '../lib/search';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type SearchHit, type MatchContext, type NoteMatches } from '../lib/api';
 import { useStore } from '../lib/store';
+import { nativeBatchTagMenuItems } from '../lib/tags/actions';
+import { extendFileMenu } from '../lib/obsidian/menus';
+import { menuModifiers } from '../lib/configuredMenus/transform';
 import Icon from './Icon';
 
 type SortMode = 'relevance' | 'name-asc' | 'name-desc' | 'path-asc';
@@ -266,7 +269,14 @@ export default function SearchPanel() {
         )}
       </div>
 
-      <div className="search-results" ref={resultsRef}>
+      <div className="search-results" ref={resultsRef} onContextMenu={event => {
+        event.preventDefault();
+        const paths = shown.map(hit => hit.path);
+        useStore.getState().openContextMenu({ x: event.clientX, y: event.clientY,
+          items: extendFileMenu(nativeBatchTagMenuItems({ kind: 'files', paths }), paths,
+            { kind: 'file', source: 'search-results', paths, fileTypes: paths.map(path => path.split('.').at(-1) ?? ''),
+              activePath: useStore.getState().activePath ?? undefined, modifiers: menuModifiers(event.nativeEvent) }) });
+      }}>
         {shown.slice(0, visible).map((h) => {
           const m = matches.get(h.path);
           const noteCollapsed = isCollapsed(h.path);

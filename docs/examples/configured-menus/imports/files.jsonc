@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "rules": [
+    // Stable IDs work independently of menu title language.
+    // { "match": { "id": "file:rename" }, "title": "Rename note", "icon": "pencil", "order": 0 },
+    // { "match": { "id": "file:delete" }, "when": { "modifiers": { "shift": false } }, "hide": true },
+    // Enable custom:tools in the root file before moving an existing item into it.
+    // { "match": { "id": "file:copy-path" }, "move": { "parent": "custom:tools", "index": 0 } },
+    // Weak matches explicitly affect contributions without stable IDs only.
+    // { "match": { "weak": { "title": "Plugin action", "section": "plugin" } }, "group": "plugins" },
+  ],
+}

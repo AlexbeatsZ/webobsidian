@@ -3,7 +3,7 @@ import { runWritingHotkey, bindWritingNavigation } from './lib/writing/commands'
 import { runNativeCommand } from './lib/nativeCommands';
 import { refreshSearch, searchSettings } from './lib/search';
 import { useEffect, useState } from 'react';
-import { api, ApiError } from './lib/api';
+import { api, ApiError, invalidateVaultRequests } from './lib/api';
 import { useStore } from './lib/store';
 import Login from './components/Login';
 import ForceChangePassword from './components/ForceChangePassword';
@@ -23,6 +23,13 @@ import { loadPlugins, sharedApp } from './lib/plugins';
 import { initUrlSync } from './lib/urlsync';
 import { useIsMobile } from './lib/useIsMobile';
 import { notifyIndexChanged } from './lib/indexEvents';
+import { bindVaultMaintenance } from './lib/vaultMaintenance';
+import { bootstrapUserscripts, refreshUserscripts } from './lib/userscripts/client';
+import { initializeNativeMenus, attachmentDialogHost, readNativeFeatures } from './lib/nativeFeatures';
+import { notifyMenuConfigurationFileChanged } from './lib/configuredMenus/controller';
+import AttachmentCleanupDialog from './components/AttachmentCleanupDialog';
+import TagOperationsHost from './components/TagOperationsHost';
+import { clearNativeFeaturePreferences } from './lib/nativeFeaturePreferences';
 
 export default function App() {
   const authed = useStore((s) => s.authed);
@@ -57,6 +64,9 @@ export default function App() {
 
   useEffect(() => {
     if (!authed) return;
+    const stopUserscripts = bootstrapUserscripts();
+    let stopMenus = initializeNativeMenus();
+    void readNativeFeatures().then(value => { attachmentDialogHost.initialOptions = value.attachments; }).catch(console.error);
     loadTree();
     void refreshSearch().catch(console.error);
     const stopWritingFiles=watchExternalWritingSources();
@@ -82,6 +92,7 @@ export default function App() {
     // websocket live updates
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const stopMaintenance = bindVaultMaintenance(ws);
     let treeTimer: number | undefined;
     let indexTimer: number | undefined;
     ws.onmessage = (ev) => {
@@ -89,6 +100,7 @@ export default function App() {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'fs') {
           writingFileChanged(msg.path);
+          notifyMenuConfigurationFileChanged(msg.path);
           // Content saves update one stat; structure/unknown paths refresh the tree.
           if (!(
             msg.event === 'change' &&
@@ -98,6 +110,18 @@ export default function App() {
             window.clearTimeout(treeTimer);
             treeTimer = window.setTimeout(() => loadTree(), 800);
           }
+        } else if (msg.type === 'vault-changed') {
+          invalidateVaultRequests();
+          useStore.setState({ vaultSessionStale: true });
+          useStore.getState().notify('Vault 已切换，请重新加载应用后继续编辑；当前文档会话暂时保留。', 0);
+          clearNativeFeaturePreferences();
+          stopMenus();
+          stopMenus = initializeNativeMenus();
+          void refreshUserscripts().catch(error => useStore.getState().notify(String(error)));
+          window.dispatchEvent(new Event('vault-changed'));
+          void readNativeFeatures().then(value => { attachmentDialogHost.initialOptions = value.attachments; }).catch(console.error);
+          loadTree();
+          notifyIndexChanged();
         } else if (msg.type === 'index') {
           window.clearTimeout(indexTimer);
           indexTimer = window.setTimeout(notifyIndexChanged, 800);
@@ -113,6 +137,10 @@ export default function App() {
       window.clearTimeout(treeTimer);
       window.clearTimeout(indexTimer);
       ws.close();
+      stopMaintenance();
+      stopUserscripts();
+      stopMenus();
+      clearNativeFeaturePreferences();
       stopWritingFiles();
       stopWritingNavigation();
     };
@@ -275,6 +303,8 @@ export default function App() {
       <ShareDialog />
       <VersionHistory />
       <TrashView />
+      <AttachmentCleanupDialog host={attachmentDialogHost} />
+      <TagOperationsHost />
       <ContextMenu />
       <FolderPicker />
       {toast && <div className="toast">{toast}</div>}

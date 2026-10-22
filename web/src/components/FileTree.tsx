@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { useStore, type TreeSort } from '../lib/store';
+import { useStore, type TreeSort, type ContextMenuItem } from '../lib/store';
 import { extendFileMenu } from '../lib/obsidian/menus';
 import { api, type TreeNode } from '../lib/api';
 import { findNode, pruneDescendants } from '../lib/tree';
 import { pathToUrl } from '../lib/urlsync';
+import { nativeBatchTagMenuItems } from '../lib/tags/actions';
+import { menuModifiers } from '../lib/configuredMenus/transform';
 import Icon from './Icon';
 
 /** Inline rename box shown in place of a tree row's name (Obsidian-style). */
@@ -191,8 +193,8 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     else openFile(node.path);
   };
 
-  const doDeleteMany = async () => {
-    const paths = pruneDescendants(useStore.getState().selected);
+  const doDeleteMany = async (captured: string[]) => {
+    const paths = pruneDescendants(captured);
     if (!paths.length || !confirm(`Delete ${paths.length} item${paths.length > 1 ? 's' : ''}?`)) return;
     let n = 0;
     for (const p of paths) {
@@ -203,7 +205,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     await loadTree();
     notify(`Deleted ${n} item${n > 1 ? 's' : ''}`);
   };
-  const doMoveMany = () => setMovePath(useStore.getState().selected);
 
   const doRename = () => setRenamingPath(node.path);
   const doDelete = async () => {
@@ -281,59 +282,64 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     e.preventDefault();
     e.stopPropagation();
     const sel = useStore.getState().selected;
+    const menuContext = (paths: string[]) => ({ kind: paths.length === 1 && isFolder ? 'folder' : 'file', source: 'file-explorer', paths,
+      activePath: useStore.getState().activePath ?? undefined, modifiers: menuModifiers(e.nativeEvent),
+      fileTypes: paths.map(path => findNode(useStore.getState().tree, path)?.type === 'folder' ? '' : path.split('.').at(-1) ?? '') });
     // Right-clicking a row that's part of a multi-selection → bulk actions.
     if (sel.length > 1 && sel.includes(node.path)) {
       openContextMenu({
         x: e.clientX,
         y: e.clientY,
         items: extendFileMenu([
-          { label: `Move ${sel.length} items to…`, onClick: doMoveMany },
+          { id: 'file:move-selected', label: `Move ${sel.length} items to…`, onClick: () => setMovePath(sel) },
+          ...nativeBatchTagMenuItems({ kind: 'files', paths: useStore.getState().filePaths.filter(path => sel.some(parent => path === parent || path.startsWith(parent + '/'))) }),
           { label: '', separator: true },
-          { label: `Delete ${sel.length} items`, danger: true, onClick: doDeleteMany },
-        ], sel),
+          { id: 'file:delete-selected', label: `Delete ${sel.length} items`, danger: true, onClick: () => { void doDeleteMany(sel); } },
+        ], sel, menuContext(sel)),
       });
       return;
     }
     // Right-clicking outside the selection collapses it onto this single row.
     if (!sel.includes(node.path)) { setSelected([node.path]); setSelectAnchor(node.path); }
-    const items = isFolder
+    const items: ContextMenuItem[] = isFolder
       ? [
-          { label: 'New note', onClick: () => newNote(node.path) },
-          { label: 'New canvas', onClick: () => newCanvas(node.path) },
-          { label: 'New folder', onClick: () => newFolder(node.path) },
+          { id: 'file:new-note', label: 'New note', onClick: () => newNote(node.path) },
+          { id: 'file:new-canvas', label: 'New canvas', onClick: () => newCanvas(node.path) },
+          { id: 'file:new-folder', label: 'New folder', onClick: () => newFolder(node.path) },
           { label: '', separator: true },
-          { label: 'Copy', onClick: doClipboard('copy') },
-          { label: 'Cut', onClick: doClipboard('cut') },
-          ...(clipboard ? [{ label: 'Paste', onClick: doPaste }] : []),
+          { id: 'file:copy', label: 'Copy', onClick: doClipboard('copy') },
+          { id: 'file:cut', label: 'Cut', onClick: doClipboard('cut') },
+          ...(clipboard ? [{ id: 'file:paste', label: 'Paste', onClick: doPaste }] : []),
           { label: '', separator: true },
-          { label: 'Rename…', onClick: doRename },
-          { label: 'Move folder to…', onClick: doMove },
-          { label: 'Copy path', onClick: copyPath },
-          { label: 'Copy URL path', onClick: copyUrl },
+          { id: 'file:rename', label: 'Rename…', onClick: doRename },
+          { id: 'file:move', label: 'Move folder to…', onClick: doMove },
+          { id: 'file:copy-path', label: 'Copy path', onClick: copyPath },
+          { id: 'file:copy-url', label: 'Copy URL path', onClick: copyUrl },
           { label: '', separator: true },
-          { label: 'Delete', danger: true, onClick: doDelete },
+          { id: 'file:delete', label: 'Delete', danger: true, onClick: doDelete },
         ]
       : [
-          { label: 'Open', onClick: () => openFile(node.path) },
-          { label: 'Open to the right', onClick: () => openToSide(node.path) },
+          { id: 'file:open', label: 'Open', onClick: () => openFile(node.path) },
+          { id: 'file:open-to-side', label: 'Open to the right', onClick: () => openToSide(node.path) },
           { label: '', separator: true },
-          { label: bookmarks.includes(node.path) ? 'Remove bookmark' : 'Bookmark', onClick: () => toggleBookmark(node.path) },
+          { id: 'file:bookmark', label: bookmarks.includes(node.path) ? 'Remove bookmark' : 'Bookmark', onClick: () => toggleBookmark(node.path) },
           ...(/\.(md|markdown|canvas)$/i.test(node.path)
-            ? [{ label: 'Share…', icon: 'globe', onClick: () => setShareDialog(node.path) }]
+            ? [{ id: 'file:share', label: 'Share…', icon: 'globe', onClick: () => setShareDialog(node.path) }]
             : []),
-          { label: 'Make a copy', onClick: doCopy },
+          { id: 'file:duplicate', label: 'Make a copy', onClick: doCopy },
           { label: '', separator: true },
-          { label: 'Copy', onClick: doClipboard('copy') },
-          { label: 'Cut', onClick: doClipboard('cut') },
-          ...(clipboard ? [{ label: 'Paste', onClick: doPaste }] : []),
+          { id: 'file:copy', label: 'Copy', onClick: doClipboard('copy') },
+          { id: 'file:cut', label: 'Cut', onClick: doClipboard('cut') },
+          ...(clipboard ? [{ id: 'file:paste', label: 'Paste', onClick: doPaste }] : []),
           { label: '', separator: true },
-          { label: 'Rename…', onClick: doRename },
-          { label: 'Move file to…', onClick: doMove },
-          { label: 'Copy URL path', onClick: copyUrl },
+          { id: 'file:rename', label: 'Rename…', onClick: doRename },
+          { id: 'file:move', label: 'Move file to…', onClick: doMove },
+          { id: 'file:copy-url', label: 'Copy URL path', onClick: copyUrl },
           { label: '', separator: true },
-          { label: 'Delete', danger: true, onClick: doDelete },
+          { id: 'file:delete', label: 'Delete', danger: true, onClick: doDelete },
         ];
-    openContextMenu({ x: e.clientX, y: e.clientY, items: extendFileMenu(items,[node.path]) });
+    items.push(...nativeBatchTagMenuItems(isFolder ? { kind: 'folder', path: node.path } : { kind: 'files', paths: [node.path] }));
+    openContextMenu({ x: e.clientX, y: e.clientY, items: extendFileMenu(items,[node.path], menuContext([node.path])) });
   };
 
   const onDragStart = (e: React.DragEvent) => {
@@ -557,11 +563,11 @@ export default function FileTree() {
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: 'New note', onClick: () => newNote('') },
-        { label: 'New canvas', onClick: () => newCanvas('') },
-        { label: 'New folder', onClick: () => newFolder('') },
+        { id: 'file:new-note', label: 'New note', onClick: () => newNote('') },
+        { id: 'file:new-canvas', label: 'New canvas', onClick: () => newCanvas('') },
+        { id: 'file:new-folder', label: 'New folder', onClick: () => newFolder('') },
         ...(clipboard
-          ? [{ label: '', separator: true }, { label: 'Paste', onClick: pasteToRoot }]
+          ? [{ label: '', separator: true }, { id: 'file:paste', label: 'Paste', onClick: pasteToRoot }]
           : []),
       ],
     });

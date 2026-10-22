@@ -7,6 +7,7 @@ import { updateLinkGraphFromNote } from './links.js';
 import { hasIndexedFile, indexFile, unindexFile } from './fileindex.js';
 import { catalog } from './catalog.js';
 import { broadcast, notifyIndexChanged } from './realtime.js';
+import { noteVaultMutation } from './vaultMaintenance.js';
 
 type Event = 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir';
 type Seen = { revision?: string; stamp: string; directory: boolean };
@@ -38,6 +39,7 @@ export function enableFileUpdates() {
 
 /** Reserve every worker while explicit full rebuilds replace index structures. */
 export function rebuildFileIndexes(work: () => Promise<void>): Promise<void> {
+  noteVaultMutation();
   const job = rebuilds.then(async () => {
     for (let i = 0; i < 4; i++) await acquire();
     try {
@@ -49,6 +51,12 @@ export function rebuildFileIndexes(work: () => Promise<void>): Promise<void> {
   });
   rebuilds = job.catch(() => {});
   return job;
+}
+
+/** Maintenance waits for the existing drains without reserving their workers. */
+export async function drainFileUpdates(): Promise<void> {
+  await rebuilds;
+  while (queues.size) await Promise.allSettled([...queues.values()].map(state => state.promise));
 }
 
 async function update(relative: string, event: Event) {
@@ -114,6 +122,7 @@ async function update(relative: string, event: Event) {
 
 /** Routes and watcher share one latest-state drain per canonical path. */
 export function queueFileUpdate(relative: string, event: Event = 'change'): Promise<void> {
+  noteVaultMutation();
   relative = path.posix.normalize(relative.replace(/\\/g, '/')).replace(/^\/+/, '');
   if (
     !enabled ||

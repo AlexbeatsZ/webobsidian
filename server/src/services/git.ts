@@ -4,6 +4,7 @@ import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git';
 import { getSettings } from './settings.js';
 import { getVaultRoot } from './vault.js';
 import { redactUrlCreds } from '../lib/redact.js';
+import { beginBackgroundVaultWrite } from './vaultMaintenance.js';
 
 /** GitHub-native sync with Git LFS support (PRD FR-4). */
 
@@ -69,8 +70,11 @@ async function clearStaleLocks(): Promise<void> {
  *  lock. Ops queue (never overlap); a rejecting op doesn't poison the queue. */
 function withGitLock<T>(fn: () => Promise<T>): Promise<T> {
   const result = gitQueue.then(async () => {
-    await clearStaleLocks();
-    return fn();
+    const release = beginBackgroundVaultWrite();
+    try {
+      await clearStaleLocks();
+      return await fn();
+    } finally { release(); }
   });
   gitQueue = result.then(
     () => undefined,

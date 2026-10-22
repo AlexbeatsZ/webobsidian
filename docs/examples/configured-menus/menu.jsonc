@@ -1,0 +1,18 @@
+// Copy this directory into <Vault>/.obsidian/webobsidian/menus/.
+// The shipped example is passive; uncomment the operations you want.
+{
+  "version": 1,
+  "includes": ["imports/files.jsonc"],
+  "items": [
+    // {
+    //   "id": "custom:tools",
+    //   "title": "Note tools",
+    //   "icon": "wrench",
+    //   "when": { "contexts": ["file", "tab"], "fileTypes": ["md"] },
+    //   "submenu": [
+    //     { "id": "custom:bookmark", "title": "Toggle bookmark", "command": "bookmark" },
+    //     { "id": "custom:source", "title": "Source mode", "command": "source" },
+    //   ],
+    // },
+  ],
+}

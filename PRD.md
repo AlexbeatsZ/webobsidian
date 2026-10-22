@@ -1,7 +1,13 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.13 · Cập nhật: 2026-10-22 · Trạng thái: Draft
+> Phiên bản: 1.14 · Cập nhật: 2026-10-22 · Trạng thái: Draft
+> Changelog 1.14 (native workflows): desktop browser userscripts with reviewed
+> import/update/storage/GM support; per-Vault JSONC context menus; preview and
+> revalidated unused-attachment trash; native tag hierarchy, source-preserving
+> batches and Tag Pages. Reuse existing command/menu/catalog/session/update
+> owners and suppress only migrated legacy modules. See [native workflows](docs/design/native-features.md).
+> Types and isolated bundles only; runtime acceptance and new packaging remain deferred.
 > Changelog 1.13 (native writing): integrate LaTeX Suite snippets/formula helpers
 > and Linter formatting with shared source analysis, session history and MathJax.
 > One LaTeX replacement language serves both; legacy Linter replacements migrate

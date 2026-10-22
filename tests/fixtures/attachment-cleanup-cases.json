@@ -1,0 +1,40 @@
+{
+  "status": "Authored, deliberately unexecuted under static-only verification",
+  "references": [
+    { "source": "notes/a.md", "text": "![[../assets/a%20b.png|300]]", "protect": ["assets/a b.png"] },
+    { "source": "notes/a.md", "text": "![x](../assets/a\\(1\\).png)", "protect": ["assets/a(1).png"] },
+    { "source": "notes/a.md", "text": "[x][asset]\n\n[asset]: <../assets/a b.pdf> \"title\"", "protect": ["assets/a b.pdf"] },
+    { "source": "notes/a.md", "text": "---\ncover: ../assets/a%23b.png\nmedia: ['[[song.mp3]]']\n---\n", "protect": ["assets/a#b.png", "audio/song.mp3"] },
+    { "source": "notes/a.md", "text": "![[a\\|b.png]]", "protect": ["assets/a|b.png"] },
+    { "source": "notes/a.md", "text": "<video poster='../assets/poster.png'><source src=../assets/movie.mp4></video>", "protect": ["assets/poster.png", "assets/movie.mp4"] },
+    { "source": "notes/a.md", "text": "<img src='../assets/a&amp;b.png' srcset='../assets/a.png 1x, ../assets/b.png 2x'>", "protect": ["assets/a&b.png", "assets/a.png", "assets/b.png"] },
+    { "source": "styles/theme.css", "text": "a{background:url('../assets/a b.png')} @import '../assets/theme.css';", "protect": ["assets/a b.png"] },
+    { "source": "board.canvas", "text": "{\"nodes\":[{\"type\":\"file\",\"file\":\"assets/slides.pdf\"},{\"type\":\"text\",\"text\":\"![[voice.mp3]]\"}],\"edges\":[]}", "protect": ["assets/slides.pdf", "audio/voice.mp3"] },
+    { "source": "notes/a.md", "text": "![[same.png]]", "catalog": ["one/same.png", "two/same.png"], "protect": ["one/same.png", "two/same.png"] }
+  ],
+  "mustBlock": [
+    "Unreadable, oversized or invalid UTF-8 reference source",
+    "Malformed/duplicate-key/custom-tag YAML or invalid Canvas",
+    "Unknown Canvas node or unbounded dynamic resource expression",
+    "CSS hex escape/image-set/malformed url or complex/unquoted srcset",
+    "Dynamic script/base/event attribute, Dataview/Templater/Base query",
+    "Unindexed visible file or symlink",
+    "Dirty/conflict/pending DocumentRegistry/Canvas state, unknown client acknowledgment",
+    "Changed Vault root/catalog/epoch, stale token, foreign-session token, duplicate selections",
+    "Added source/reference after preview or changed candidate content before execute",
+    "External mutation during a multi-file cleanup lease"
+  ],
+  "executionAndRecovery": [
+    "Only chosen allowed candidates move; empty selection does not mutate",
+    "Normal permanent-delete setting still uses vault.trash",
+    "Own epoch advances permit subsequent selected moves; external lease violations stop them",
+    "Failure on item two reports item one trash path and leaves remaining items untouched",
+    "Restoring via existing Trash UI preserves a recreated same-name file",
+    "Changing excludes invalidates preview; excluded docs still contribute references",
+    "Plugin standard assets alone do not create a cleanup blocker",
+    "Unknown opaque formats remain protected non-candidates with a coverage notice",
+    "Known Plus/Linter/LaTeX Suite/Templater/Webviewer settings use narrow literal readers",
+    "Dynamic image-${name}.png protects every PNG rather than blocking unrelated audio",
+    "Lost execute response requires inspecting Trash/files before retrying"
+  ]
+}

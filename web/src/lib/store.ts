@@ -4,6 +4,7 @@ import { api, type TreeNode, type ShareRecord } from './api';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
 import { parseLinkTarget } from '@webobsidian/markdown-core';
+import type { MenuContext } from './configuredMenus/types';
 let openGeneration = 0;
 let splitGeneration = 0;
 
@@ -71,11 +72,16 @@ export const DEFAULT_GRAPH_SETTINGS: GraphSettings = {
 };
 
 export interface ContextMenuItem {
+  id?: string;
   label: string;
+  disabled?: boolean;
+  checked?: boolean;
+  section?: string;
+  group?: string;
   danger?: boolean;
   separator?: boolean;
   icon?: string;
-  onClick?: () => void;
+  onClick?: (event?: MouseEvent) => void;
   submenu?: ContextMenuItem[];
 }
 
@@ -83,6 +89,7 @@ export interface ContextMenuState {
   x: number;
   y: number;
   items: ContextMenuItem[];
+  context?: MenuContext;
 }
 
 interface AppState {
@@ -106,6 +113,8 @@ interface AppState {
   goForward: () => void;
   content: string;
   dirty: boolean;
+  vaultSessionStale: boolean;
+  pendingCanvasEdits: number;
   viewMode: ViewMode;
   setViewMode: (m: ViewMode) => void;
 
@@ -357,6 +366,8 @@ export const useStore = create<AppState>()(
       },
       content: '',
       dirty: false,
+      vaultSessionStale: false,
+      pendingCanvasEdits: 0,
       viewMode: 'live',
       setViewMode: (m) => set({ viewMode: m }),
 

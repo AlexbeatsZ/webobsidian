@@ -1,0 +1,16 @@
+.attachment-cleanup-bg { z-index: 1700; }
+.attachment-cleanup.modal { width: min(820px, 94vw); max-height: 90vh; overflow-y: auto; }
+.attachment-cleanup h2 { margin-top: 0; }
+.attachment-cleanup p { line-height: 1.5; }
+.attachment-cleanup-options { display: grid; gap: 12px; }
+.attachment-cleanup-options label { display: grid; gap: 5px; }
+.attachment-cleanup-options .text-input { width: 100%; box-sizing: border-box; }
+.attachment-cleanup-hint { color: var(--text-muted); font-size: 12px; }
+.attachment-cleanup-warning { padding: 10px; border: 1px solid var(--background-modifier-border, #888); border-radius: 5px; overflow-wrap: anywhere; }
+.attachment-cleanup-selection, .attachment-cleanup-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
+.attachment-cleanup-list { max-height: 260px; overflow: auto; padding: 0 4px; list-style: none; }
+.attachment-cleanup-list li { padding: 5px 0; overflow-wrap: anywhere; }
+.attachment-cleanup-list label { display: flex; gap: 8px; align-items: baseline; }
+.attachment-cleanup-list label span { flex: 1; min-width: 0; }
+.attachment-cleanup-list small { white-space: nowrap; color: var(--text-muted); }
+.attachment-cleanup details { margin: 10px 0; }

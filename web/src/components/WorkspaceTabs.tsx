@@ -7,6 +7,9 @@ import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { editorFind, getActiveEditor } from '../lib/activeEditor';
 import { triggerAddProperty } from '../lib/livePreview';
 import { pathToUrl } from '../lib/urlsync';
+import { extendFileMenu } from '../lib/obsidian/menus';
+import { nativeBatchTagMenuItems } from '../lib/tags/actions';
+import { menuModifiers } from '../lib/configuredMenus/transform';
 import { useIsMobile } from '../lib/useIsMobile';
 import Icon from './Icon';
 
@@ -82,22 +85,22 @@ export default function WorkspaceTabs() {
     const baseName = path.split('/').pop() ?? path;
     const closeOthers = () => tabs.filter((t) => t.path !== path).forEach((t) => closeTab(t.path));
     const tabItems: ContextMenuItem[] = [
-      { label: 'Close tab', icon: 'x', onClick: () => closeTab(path) },
-      { label: 'Close other tabs', onClick: closeOthers },
+      { id: 'tab:close', label: 'Close tab', icon: 'x', onClick: () => closeTab(path) },
+      { id: 'tab:close-others', label: 'Close other tabs', onClick: closeOthers },
     ];
     let items: ContextMenuItem[];
     if (path === GRAPH_PATH) {
       items = [
         // GraphView owns the Pixi renderer — it listens for this event and
         // extracts the stage to a PNG (a plain canvas read would be blank).
-        { label: 'Copy screenshot', icon: 'camera', onClick: () => void inTab(path, () => window.dispatchEvent(new CustomEvent('wo-graph-screenshot'))) },
+        { id: 'tab:copy-screenshot', label: 'Copy screenshot', icon: 'camera', onClick: () => void inTab(path, () => window.dispatchEvent(new CustomEvent('wo-graph-screenshot'))) },
         { label: '', separator: true },
         ...tabItems,
       ];
     } else {
       const sep: ContextMenuItem = { label: '', separator: true };
       const renameItem: ContextMenuItem = {
-        label: 'Rename…',
+        id: 'file:rename', label: 'Rename…',
         icon: 'pencil',
         onClick: async () => {
           const to = prompt('Rename / move to (vault-relative path):', path);
@@ -110,12 +113,12 @@ export default function WorkspaceTabs() {
         },
       };
       const moveItem: ContextMenuItem = {
-        label: 'Move file to…',
+        id: 'file:move', label: 'Move file to…',
         icon: 'folder',
         onClick: () => setMovePath(path),
       };
       const copyItem: ContextMenuItem = {
-        label: 'Make a copy',
+        id: 'file:duplicate', label: 'Make a copy',
         icon: 'file-plus',
         onClick: async () => {
           const r = await api.read(path).catch(() => null);
@@ -129,26 +132,26 @@ export default function WorkspaceTabs() {
         },
       };
       items = [
-        ...(isMd ? [{ label: 'Backlinks in document', icon: 'link', onClick: () => void inTab(path, () => setRightPanel('backlinks')) }, sep] : []),
+        ...(isMd ? [{ id: 'file:backlinks', label: 'Backlinks in document', icon: 'link', onClick: () => void inTab(path, () => setRightPanel('backlinks')) }, sep] : []),
         ...(canSplit
           ? [
-              { label: 'Split right', icon: 'columns', onClick: () => openToSide(path, 'right') },
-              { label: 'Split down', icon: 'rows', onClick: () => openToSide(path, 'down') },
+              { id: 'file:split-right', label: 'Split right', icon: 'columns', onClick: () => openToSide(path, 'right') },
+              { id: 'file:split-down', label: 'Split down', icon: 'rows', onClick: () => openToSide(path, 'down') },
             ]
           : []),
-        { label: 'Open in new window', icon: 'arrow-up-right', onClick: () => window.open(pathToUrl(path), '_blank', 'noopener') },
+        { id: 'file:new-window', label: 'Open in new window', icon: 'arrow-up-right', onClick: () => window.open(pathToUrl(path), '_blank', 'noopener') },
         sep,
         renameItem,
         moveItem,
         copyItem,
         { label: bookmarks.includes(path) ? 'Remove bookmark' : 'Bookmark', icon: 'bookmark', onClick: () => toggleBookmark(path) },
-        ...(isMd ? [{ label: 'Add file property', icon: 'plus', onClick: () => void addFileProperty(path) }] : []),
-        ...(isMd ? [{ label: 'Export to PDF…', icon: 'file-pdf', onClick: () => void exportToPdf(path) }] : []),
+        ...(isMd ? [{ id: 'file:add-property', label: 'Add file property', icon: 'plus', onClick: () => void addFileProperty(path) }] : []),
+        ...(isMd ? [{ id: 'file:export-pdf', label: 'Export to PDF…', icon: 'file-pdf', onClick: () => void exportToPdf(path) }] : []),
         ...(canSplit
           ? [
               sep,
               {
-                label: 'Find…',
+                id: 'editor:find', label: 'Find…',
                 icon: 'search',
                 onClick: () => void inTab(path, () => {
                   if (!editorFind()) notify('Open the note to search inside it');
@@ -158,41 +161,41 @@ export default function WorkspaceTabs() {
           : []),
         sep,
         {
-          label: 'Copy URL path',
+          id: 'file:copy-url', label: 'Copy URL path',
           onClick: () => {
             navigator.clipboard?.writeText(`${location.origin}${pathToUrl(path)}`).catch(() => {});
             notify('URL copied');
           },
         },
-        { label: 'Open version history', icon: 'clock', onClick: () => setVersionHistory(path) },
+        { id: 'file:history', label: 'Open version history', icon: 'clock', onClick: () => setVersionHistory(path) },
         ...(isMd
           ? [
               {
-                label: 'Open linked view',
+                id: 'file:linked-view', label: 'Open linked view',
                 icon: 'arrow-up-right',
                 submenu: [
                   { label: 'Backlinks', icon: 'link', onClick: () => void inTab(path, () => setRightPanel('backlinks')) },
                   { label: 'Outgoing links', icon: 'arrow-up-right', onClick: () => void inTab(path, () => setRightPanel('outgoing')) },
-                  { label: 'Outline', icon: 'list', onClick: () => void inTab(path, () => setRightPanel('outline')) },
+                  { id: 'file:outline', label: 'Outline', icon: 'list', onClick: () => void inTab(path, () => setRightPanel('outline')) },
                 ],
               },
             ]
           : []),
         sep,
         {
-          label: 'Reveal file in navigation',
+          id: 'file:reveal', label: 'Reveal file in navigation',
           icon: 'folder',
           onClick: () => {
             revealInTree(path);
             if (isMobile) setMobileDrawer('left');
           },
         },
-        ...(isShareable ? [{ label: 'Share…', icon: 'globe', onClick: () => setShareDialog(path) }] : []),
+        ...(isShareable ? [{ id: 'file:share', label: 'Share…', icon: 'globe', onClick: () => setShareDialog(path) }] : []),
         sep,
         ...tabItems,
         sep,
         {
-          label: 'Delete',
+          id: 'file:delete', label: 'Delete',
           danger: true,
           icon: 'trash',
           onClick: async () => {
@@ -206,7 +209,11 @@ export default function WorkspaceTabs() {
         },
       ];
     }
-    openContextMenu({ x: e.clientX || Math.round(rect.left), y: e.clientY || Math.round(rect.bottom), items });
+    if (isMd) items.push(...nativeBatchTagMenuItems({ kind: 'files', paths: [path] }));
+    openContextMenu({ x: e.clientX || Math.round(rect.left), y: e.clientY || Math.round(rect.bottom),
+      items: extendFileMenu(items, [path], { kind: 'tab', source: 'workspace-tabs', paths: [path],
+        fileTypes: [path.split('.').at(-1) ?? ''], activePath: useStore.getState().activePath ?? undefined,
+        modifiers: menuModifiers(e.nativeEvent) }) });
   };
 
   return (

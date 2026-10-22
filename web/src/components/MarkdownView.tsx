@@ -23,6 +23,9 @@ import { semanticDecorations } from '../lib/semanticDecorations';
 import { listLayout } from '../lib/listLayout';
 import { blockLayout } from '../lib/blockLayout';
 import { renderContext, type RenderContext } from '../lib/renderContext';
+import { menuModifiers } from '../lib/configuredMenus/transform';
+import { attachMenuContext } from '../lib/configuredMenus/transform';
+import type { RenderMenuItem } from '../lib/renderContext';
 import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField,
   tableField, htmlBlockField, mermaidField, htmlRenderedState, htmlPreviewField,
   calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitleField,
@@ -135,56 +138,86 @@ export default function MarkdownView(props: MarkdownViewProps) {
   };
 
   const onContextMenu = (e: React.MouseEvent) => {
+    if (e.defaultPrevented) return;
     e.preventDefault();
     const v = view.current;
+    const tag = (e.target as Element).closest<HTMLElement>('[data-native-tag]');
+    if (tag && context.tagMenu) {
+      e.stopPropagation();
+      context.tagMenu(tag.dataset.nativeTag!, e.nativeEvent, mode === 'reading' ? 'reading' : tag.closest('.cm-props') ? 'property' : 'editor');
+      return;
+    }
+    const captured = v?.state;
+    const selection = captured?.selection.main;
+    const linkElement = (e.target as Element).closest<HTMLElement>('[data-menu-link], a[href]');
+    const link = linkElement?.dataset.menuLink ?? linkElement?.getAttribute('href') ?? undefined;
+    const menuContext = { kind: link ? 'link' : 'editor', source: mode === 'reading' ? 'reading' : 'editor',
+      paths: [context.sourcePath], fileTypes: [context.sourcePath.split('.').at(-1) ?? ''],
+      activePath: context.sourcePath, documentVersion: latest.current.snapshot.version,
+      selection: selection && { from: selection.from, to: selection.to, text: captured!.sliceDoc(selection.from, selection.to) },
+      link,
+      modifiers: menuModifiers(e.nativeEvent) };
+    const protect = (items: RenderMenuItem[]): RenderMenuItem[] => items.map(item => ({ ...item,
+      submenu: item.submenu && protect(item.submenu),
+      onClick: item.onClick && (() => {
+        if (view.current?.state !== captured) { context.reportError?.('文档或选区已改变，请重新打开菜单'); return; }
+        item.onClick?.();
+      }),
+    }));
+    const showMenu = (menu: { x: number; y: number; items: RenderMenuItem[] }) => openContextMenu({ ...menu,
+      context: menuContext, items: attachMenuContext(protect(menu.items), menuContext) });
     if (latest.current.mode === 'reading') {
-      openContextMenu({ x: e.clientX, y: e.clientY, items: [
-        { label: 'Copy', onClick: copy }, { label: 'Select all', onClick: selectAll },
+      showMenu({ x: e.clientX, y: e.clientY, items: [
+        ...(link ? [{ id: 'link:open', label: 'Open link', onClick: () => context.openLink(link) },
+          { id: 'link:copy', label: 'Copy link', onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
+        { id: 'editor:copy', label: 'Copy', onClick: copy }, { id: 'editor:select-all', label: 'Select all', onClick: selectAll },
       ] });
       return;
     }
     const sel = v ? v.state.sliceDoc(v.state.selection.main.from, v.state.selection.main.to) : '';
-    openContextMenu({
+    showMenu({
       x: e.clientX,
       y: e.clientY,
       items: [
+        ...(link ? [{ id: 'link:open', label: 'Open link', onClick: () => context.openLink(link) },
+          { id: 'link:copy', label: 'Copy link', onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
         {
-          label: 'Format', icon: 'pencil', submenu: [
-            { label: 'Bold', onClick: () => wrap('**') },
-            { label: 'Italic', onClick: () => wrap('*') },
-            { label: 'Strikethrough', onClick: () => wrap('~~') },
-            { label: 'Highlight', onClick: () => wrap('==') },
-            { label: 'Inline code', onClick: () => wrap('`') },
+          id: 'editor:format', label: 'Format', icon: 'pencil', submenu: [
+            { id: 'editor:format:bold', label: 'Bold', onClick: () => wrap('**') },
+            { id: 'editor:format:italic', label: 'Italic', onClick: () => wrap('*') },
+            { id: 'editor:format:strike', label: 'Strikethrough', onClick: () => wrap('~~') },
+            { id: 'editor:format:highlight', label: 'Highlight', onClick: () => wrap('==') },
+            { id: 'editor:format:code', label: 'Inline code', onClick: () => wrap('`') },
           ],
         },
         {
-          label: 'Paragraph', icon: 'file-text', submenu: [
-            { label: 'Heading 1', onClick: () => prefixLines('# ') },
-            { label: 'Heading 2', onClick: () => prefixLines('## ') },
-            { label: 'Heading 3', onClick: () => prefixLines('### ') },
-            { label: 'Bullet list', onClick: () => prefixLines('- ') },
-            { label: 'Numbered list', onClick: () => prefixLines('1. ') },
-            { label: 'Task list', onClick: () => prefixLines('- [ ] ') },
-            { label: 'Quote', onClick: () => prefixLines('> ') },
-            { label: 'Code block', onClick: () => wrap('```\n', '\n```') },
+          id: 'editor:paragraph', label: 'Paragraph', icon: 'file-text', submenu: [
+            { id: 'editor:heading:1', label: 'Heading 1', onClick: () => prefixLines('# ') },
+            { id: 'editor:heading:2', label: 'Heading 2', onClick: () => prefixLines('## ') },
+            { id: 'editor:heading:3', label: 'Heading 3', onClick: () => prefixLines('### ') },
+            { id: 'editor:list:bullet', label: 'Bullet list', onClick: () => prefixLines('- ') },
+            { id: 'editor:list:ordered', label: 'Numbered list', onClick: () => prefixLines('1. ') },
+            { id: 'editor:list:task', label: 'Task list', onClick: () => prefixLines('- [ ] ') },
+            { id: 'editor:quote', label: 'Quote', onClick: () => prefixLines('> ') },
+            { id: 'editor:code-block', label: 'Code block', onClick: () => wrap('```\n', '\n```') },
           ],
         },
         {
-          label: 'Insert', icon: 'plus', submenu: [
-            { label: 'Internal link', onClick: () => insert('[[]]', 2) },
-            { label: 'External link', onClick: () => wrap('[', '](url)') },
-            { label: 'Embed file', onClick: () => insert('![[]]', 3) },
-            { label: 'Callout', onClick: () => insert('> [!note] Title\n> ', 18) },
-            { label: 'Table', onClick: () => insert('\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n') },
-            { label: 'Horizontal rule', onClick: () => insert('\n---\n') },
-            { label: 'Tag', onClick: () => insert('#') },
+          id: 'editor:insert', label: 'Insert', icon: 'plus', submenu: [
+            { id: 'editor:insert:wiki', label: 'Internal link', onClick: () => insert('[[]]', 2) },
+            { id: 'editor:insert:link', label: 'External link', onClick: () => wrap('[', '](url)') },
+            { id: 'editor:insert:embed', label: 'Embed file', onClick: () => insert('![[]]', 3) },
+            { id: 'editor:insert:callout', label: 'Callout', onClick: () => insert('> [!note] Title\n> ', 18) },
+            { id: 'editor:insert:table', label: 'Table', onClick: () => insert('\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n') },
+            { id: 'editor:insert:rule', label: 'Horizontal rule', onClick: () => insert('\n---\n') },
+            { id: 'editor:insert:tag', label: 'Tag', onClick: () => insert('#') },
           ],
         },
         { label: '', separator: true },
-        { label: 'Cut', onClick: cut },
-        { label: 'Copy', onClick: copy },
-        { label: 'Paste', onClick: paste },
-        { label: 'Select all', onClick: selectAll },
+        { id: 'editor:cut', label: 'Cut', onClick: cut },
+        { id: 'editor:copy', label: 'Copy', onClick: copy },
+        { id: 'editor:paste', label: 'Paste', onClick: paste },
+        { id: 'editor:select-all', label: 'Select all', onClick: selectAll },
         ...(sel
           ? [
               { label: '', separator: true },
@@ -280,5 +313,20 @@ export default function MarkdownView(props: MarkdownViewProps) {
     layout === 'page' ? 'is-readable-line-width' : 'markdown-embedded-view',
     mode !== 'source' ? 'is-live-preview live-preview' : '',
     mode === 'reading' ? 'is-reading-mode' : ''].join(' ');
-  return <div className={cls} data-document-id={snapshot.id} ref={host} onContextMenu={onContextMenu} />;
+  return <div className={cls} data-document-id={snapshot.id} ref={host} onContextMenu={onContextMenu}
+    onMouseOver={event => {
+      const tag = (event.target as Element).closest<HTMLElement>('[data-native-tag]');
+      if (tag && !tag.contains(event.relatedTarget as Node | null)) context.tagHover?.(tag.dataset.nativeTag!, event.nativeEvent);
+    }}
+    onMouseOut={event => {
+      const tag = (event.target as Element).closest<HTMLElement>('[data-native-tag]');
+      if (tag && !tag.contains(event.relatedTarget as Node | null)) context.tagLeave?.();
+    }}
+    onClick={event => {
+      const tag = (event.target as Element).closest<HTMLElement>('[data-native-tag]');
+      if (tag && event.altKey && context.openTag) {
+        event.preventDefault(); event.stopPropagation();
+        context.openTag(tag.dataset.nativeTag!, event.ctrlKey || event.metaKey);
+      }
+    }} />;
 }

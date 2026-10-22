@@ -1,0 +1,30 @@
+.native-tags-backdrop { z-index: 1100; position: fixed; inset: 0; display: grid; place-items: center; background: #0007; padding: 24px; }
+.native-tags-dialog { background: var(--background-primary); color: var(--text-normal); border: 1px solid var(--background-modifier-border); border-radius: 10px; width: min(740px, 96vw); max-height: 90vh; overflow: auto; padding: 24px; box-shadow: 0 16px 60px #0005; }
+.native-tags-dialog h2 { margin: 0 0 12px; font-size: 1.2em; }
+.native-tags-hint { color: var(--text-muted); line-height: 1.6; }
+.native-tags-fields { display: grid; gap: 12px; padding: 0; border: 0; }
+.native-tags-fields > label { display: grid; gap: 5px; }
+.native-tags-fields input:not([type=checkbox]), .native-tags-fields select, .native-tags-dialog > input { width: 100%; }
+.native-tags-fields .native-tags-check, .native-tags-check { display: flex; align-items: flex-start; gap: 8px; }
+.native-tags-check input { margin-top: 4px; }
+.native-tags-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.native-tags-error { color: var(--text-error, #dd654e); white-space: pre-wrap; }
+.native-tags-preview { margin-top: 14px; }
+.native-tags-preview > ul, .native-tags-results { max-height: 300px; overflow: auto; padding-left: 20px; }
+.native-tags-preview li { margin: 6px 0; overflow-wrap: anywhere; }
+.native-tags-merge { border: 1px solid var(--text-accent); padding: 12px; border-radius: 6px; }
+.native-tags-change { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; font: 12px var(--font-monospace); white-space: pre-wrap; }
+.native-tags-change del { background: #d9534f20; text-decoration: none; }
+.native-tags-change ins { background: #4caf5020; text-decoration: none; }
+.native-tags-panel { padding: 8px; }
+.native-tags-toolbar { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+.native-tags-toolbar input { width: 100%; min-width: 0; }
+.native-tags-tree { list-style: none; padding: 0; margin: 0; }
+.native-tags-tree ul { list-style: none; margin: 0; padding-left: 16px; }
+.native-tags-row { display: flex; align-items: center; gap: 4px; min-height: 28px; border-radius: 4px; }
+.native-tags-row:hover, .native-tags-row.is-drop-target { background: var(--background-modifier-hover); }
+.native-tags-row button { border: none; background: transparent; box-shadow: none; padding: 3px; color: inherit; }
+.native-tags-row .native-tags-label { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+.native-tags-row .native-tags-count { color: var(--text-faint); padding-right: 4px; font-size: 11px; }
+.native-tags-fold { width: 20px; flex: 0 0 20px; }
+.native-tags-hover { position: fixed; z-index: 1000; width: min(440px, 80vw); max-height: 320px; overflow: auto; padding: 14px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; box-shadow: 0 8px 30px #0004; }

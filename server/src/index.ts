@@ -28,10 +28,21 @@ import { agentRouter } from './routes/agent.js';
 import { uiStateRouter } from './routes/uistate.js';
 import { sharesRouter, publicSharesRouter } from './routes/shares.js';
 import { sharePageRouter } from './routes/sharepage.js';
+import { configuredMenusRouter } from './routes/configuredMenus.js';
+import { tagsRouter } from './routes/tags.js';
+import { nativeFeaturesRouter } from './routes/nativeFeatures.js';
+import { nativeFeatureSettings } from './services/nativeFeatureSettings.js';
+import { configureTagPreferences } from './services/tags/service.js';
+import { createAttachmentsRouter } from './routes/attachments.js';
+import { AttachmentCleanupService } from './services/attachment-cleanup/service.js';
+import { catalog } from './services/catalog.js';
+import { guardVaultMutations, bindMaintenanceClients, maintenanceClientConnected,
+  maintenanceClientMessage, vaultGeneration, inspectMaintenanceWorkspace,
+  assertMaintenanceWorkspaceSafe, withVaultMaintenance } from './services/vaultMaintenance.js';
 import { initSearch } from './services/search.js';
 import { setBroadcaster } from './services/realtime.js';
 import { getVaultRoot, ensureVault } from './services/vault.js';
-import { enableFileUpdates, queueFileUpdate } from './services/fileupdates.js';
+import { enableFileUpdates, queueFileUpdate, drainFileUpdates } from './services/fileupdates.js';
 import { startAutoSync } from './services/autosync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,6 +71,7 @@ async function main() {
   app.set('trust proxy', config.trustProxy);
   app.use(express.json({ limit: '32mb' }));
   app.use(cookieParser());
+  app.use(guardVaultMutations);
 
   // Per-request CSP nonce — used by the SSR share page's inline <script>.
   app.use((_req, res, next) => {
@@ -122,6 +134,18 @@ async function main() {
   app.use('/api/git', gitRouter);
   app.use('/api/keys', keysRouter);
   app.use('/api/plugins', pluginsRouter);
+  app.use('/api/menus', configuredMenusRouter);
+  app.use('/api/tags', tagsRouter);
+  app.use('/api/native-features', nativeFeaturesRouter);
+  configureTagPreferences(async () => (await nativeFeatureSettings()).tags);
+  const attachmentCleanup = new AttachmentCleanupService({
+    getCatalog: () => catalog,
+    captureState: async () => ({ root: await getVaultRoot(), generation: vaultGeneration(),
+      blockers: await inspectMaintenanceWorkspace() }),
+    withExclusiveMutation: work => withVaultMaintenance(drainFileUpdates, work),
+    assertWorkspaceSafe: assertMaintenanceWorkspaceSafe,
+  });
+  app.use('/api/attachments', createAttachmentsRouter(attachmentCleanup));
   app.use('/api/uistate', uiStateRouter);
   app.use('/api/shares', sharesRouter); // manage public share links (auth)
   app.use('/public/shares', publicSharesRouter); // shared-note content (NO auth)
@@ -165,6 +189,7 @@ async function main() {
 // files), so the upgrade is rejected unless the request carries a valid session.
 function setupWebsocket(server: http.Server) {
   const wss = new WebSocketServer({ noServer: true });
+  bindMaintenanceClients(() => wss.clients);
 
   server.on('upgrade', (req, socket, head) => {
     let pathname = '';
@@ -189,6 +214,11 @@ function setupWebsocket(server: http.Server) {
   });
 
   wss.on('connection', (ws) => {
+    maintenanceClientConnected();
+    ws.on('message', data => {
+      if (!Buffer.isBuffer(data) || data.length > 16384) return;
+      try { maintenanceClientMessage(ws, JSON.parse(data.toString())); } catch { /* unrelated client message */ }
+    });
     ws.send(JSON.stringify({ type: 'hello' }));
   });
   setBroadcaster((msg) => {

@@ -8,6 +8,8 @@ export class DocumentRegistry {
   private listeners = new Set<(snapshot: DocumentSnapshot) => void>();
 
   get(path: string): DocumentSession | undefined { return this.sessions.get(path); }
+  /** Current saved/unsaved state for explicit maintenance operations. */
+  snapshots(): DocumentSnapshot[] { return [...this.sessions.values()].map(session => session.snapshot); }
   subscribe(listener: (snapshot: DocumentSnapshot) => void): () => void {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };

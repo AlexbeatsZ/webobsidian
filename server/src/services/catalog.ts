@@ -8,6 +8,8 @@ export interface NoteRecord extends CatalogEntry {
   snippet: string;
 }
 export const CORE_LIST_PROPS = new Set(['tags', 'aliases', 'cssclasses']);
+/** Metadata normalization is part of persisted cache compatibility. */
+export const CATALOG_SCHEMA_VERSION = 2;
 function propertyType(key: string, value: unknown): string {
   if (CORE_LIST_PROPS.has(key) || Array.isArray(value)) return 'list';
   if (typeof value === 'number') return 'number';
@@ -40,10 +42,10 @@ export class VaultCatalog {
   }
   putNote(path: string, note: ParsedNote) {
     this.putPath(path);
-    const raw = note.frontmatter.aliases ?? note.frontmatter.alias;
-    const aliases = (Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : []).filter(
-      (v): v is string => typeof v === 'string',
-    );
+    const aliases = [...new Set(Object.entries(note.frontmatter)
+      .filter(([key]) => /^aliases?$/i.test(key))
+      .flatMap(([, raw]) => Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [])
+      .filter((value): value is string => typeof value === 'string'))];
     const record: NoteRecord = {
       path,
       kind: 'file',

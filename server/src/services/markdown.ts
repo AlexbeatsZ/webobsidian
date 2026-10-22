@@ -1,6 +1,7 @@
 import matter from 'gray-matter';
 import path from 'node:path';
 import { extractMetadata, parseLinkTarget } from '@webobsidian/markdown-core';
+import { normalizeStoredTags } from './tags/query.js';
 
 export interface ParsedNote {
   title: string;
@@ -27,9 +28,8 @@ export function parseNote(rel: string, raw: string): ParsedNote {
   const metadata = extractMetadata(raw.replace(/^\ufeff/, '').replace(/\r\n|\r/g, '\n'));
   const links = new Set(metadata.links);
   const tags = new Set(metadata.tags);
-  const fmTags = frontmatter.tags;
-  if (Array.isArray(fmTags)) for (const t of fmTags) tags.add(String(t));
-  else if (typeof fmTags === 'string') for (const t of fmTags.split(/[,\s]+/)) if (t) tags.add(t);
+  for (const [key, value] of Object.entries(frontmatter))
+    if (/^tags?$/i.test(key)) for (const tag of normalizeStoredTags(value)) tags.add(tag);
 
   const headings = metadata.headings.map((heading) => heading.text);
 

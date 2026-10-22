@@ -4,7 +4,19 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-10-22 (native writing and Chinese search; static-only validation)
+Cập nhật lần cuối: 2026-10-22 (native workflows; static-only validation)
+
+## Native workflows (PRD 1.14)
+
+- [x] Managed desktop userscripts: source/file/URL imports, approvals, GM storage/APIs, guest lifecycle and optional automatic updates.
+- [x] Per-Vault JSONC menus: includes, conditions, stable IDs, hide/rename/order/groups/submenus and existing-command actions.
+- [x] Unused attachment scan/preview/selection/confirmation, reference revalidation and existing Vault trash/restore workflow.
+- [x] Existing HTTP/Git/file-update drains and authenticated WS maintenance inspection/freeze; dirty/conflict/Canvas/unknown clients fail closed.
+- [x] Native tag tree/search/rename/merge/batches/drag/Tag Pages/hover with source patches and shared document history.
+- [x] Per-Vault native settings, one-time tag preference import and selective legacy plugin/module takeover.
+- [x] Current core/search/web/server/desktop types, isolated production and standalone bundle/syntax checks.
+- [ ] Execute prepared regressions; user browser/script/navigation/menu/tag/cleanup/migration/performance acceptance.
+- [ ] New desktop portable deliverable (not requested).
 
 ## Native writing (PRD 1.13)
 
