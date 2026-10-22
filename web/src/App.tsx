@@ -142,6 +142,7 @@ export default function App() {
           writingFileChanged(msg.path);
           if (msg.path === '.obsidian/webobsidian/automation.jsonc')
             void sharedApp.automation.reload().catch(error => useStore.getState().notify(String(error)));
+          window.dispatchEvent(new CustomEvent('vault-configuration-changed', { detail: { path: msg.path, event: msg.event } }));
         } else if (msg.type === 'index') {
           window.clearTimeout(indexTimer);
           indexTimer = window.setTimeout(notifyIndexChanged, 800);
