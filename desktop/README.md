@@ -1,7 +1,7 @@
 # WebObsidian Desktop (Electron)
 
-Packages WebObsidian as an installable desktop app for **macOS / Windows / Linux**
-(arm64 · x64 · ia32). It is a thin **Electron shell** around the unchanged
+Packages WebObsidian as a desktop app for **macOS / Windows / Linux**
+(Windows: x64 portable; macOS/Linux: arm64 and x64). It is a thin **Electron shell** around the unchanged
 `server/` (Express) + `web/` (SPA): the shell spawns the server as a child process
 bound to `127.0.0.1` on a random free port and loads it in a `BrowserWindow`.
 
@@ -32,15 +32,15 @@ From the **repo root** (builds web + server first, then the desktop app):
 ```bash
 npm install
 npm run desktop          # build everything + launch the app (dev)
-npm run desktop:dist     # build installers for THIS platform → desktop/release/
+npm run desktop:dist     # build this platform's packages; Windows: portable only
 ```
 
-To build only the Windows x64 installer and portable app without publishing or
-launching them, run from the repo root:
+To build the Windows x64 portable app without publishing or launching it, run
+from the repo root:
 
 ```bash
 npm run build
-npm --workspace desktop run dist -- --win nsis portable --x64 --publish never
+npm --workspace desktop run dist -- --win --x64 --publish never
 ```
 
 Every `dist`, `dist:dir`, or `dist:publish` run first deletes the entire previous
@@ -50,9 +50,9 @@ through these npm scripts so the cleanup hook is applied; direct
 `electron-builder` invocations bypass it. Desktop `dist/` and `.gen/server/`
 are also regenerated from scratch. This cleanup does not touch vaults or app data.
 
-The two outputs have separate names so they can coexist in that version directory:
-`WebObsidian-<version>-win-x64-setup.exe` and
-`WebObsidian-<version>-win-x64-portable.exe`.
+Windows builds produce only `WebObsidian-<version>-win-x64-portable.exe`.
+The default Windows target is portable for both local builds and release CI;
+no setup installer is generated. Building a package does not install or launch it.
 
 Or directly inside `desktop/` (assumes `npm run build` already ran at the root):
 
@@ -60,7 +60,7 @@ Or directly inside `desktop/` (assumes `npm run build` already ran at the root):
 npm run build        # esbuild: dist/ (main+preload) + .gen/server/ (server bundle + SPA)
 npm run check:bundle # static standalone dependency check; does not start the server
 npm start            # launch with the already-built bundle
-npm run dist         # electron-builder → installers in desktop/release/
+npm run dist         # electron-builder → packages; Windows: portable only
 npm run dist:dir     # fast unpacked build (no installer), for smoke testing
 ```
 
@@ -94,7 +94,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Each runner (macOS/Windows/Ubuntu) packages its platform's installers and uploads
+Each runner (macOS/Windows/Ubuntu) packages its platform's artifacts and uploads
 them to a **draft** GitHub Release for the tag. When all three finish, open the draft
 release on GitHub and click **Publish**.
 
@@ -103,7 +103,6 @@ Artifacts:
 | Platform | Formats | Arch |
 |----------|---------|------|
 | macOS    | `.dmg`, `.zip`         | arm64, x64 |
-| Windows  | NSIS `.exe`           | x64, arm64, ia32 |
 | Windows  | portable `.exe`       | x64 |
 | Linux    | `.AppImage`, `.deb`    | x64, arm64 |
 

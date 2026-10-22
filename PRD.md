@@ -2,7 +2,8 @@
 
 > Product Requirements Document
 > Phiên bản: 1.11 · Cập nhật: 2026-10-22 · Trạng thái: Draft
-> Changelog 1.11 (compact workspace): remove the visible desktop File/Edit menu;
+> Changelog 1.11 (compact workspace; Windows portable delivery): Windows packaging
+> now defaults to x64 portable only, without a setup installer. Remove the visible desktop File/Edit menu;
 > share one 32px row between tabs, sidebar toggles and native window controls.
 > Remove the redundant note/format headers; move file actions to tab context menus
 > and Markdown modes to a bottom-right icon menu. Collapse the ribbon with the left
@@ -36,7 +37,7 @@
 > bind `127.0.0.1` + cổng ngẫu nhiên) và load SPA trong `BrowserWindow`. Server được esbuild bundle thành
 > **1 file `.mjs`** (không native module runtime nên cross-arch chỉ là đổi Electron binary). Lần đầu **chọn
 > vault**, dữ liệu vào `userData`, **auto-login** bằng mật khẩu ngẫu nhiên/máy (không bắt đổi pass). Đóng gói
-> bằng **electron-builder** (dmg/zip · nsis/portable · AppImage/deb); CI mới `release.yml` build matrix
+> bằng **electron-builder** (dmg/zip · Windows x64 portable · AppImage/deb); CI mới `release.yml` build matrix
 > macOS/Windows/Ubuntu khi push tag `v*` và publish **GitHub Release**. Không đổi server/web code.
 > Changelog 1.4 (FR-2 — Audio/Video embed: phát được như Obsidian, theo yêu cầu người dùng): embed
 > `![[clip.mp4]]` / `![[song.mp3]]` giờ render **trình phát HTML5 thật** (`<video controls>` / `<audio
@@ -451,7 +452,7 @@ Express + SPA hiện có (không fork code, không đổi kiến trúc) — nên
   đổi trong Settings.
 - **Đa nền tảng / đa kiến trúc**: vì server **không có native module runtime**, cross-arch chỉ là đóng gói
   Electron binary tương ứng. Đóng gói bằng **electron-builder**: macOS `dmg`+`zip` (arm64/x64), Windows
-  `nsis`(installer)+`portable` (x64/arm64/ia32), Linux `AppImage`+`deb` (x64/arm64).
+  `portable` only (x64; no setup installer), Linux `AppImage`+`deb` (x64/arm64).
 - **Phát hành**: GitHub Actions workflow `release.yml` chạy khi push tag `v*` — matrix macOS/Windows/Ubuntu,
   mỗi runner build native cho HĐH của nó rồi **publish lên GitHub Release** (draft) để người dùng tải.
 - **Phụ thuộc ngoài**: tính năng Git sync cần `git` có trên máy (PATH được bổ sung các vị trí phổ biến); thiếu

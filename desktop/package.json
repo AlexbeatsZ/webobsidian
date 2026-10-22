@@ -1,6 +1,6 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "WebObsidian desktop app (Electron shell around the self-hosted server)",
   "author": "xnohat <xnohat@gmail.com>",
@@ -62,17 +62,9 @@
     "win": {
       "icon": "buildResources/icon.png",
       "target": [
-        { "target": "nsis", "arch": ["x64", "arm64", "ia32"] },
         { "target": "portable", "arch": ["x64"] }
       ],
       "artifactName": "${productName}-${version}-win-${arch}.${ext}"
-    },
-    "nsis": {
-      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}",
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": false
     },
     "portable": {
       "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"

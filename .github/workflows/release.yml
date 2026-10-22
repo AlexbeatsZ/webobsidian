@@ -1,12 +1,12 @@
 name: Release desktop apps
 
-# Build cross-platform desktop installers and publish them to a GitHub Release.
+# Build cross-platform desktop packages and publish them to a GitHub Release.
 # Trigger: push a version tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`),
 # or run manually from the Actions tab.
 #
-# Each runner builds installers for its OWN platform natively (mac on macOS,
+# Each runner builds packages for its OWN platform natively (mac on macOS,
 # win on Windows, linux on Ubuntu) — no cross-compilation / wine needed. Because
-# the bundled server has no native node modules, every CPU arch (x64/arm64/ia32)
+# the bundled server has no native node modules, each configured CPU arch
 # is produced just by packing the matching prebuilt Electron binary.
 #
 # electron-builder uploads assets to a DRAFT release for the tag. After all three
@@ -45,7 +45,7 @@ jobs:
       - name: Build web + server
         run: npm run build
 
-      - name: Package & publish desktop installers
+      - name: Package & publish desktop apps (Windows portable only)
         run: npm --workspace desktop run dist:publish
         env:
           # electron-builder publishes to GitHub Releases with this token.

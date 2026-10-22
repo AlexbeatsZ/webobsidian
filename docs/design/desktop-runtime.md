@@ -35,6 +35,12 @@ print the persisted secret or reset desktop config/vault data to fix packaging.
 
 ## Local build retention
 
+Windows builds use only the x64 portable target, producing
+`WebObsidian-<version>-win-x64-portable.exe`. This applies to local npm packaging
+and release CI through desktop/package.json. The NSIS setup target/configuration
+was removed on 2026-10-22 at the user's request. macOS/Linux targets are unchanged.
+Packaging never installs or launches the generated application.
+
 Keep only the latest local desktop deliverables. The npm `dist`, `dist:dir`,
 and `dist:publish` commands run `clean:release` first, deleting the entire fixed
 `desktop/release/` directory before packaging to `release/<version>/`. The cleaner

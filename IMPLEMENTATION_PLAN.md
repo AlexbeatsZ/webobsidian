@@ -13,6 +13,7 @@ Cập nhật lần cuối: 2026-10-22 (compact workspace chrome; static-only val
 - [x] Preserve native actions through F10 and file actions through tab context menus.
 - [x] Bottom-right reading/source/live menu; ribbon/left sidebar visibility linked.
 - [x] Isolated current-core/web/desktop types and production web/main/preload bundles.
+- [x] Windows x64 portable 0.1.5 packaged; future Windows defaults are portable-only.
 - [ ] User titlebar/drag/menu/sidebar/mobile acceptance; runtime runs remain deferred.
 
 Current layout supersedes the historical menu/toolbar layout below. See

@@ -125,14 +125,14 @@ deployment settings live in **`.env`** (git-ignored) — you never edit the trac
 
 ## 🖥️ Desktop app (no server setup)
 
-Prefer a native app? Grab an installer from the
+Prefer a native app? Download a desktop package from the
 [**Releases**](https://github.com/xnohat/webobsidian/releases) page — available for
-**macOS / Windows / Linux** (arm64 · x64 · ia32):
+**macOS / Windows / Linux** (Windows: x64 portable; macOS/Linux: arm64 and x64):
 
 | Platform | Download |
 |----------|----------|
 | macOS    | `.dmg` (or `.zip`) — arm64 / x64 |
-| Windows  | NSIS installer `.exe` or portable `.exe` — x64 / arm64 / ia32 |
+| Windows  | Portable `.exe` — x64 |
 | Linux    | `.AppImage` or `.deb` — x64 / arm64 |
 
 The desktop app bundles the whole server, picks your vault folder on first launch, and

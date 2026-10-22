@@ -66,5 +66,7 @@ declarations; compiling current core into the isolated build resolves them.
 No browser, Electron, server, installer or interactive tests were launched, in
 accordance with the standing static-only boundary. Actual titlebar geometry,
 native dragging/Snap behavior, mobile touch and view-menu interaction remain
-user acceptance. Existing app, vault, server/public and desktop 0.1.4 packages
-were preserved; this change updates source and has not been packaged or installed.
+user acceptance. The follow-up Windows x64 portable build 0.1.5 includes this UI;
+packaged version, UI markers, 186 resources and standalone server checks pass.
+The former 0.1.4 artifacts were removed before packaging. Existing app, vault and
+server/public were preserved; the new portable was not launched or installed.
