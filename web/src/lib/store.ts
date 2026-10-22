@@ -4,6 +4,7 @@ import { api, type TreeNode, type ShareRecord } from './api';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
 import { parseLinkTarget } from '@webobsidian/markdown-core';
+import { openFragment } from './fragmentNavigation';
 import type { MenuContext } from './configuredMenus/types';
 let openGeneration = 0;
 let splitGeneration = 0;
@@ -535,7 +536,11 @@ export const useStore = create<AppState>()(
             get().notify(resolved.status === 'ambiguous' ? 'Ambiguous link: ' + target : 'Link is not allowed');
             return;
           }
-          if (path) await get().openFile(path);
+          if (path) {
+            await get().openFile(path);
+            const fragment = parseLinkTarget(target).fragment;
+            if (fragment && /\.(md|markdown)$/i.test(path)) openFragment(path, fragment);
+          }
           else {
             // Only append `.md` when the target has no extension at all — a target
             // like `Foo.canvas` must stay `Foo.canvas`, not become `Foo.canvas.md`.

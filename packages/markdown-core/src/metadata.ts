@@ -1,7 +1,7 @@
-import { analyzeMarkdown, type MarkdownModel, type SourceSpan } from './syntax.js';
+import { analyzeMarkdown, markdownComments, type MarkdownModel, type SourceSpan } from './syntax.js';
 import { parseLinkTarget } from './links.js';
-import { legacySubheadings } from './legacySubheadings.js';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts } from './bodyHeadings.js';
+import { mathRegions } from './math.js';
 
 export interface Heading extends SourceSpan { level: number; text: string; kind?: 'body' }
 export interface Metadata {
@@ -17,11 +17,8 @@ export function extractMetadata(source: string | MarkdownModel): Metadata {
   const { text } = model;
   const forbidden = [...model.literal, ...model.html, ...model.htmlBlocks, ...(model.frontmatter ? [model.frontmatter] : [])];
   const intersects = (from: number, to: number) => forbidden.some((range) => from < range.to && to > range.from);
-  const comments: SourceSpan[] = [];
-  for (const match of text.matchAll(/%%[\s\S]*?%%/g)) {
-    if (!intersects(match.index!, match.index! + match[0].length)) comments.push({ from: match.index!, to: match.index! + match[0].length });
-  }
-  forbidden.push(...comments);
+  const comments = markdownComments(model);
+  forbidden.push(...comments, ...mathRegions(model));
   const links = new Set<string>(), tags = new Set<string>();
   for (const match of text.matchAll(/!?\[\[([^\]\n]+?)\]\]/g)) {
     if (intersects(match.index!, match.index! + match[0].length)) continue;
@@ -56,31 +53,4 @@ export function extractMetadata(source: string | MarkdownModel): Metadata {
   const result = { tags: [...tags], links: [...links], headings, comments, blockIds };
   metadataCache.set(model, result);
   return result;
-}
-
-export function fragmentRange(model: MarkdownModel, fragment: string): SourceSpan | null {
-  if (!fragment) return { from: 0, to: model.text.length };
-  const meta = extractMetadata(model);
-  let decoded = fragment;
-  try { decoded = decodeURIComponent(fragment); } catch { /* literal percent */ }
-  if (decoded.startsWith('^')) {
-    const block = meta.blockIds.find((candidate) => candidate.id === decoded.slice(1));
-    if (!block) return null;
-    const paragraph = model.nodes.filter((node) => ['Paragraph', 'ListItem', 'Blockquote'].includes(node.name) && node.from <= block.from && node.to >= block.to)
-      .sort((a, b) => a.to - a.from - (b.to - b.from))[0];
-    return paragraph ? { from: paragraph.from, to: paragraph.to } : { from: model.text.lastIndexOf('\n', block.from - 1) + 1, to: block.to };
-  }
-  if (decoded.startsWith('-')) {
-    const subheadings = legacySubheadings(model, meta.comments);
-    const item = subheadings.find(candidate => candidate.fragment.normalize('NFC') === decoded.normalize('NFC'));
-    if (item) {
-      const next = [...subheadings, ...meta.headings].filter(candidate => candidate.from > item.from).sort((a, b) => a.from - b.from)[0];
-      return { from: item.from, to: next?.from ?? model.text.length };
-    }
-  }
-  const index = meta.headings.findIndex((heading) => heading.text.normalize('NFC').toLocaleLowerCase() === decoded.normalize('NFC').toLocaleLowerCase());
-  if (index < 0) return null;
-  const heading = meta.headings[index];
-  const next = meta.headings.slice(index + 1).find((candidate) => candidate.level <= heading.level);
-  return { from: heading.from, to: next?.from ?? model.text.length };
 }

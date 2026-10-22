@@ -7,7 +7,7 @@ import { registerEditor } from '../lib/activeEditor';
 import { bindPluginEditor } from '../lib/plugins';
 import { manualSave, bindTimestampUpdates } from '../lib/writing/format';
 import MarkdownView from './MarkdownView';
-import { analyzeMarkdown, fragmentRange } from '@webobsidian/markdown-core';
+import { analyzeMarkdown, fragmentRange, equationContext } from '@webobsidian/markdown-core';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
 export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment }: { path?: string; reading?: boolean; embedded?: boolean; fragment?: string }) {
@@ -37,13 +37,19 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     const timer = window.setTimeout(() => { void session.save().catch((cause) => notify(cause.message)); }, 900);
     return () => window.clearTimeout(timer);
   }, [session, reading, snapshot.version, snapshot.dirty, snapshot.conflict, notify]);
+  const numberedContext = useMemo(() => {
+    const model = session?.analysis;
+    if (!model) return context;
+    const from = fragment ? fragmentRange(model, fragment)?.from ?? 0 : 0;
+    return { ...context, equations: equationContext(model, from), mathSource: { model, from } };
+  }, [context, session, snapshot.version, fragment]);
   if (error) return <div className="editor-error" role="alert">{error.message}</div>;
   if (!session) return <div className="editor-loading">Loading…</div>;
   const analysis = session.analysis;
   const range = fragment ? fragmentRange(analysis, fragment) : null;
   if (fragment && !range) return <div className="editor-error">Section or block could not be found</div>;
   const displayed = range ? { ...snapshot, text: snapshot.text.slice(range.from, range.to), raw: snapshot.text.slice(range.from, range.to) } : snapshot;
-  return <MarkdownView snapshot={displayed} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={context}
+  return <MarkdownView snapshot={displayed} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={numberedContext}
     autoFocus={!reading} showTitle={!embedded} layout={embedded ? 'embedded' : 'page'}
     onChange={(changes, version, origin, model, history) => { session.edit(version, changes, origin, history); session.acceptAnalysis(model); return session.snapshot; }}
     onUndo={() => { session.undo(); return session.snapshot; }}

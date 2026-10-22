@@ -1,7 +1,7 @@
 import { Facet } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { MenuContext } from './configuredMenus/types';
-import type { MarkdownModel } from '@webobsidian/markdown-core';
+import type { EquationContext, MarkdownModel } from '@webobsidian/markdown-core';
 
 export interface RenderMenuItem {
   id?: string; label: string; icon?: string; disabled?: boolean; checked?: boolean;
@@ -13,16 +13,20 @@ export interface FragmentOptions {
   id: string; mode?: 'live' | 'reading'; sourceFrom?: number; autoFocus?: boolean;
   context?: RenderContext; onCommit?: (source: string) => void;
   onReady?: () => void;
+  equations?: EquationContext;
+  mathSource?: { model: MarkdownModel; from: number };
 }
 export interface EmbeddedNote {
   path: string; context: RenderContext;
-  read: () => { source: string; from: number } | null;
+  read: () => { source: string; from: number; equations?: EquationContext; mathSource?: { model: MarkdownModel; from: number } } | null;
   subscribe: (listener: () => void) => () => void;
 }
 
 /** Services are scoped to a view's source document and capability boundary. */
 export interface RenderContext {
   sourcePath: string;
+  /** Full-source semantic snapshot, optionally projected into a fragment. */
+  equations?: EquationContext;
   mathSource?: { model: MarkdownModel; from: number };
   openLink: (target: string) => void;
   openMenu: (menu: { x: number; y: number; items: RenderMenuItem[]; context?: MenuContext }) => void;

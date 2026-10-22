@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { SourceDocument, analyzeMarkdown, embeddedTargets, fragmentRange, parseLinkTarget } from '@webobsidian/markdown-core';
+import { SourceDocument, analyzeMarkdown, embeddedTargets, fragmentRange, parseLinkTarget, equationContext, type EquationContext } from '@webobsidian/markdown-core';
 
 export interface ShareDocument {
   token: string; path: string; source: string; from: number;
   notes: Map<string, string>; media: Map<string, string>;
+  equations?: EquationContext;
 }
 interface Services { read: (path: string) => Promise<string>; resolve: (target: string, sourcePath: string) => string | undefined }
 
@@ -19,6 +20,11 @@ export async function buildShareScope(rootPath: string, services: Services): Pro
     const model = analyzeMarkdown(new SourceDocument(raw).text);
     const range = fragmentRange(model, fragment); if (!range) return null;
     const document: ShareDocument = { token: key, path, source: model.text.slice(range.from, range.to), from: range.from, notes: new Map(), media: new Map() };
+    const numbered = equationContext(model, range.from);
+    // Only granted formulas leave the server, never the unshared source model.
+    document.equations = { ...numbered, revision: key, equations: numbered.equations
+      .filter(e => e.from >= range.from && e.to <= range.to)
+      .map(e => ({ ...e, heading: '', ...(e.anchor && e.anchor.to > range.to ? { anchor: undefined, id: undefined } : {}) })) };
     scope.set(key, document);
     for (const target of embeddedTargets(document.source)) {
       const parsed = parseLinkTarget(target);

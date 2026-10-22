@@ -176,7 +176,7 @@ publicSharesRouter.get('/:id/render', asyncHandler(async (req, res) => {
   const scope = await buildShareScope(share.path, { read: vault.readFileText, resolve: resolveFile });
   res.setHeader('Cache-Control', 'no-store');
   res.json({ mathProfile: await sharedMathProfile(), kind: isCanvas(share.path) ? 'canvas' : 'markdown', documents: [...scope.values()].map(doc => ({
-    token: doc.token, source: doc.source, from: doc.from, notes: Object.fromEntries(doc.notes),
+    token: doc.token, source: doc.source, from: doc.from, equations: doc.equations, notes: Object.fromEntries(doc.notes),
   })) });
 }));
 

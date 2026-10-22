@@ -1,10 +1,12 @@
+import { parseLinkTarget, type EquationContext } from '@webobsidian/markdown-core';
+import { openFragment } from './lib/fragmentNavigation';
 import { mountMarkdownFragment } from './components/MarkdownFragment';
 import type { RenderContext } from './lib/renderContext';
 import './styles/obsidian.css';
 import { activateMathProfile } from './lib/mathjax';
 import type { MathProfile } from './lib/mathPreamble';
 
-interface SharedDocument { token: string; source: string; from: number; notes: Record<string, string> }
+interface SharedDocument { token: string; source: string; from: number; equations?: EquationContext; notes: Record<string, string> }
 interface SharedPayload { kind: 'markdown' | 'canvas'; documents: SharedDocument[]; mathProfile?: MathProfile }
 
 /** No vault/store/authenticated API imports. Every operation is share-scoped. */
@@ -20,19 +22,20 @@ export async function enhanceSharedPage(id: string, payload?: SharedPayload): Pr
   const root = docs.get('root'); if (!root) return;
   const stops: (() => void)[] = [];
   const contextFor = (token: string): RenderContext => ({
-    sourcePath: token, openLink: target => { if (target.startsWith('#')) location.hash = target.slice(1); },
+    sourcePath: token, equations: docs.get(token)?.equations, openLink: target => { if (target.startsWith('#')) openFragment(token, target.slice(1)); },
     openMenu: () => {}, files: () => [], tags: async () => [], properties: async () => [], propertyTypes: () => ({}),
     setPropertyType: async () => { throw new Error('This share is read-only'); },
     rawUrl: target => '/public/shares/' + encodeURIComponent(id) + '/file?from=' + encodeURIComponent(token) + '&path=' + encodeURIComponent(target),
     renderEmbed: async (target, signal) => {
-      const child = docs.get(docs.get(token)?.notes[target] ?? ''); if (!child || signal.aborted) return null;
-      return { path: child.token, context: contextFor(child.token), read: () => ({ source: child.source, from: child.from }), subscribe: () => () => {} };
+      const declared = docs.get(token)?.notes ?? {};
+      const child = docs.get(declared[target] ?? declared[parseLinkTarget(target).path] ?? ''); if (!child || signal.aborted) return null;
+      return { path: child.token, context: contextFor(child.token), read: () => ({ source: child.source, from: child.from, equations: child.equations }), subscribe: () => () => {} };
     },
   });
   const mount = (host: HTMLElement, doc: SharedDocument) => {
     const content = document.createElement('div');
     // Keep crawler/fallback HTML until the shared engine has mounted successfully.
-    stops.push(mountMarkdownFragment(content, doc.source, { id: doc.token, sourceFrom: doc.from, context: contextFor(doc.token),
+    stops.push(mountMarkdownFragment(content, doc.source, { id: doc.token, sourceFrom: doc.from, equations: doc.equations, context: contextFor(doc.token),
       onReady: () => host.replaceChildren(content) }));
   };
   if (result.kind === 'markdown') {

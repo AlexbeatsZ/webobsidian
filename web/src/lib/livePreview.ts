@@ -12,7 +12,7 @@ import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from '.
 import { openLightbox } from './imageLightbox';
 import { applyImagePresentation, presentHtmlImages } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
-import { syntaxModel, blockModel } from './syntaxModel';
+import { syntaxModel, blockModel, equationsOf } from './syntaxModel';
 import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered, toggleSourceRegion } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
@@ -22,6 +22,7 @@ import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './r
 import { renderMath, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns, refreshBlockEffects } from './blocks/model';
+import { equationLabel, equationTarget, equationAt, fragmentRange, parseLinkTarget, type Equation } from '@webobsidian/markdown-core';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -82,18 +83,42 @@ function externalLinkIcon(): SVGElement {
 }
 
 class WikilinkWidget extends WidgetType {
+  private cleanup = new WeakMap<HTMLElement, () => void>();
+  destroy(dom: HTMLElement) { this.cleanup.get(dom)?.(); }
   /** `aria` = default display text, set when an alias overrides it (like Obsidian). */
-  constructor(readonly target: string, readonly label: string, readonly embed: boolean, readonly aria?: string) {
+  constructor(readonly target: string, readonly label: string, readonly embed: boolean, readonly aria?: string, readonly numberReference = false, readonly revision?: string) {
     super();
   }
   eq(o: WikilinkWidget) {
-    return o.target === this.target && o.label === this.label && o.embed === this.embed && o.aria === this.aria;
+    return o.target === this.target && o.label === this.label && o.embed === this.embed && o.aria === this.aria && o.numberReference === this.numberReference && o.revision === this.revision;
   }
   toDOM(view: EditorView) {
     const a = document.createElement('a');
     a.className = 'cm-hmd-internal-link cm-wikilink internal-link' + (this.embed ? ' embed' : '');
     a.dataset.menuLink = this.target;
     a.textContent = this.label;
+    const destination = parseLinkTarget(this.target);
+    if (this.numberReference && /^[\^=]/.test(destination.fragment)) {
+      const context = contextOf(view), controller = new AbortController();
+      let unsubscribe: (() => void) | undefined;
+      this.cleanup.set(a, () => { controller.abort(); unsubscribe?.(); });
+      const paint = (equation?: Equation, missing = false) => {
+        if (controller.signal.aborted) return;
+        if (equation) {
+          a.textContent = equationLabel(equation, !destination.path ? equationsOf(view.state) : undefined) ?? this.label;
+          a.title = `${this.target}\n${equation.tex}`;
+          a.classList.toggle('is-unresolved', !!equation.ambiguous);
+        } else { a.textContent = this.label; a.classList.toggle('is-unresolved', missing); a.title = this.target; }
+      };
+      if (!destination.path) paint(equationTarget(equationsOf(view.state), destination.fragment),
+        !fragmentRange(context.mathSource?.model ?? view.state.field(syntaxModel), destination.fragment));
+      else void context.renderEmbed(this.target, controller.signal).then(note => {
+        if (controller.signal.aborted) return;
+        if (!note) { paint(undefined, true); return; }
+        const refresh = () => { const data = note.read(); paint(data?.equations ? equationTarget(data.equations, destination.fragment) : undefined, !data); };
+        unsubscribe = note.subscribe(refresh); refresh();
+      }).catch(() => {});
+    }
     if (this.aria) a.setAttribute('aria-label', this.aria);
     a.onmousedown = (e) => {
       e.preventDefault();
@@ -378,26 +403,34 @@ class MathWidget extends WidgetType {
   private controllers = new WeakMap<HTMLElement, AbortController>();
   private subscriptions = new WeakMap<HTMLElement, () => void>();
   destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); this.subscriptions.get(dom)?.(); }
-  constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }, readonly definitions: readonly string[] = []) {
+  constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }, readonly number?: string, readonly anchor?: string, readonly definitions: readonly string[] = []) {
     super();
   }
   eq(o: MathWidget) {
-    return o.tex === this.tex && o.display === this.display && o.range?.from === this.range?.from && o.range?.to === this.range?.to && o.definitions.length === this.definitions.length && o.definitions.every((d, i) => d === this.definitions[i]);
+    return o.tex === this.tex && o.display === this.display && o.range?.from === this.range?.from && o.range?.to === this.range?.to && o.number === this.number && o.anchor === this.anchor && o.definitions.length === this.definitions.length && o.definitions.every((d,i) => d === this.definitions[i]);
   }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
     span.className = 'cm-math-rendered' + (this.display ? ' math-block' : ' math-inline');
+    if (this.number) span.classList.add('cm-numbered-equation');
     const body = document.createElement('span');
     body.textContent = this.tex;
     span.appendChild(body); // shown until MathJax finishes, or if loading fails
+    if (this.anchor) span.dataset.equationId = this.anchor;
+    if (this.number) {
+      const label = document.createElement('span'); label.className = 'cm-equation-number'; label.textContent = this.number;
+      span.appendChild(label);
+    }
     span.dataset.renderPending = 'true';
     const render = () => {
       this.controllers.get(span)?.abort();
-      const controller = new AbortController();
-      this.controllers.set(span, controller);
+      const controller = new AbortController(); this.controllers.set(span, controller);
+      const context = contextOf(view), source = context.mathSource;
+      const model = source?.model ?? view.state.field(syntaxModel);
+      const from = (this.range?.from ?? 0) + (source?.from ?? 0);
       span.dataset.renderPending = 'true';
-      void renderMath(body, this.tex, this.display, controller.signal, { sourcePath: contextOf(view).sourcePath, definitions: mathDefinitionContext(view.state.field(syntaxModel), this.range?.from ?? 0) })
-        .then(() => { if (!controller.signal.aborted) { span.classList.remove("mod-error"); span.removeAttribute("title"); } })
+      void renderMath(body, this.tex, this.display, controller.signal, { sourcePath: context.sourcePath, definitions: mathDefinitionContext(model, from) })
+        .then(() => { if (!controller.signal.aborted) { span.classList.remove('mod-error'); span.removeAttribute('title'); } })
         .catch(error => {
           if (controller.signal.aborted) return;
           span.classList.add('mod-error');
@@ -475,16 +508,16 @@ class NoteEmbedWidget extends WidgetType {
       if (controller.signal.aborted) return;
       if (!res) { embedNotFound(content, this.target); return; }
       if (trail.includes(res.path)) { content.textContent = 'Circular embed: ' + res.path; return; }
-      let stop: (() => void) | undefined, previous: string | undefined;
+      let stop: (() => void) | undefined, previous: string | undefined, revision: string | undefined;
       cleanup.push(() => stop?.());
       const refresh = () => {
         if (controller.signal.aborted) return;
         const fragment = res.read();
         if (!fragment) { stop?.(); content.textContent = 'Embedded section or block could not be found'; return; }
-        if (fragment.source === previous) return;
-        previous = fragment.source; stop?.(); content.replaceChildren();
+        if (fragment.source === previous && fragment.equations?.revision === revision) return;
+        previous = fragment.source; revision = fragment.equations?.revision; stop?.(); content.replaceChildren();
         const host = document.createElement('div'); host.className = 'cm-note-fragment'; content.appendChild(host);
-        stop = context.mountFragment?.(host, fragment.source, { id: res.path, sourceFrom: fragment.from,
+        stop = context.mountFragment?.(host, fragment.source, { id: res.path, sourceFrom: fragment.from, equations: fragment.equations, mathSource: fragment.mathSource,
           context: { ...res.context, embedTrail: [...trail, res.path] } });
         if (!stop) host.textContent = fragment.source;
       };
@@ -566,7 +599,15 @@ function buildMathBlocks(state: EditorState): DecorationSet {
   const ro = state.field(livePreviewReadonly, false) ?? false;
   return Decoration.set(state.field(blockModel).math.filter((block) =>
     !blockEffectOwns(state, block) && !sourceIsOpen(state, block) && (forceRendered(state, block) || !caretTouches(block, state.field(compositionSelection).selection.ranges, ro))
-  ).map((block) => Decoration.replace({ widget: new MathWidget(block.tex, true, block, mathDefinitionContext(state.field(syntaxModel), block.from)), block: true }).range(block.from, block.to)), true);
+  ).map((block) => Decoration.replace({ widget: numberedMath(state, block.tex, true, block), block: true }).range(block.from, block.to)), true);
+}
+function numberedMath(state: EditorState, tex: string, display: boolean, range: { from: number; to: number }) {
+  const context = equationsOf(state);
+  const equation = display ? equationAt(context, range.from) : undefined;
+  const source = state.facet(renderContext).mathSource;
+  const definitions = mathDefinitionContext(source?.model ?? state.field(syntaxModel), range.from + (source?.from ?? 0));
+  return new MathWidget(tex, display, range, equation && !equation.tag ? equationLabel(equation, context) ?? undefined : undefined,
+    equation?.ambiguous ? undefined : equation?.id, definitions);
 }
 export const mathBlockField = StateField.define<DecorationSet>({
   create: buildMathBlocks, update: (value, transaction) => decorationInputsChanged(transaction) ? buildMathBlocks(transaction.state) : value,
@@ -779,8 +820,8 @@ type TableBlock = TableModel;
 
 class TableWidget extends WidgetType {
   private cleanup = new WeakMap<HTMLElement, (() => void)[]>();
-  constructor(readonly block: TableBlock, readonly ro: boolean) { super(); }
-  eq(o: TableWidget) { return o.block.key === this.block.key && o.block.from === this.block.from && o.ro === this.ro; }
+  constructor(readonly block: TableBlock, readonly ro: boolean, readonly revision: string) { super(); }
+  eq(o: TableWidget) { return o.block.key === this.block.key && o.block.from === this.block.from && o.ro === this.ro && o.revision === this.revision; }
   ignoreEvent() { return true; }
   destroy(dom: HTMLElement) { this.cleanup.get(dom)?.forEach(stop => stop()); }
   toDOM(view: EditorView) {
@@ -810,6 +851,9 @@ class TableWidget extends WidgetType {
           const host = document.createElement('div'); cell.appendChild(host);
           stop = context.mountFragment?.(host, raw, {
             id: context.sourcePath + ':cell:' + ri + ':' + col, sourceFrom: token?.from ?? row.to,
+            equations: { ...equationsOf(view.state), from: equationsOf(view.state).from + (token?.from ?? row.to) },
+            mathSource: { model: context.mathSource?.model ?? view.state.field(syntaxModel),
+              from: (context.mathSource?.from ?? 0) + (token?.from ?? row.to) },
             mode, autoFocus: mode === 'live',
             onCommit: (value) => { editing = false; if (value !== raw) apply([editTableCell(b, ri, col, value)]); else mount('reading'); },
           });
@@ -1583,6 +1627,12 @@ function buildDecorations(view: EditorView): DecorationSet {
   // Inline code and code blocks are literal — wikilink/embed/link/tag syntax
   // inside them must stay raw (e.g. `![[file]]` in backticks is not an embed).
   const model = view.state.field(syntaxModel);
+  const equationInfo = equationsOf(view.state);
+  for (const equation of equationInfo.equations) {
+    if (!equation.anchor) continue;
+    const from = equation.anchor.from - equationInfo.from, to = equation.anchor.to - equationInfo.from;
+    if (from >= 0 && to <= doc.length && !lineActive(from)) pushReplace(from, to, Decoration.replace({}));
+  }
   const codeRanges = [...model.literal, ...model.html, ...model.entities, ...view.state.field(blockModel).math];
   const inCode = (from: number, to: number) => {
     for (const r of codeRanges) if (from < r.to && to > r.from) return true;
@@ -1892,7 +1942,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       for (const formula of inlineMathByLine.get(line.number) ?? []) {
         const s=formula.from,e=formula.to;
         if(inCode(s,e))continue;
-        if(!touches(s,e))pushReplace(s,e,Decoration.replace({widget:new MathWidget(formula.tex,formula.display,formula,mathDefinitionContext(view.state.field(syntaxModel),formula.from))}));
+        if(!touches(s,e))pushReplace(s,e,Decoration.replace({widget:numberedMath(view.state,formula.tex,formula.display,formula)}));
         else all.push(Decoration.mark({class:'cm-math'}).range(s,e));
       }
 
@@ -1986,7 +2036,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           pushReplace(
             s,
             e,
-            Decoration.replace({ widget: new WikilinkWidget(href, label, isEmbed, defaultDisplay !== label ? defaultDisplay : undefined) }),
+            Decoration.replace({ widget: new WikilinkWidget(href, label, isEmbed, defaultDisplay !== label ? defaultDisplay : undefined, alias === null, alias === null && /#[\^=]/.test(href) ? equationsOf(view.state).revision : undefined) }),
           );
         }
       }
@@ -2143,7 +2193,7 @@ function buildTables(state: EditorState): DecorationSet {
   // Like Obsidian, tables are ALWAYS shown as the interactive widget (never as raw
   // pipes) — editing happens in-cell, so the selection no longer reveals raw.
   const ranges: Range<Decoration>[] = tables.map((t) =>
-    Decoration.replace({ widget: new TableWidget(t, ro), block: true }).range(t.from, t.to),
+    Decoration.replace({ widget: new TableWidget(t, ro, equationsOf(state).revision), block: true }).range(t.from, t.to),
   );
   return Decoration.set(ranges, true);
 }

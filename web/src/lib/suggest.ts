@@ -1,6 +1,9 @@
 import { searchEntries, searchSettings, subscribeSearch, matchName, fileCandidates } from './search';
 import { documents } from './documents';
-import { extractMetadata } from '@webobsidian/markdown-core';
+import { extractMetadata, mathRegions, equations, equationAnchor, equationLabel, type MarkdownModel, type Equation } from '@webobsidian/markdown-core';
+import { syntaxModel } from './syntaxModel';
+import { api } from './api';
+import { renderMath, mathDefinitionContext } from './mathjax';
 import { EditorView, ViewPlugin, ViewUpdate, keymap } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
 import { contextOf } from './renderContext';
@@ -22,6 +25,7 @@ interface Item {
   note?: string; // secondary text (folder path)
   insert: string; // text replacing the query
   match: FuzzyMatch;
+  equation?: { value: Equation; model: MarkdownModel; path: string; target: string };
 }
 
 interface Ctx {
@@ -40,9 +44,13 @@ function detect(view: EditorView): Ctx | null {
   const ob = before.lastIndexOf('[[');
   const cb = before.lastIndexOf(']');
   if (ob >= 0 && ob > cb) {
+    const model = view.state.field(syntaxModel);
+    if (model.literal.some(r => sel.head >= r.from && sel.head <= r.to) ||
+      mathRegions(model).some(r => sel.head >= r.from && sel.head <= r.to) ||
+      model.frontmatter && sel.head < model.frontmatter.to) return null;
     const q = before.slice(ob + 2);
     // display-text / heading / block modes end basic file suggestions
-    if (!q.includes('\n') && !q.includes('^')) {
+    if (!q.includes('\n')) {
       return { mode: 'link', embed: ob > 0 && before[ob - 1] === '!', from: line.from + ob + 2, query: q };
     }
     return null;
@@ -179,6 +187,10 @@ function renderLabel(el: HTMLElement, label: string, item: Item) {
 
 const cachedTags = new WeakMap<EditorView, string[]>();
 class SuggestState {
+  private preview?: AbortController;
+  private generation = 0;
+  private targetPath = '';
+  private targetLoad?: Promise<import('@webobsidian/markdown-core').DocumentSession>;
   private destroyed = false;
   dom: HTMLElement | null = null;
   ctx: Ctx | null = null;
@@ -210,10 +222,62 @@ class SuggestState {
     const ctx = detect(view);
     if (!ctx) return this.hide();
     this.ctx = ctx;
+    if (ctx.mode === 'link' && ctx.query.includes('#^') && !ctx.query.includes('|')) {
+      void this.formulaItems(ctx); return;
+    }
     this.items = computeItems(ctx, view);
     this.selected = 0;
     if (!this.items.length) return this.hide();
     this.show();
+  }
+
+  private async formulaItems(ctx: Ctx) {
+    const generation = ++this.generation, captured = this.view.state;
+    const [target, query = ''] = ctx.query.split('#^');
+    const formulaMode = query.startsWith('eq');
+    try {
+      let model = captured.field(syntaxModel), path = contextOf(this.view).sourcePath;
+      if (target) {
+        if (this.targetPath !== target || !this.targetLoad) {
+          this.targetPath = target;
+          this.targetLoad = api.resolve(target, path).then(result => {
+            if (!result.path || result.status === 'ambiguous' || result.status === 'denied') throw new Error('Target note is unavailable or ambiguous');
+            if (!/\.(md|markdown)$/i.test(result.path)) throw new Error('公式引用只支持 Markdown 笔记');
+            return documents.open(result.path);
+          });
+        }
+        const session = await this.targetLoad; path = session.id;
+        model = path === contextOf(this.view).sourcePath ? captured.field(syntaxModel) : session.analysis;
+      }
+      if (this.destroyed || generation !== this.generation || this.view.state !== captured || this.ctx?.query !== ctx.query) return;
+      const search = formulaMode ? query.slice(2).replace(/^-/, '').trim() : query;
+      const formulas = equations(model);
+      const blocks = extractMetadata(model).blockIds, counts = new Map<string, number>();
+      for (const block of blocks) counts.set(block.id, (counts.get(block.id) ?? 0) + 1);
+      this.items = formulaMode ? formulas.filter(e => !e.ambiguous && e.referenceable).flatMap(value => {
+        const label = `${equationLabel(value) ?? '未编号'} ${value.id ?? value.tex.replace(/\s+/g, ' ').slice(0, 80)}`;
+        const match = matchName(search, `${label} ${value.heading} ${value.tex}`);
+        return match ? [{ label, note: value.heading || path, insert: '', match: { score: match.score, matches: [] },
+          equation: { value, model, path, target } }] : [];
+      }) : blocks.filter(b => counts.get(b.id) === 1)
+        .flatMap(block => {
+          const match = matchName(query, block.id);
+          return match ? [{ label: block.id, insert: `${target}#^${block.id}`, match }] : [];
+        });
+      if (formulaMode) {
+        const formulaIds = new Set(formulas.map(e => e.id));
+        this.items.push(...blocks.filter(b => !formulaIds.has(b.id) && counts.get(b.id) === 1).flatMap(block => {
+          const match = matchName(query, block.id);
+          return match ? [{ label: block.id, note: '块引用', insert: `${target}#^${block.id}`, match }] : [];
+        }));
+      }
+      this.items.sort((a,b) => b.match.score - a.match.score);
+      this.items = this.items.slice(0, 20);
+      this.selected = 0;
+      if (this.items.length) this.show(); else this.hide();
+    } catch (error) {
+      if (generation === this.generation) { this.targetLoad = undefined; this.hide(); contextOf(this.view).reportError?.(String(error)); }
+    }
   }
 
   show() {
@@ -260,6 +324,7 @@ class SuggestState {
     dom.style.left = `${Math.round(Math.min(coords.left, window.innerWidth - 320))}px`;
     dom.style.display = 'block';
     // Flip above the cursor when there is no room below (like Obsidian).
+    this.renderPreview();
     const height = Math.min(dom.scrollHeight, 300);
     if (coords.bottom + 4 + height > window.innerHeight && coords.top - 4 - height > 0) {
       dom.style.top = `${Math.round(coords.top - 4 - height)}px`;
@@ -272,9 +337,23 @@ class SuggestState {
     if (!this.dom) return;
     [...this.dom.children].forEach((c, i) => c.classList.toggle('is-selected', i === this.selected));
     (this.dom.children[this.selected] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' });
+    this.renderPreview();
+  }
+
+  private renderPreview() {
+    this.preview?.abort();
+    this.dom?.querySelector('.suggestion-equation-preview')?.remove();
+    const item = this.items[this.selected]?.equation;
+    if (!this.dom || !item) return;
+    const preview = document.createElement('div'); preview.className = 'suggestion-equation-preview'; this.dom.appendChild(preview);
+    this.preview = new AbortController();
+    void renderMath(preview, item.value.tex, true, this.preview.signal, { transient: true, sourcePath: item.path,
+      definitions: mathDefinitionContext(item.model, item.value.from) }).catch(() => {});
   }
 
   hide() {
+    this.preview?.abort();
+    this.generation++;
     this.ctx = null;
     if (this.dom) {
       this.dom.remove();
@@ -289,9 +368,30 @@ class SuggestState {
   accept() {
     const ctx = this.ctx;
     const item = this.items[this.selected];
-    if (!ctx || !item || this.view.composing) return;
+    if (!ctx || !item || this.view.composing || this.view.state.readOnly) return;
     const view = this.view;
     const head = view.state.selection.main.head;
+    if (item.equation) {
+      try {
+        const { value, model, path, target } = item.equation;
+        const local = path === contextOf(view).sourcePath;
+        const session = local ? undefined : documents.get(path);
+        if ((local ? view.state.field(syntaxModel) : session?.analysis) !== model) throw new Error('文档已改变，请重新选择公式');
+        const prepared = equationAnchor(model, value.from, crypto.randomUUID());
+        const insert = `${target}#^${prepared.id}]]`;
+        const extra = view.state.sliceDoc(head, head + 2) === ']]' ? 2 : 0;
+        const changes = [{ from: ctx.from, to: head + extra, insert }, ...(local && prepared.change ? [prepared.change] : [])].sort((a,b) => a.from - b.from);
+        const mapped = view.state.changes(changes).mapPos(head + extra, 1);
+        if (session && prepared.change) {
+          if (session.snapshot.conflict) throw new Error('目标笔记有冲突，请先解决冲突');
+          session.edit(session.snapshot.version, [prepared.change], 'equation-anchor');
+        }
+        view.dispatch({ changes, selection: { anchor: mapped }, userEvent: 'input.complete' });
+        if (session?.snapshot.dirty) void session.save().catch(error => contextOf(view).reportError?.(String(error)));
+        this.hide(); view.focus();
+      } catch (error) { this.hide(); contextOf(view).reportError?.(String(error)); }
+      return;
+    }
     if (ctx.mode === 'link') {
       // consume a `]]` the user (or auto-pair) already typed after the cursor
       const after = view.state.sliceDoc(head, head + 2);

@@ -1,6 +1,15 @@
 import { StateEffect, StateField } from '@codemirror/state';
-import { analyzeMarkdown, updateMarkdown, extractMetadata, blockContainers, mathBlocks, tableModels, type MarkdownModel, type Metadata } from '@webobsidian/markdown-core';
+import { analyzeMarkdown, updateMarkdown, extractMetadata, blockContainers, mathBlocks, tableModels, equationContext, type MarkdownModel, type Metadata } from '@webobsidian/markdown-core';
+import type { EditorState } from '@codemirror/state';
 import { renderContext } from './renderContext';
+
+export const equationsOf = (state: EditorState) => {
+  const context = state.facet(renderContext), model = state.field(syntaxModel);
+  // Local transactions precede the React snapshot update. A fragment retains
+  // its original-note context; a full editor can already use its newest model.
+  return context.equations && (context.equations.from !== 0 || context.mathSource?.model.text === model.text)
+    ? context.equations : equationContext(model);
+};
 
 /** Layout-independent complete model; never inferred from rendered/visible DOM. */
 export const adoptSyntaxModel = StateEffect.define<MarkdownModel>();

@@ -17,3 +17,6 @@ export * from './legacySubheadings.js';
 export * from './blockEffects.js';
 export * from './mathPackages.js';
 export * from './mathSource.js';
+
+export * from './equations.js';
+export * from './fragments.js';

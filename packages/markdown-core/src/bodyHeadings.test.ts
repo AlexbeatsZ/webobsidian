@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeMarkdown, updateMarkdown } from './syntax.js';
-import { extractMetadata, fragmentRange } from './metadata.js';
+import { extractMetadata } from './metadata.js';
+import { fragmentRange } from './fragments.js';
 import { mathRegions } from './math.js';
 
 describe('native body-local headings', () => {

@@ -21,11 +21,12 @@ export function mountMarkdownFragment(host: HTMLElement, source: string, options
       onUndo: () => { session.undo(); return session.snapshot; },
       onRedo: () => { session.redo(); return session.snapshot; },
     }), []);
+    const context = useMemo(() => ({ ...options.context, equations: options.equations, mathSource: options.mathSource }), []);
     return <div onBlurCapture={() => {
       queueMicrotask(() => {
         if (!destroyed && !host.contains(document.activeElement)) options.onCommit?.(session.snapshot.raw);
       });
-    }}><MarkdownView snapshot={snapshot} mode={options.mode ?? 'reading'} context={options.context}
+    }}><MarkdownView snapshot={snapshot} mode={options.mode ?? 'reading'} context={context}
       layout="embedded" showTitle={false} autoFocus={options.autoFocus} onReady={(view) => {
         unbind?.(); unbind = view ? options.context.bindEditor?.(view, { undo: () => session.undo(), redo: () => session.redo() }) : undefined;
         if (view) { delete host.dataset.renderPending; options.onReady?.(); }

@@ -16,6 +16,18 @@ export interface MarkdownModel {
 const predecessors=new WeakMap<MarkdownModel,{previous:WeakRef<MarkdownModel>;changes:readonly ChangedRange[]}>();
 export const syntaxPredecessor=(model:MarkdownModel)=>predecessors.get(model);
 
+const commentCache = new WeakMap<MarkdownModel, SourceSpan[]>();
+/** Base source fact shared by metadata and formulas; neither depends on the other. */
+export function markdownComments(model: MarkdownModel): SourceSpan[] {
+  const cached = commentCache.get(model); if (cached) return cached;
+  const forbidden = [...model.literal, ...model.html, ...model.htmlBlocks, ...(model.frontmatter ? [model.frontmatter] : [])];
+  const comments = [...model.text.matchAll(/%%[\s\S]*?%%/g)].flatMap(match => {
+    const from = match.index!, to = from + match[0].length;
+    return forbidden.some(r => from < r.to && to > r.from) ? [] : [{ from, to }];
+  });
+  commentCache.set(model, comments); return comments;
+}
+
 /** One full-source grammar for views, fragments and metadata; never serializes Markdown. */
 export function analyzeMarkdown(text: string, id = '', version = 0): MarkdownModel {
   return modelFromTree(text, id, version, markdownParser.parse(text));

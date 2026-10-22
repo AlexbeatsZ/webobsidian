@@ -1,6 +1,5 @@
 import type { MarkdownModel, SourceSpan } from './syntax.js';
-import { syntaxPredecessor } from './syntax.js';
-import { extractMetadata } from './metadata.js';
+import { syntaxPredecessor, markdownComments } from './syntax.js';
 
 export interface MathRegion extends SourceSpan {
   bodyFrom: number;
@@ -77,7 +76,7 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
   const excluded = [
     ...model.literal,
     ...model.htmlBlocks,
-    ...extractMetadata(model).comments,
+    ...markdownComments(model),
     ...(model.frontmatter ? [model.frontmatter] : []),
   ].sort((a, b) => a.from - b.from);
   const add = (

@@ -18,3 +18,21 @@ it('grants only declared embeds, their selected section and its own media', asyn
   expect(nested.source).not.toContain('private');
   expect(scope.size).toBe(2);
 });
+
+it('projects original equation numbers without exposing preceding source or heading labels', async () => {
+  const files: Record<string, string> = {
+    'root.md': '![[note#^eq-allowed]]\n[[private#^eq-secret]]',
+    'note.md': '# Secret chapter title\n$$privateFormula$$\n# Allowed chapter\n$$x$$ ^eq-allowed\n\n$$laterSecret$$',
+    'private.md': '$$privateTarget$$ ^eq-secret',
+  };
+  const scope = await buildShareScope('root.md', {
+    read: async path => files[path], resolve: target => files[target + '.md'] ? target + '.md' : undefined,
+  });
+  const root = scope.get('root')!, nested = scope.get(root.notes.get('note#^eq-allowed')!)!;
+  expect(nested.equations?.equations.map(e => [e.id, e.number, e.heading])).toEqual([['eq-allowed', '2-1', '']]);
+  expect(nested.source).toBe('$$x$$ ^eq-allowed');
+  expect(JSON.stringify([...scope.values()])).not.toContain('privateFormula');
+  expect(JSON.stringify([...scope.values()])).not.toContain('Secret chapter title');
+  expect(JSON.stringify([...scope.values()])).not.toContain('laterSecret');
+  expect(root.notes.has('private#^eq-secret')).toBe(false);
+});

@@ -1,0 +1,23 @@
+.cm-math-rendered.cm-numbered-equation {
+  position: relative;
+  box-sizing: border-box;
+  padding-inline: 4em;
+}
+.cm-equation-number {
+  position: absolute;
+  inset-inline-end: .5em;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+}
+.suggestion-equation-preview {
+  position: sticky;
+  bottom: 0;
+  padding: .75em;
+  background: var(--background-primary);
+  border-top: 1px solid var(--background-modifier-border);
+  overflow-x: auto;
+  max-height: 10em;
+}

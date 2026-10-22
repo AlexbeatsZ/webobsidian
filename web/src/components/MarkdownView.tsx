@@ -1,9 +1,11 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
+import '../styles/equations.css';
 import { codeBlocks, pluginPostProcessing } from '../lib/obsidian/markdown';
 import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { editorSelection } from '../lib/editorSelection';
+import { bindFragmentNavigation } from '../lib/fragmentNavigation';
 import { nativeWritingExtensions } from '../lib/writing/extensions';
 import { captureWritingState, restoreWritingState, snippetChangeEffects, writingOperation, snippetGroup, type WritingViewState } from '../lib/writing/editing';
 import { formatPaste } from '../lib/writing/format';
@@ -295,10 +297,12 @@ export default function MarkdownView(props: MarkdownViewProps) {
       ],
     });
     const v = new EditorView({ state, parent: host.current });
+    const stopNavigation = bindFragmentNavigation(v, p.snapshot.id,
+      !p.context.embedTrail?.length && !p.context.equations?.from);
     view.current = v;
     p.onReady?.(v);
     if (p.autoFocus) v.focus();
-    return () => { p.onReady?.(null); view.current = null; v.destroy(); };
+    return () => { stopNavigation(); p.onReady?.(null); view.current = null; v.destroy(); };
   }, [snapshot.id]);
 
   useEffect(() => { sync(snapshot); }, [snapshot]);

@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { analyzeMarkdown } from './syntax.js';
-import { extractMetadata, fragmentRange } from './metadata.js';
+import { extractMetadata } from './metadata.js';
+import { fragmentRange } from './fragments.js';
 import { legacySubheadings } from './legacySubheadings.js';
 import { blockContainers } from './blocks.js';
 
