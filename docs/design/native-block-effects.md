@@ -55,8 +55,13 @@ Paths are relative to the blocks directory. Assets may be subdirectories but
 cannot escape it. Entries may combine classes, stylesheet and a script. Repeated
 names are rejected. A pipeline may contain any number of CSS definitions and one
 JS definition. Unknown names or multiple JS owners preserve visible source.
-No file is generated automatically. Edit files externally and invoke the native
-`blocks:reload` command. Reload is atomic; invalid definitions deactivate previous
+No file is generated automatically. Configuration/CSS/JS changes under the blocks
+directory reuse the existing `vault-configuration-changed` watcher/WS event and
+coalesce into one reload; other file extensions and unrelated configuration are ignored.
+The native `blocks:reload` command also reloads explicitly. Unchanged script source
+retains its compiled function and mounted identity. Switching Vault cancels the
+pending reload and detaches subscriptions on disposal. No second watcher, polling,
+note indexing or file-tree refresh is added. Reload is atomic; invalid definitions deactivate previous
 definitions and report the error instead of continuing obsolete user code.
 
 Scripts are function bodies receiving `block`: app, container, source, sourcePath,

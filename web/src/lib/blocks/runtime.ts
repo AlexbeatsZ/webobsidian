@@ -25,9 +25,11 @@ export function attachBlockStyles(doc: Document) {
 export function installBlockEffects(currentApp: App): () => void {
   app = currentApp;
   let stopped = false, generation = 0;
+  let reloadTimer: number | undefined;
   let active = new Map<string, LoadedBlockDefinition>();
   const clear = () => { active.clear(); setBlockDefinitions([]); styles = ''; updateStyles(); refreshBlockViews(); refreshPluginMarkdown(); };
   const reload = async () => {
+    window.clearTimeout(reloadTimer); reloadTimer = undefined;
     const started = ++generation;
     try {
       const bundle = await request<Bundle>('/api/native-features/blocks');
@@ -47,11 +49,23 @@ export function installBlockEffects(currentApp: App): () => void {
       clear(); throw error;
     }
   };
+  const report = (error: unknown) => useStore.getState().notify('块效果配置：' + String(error));
+  const onConfiguration = (event: Event) => {
+    const path = (event as CustomEvent<{ path?: string }>).detail?.path?.replace(/\\/g, '/');
+    const directory = '.obsidian/webobsidian/blocks';
+    if (stopped || !path || !(path === directory || path.startsWith(directory + '/') && /\.(jsonc|css|js)$/i.test(path))) return;
+    // Atomic saves can emit several events. Share the existing watcher/WS lane
+    // and reload once; unchanged script source retains its compiled function.
+    window.clearTimeout(reloadTimer);
+    reloadTimer = window.setTimeout(() => { void reload().catch(report); }, 80);
+  };
   const stopCommand = currentApp.commands.register({ id: 'blocks:reload', name: '重新加载块效果配置', callback: reload });
-  const onSwitch = () => { stopped = true; generation++; clear(); };
+  const onSwitch = () => { stopped = true; generation++; window.clearTimeout(reloadTimer); reloadTimer = undefined; clear(); };
   window.addEventListener('vault-changed', onSwitch);
-  void reload().catch(error => useStore.getState().notify('块效果配置：' + String(error)));
-  return () => { onSwitch(); stopCommand(); window.removeEventListener('vault-changed', onSwitch); if (app === currentApp) app = undefined; };
+  window.addEventListener('vault-configuration-changed', onConfiguration);
+  void reload().catch(report);
+  return () => { onSwitch(); stopCommand(); window.removeEventListener('vault-changed', onSwitch);
+    window.removeEventListener('vault-configuration-changed', onConfiguration); if (app === currentApp) app = undefined; };
 }
 
 /** Both fenced JS and configured effects use exactly the same run implementation. */
