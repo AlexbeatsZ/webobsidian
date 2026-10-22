@@ -38,12 +38,20 @@ are preserved independently of the shared renderer's stricter ambiguity policy.
 The plugin vault caches fallback suffix/basename candidates in existing file order;
 content-stat events retain this index while structural sync/rename invalidates it.
 
+## Unified Vault catalog (2026-10-22)
+
+Saved metadata now belongs to VaultCatalog; startup/rebuild enumerate once and
+parse each Markdown file once. The link graph and full-text engine consume the
+same records. One scoped TargetIndex preserves Markdown-only graph resolution
+and all-file resource resolution. See chinese-search.md. No performance numbers
+are claimed; static verification only.
+
 ## Server link indexes
 
 TargetIndex precomputes NFC/case-normalized exact and suffix candidates, retaining
 the existing root/local/suffix precedence and explicit ambiguity. One-shot
 resolveTarget stays available without constructing a full index. File/embed
-resolution and the note graph each own a mutable index. The graph maintains
+resolution and the note graph share the catalog index with explicit query scopes. The graph maintains
 outgoing resolved sets, incoming source sets and lookup-key dependencies;
 content edits update one source, path membership changes revisit affected
 resolved and unresolved sources. Backlinks read the incoming set directly.

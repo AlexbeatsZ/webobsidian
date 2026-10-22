@@ -1,3 +1,4 @@
+import { matchName } from '../search';
 import { Component } from './events';
 import { createDiv, createEl } from './dom';
 import moment from 'moment';
@@ -9,9 +10,7 @@ export class Notice {
     if (timeout > 0) window.setTimeout(() => this.hide(), timeout);
   }
   setMessage(message: string | DocumentFragment) {
-    this.noticeEl.replaceChildren(
-      typeof message === 'string' ? document.createTextNode(message) : message
-    );
+    this.noticeEl.replaceChildren(typeof message === 'string' ? document.createTextNode(message) : message);
     return this;
   }
   hide() {
@@ -31,10 +30,7 @@ export class Scope {
   }
   handle(event: KeyboardEvent) {
     for (const k of this.keys)
-      if (
-        k.key.toLowerCase() === event.key.toLowerCase() &&
-        matchesModifiers(event, k.modifiers)
-      ) {
+      if (k.key.toLowerCase() === event.key.toLowerCase() && matchesModifiers(event, k.modifiers)) {
         if (k.func(event, k) === false) event.preventDefault();
         return;
       }
@@ -52,8 +48,7 @@ export function matchesModifiers(e: KeyboardEvent, mods: string[]) {
   );
 }
 export const Keymap = {
-  isModEvent: (e: MouseEvent | KeyboardEvent) =>
-    /Mac/.test(navigator.platform) ? e.metaKey : e.ctrlKey,
+  isModEvent: (e: MouseEvent | KeyboardEvent) => (/Mac/.test(navigator.platform) ? e.metaKey : e.ctrlKey),
   isModifier: (e: KeyboardEvent, name: string) => matchesModifiers(e, [name]),
 };
 export class Modal {
@@ -115,10 +110,7 @@ export class SuggestModal<T = any> extends Modal {
         e.preventDefault();
         this.selected = Math.max(
           0,
-          Math.min(
-            this.results.length - 1,
-            this.selected + (e.key === 'ArrowDown' ? 1 : -1)
-          )
+          Math.min(this.results.length - 1, this.selected + (e.key === 'ArrowDown' ? 1 : -1)),
         );
         this.draw();
       }
@@ -151,9 +143,7 @@ export class SuggestModal<T = any> extends Modal {
         parent: this.resultContainerEl,
       });
       this.renderSuggestion(item, el);
-      el.addEventListener('click', (e: MouseEvent) =>
-        this.selectSuggestion(item, e)
-      );
+      el.addEventListener('click', (e: MouseEvent) => this.selectSuggestion(item, e));
     });
   }
   onOpen() {
@@ -180,9 +170,7 @@ export class ConfirmationModal extends Modal {
       this.resolve?.(true);
       this.close();
     });
-  cancelButton = new ButtonComponent(this.modalEl)
-    .setButtonText('Cancel')
-    .onClick(() => this.close());
+  cancelButton = new ButtonComponent(this.modalEl).setButtonText('Cancel').onClick(() => this.close());
   setButtonText(text: string) {
     this.confirmButton.setButtonText(text);
     return this;
@@ -218,10 +206,11 @@ export class FuzzySuggestModal<T = any> extends SuggestModal<{
   }
   getSuggestions(q: string) {
     return this.getItems()
-      .filter((i) =>
-        this.getItemText(i).toLowerCase().includes(q.toLowerCase())
-      )
-      .map((item) => ({ item, match: { score: 0, matches: [] } }));
+      .flatMap((item) => {
+        const match = matchName(q, this.getItemText(item));
+        return match ? [{ item, match }] : [];
+      })
+      .sort((a, b) => b.match.score - a.match.score);
   }
   renderSuggestion(value: { item: T }, el: HTMLElement) {
     el.textContent = this.getItemText(value.item);
@@ -236,7 +225,7 @@ export class AbstractInputSuggest<T = any> extends Component {
   private modal: SuggestModal<T>;
   constructor(
     public app: any,
-    public textInputEl: HTMLInputElement | HTMLTextAreaElement
+    public textInputEl: HTMLInputElement | HTMLTextAreaElement,
   ) {
     super();
     const suggest = this;
@@ -377,10 +366,7 @@ export class MomentFormatComponent extends TextComponent {
     return this;
   }
   private updateSample() {
-    if (this.sample)
-      this.sample.textContent = moment().format(
-        this.getValue() || this.defaultFormat
-      );
+    if (this.sample) this.sample.textContent = moment().format(this.getValue() || this.defaultFormat);
   }
 }
 export class ToggleComponent extends BaseComponent<HTMLInputElement> {
@@ -483,10 +469,7 @@ export class SliderComponent extends BaseComponent<HTMLInputElement> {
     return Number(this.sliderEl.value);
   }
   setDynamicTooltip() {
-    this.sliderEl.addEventListener(
-      'input',
-      () => (this.sliderEl.title = this.sliderEl.value)
-    );
+    this.sliderEl.addEventListener('input', () => (this.sliderEl.title = this.sliderEl.value));
     return this;
   }
   onChange(cb: (v: number) => void) {
@@ -592,7 +575,7 @@ export class PluginSettingTab {
   containerEl = createDiv({ cls: 'vertical-tab-content' });
   constructor(
     public app: any,
-    public plugin: any
+    public plugin: any,
   ) {
     this.id = plugin.manifest.id;
     this.name = plugin.manifest.name;
@@ -702,8 +685,7 @@ export class Menu extends Component {
       }) as HTMLButtonElement;
       el.disabled = item.disabled;
       el.onclick = (e) => {
-        if (item.submenu)
-          item.submenu.showAtPosition({ x: e.clientX, y: e.clientY });
+        if (item.submenu) item.submenu.showAtPosition({ x: e.clientX, y: e.clientY });
         else {
           item.callback?.(e);
           this.hide();
@@ -719,8 +701,7 @@ export class Menu extends Component {
   private closeListener?: EventListener;
   hide() {
     this.dom.remove();
-    if (this.closeListener)
-      document.removeEventListener('pointerdown', this.closeListener);
+    if (this.closeListener) document.removeEventListener('pointerdown', this.closeListener);
     this.closeListener = undefined;
   }
 }

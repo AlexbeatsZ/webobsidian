@@ -2,12 +2,14 @@ import { Router } from 'express';
 import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
 import { qmd } from '../services/search.js';
-import { backlinksFor, graphData, resolveLink, buildLinkGraph } from '../services/links.js';
+import { backlinksFor, graphData, resolveLink } from '../services/links.js';
 import { resolveIndexedTarget } from '../services/fileindex.js';
 import { readPropertyTypes, setPropertyType } from '../services/propertytypes.js';
 import { notifyIndexChanged } from '../services/realtime.js';
 import { rebuildFileIndexes } from '../services/fileupdates.js';
-import { buildFileIndex } from '../services/fileindex.js';
+import { rebuildVaultIndex } from '../services/vaultindex.js';
+import { catalog } from '../services/catalog.js';
+import { getSettings } from '../services/settings.js';
 
 export const searchRouter = Router();
 searchRouter.use(requireAuth);
@@ -18,7 +20,10 @@ searchRouter.get(
     const q = String(req.query.q ?? '');
     // limit omitted / 0 → return every match; the client renders them incrementally.
     const limit = Math.max(0, Number(req.query.limit ?? 0) || 0);
-    res.json({ query: q, hits: await qmd.search(q, limit) });
+    res.json({
+      query: q,
+      hits: await qmd.search(q, limit, req.query.mode === 'pinyin' ? 'pinyin' : 'literal'),
+    });
   }),
 );
 
@@ -27,15 +32,22 @@ searchRouter.get(
 searchRouter.post(
   '/search/matches',
   asyncHandler(async (req, res) => {
-    const { query, paths, matchCase, phrase } = req.body ?? {};
+    const { query, paths, matchCase, phrase, mode } = req.body ?? {};
     // phrase=true → match the whole query as one needle (e.g. unlinked mentions
     // look for the exact note title, not each word of it).
     const terms = phrase
       ? [String(query ?? '').trim()].filter((t) => t.length >= 2)
       : qmd.queryTerms(String(query ?? ''));
     const list = (Array.isArray(paths) ? paths : []).slice(0, 80).map((p) => String(p));
+    const chinese = !phrase && mode === 'pinyin' ? (await getSettings()).search.chinese : undefined;
     const matches = await Promise.all(
-      list.map((p) => qmd.matchesFor(p, terms, { caseSensitive: !!matchCase })),
+      list.map((p) =>
+        qmd.matchesFor(p, terms, {
+          caseSensitive: !!matchCase,
+          pinyin: chinese?.enabled ? chinese : undefined,
+          pinyinQuery: chinese?.enabled ? qmd.queryText(String(query ?? '')) : undefined,
+        }),
+      ),
     );
     res.json({ matches });
   }),
@@ -88,8 +100,14 @@ searchRouter.get(
     const target = String(req.query.target ?? '');
     const sourcePath = String(req.query.sourcePath ?? '');
     const result = resolveIndexedTarget(target, sourcePath);
-    res.json({ target, path: result.status === 'resolved' ? result.path : null,
-      status: result.status, candidates: result.candidates, fragment: result.fragment, normalizedTarget: result.path });
+    res.json({
+      target,
+      path: result.status === 'resolved' ? result.path : null,
+      status: result.status,
+      candidates: result.candidates,
+      fragment: result.fragment,
+      normalizedTarget: result.path,
+    });
   }),
 );
 
@@ -104,11 +122,25 @@ searchRouter.post(
   '/reindex',
   asyncHandler(async (_req, res) => {
     await rebuildFileIndexes(async () => {
-      await qmd.build();
-      await buildLinkGraph();
-      await buildFileIndex();
+      await rebuildVaultIndex();
     });
     notifyIndexChanged();
     res.json({ ok: true });
+  }),
+);
+
+searchRouter.get(
+  '/catalog',
+  asyncHandler(async (_req, res) => {
+    res.json({
+      entries: [...catalog.entries.values()].map(({ path, kind, title, aliases, tags, headings }) => ({
+        path,
+        kind,
+        title,
+        aliases,
+        tags,
+        headings,
+      })),
+    });
   }),
 );

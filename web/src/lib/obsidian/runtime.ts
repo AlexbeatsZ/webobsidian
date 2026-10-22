@@ -1,3 +1,4 @@
+import { matchName } from '../search';
 import * as cmState from '@codemirror/state';
 import * as cmView from '@codemirror/view';
 import * as cmLanguage from '@codemirror/language';
@@ -17,10 +18,7 @@ import { api } from '../api';
 import { useStore } from '../store';
 import { mountMarkdownFragment } from '../../components/MarkdownFragment';
 import { createVaultRenderContext } from '../vaultRenderContext';
-import {
-  renderMath as renderMathInto,
-  loadMathJax as loadMathJaxRuntime,
-} from '../mathjax';
+import { renderMath as renderMathInto, loadMathJax as loadMathJaxRuntime } from '../mathjax';
 import { livePreviewState } from '../livePreview';
 import * as events from './events';
 import * as ui from './ui';
@@ -39,11 +37,7 @@ type Command = {
   callback?: () => any;
   checkCallback?: (checking: boolean) => any;
   editorCallback?: (editor: editor.Editor, view: workspace.MarkdownView) => any;
-  editorCheckCallback?: (
-    checking: boolean,
-    editor: editor.Editor,
-    view: workspace.MarkdownView
-  ) => any;
+  editorCheckCallback?: (checking: boolean, editor: editor.Editor, view: workspace.MarkdownView) => any;
 };
 export type PluginStatus = {
   id: string;
@@ -82,8 +76,7 @@ export function runPluginCommand(id: string, checking = false): boolean {
   const view = sharedApp.workspace.getActiveViewOfType(workspace.MarkdownView);
   try {
     const check = (result: any) => {
-      if (!checking && result?.then)
-        Promise.resolve(result).catch((e) => fail(id.split(':')[0], e));
+      if (!checking && result?.then) Promise.resolve(result).catch((e) => fail(id.split(':')[0], e));
       return result !== false;
     };
     if (command.editorCheckCallback)
@@ -96,16 +89,11 @@ export function runPluginCommand(id: string, checking = false): boolean {
     if (command.editorCallback) {
       if (!view || view.editor.cm.state.readOnly) return false;
       if (!checking)
-        Promise.resolve(command.editorCallback(view.editor, view)).catch((e) =>
-          fail(id.split(':')[0], e)
-        );
+        Promise.resolve(command.editorCallback(view.editor, view)).catch((e) => fail(id.split(':')[0], e));
       return true;
     }
     if (command.callback) {
-      if (!checking)
-        Promise.resolve(command.callback()).catch((e) =>
-          fail(id.split(':')[0], e)
-        );
+      if (!checking) Promise.resolve(command.callback()).catch((e) => fail(id.split(':')[0], e));
       return true;
     }
   } catch (e) {
@@ -117,7 +105,7 @@ export class Plugin extends events.Component {
   private extensions: cmState.Extension[] = [];
   constructor(
     public app: App,
-    public manifest: any
+    public manifest: any,
   ) {
     super();
   }
@@ -160,16 +148,11 @@ export class Plugin extends events.Component {
   registerMarkdownPostProcessor(callback: any, sortOrder = 0) {
     return markdown.registerPostProcessor(this, callback, sortOrder);
   }
-  registerMarkdownCodeBlockProcessor(
-    language: string,
-    callback: any,
-    sortOrder = 0
-  ) {
+  registerMarkdownCodeBlockProcessor(language: string, callback: any, sortOrder = 0) {
     return markdown.registerCodeProcessor(this, language, callback, sortOrder);
   }
   registerView(type: string, creator: any) {
-    if (this.app.workspace.viewRegistry.has(type))
-      throw new Error(`View already registered: ${type}`);
+    if (this.app.workspace.viewRegistry.has(type)) throw new Error(`View already registered: ${type}`);
     this.app.workspace.viewRegistry.set(type, creator);
     this.register(() => {
       this.app.workspace.detachLeavesOfType(type);
@@ -190,9 +173,8 @@ export class Plugin extends events.Component {
     void suggest.load();
     this.registerEditorExtension(
       cmView.EditorView.updateListener.of((update) => {
-        if (update.docChanged || update.selectionSet)
-          void suggest.update(update.view);
-      })
+        if (update.docChanged || update.selectionSet) void suggest.update(update.view);
+      }),
     );
   }
   private addElement(map: Map<string, HTMLElement[]>, el: HTMLElement) {
@@ -203,7 +185,7 @@ export class Plugin extends events.Component {
       el.remove();
       map.set(
         this.manifest.id,
-        (map.get(this.manifest.id) ?? []).filter((e) => e !== el)
+        (map.get(this.manifest.id) ?? []).filter((e) => e !== el),
       );
       changed();
     });
@@ -221,24 +203,13 @@ export class Plugin extends events.Component {
     return this.addElement(pluginRibbon, el);
   }
   addStatusBarItem() {
-    return this.addElement(
-      pluginStatusItems,
-      dom.createDiv({ cls: 'status-bar-item' })
-    );
+    return this.addElement(pluginStatusItems, dom.createDiv({ cls: 'status-bar-item' }));
   }
-  registerObsidianProtocolHandler(
-    action: string,
-    handler: (params: any) => any
-  ) {
+  registerObsidianProtocolHandler(action: string, handler: (params: any) => any) {
     this.app.protocolHandlers.set(action, handler);
     this.register(() => this.app.protocolHandlers.delete(action));
   }
-  registerCliHandler(
-    id: string,
-    description: string,
-    parameters: any,
-    callback: Function
-  ) {
+  registerCliHandler(id: string, description: string, parameters: any, callback: Function) {
     this.app.cliHandlers.set(id, { description, parameters, callback });
     this.register(() => this.app.cliHandlers.delete(id));
   }
@@ -256,7 +227,7 @@ export class EditorSuggest extends events.Component {
   setInstructions(items: any[]) {
     this.suggestEl.setAttribute(
       'aria-description',
-      items.map((i) => `${i.command}: ${i.purpose}`).join('; ')
+      items.map((i) => `${i.command}: ${i.purpose}`).join('; '),
     );
     return this;
   }
@@ -359,9 +330,7 @@ export class App {
   protocolHandlers = new Map<string, Function>();
   cliHandlers = new Map<string, any>();
   loadLocalStorage(key: string) {
-    const value = localStorage.getItem(
-      `obsidian:${this.vault.adapter.basePath}:${key}`
-    );
+    const value = localStorage.getItem(`obsidian:${this.vault.adapter.basePath}:${key}`);
     if (value === null) return null;
     try {
       return JSON.parse(value);
@@ -370,10 +339,7 @@ export class App {
     }
   }
   saveLocalStorage(key: string, value: any) {
-    localStorage.setItem(
-      `obsidian:${this.vault.adapter.basePath}:${key}`,
-      JSON.stringify(value)
-    );
+    localStorage.setItem(`obsidian:${this.vault.adapter.basePath}:${key}`, JSON.stringify(value));
   }
   keymap = {
     pushScope: (scope: ui.Scope) => {
@@ -403,10 +369,8 @@ export class App {
   };
   internalPlugins = {
     plugins: Object.create(null),
-    getPluginById: (id: string): any =>
-      this.internalPlugins.plugins[id] ?? null,
-    getEnabledPluginById: (id: string): any =>
-      this.internalPlugins.plugins[id]?.instance ?? null,
+    getPluginById: (id: string): any => this.internalPlugins.plugins[id] ?? null,
+    getEnabledPluginById: (id: string): any => this.internalPlugins.plugins[id]?.instance ?? null,
   };
   hotkeyManager = {
     customKeys: {} as Record<string, any>,
@@ -414,19 +378,12 @@ export class App {
     getDefaultHotkeys: (id: string) => pluginCommands.get(id)?.hotkeys ?? [],
   };
   fileManager = {
-    renameFile: (file: files.TAbstractFile, path: string) =>
-      this.vault.rename(file, path),
+    renameFile: (file: files.TAbstractFile, path: string) => this.vault.rename(file, path),
     trashFile: (file: files.TAbstractFile) => this.vault.trash(file),
-    generateMarkdownLink: (
-      file: files.TFile,
-      source: string,
-      subpath = '',
-      alias = ''
-    ) =>
+    generateMarkdownLink: (file: files.TFile, source: string, subpath = '', alias = '') =>
       `[[${this.metadataCache.fileToLinktext(file, source, true)}${subpath}${alias ? '|' + alias : ''}]]`,
     getNewFileParent: (source = '') =>
-      this.vault.getFolderByPath(source.split('/').slice(0, -1).join('/')) ??
-      this.vault.getRoot(),
+      this.vault.getFolderByPath(source.split('/').slice(0, -1).join('/')) ?? this.vault.getRoot(),
     processFrontMatter: async (file: files.TFile, fn: (fm: any) => void) => {
       await this.vault.process(file, (source) => {
         const info = files.getFrontMatterInfo(source);
@@ -445,10 +402,7 @@ export class App {
     },
   };
   isDarkMode() {
-    return (
-      document.body.classList.contains('theme-dark') ||
-      !!document.querySelector('.theme-dark')
-    );
+    return document.body.classList.contains('theme-dark') || !!document.querySelector('.theme-dark');
   }
 }
 export const sharedApp = new App();
@@ -465,11 +419,7 @@ export function openPluginSettings(id: string) {
   useStore.getState().setSettings(true);
   window.dispatchEvent(new CustomEvent('plugin-settings-open', { detail: id }));
 }
-function debounce<T extends (...args: any[]) => any>(
-  callback: T,
-  delay = 0,
-  resetTimer = false
-) {
+function debounce<T extends (...args: any[]) => any>(callback: T, delay = 0, resetTimer = false) {
   let timer: number | undefined;
   let args: any[];
   const fn = (...values: any[]) => {
@@ -503,12 +453,10 @@ export const Platform = {
   isLinux: /Linux/.test(navigator.platform),
   isAndroidApp: false,
   isIosApp: false,
-  isSafari:
-    /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent),
+  isSafari: /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent),
   resourcePathPrefix: '',
 };
-const nativeRequire = (window as any).webobsidianNativeRequire as
-  ((name: string) => any) | undefined;
+const nativeRequire = (window as any).webobsidianNativeRequire as ((name: string) => any) | undefined;
 if (nativeRequire) {
   Platform.isDesktop = true;
   Platform.isDesktopApp = true;
@@ -516,14 +464,9 @@ if (nativeRequire) {
 export async function requestUrl(input: string | any) {
   const options = typeof input === 'string' ? { url: input } : input;
   const result = nativeRequire
-    ? await nativeRequire('electron').ipcRenderer.invoke(
-        'desktop:plugin-request',
-        options
-      )
+    ? await nativeRequire('electron').ipcRenderer.invoke('desktop:plugin-request', options)
     : await api.pluginRequest(options);
-  const arrayBuffer = Uint8Array.from(atob(result.base64), (c) =>
-    c.charCodeAt(0)
-  ).buffer;
+  const arrayBuffer = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0)).buffer;
   const text = new TextDecoder().decode(arrayBuffer);
   if (options.throw !== false && result.status >= 400)
     throw new Error(`Request failed, status ${result.status}`);
@@ -538,13 +481,7 @@ export async function requestUrl(input: string | any) {
   };
 }
 export const MarkdownRenderer = {
-  async render(
-    _app: App,
-    source: string,
-    el: HTMLElement,
-    sourcePath: string,
-    component: events.Component
-  ) {
+  async render(_app: App, source: string, el: HTMLElement, sourcePath: string, component: events.Component) {
     const context = createVaultRenderContext(sourcePath, {
       files: () => sharedApp.vault.getFiles().map((f) => f.path),
       openLink: (target) => {
@@ -561,12 +498,7 @@ export const MarkdownRenderer = {
       component.register(stop);
     });
   },
-  async renderMarkdown(
-    source: string,
-    el: HTMLElement,
-    path: string,
-    component: events.Component
-  ) {
+  async renderMarkdown(source: string, el: HTMLElement, path: string, component: events.Component) {
     await MarkdownRenderer.render(sharedApp, source, el, path, component);
   },
 };
@@ -576,12 +508,7 @@ function renderMath(source: string, display: boolean) {
     cls: display ? 'math math-block' : 'math math-inline',
   });
   el.dataset.latex = source;
-  const promise = renderMathInto(
-    el,
-    source,
-    display,
-    new AbortController().signal
-  );
+  const promise = renderMathInto(el, source, display, new AbortController().signal);
   mathPromises.add(promise);
   void promise.finally(() => mathPromises.delete(promise));
   return el;
@@ -604,8 +531,7 @@ export const obsidianModule: Record<string, any> = {
   requestUrl,
   request: async (opts: any) => (await requestUrl(opts)).text,
   apiVersion: '1.8.7',
-  requireApiVersion: (version: string) =>
-    version.localeCompare('1.8.7', undefined, { numeric: true }) <= 0,
+  requireApiVersion: (version: string) => version.localeCompare('1.8.7', undefined, { numeric: true }) <= 0,
   getLanguage: () => navigator.language.split('-')[0],
   livePreviewState,
   loadMathJax,
@@ -621,20 +547,28 @@ export const obsidianModule: Record<string, any> = {
   },
   htmlToMarkdown: (html: string) => new TurndownService().turndown(html),
   getLinkpath: (text: string) => files.parseLinktext(text).path,
-  arrayBufferToBase64: (buf: ArrayBuffer) =>
-    btoa(String.fromCharCode(...new Uint8Array(buf))),
-  base64ToArrayBuffer: (value: string) =>
-    Uint8Array.from(atob(value), (c) => c.charCodeAt(0)).buffer,
-  prepareFuzzySearch: (query: string) => (text: string) => {
-    const at = text.toLowerCase().indexOf(query.toLowerCase());
-    return at < 0 ? null : { score: 1, matches: [[at, at + query.length]] };
-  },
+  arrayBufferToBase64: (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf))),
+  base64ToArrayBuffer: (value: string) => Uint8Array.from(atob(value), (c) => c.charCodeAt(0)).buffer,
+  prepareFuzzySearch: (query: string) => (text: string) => matchName(query, text),
   prepareSimpleSearch: (query: string) => (text: string) => {
     const at = text.toLowerCase().indexOf(query.toLowerCase());
     return at < 0 ? null : { score: 1, matches: [[at, at + query.length]] };
   },
-  renderMatches: (el: HTMLElement, text: string, _matches: any) => {
-    el.textContent = text;
+  renderMatches: (el: HTMLElement, text: string, matches: [number, number][] = []) => {
+    el.replaceChildren();
+    let at = 0;
+    for (const [a, b] of matches) {
+      const start = Math.max(at, a),
+        end = Math.min(text.length, b);
+      if (end <= start) continue;
+      el.append(document.createTextNode(text.slice(at, start)));
+      const span = document.createElement('span');
+      span.className = 'suggestion-highlight';
+      span.textContent = text.slice(start, end);
+      el.append(span);
+      at = end;
+    }
+    el.append(document.createTextNode(text.slice(at)));
   },
 };
 const tokenClassNodeProp = new lezerCommon.NodeProp<string>();
@@ -657,16 +591,12 @@ modules.util = {
     (fn: Function) =>
     (...args: any[]) =>
       new Promise((resolve, reject) =>
-        fn(...args, (error: any, value: any) =>
-          error ? reject(error) : resolve(value)
-        )
+        fn(...args, (error: any, value: any) => (error ? reject(error) : resolve(value))),
       ),
 };
 modules.child_process = {
   exec: (...args: any[]) => {
-    const error = new Error(
-      'Shell commands require native desktop plugins to be enabled'
-    );
+    const error = new Error('Shell commands require native desktop plugins to be enabled');
     const cb = args.at(-1);
     if (typeof cb === 'function') cb(error);
     else throw error;
@@ -682,6 +612,11 @@ Object.assign(window, {
   },
 });
 export async function loadPlugin(id: string, manifest: any) {
+  if (id === 'fuzzy-chinese-pinyin') {
+    pluginStatuses.set(id, { id, state: 'unsupported', error: 'Replaced by built-in Chinese search' });
+    changed();
+    return;
+  }
   if (loaded.has(id)) return;
   if (pending.has(id)) return pending.get(id);
   const operation = (async () => {
@@ -698,20 +633,14 @@ export async function loadPlugin(id: string, manifest: any) {
     }
     let instance: Plugin | undefined;
     try {
-      const response = await fetch(
-        `/api/plugins/${encodeURIComponent(id)}/main.js`,
-        { credentials: 'include' }
-      );
-      if (!response.ok)
-        throw new Error(`Plugin source: HTTP ${response.status}`);
+      const response = await fetch(`/api/plugins/${encodeURIComponent(id)}/main.js`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(`Plugin source: HTTP ${response.status}`);
       const code = await response.text(),
         module = { exports: {} as any };
-      const root =
-        sharedApp.vault.adapter.basePath.replace(/\\/g, '/') +
-        `/.obsidian/plugins/${id}`;
-      const native = nativeRequire?.('node:module').createRequire(
-        root + '/main.js'
-      );
+      const root = sharedApp.vault.adapter.basePath.replace(/\\/g, '/') + `/.obsidian/plugins/${id}`;
+      const native = nativeRequire?.('node:module').createRequire(root + '/main.js');
       const require = (name: string) => {
         if (
           native &&
@@ -724,9 +653,7 @@ export async function loadPlugin(id: string, manifest: any) {
         )
           return native(name);
         if (name in modules) return modules[name];
-        throw new Error(
-          `Unsupported module: ${name} (requires native desktop capabilities)`
-        );
+        throw new Error(`Unsupported module: ${name} (requires native desktop capabilities)`);
       };
       new Function(
         'module',
@@ -735,12 +662,11 @@ export async function loadPlugin(id: string, manifest: any) {
         'app',
         '__dirname',
         '__filename',
-        code + '\n//# sourceURL=plugin:' + id
+        code + '\n//# sourceURL=plugin:' + id,
       )(module, module.exports, require, sharedApp, root, root + '/main.js');
       const Type = module.exports.default ?? module.exports;
       instance = new Type(sharedApp, manifest);
-      if (!(instance instanceof Plugin))
-        throw new Error('Plugin must extend obsidian.Plugin');
+      if (!(instance instanceof Plugin)) throw new Error('Plugin must extend obsidian.Plugin');
       sharedApp.plugins.plugins[id] = instance;
       sharedApp.plugins.manifests[id] = manifest;
       await instance.load();
@@ -784,6 +710,8 @@ export function unloadPlugin(id: string) {
   }
 }
 export async function setPluginEnabled(id: string, enabled: boolean) {
+  if (id === 'fuzzy-chinese-pinyin')
+    throw new Error('Chinese search is built in; configure Search settings instead.');
   await api.setPluginEnabled(id, enabled);
   if (enabled) {
     const { plugins } = await api.listPlugins();
@@ -802,21 +730,15 @@ export async function loadPlugins(): Promise<void> {
     await useStore.getState().loadTree();
     sharedApp.vault.sync(useStore.getState().tree);
     const settings = await api.getSettings();
-    sharedApp.vault.adapter.basePath =
-      (window as any).webobsidianDesktop?.vaultPath ?? settings.vault.path;
+    sharedApp.vault.adapter.basePath = (window as any).webobsidianDesktop?.vaultPath ?? settings.vault.path;
     const stopMenus = bindPluginMenus(sharedApp);
     if (nativeRequire) {
-      sharedApp.workspace.viewRegistry.set(
-        'webviewer',
-        (leaf) => new WebViewerView(leaf)
-      );
+      sharedApp.workspace.viewRegistry.set('webviewer', (leaf) => new WebViewerView(leaf));
       sharedApp.internalPlugins.plugins.webviewer = {
         enabled: true,
         instance: {
           open: (url: string) =>
-            sharedApp.workspace
-              .getLeaf(true)
-              .setViewState({ type: 'webviewer', state: { url } }),
+            sharedApp.workspace.getLeaf(true).setViewState({ type: 'webviewer', state: { url } }),
         },
       };
       pluginCommands.set('webviewer:open', {
@@ -830,13 +752,8 @@ export async function loadPlugins(): Promise<void> {
       instance: {
         options: { folder: '' },
         insertTemplate: async (file: files.TFile) => {
-          const view = sharedApp.workspace.getActiveViewOfType(
-            workspace.MarkdownView
-          );
-          if (view)
-            view.editor.replaceSelection(
-              await sharedApp.vault.cachedRead(file)
-            );
+          const view = sharedApp.workspace.getActiveViewOfType(workspace.MarkdownView);
+          if (view) view.editor.replaceSelection(await sharedApp.vault.cachedRead(file));
         },
       },
     };
@@ -855,54 +772,62 @@ export async function loadPlugins(): Promise<void> {
         sharedApp.vault.applyFileStat(state.lastFileChange.path, state.lastFileChange.stat);
       } else if (state.tree !== prior.tree) sharedApp.vault.sync(state.tree, true);
       if (state.activePath !== prior.activePath) {
-        sharedApp.workspace.trigger(
-          'file-open',
-          sharedApp.workspace.getActiveFile()
-        );
-        sharedApp.workspace.trigger(
-          'active-leaf-change',
-          sharedApp.workspace.activeLeaf
-        );
+        sharedApp.workspace.trigger('file-open', sharedApp.workspace.getActiveFile());
+        sharedApp.workspace.trigger('active-leaf-change', sharedApp.workspace.activeLeaf);
         sharedApp.workspace.trigger('layout-change');
       }
     });
-    const pendingFiles = new Set<string>(), structuralFiles = new Set<string>();
-    let metadataTimer: number | undefined, metadataRunning = false, metadataStopped = false;
+    const pendingFiles = new Set<string>(),
+      structuralFiles = new Set<string>();
+    let metadataTimer: number | undefined,
+      metadataRunning = false,
+      metadataStopped = false;
     const drainMetadata = async () => {
       metadataTimer = undefined;
       if (metadataRunning || metadataStopped) return;
       metadataRunning = true;
       try {
         while (pendingFiles.size && !metadataStopped) {
-          const paths = [...pendingFiles], structural = [...structuralFiles];
-          pendingFiles.clear(); structuralFiles.clear();
+          const paths = [...pendingFiles],
+            structural = [...structuralFiles];
+          pendingFiles.clear();
+          structuralFiles.clear();
           await sharedApp.metadataCache.updateFiles(paths, structural);
         }
-      } catch (error) { console.error('[metadata]', error); }
-      finally { metadataRunning = false; }
+      } catch (error) {
+        console.error('[metadata]', error);
+      } finally {
+        metadataRunning = false;
+      }
     };
     const queueMetadata = (file: files.TAbstractFile, structural: boolean, oldPath?: string) => {
       if (!(file instanceof files.TFile)) return;
       if (!structural && !/^(md|markdown)$/i.test(file.extension)) return;
       pendingFiles.add(file.path);
       if (structural) structuralFiles.add(file.path);
-      if (oldPath) { pendingFiles.add(oldPath); structuralFiles.add(oldPath); }
-      if (metadataTimer === undefined && !metadataRunning) metadataTimer = window.setTimeout(() => { void drainMetadata(); }, 0);
+      if (oldPath) {
+        pendingFiles.add(oldPath);
+        structuralFiles.add(oldPath);
+      }
+      if (metadataTimer === undefined && !metadataRunning)
+        metadataTimer = window.setTimeout(() => {
+          void drainMetadata();
+        }, 0);
     };
     const metadataEvents = [
       sharedApp.vault.on('modify', (file: files.TFile) => queueMetadata(file, false)),
       sharedApp.vault.on('create', (file: files.TAbstractFile) => queueMetadata(file, true)),
       sharedApp.vault.on('delete', (file: files.TAbstractFile) => queueMetadata(file, true)),
-      sharedApp.vault.on('rename', (file: files.TAbstractFile, oldPath: string) => queueMetadata(file, true, oldPath)),
+      sharedApp.vault.on('rename', (file: files.TAbstractFile, oldPath: string) =>
+        queueMetadata(file, true, oldPath),
+      ),
     ];
     const keys = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return;
       for (const command of pluginCommands.values())
         if (
           command.hotkeys?.some(
-            (h) =>
-              h.key.toLowerCase() === event.key.toLowerCase() &&
-              ui.matchesModifiers(event, h.modifiers)
+            (h) => h.key.toLowerCase() === event.key.toLowerCase() && ui.matchesModifiers(event, h.modifiers),
           ) &&
           runPluginCommand(command.id, true)
         ) {
@@ -963,9 +888,8 @@ export function bindPluginEditor(view: cmView.EditorView, path: string) {
   view.dispatch({
     effects: cmState.StateEffect.appendConfig.of(
       cmView.EditorView.updateListener.of((update) => {
-        if (update.docChanged)
-          sharedApp.workspace.trigger('editor-change', info.editor, info);
-      })
+        if (update.docChanged) sharedApp.workspace.trigger('editor-change', info.editor, info);
+      }),
     ),
   });
   return detach;

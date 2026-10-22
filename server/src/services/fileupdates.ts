@@ -5,30 +5,47 @@ import { parseNote } from './markdown.js';
 import { qmd } from './search.js';
 import { updateLinkGraphFromNote } from './links.js';
 import { hasIndexedFile, indexFile, unindexFile } from './fileindex.js';
+import { catalog } from './catalog.js';
 import { broadcast, notifyIndexChanged } from './realtime.js';
 
 type Event = 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir';
 type Seen = { revision?: string; stamp: string; directory: boolean };
 const seen = new Map<string, Seen>();
-const queues = new Map<string, { generation: number; drained: number; event: Event; promise: Promise<void> }>();
+const queues = new Map<
+  string,
+  { generation: number; drained: number; event: Event; promise: Promise<void> }
+>();
 let enabled = false;
 let active = 0;
 const waiters: (() => void)[] = [];
 let rebuilds: Promise<void> = Promise.resolve();
 async function acquire() {
-  if (active < 4) { active++; return; }
+  if (active < 4) {
+    active++;
+    return;
+  }
   await new Promise<void>((resolve) => waiters.push(resolve));
 }
-function release() { const next = waiters.shift(); if (next) next(); else active--; }
+function release() {
+  const next = waiters.shift();
+  if (next) next();
+  else active--;
+}
 /** Library imports/tests do not start background vault work. Enable after boot indexes. */
-export function enableFileUpdates() { enabled = true; }
+export function enableFileUpdates() {
+  enabled = true;
+}
 
 /** Reserve every worker while explicit full rebuilds replace index structures. */
 export function rebuildFileIndexes(work: () => Promise<void>): Promise<void> {
   const job = rebuilds.then(async () => {
     for (let i = 0; i < 4; i++) await acquire();
-    try { await work(); }
-    finally { seen.clear(); for (let i = 0; i < 4; i++) release(); }
+    try {
+      await work();
+    } finally {
+      seen.clear();
+      for (let i = 0; i < 4; i++) release();
+    }
   });
   rebuilds = job.catch(() => {});
   return job;
@@ -46,7 +63,10 @@ async function update(relative: string, event: Event) {
     if (prior?.stamp === 'missing' && !known) return;
     const directory = prior?.directory ?? event === 'unlinkDir';
     unindexFile(relative);
-    if (/\.(md|markdown)$/i.test(relative)) { qmd.remove(relative); updateLinkGraphFromNote(relative, undefined, true); }
+    if (/\.(md|markdown)$/i.test(relative)) {
+      qmd.remove(relative);
+      updateLinkGraphFromNote(relative, undefined, true);
+    }
     invalidateStat(relative);
     seen.set(relative, { stamp: 'missing', directory });
     notifyIndexChanged();
@@ -57,7 +77,10 @@ async function update(relative: string, event: Event) {
   if (!directory && !stat.isFile()) return;
   if (directory && known) {
     unindexFile(relative);
-    if (/\.(md|markdown)$/i.test(relative)) { qmd.remove(relative); updateLinkGraphFromNote(relative, undefined, true); }
+    if (/\.(md|markdown)$/i.test(relative)) {
+      qmd.remove(relative);
+      updateLinkGraphFromNote(relative, undefined, true);
+    }
   }
   const stamp = `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`;
   let revision: string | undefined;
@@ -73,38 +96,61 @@ async function update(relative: string, event: Event) {
     }
   }
   const structural = directory ? !prior || prior.stamp === 'missing' || !prior.directory : !known;
-  if (!directory) indexFile(relative);
+  catalog.putPath(relative, directory, stamp);
   if (!structural && prior?.stamp === stamp && prior.revision === revision) return;
   invalidateStat(relative);
   seen.set(relative, { stamp, revision, directory });
-  if (structural || markdown && prior?.revision !== revision) notifyIndexChanged();
-  broadcast({ type: 'fs', event: directory ? 'addDir' : structural ? 'add' : 'change', path: relative, indexed: true,
-    ...(!directory ? { stat: { mtime: stat.mtimeMs, ctime: stat.birthtimeMs || stat.mtimeMs, size: stat.size } } : {}) });
+  if (structural || (markdown && prior?.revision !== revision)) notifyIndexChanged();
+  broadcast({
+    type: 'fs',
+    event: directory ? 'addDir' : structural ? 'add' : 'change',
+    path: relative,
+    indexed: true,
+    ...(!directory
+      ? { stat: { mtime: stat.mtimeMs, ctime: stat.birthtimeMs || stat.mtimeMs, size: stat.size } }
+      : {}),
+  });
 }
 
 /** Routes and watcher share one latest-state drain per canonical path. */
 export function queueFileUpdate(relative: string, event: Event = 'change'): Promise<void> {
   relative = path.posix.normalize(relative.replace(/\\/g, '/')).replace(/^\/+/, '');
-  if (!enabled || relative === '.' || relative.split('/').some((part) => part.startsWith('.') || part === 'node_modules')) return Promise.resolve();
+  if (
+    !enabled ||
+    relative === '.' ||
+    relative.split('/').some((part) => part.startsWith('.') || part === 'node_modules')
+  )
+    return Promise.resolve();
   const current = queues.get(relative);
-  if (current) { current.generation++; current.event = event; return current.promise; }
+  if (current) {
+    current.generation++;
+    current.event = event;
+    return current.promise;
+  }
   const state = { generation: 0, drained: -1, event, promise: Promise.resolve() };
   queues.set(relative, state);
-  state.promise = Promise.resolve().then(async () => {
-    await acquire();
-    try {
-      let generation: number;
-      do {
-        generation = state.generation;
-        try { await update(relative, state.event); }
-        catch (error) { console.error('[file index]', relative, error); }
-        state.drained = generation;
-      } while (generation !== state.generation);
-    } finally { release(); }
-  }).finally(() => {
-    if (queues.get(relative) === state) queues.delete(relative);
-    // An event can arrive between the last drain check and this final microtask.
-    if (state.drained !== state.generation) return queueFileUpdate(relative, state.event);
-  });
+  state.promise = Promise.resolve()
+    .then(async () => {
+      await acquire();
+      try {
+        let generation: number;
+        do {
+          generation = state.generation;
+          try {
+            await update(relative, state.event);
+          } catch (error) {
+            console.error('[file index]', relative, error);
+          }
+          state.drained = generation;
+        } while (generation !== state.generation);
+      } finally {
+        release();
+      }
+    })
+    .finally(() => {
+      if (queues.get(relative) === state) queues.delete(relative);
+      // An event can arrive between the last drain check and this final microtask.
+      if (state.drained !== state.generation) return queueFileUpdate(relative, state.event);
+    });
   return state.promise;
 }

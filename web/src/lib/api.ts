@@ -1,3 +1,4 @@
+import type { CatalogEntry } from '@webobsidian/search-core';
 // Thin fetch wrapper around the WebObsidian server API.
 
 export interface TreeNode {
@@ -34,6 +35,8 @@ export interface SearchHit {
   score: number;
   tags: string[];
   snippet: string;
+  matchedField?: string;
+  matchKind?: string;
 }
 
 export interface MatchContext {
@@ -82,7 +85,10 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
 }
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
     super(message);
   }
 }
@@ -108,9 +114,14 @@ export const api = {
   // files
   tree: () => req<TreeNode>('/api/files/'),
   read: (path: string) =>
-    req<{ path: string; content: string; revision?: string }>(`/api/files/content?path=${encodeURIComponent(path)}`),
+    req<{ path: string; content: string; revision?: string }>(
+      `/api/files/content?path=${encodeURIComponent(path)}`,
+    ),
   write: (path: string, content: string, baseRevision?: string) =>
-    req<{ ok: true; revision?: string }>('/api/files/content', { method: 'PUT', body: JSON.stringify({ path, content, baseRevision }) }),
+    req<{ ok: true; revision?: string }>('/api/files/content', {
+      method: 'PUT',
+      body: JSON.stringify({ path, content, baseRevision }),
+    }),
   createFolder: (path: string) =>
     req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
   rename: (from: string, to: string) =>
@@ -118,10 +129,9 @@ export const api = {
   copy: (from: string, to: string) =>
     req<{ ok: true }>('/api/files/copy', { method: 'POST', body: JSON.stringify({ from, to }) }),
   remove: (path: string) =>
-    req<{ ok: true; trashed?: string; deleted?: string }>(
-      `/api/files/?path=${encodeURIComponent(path)}`,
-      { method: 'DELETE' },
-    ),
+    req<{ ok: true; trashed?: string; deleted?: string }>(`/api/files/?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+    }),
   // trash (FR-1)
   listTrash: () => req<{ items: TrashItem[] }>('/api/files/trash'),
   restoreTrash: (path: string) =>
@@ -138,29 +148,38 @@ export const api = {
     fd.append('dir', dir);
     fd.append('file', file);
     const res = await fetch('/api/files/upload', { method: 'POST', credentials: 'include', body: fd });
-    if (!res.ok) throw new ApiError((await res.json().catch(() => ({}))).error ?? 'Upload failed', res.status);
+    if (!res.ok)
+      throw new ApiError((await res.json().catch(() => ({}))).error ?? 'Upload failed', res.status);
     return res.json() as Promise<{ ok: true; path: string; size: number }>;
   },
-  rawUrl: (path: string, sourcePath = '') => `/api/files/content?path=${encodeURIComponent(path)}&sourcePath=${encodeURIComponent(sourcePath)}`,
+  rawUrl: (path: string, sourcePath = '') =>
+    `/api/files/content?path=${encodeURIComponent(path)}&sourcePath=${encodeURIComponent(sourcePath)}`,
 
+  catalog: () => req<{ entries: CatalogEntry[] }>('/api/catalog'),
   // search & links
   // limit omitted → server returns every match (panel renders them incrementally)
-  search: (q: string, limit?: number, signal?: AbortSignal) =>
+  search: (q: string, limit?: number, signal?: AbortSignal, mode: 'literal' | 'pinyin' = 'literal') =>
     req<{ hits: SearchHit[] }>(
-      `/api/search?q=${encodeURIComponent(q)}${limit ? `&limit=${limit}` : ''}`,
+      `/api/search?mode=${mode}&q=${encodeURIComponent(q)}${limit ? `&limit=${limit}` : ''}`,
       { signal },
     ),
   // per-note highlighted match contexts for the given paths (lazy, batched);
   // phrase=true matches the whole query as one needle (unlinked mentions)
-  searchMatches: (query: string, paths: string[], matchCase = false, phrase = false, signal?: AbortSignal) =>
+  searchMatches: (
+    query: string,
+    paths: string[],
+    matchCase = false,
+    phrase = false,
+    signal?: AbortSignal,
+    mode: 'literal' | 'pinyin' = 'literal',
+  ) =>
     req<{ matches: NoteMatches[] }>('/api/search/matches', {
       method: 'POST',
-      body: JSON.stringify({ query, paths, matchCase, phrase }),
+      body: JSON.stringify({ query, paths, matchCase, phrase, mode }),
       signal,
     }),
   tags: () => req<{ tags: { tag: string; count: number }[] }>('/api/tags'),
-  properties: () =>
-    req<{ properties: { key: string; type: string; count: number }[] }>('/api/properties'),
+  properties: () => req<{ properties: { key: string; type: string; count: number }[] }>('/api/properties'),
   propertyTypes: () => req<{ types: Record<string, string> }>('/api/property-types'),
   setPropertyType: (key: string, type: string) =>
     req<{ types: Record<string, string> }>('/api/property-types', {
@@ -170,7 +189,13 @@ export const api = {
   backlinks: (path: string, signal?: AbortSignal) =>
     req<{ backlinks: string[] }>(`/api/backlinks?path=${encodeURIComponent(path)}`, { signal }),
   resolve: (target: string, sourcePath = '') =>
-    req<{ path: string | null; status?: string; fragment?: string; candidates?: string[]; normalizedTarget?: string }>(`/api/resolve?target=${encodeURIComponent(target)}&sourcePath=${encodeURIComponent(sourcePath)}`),
+    req<{
+      path: string | null;
+      status?: string;
+      fragment?: string;
+      candidates?: string[];
+      normalizedTarget?: string;
+    }>(`/api/resolve?target=${encodeURIComponent(target)}&sourcePath=${encodeURIComponent(sourcePath)}`),
   graph: () =>
     req<{
       nodes: { id: string; label: string; kind: 'note' | 'attachment' | 'unresolved'; tags: string[] }[];
@@ -204,16 +229,23 @@ export const api = {
     req<{ message: string }>('/api/git/commit', { method: 'POST', body: JSON.stringify({ message }) }),
   gitPush: () => req<{ message: string }>('/api/git/push', { method: 'POST' }),
   gitSync: (message?: string) =>
-    req<{ ok: boolean; log: string[] }>('/api/git/sync', { method: 'POST', body: JSON.stringify({ message }) }),
-  gitLog: (path: string) =>
-    req<{ commits: GitCommit[] }>(`/api/git/log?path=${encodeURIComponent(path)}`),
+    req<{ ok: boolean; log: string[] }>('/api/git/sync', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+  gitLog: (path: string) => req<{ commits: GitCommit[] }>(`/api/git/log?path=${encodeURIComponent(path)}`),
   gitShow: (hash: string, path: string) =>
-    req<{ content: string }>(`/api/git/show?hash=${encodeURIComponent(hash)}&path=${encodeURIComponent(path)}`),
+    req<{ content: string }>(
+      `/api/git/show?hash=${encodeURIComponent(hash)}&path=${encodeURIComponent(path)}`,
+    ),
 
   // api keys
   listKeys: () => req<{ keys: any[] }>('/api/keys/'),
   createKey: (name: string, scopes: string[]) =>
-    req<{ key: string; record: any }>('/api/keys/', { method: 'POST', body: JSON.stringify({ name, scopes }) }),
+    req<{ key: string; record: any }>('/api/keys/', {
+      method: 'POST',
+      body: JSON.stringify({ name, scopes }),
+    }),
   revokeKey: (id: string) => req<{ ok: boolean }>(`/api/keys/${id}`, { method: 'DELETE' }),
 
   // public shares (FR-10)
@@ -232,9 +264,15 @@ export const api = {
   // plugins
   listPlugins: () => req<{ plugins: any[] }>('/api/plugins/'),
   pluginData: (id: string) => req<{ data: any }>(`/api/plugins/${encodeURIComponent(id)}/data`),
-  pluginRequest: (options: any) => req<any>('/api/plugins/request', { method:'POST', body:JSON.stringify(options) }),
-  savePluginData: (id: string, data: unknown) => req<{ ok: true }>(`/api/plugins/${encodeURIComponent(id)}/data`, { method: 'PUT', body: JSON.stringify({ data }) }),
-  pluginAdapter: (op: string, path: string, body = {}) => req<any>('/api/plugins/adapter', { method: 'POST', body: JSON.stringify({ op, path, ...body }) }),
+  pluginRequest: (options: any) =>
+    req<any>('/api/plugins/request', { method: 'POST', body: JSON.stringify(options) }),
+  savePluginData: (id: string, data: unknown) =>
+    req<{ ok: true }>(`/api/plugins/${encodeURIComponent(id)}/data`, {
+      method: 'PUT',
+      body: JSON.stringify({ data }),
+    }),
+  pluginAdapter: (op: string, path: string, body = {}) =>
+    req<any>('/api/plugins/adapter', { method: 'POST', body: JSON.stringify({ op, path, ...body }) }),
   installPlugin: (repo: string) =>
     req<{ plugin: any }>('/api/plugins/install', { method: 'POST', body: JSON.stringify({ repo }) }),
   setPluginEnabled: (id: string, enabled: boolean) =>

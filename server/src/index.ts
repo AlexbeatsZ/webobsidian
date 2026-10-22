@@ -1,3 +1,4 @@
+import { migrateSearchSettings } from './services/searchmigration.js';
 import express, { type Response } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -27,8 +28,6 @@ import { uiStateRouter } from './routes/uistate.js';
 import { sharesRouter, publicSharesRouter } from './routes/shares.js';
 import { sharePageRouter } from './routes/sharepage.js';
 import { initSearch } from './services/search.js';
-import { buildLinkGraph } from './services/links.js';
-import { buildFileIndex } from './services/fileindex.js';
 import { setBroadcaster } from './services/realtime.js';
 import { getVaultRoot, ensureVault } from './services/vault.js';
 import { enableFileUpdates, queueFileUpdate } from './services/fileupdates.js';
@@ -79,8 +78,13 @@ async function main() {
           defaultSrc: ["'self'"],
           // Trusted community plugins (Templater/DataviewJS/Interactive JS)
           // evaluate user scripts. Public shares retain the strict policy.
-          scriptSrc: ["'self'", (_req, res) => `'nonce-${(res as Response).locals.cspNonce}'`, (req) => req.url?.startsWith('/share/') ? '' : "'unsafe-eval'", (req) => req.url?.startsWith('/share/') ? '' : 'blob:'],
-          workerSrc: ["'self'", (req) => req.url?.startsWith('/share/') ? '' : 'blob:'],
+          scriptSrc: [
+            "'self'",
+            (_req, res) => `'nonce-${(res as Response).locals.cspNonce}'`,
+            (req) => (req.url?.startsWith('/share/') ? '' : "'unsafe-eval'"),
+            (req) => (req.url?.startsWith('/share/') ? '' : 'blob:'),
+          ],
+          workerSrc: ["'self'", (req) => (req.url?.startsWith('/share/') ? '' : 'blob:')],
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
           fontSrc: ["'self'", 'data:'],
@@ -127,7 +131,8 @@ async function main() {
   if (await dirExists(publicDir)) {
     app.use(express.static(publicDir));
     app.get('*', (req, res, next) => {
-      if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/public')) return next();
+      if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/public'))
+        return next();
       res.sendFile(path.join(publicDir, 'index.html'));
     });
   }
@@ -136,9 +141,8 @@ async function main() {
 
   // Build search index + link graph
   console.log('[boot] indexing vault...');
+  await migrateSearchSettings().catch((error) => console.warn('[search migration]', error));
   await initSearch();
-  await buildLinkGraph();
-  await buildFileIndex();
   console.log('[boot] index ready');
 
   const server = http.createServer(app);
@@ -242,8 +246,8 @@ function startWatcher(root: string, usePolling: boolean) {
       degraded = true;
       console.warn(
         `[watcher] native file watching hit ${code} (host inotify limit too low ` +
-        `for this vault). Falling back to polling. For lower CPU, raise the limit: ` +
-        `sudo sysctl -w fs.inotify.max_user_watches=524288`,
+          `for this vault). Falling back to polling. For lower CPU, raise the limit: ` +
+          `sudo sysctl -w fs.inotify.max_user_watches=524288`,
       );
       watcher.close().catch(() => {});
       startWatcher(root, true);

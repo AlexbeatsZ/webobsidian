@@ -1,5 +1,9 @@
 # 现用 Obsidian 插件兼容宿主
 
+2026-10-22：`fuzzy-chinese-pinyin` 已由原生中文搜索取代；加载器阻止重复执行，
+保留原插件文件与 Obsidian 启用配置。下方原包加载记录仅为历史证据。
+详见 [内置中文搜索](chinese-search.md)。
+
 ## 范围与依据
 
 目标是直接加载现用插件的 CommonJS `main.js`，让命令、设置、文件访问、编辑器扩展、

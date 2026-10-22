@@ -2,7 +2,16 @@ import { promises as fs } from 'node:fs';
 import MiniSearch from 'minisearch';
 import { getSettings } from './settings.js';
 import { INDEX_FILE, config } from '../config.js';
-import { listMarkdownFiles, readFileText } from './vault.js';
+import { getVaultRoot, readFileText } from './vault.js';
+import { catalog as activeCatalog, VaultCatalog, CORE_LIST_PROPS } from './catalog.js';
+import {
+  findText,
+  phoneticTokens,
+  candidateTokens,
+  MAX_BODY,
+  SEARCH_VERSION,
+  type SearchOptions,
+} from '@webobsidian/search-core';
 import { parseNote, type ParsedNote } from './markdown.js';
 
 /**
@@ -19,6 +28,7 @@ interface QmdDoc {
   tags: string;
   path: string;
   body: string;
+  [field: string]: string;
 }
 
 export interface SearchHit {
@@ -27,6 +37,8 @@ export interface SearchHit {
   score: number;
   tags: string[];
   snippet: string;
+  matchedField?: string;
+  matchKind?: 'literal' | 'pinyin';
 }
 
 /** One match snippet within a note. `ranges` are [start,len] offsets into `text`
@@ -47,23 +59,6 @@ export interface NoteMatches {
 
 const FIELDS = ['title', 'headings', 'tags', 'path', 'body'] as const;
 
-// Obsidian's built-in properties are always List-typed.
-const CORE_LIST_PROPS = new Set(['tags', 'aliases', 'cssclasses']);
-
-/** Classify a frontmatter value into an Obsidian property type
- *  (text | list | number | checkbox | date | datetime). */
-function inferPropType(key: string, v: unknown): string {
-  if (CORE_LIST_PROPS.has(key)) return 'list';
-  if (Array.isArray(v)) return 'list';
-  if (typeof v === 'number') return 'number';
-  if (typeof v === 'boolean') return 'checkbox';
-  if (typeof v === 'string') {
-    if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(v)) return 'datetime';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'date';
-  }
-  return 'text';
-}
-
 /** Re-base highlight ranges after `text.trim()` drops leading whitespace. */
 function shiftRanges(untrimmed: string, ranges: [number, number][]): [number, number][] {
   const lead = untrimmed.length - untrimmed.replace(/^\s+/, '').length;
@@ -73,78 +68,43 @@ function shiftRanges(untrimmed: string, ranges: [number, number][]): [number, nu
     .filter(([s]) => s < trimmedLen);
 }
 
-class QmdEngine {
+export class QmdEngine {
   private mini: MiniSearch<QmdDoc>;
-  private snippets = new Map<string, string>();
-  private tagSet = new Map<string, string[]>();
-  // Per-note frontmatter key→type, for the vault-wide property suggestions list.
-  private propMeta = new Map<string, Record<string, string>>();
   private ready = false;
-
-  constructor() {
+  constructor(readonly catalog: VaultCatalog = activeCatalog) {
     this.mini = this.newIndex();
   }
-
-  private newIndex() {
-    return new MiniSearch<QmdDoc>({
-      fields: FIELDS as unknown as string[],
-      storeFields: ['title', 'path', 'tags'],
-      // Auto-vacuum runs in a deferred task after discard/replace and has crashed
-      // the process on large vaults (TreeIterator.dive → undefined). Disable it;
-      // the index is fully rebuilt on restart, so stale terms never accumulate far.
-      autoVacuum: false,
-      searchOptions: {
-        boost: { title: 4, headings: 2, tags: 3 },
-        prefix: true,
-        fuzzy: 0.2,
-      },
-    });
-  }
-
-  // Cap how much of a single note's body we index (some notes are huge); the
-  // tail rarely changes search relevance and very large bodies blow up memory.
-  private static MAX_BODY = 100_000;
-
-  private async toDoc(rel: string): Promise<QmdDoc> {
-    const raw = await readFileText(rel);
-    const note = parseNote(rel, raw);
-    return this.fromNote(rel, note);
-  }
-  private fromNote(rel: string, note: ParsedNote): QmdDoc {
-    const snippet = note.body.replace(/\s+/g, ' ').trim().slice(0, 280);
-    this.snippets.set(rel, snippet);
-    this.tagSet.set(rel, note.tags);
-    const meta: Record<string, string> = {};
-    for (const [k, v] of Object.entries(note.frontmatter ?? {})) meta[k] = inferPropType(k, v);
-    this.propMeta.set(rel, meta);
-    const body = note.body.length > QmdEngine.MAX_BODY ? note.body.slice(0, QmdEngine.MAX_BODY) : note.body;
+  private indexOptions() {
     return {
+      fields: [...FIELDS, ...FIELDS.map((f) => 'py_' + f)],
+      storeFields: [],
+      autoVacuum: false,
+      tokenize: (text: string, field?: string) =>
+        field?.startsWith('py_') ? text.split(' ') : MiniSearch.getDefault('tokenize')(text),
+    };
+  }
+  private newIndex() {
+    return new MiniSearch<QmdDoc>(this.indexOptions());
+  }
+
+  private fromNote(rel: string, note: ParsedNote): QmdDoc {
+    const doc: QmdDoc = {
       id: rel,
       title: note.title,
       headings: note.headings.join(' '),
       tags: note.tags.join(' '),
       path: rel,
-      body,
+      body: note.body.slice(0, MAX_BODY),
     };
+    for (const field of FIELDS) doc['py_' + field] = phoneticTokens(doc[field]).join(' ');
+    return doc;
   }
-
-  /** Full (re)build from the vault. Adds incrementally so we never hold every
-   *  note's full text in a single array (keeps peak memory bounded). */
   async build(): Promise<void> {
-    const files = await listMarkdownFiles();
-    this.mini = this.newIndex();
-    this.snippets.clear();
-    this.tagSet.clear();
-    this.propMeta.clear();
-    for (const rel of files) {
-      try {
-        this.mini.add(await this.toDoc(rel));
-      } catch {
-        /* skip unreadable */
-      }
-    }
+    const { rebuildVaultIndex } = await import('./vaultindex.js');
+    await rebuildVaultIndex();
+  }
+  finish() {
     this.ready = true;
-    await this.persist();
   }
 
   async upsert(rel: string): Promise<void> {
@@ -157,6 +117,7 @@ class QmdEngine {
   }
 
   upsertNote(rel: string, note: ParsedNote): void {
+    this.catalog.putNote(rel, note);
     const doc = this.fromNote(rel, note);
     if (this.mini.has(rel)) this.mini.replace(doc);
     else this.mini.add(doc);
@@ -164,9 +125,7 @@ class QmdEngine {
 
   remove(rel: string): void {
     if (this.mini.has(rel)) this.mini.discard(rel);
-    this.snippets.delete(rel);
-    this.tagSet.delete(rel);
-    this.propMeta.delete(rel);
+    this.catalog.remove(rel);
   }
 
   async rename(from: string, to: string): Promise<void> {
@@ -175,33 +134,99 @@ class QmdEngine {
   }
 
   /** `limit <= 0` returns every match (caller renders incrementally). */
-  async search(query: string, limit = 0): Promise<SearchHit[]> {
-    if (!this.ready) await this.build();
+  async search(query: string, limit = 0, mode: 'literal' | 'pinyin' = 'literal'): Promise<SearchHit[]> {
+    if (!this.ready) {
+      const { rebuildVaultIndex } = await import('./vaultindex.js');
+      await rebuildVaultIndex();
+      return qmd.search(query, limit, mode);
+    }
     const s = await getSettings();
     const { filterText, fields } = parseFielded(query);
-
-    const opts: Record<string, unknown> = {
-      prefix: s.search.prefix,
-      fuzzy: s.search.fuzzy,
-      boost: { title: 4, headings: 2, tags: 3 },
-    };
-    if (fields.length) opts.fields = fields;
-
     const q = filterText.trim() || query.trim();
-    const results = q ? this.mini.search(q, opts) : [];
-
-    const picked = limit > 0 ? results.slice(0, limit) : results;
-    return picked.map((r) => ({
-      path: r.id as string,
-      title: (r as any).title ?? r.id,
-      score: r.score,
-      tags: this.tagSet.get(r.id as string) ?? [],
-      snippet: this.snippets.get(r.id as string) ?? '',
-    }));
+    const selected = fields.length ? fields : [...FIELDS];
+    const results = q
+      ? this.mini.search(q, {
+          fields: selected,
+          prefix: s.search.prefix,
+          fuzzy: s.search.fuzzy,
+          boost: { title: 4, headings: 2, tags: 3 },
+        })
+      : [];
+    const hits = new Map<string, SearchHit>();
+    for (const result of results) {
+      const record = this.catalog.notes.get(result.id);
+      if (!record) continue;
+      hits.set(record.path, {
+        path: record.path,
+        title: record.title,
+        score: result.score,
+        tags: record.tags,
+        snippet: record.snippet,
+        matchKind: 'literal',
+      });
+    }
+    const options = s.search.chinese;
+    if (mode === 'pinyin' && options.enabled && /[a-z]{2}|[a-z].*[a-z]/i.test(q)) {
+      const tokens = options.fuzzyRules.length ? ['han'] : candidateTokens(q);
+      const candidates = this.mini.search(tokens.join(' '), {
+        fields: selected.map((f) => 'py_' + f),
+        tokenize: (t) => t.split(' '),
+        processTerm: (t) => t,
+        prefix: false,
+        fuzzy: false,
+        combineWith: 'AND',
+      });
+      // Only candidate documents are read, in bounded batches. Verify source rather than trusting gram co-occurrence.
+      for (let at = 0; at < candidates.length; at += 4)
+        await Promise.all(
+          candidates.slice(at, at + 4).map(async (candidate) => {
+            if (hits.has(candidate.id)) return;
+            const record = this.catalog.notes.get(candidate.id);
+            if (!record) return;
+            const values: Record<string, string> = {
+              title: record.title,
+              headings: record.headings.join(' '),
+              tags: record.tags.join(' '),
+              path: record.path,
+            };
+            for (const field of selected) {
+              if (field === 'body') {
+                try {
+                  values.body = parseNote(record.path, await readFileText(record.path)).body.slice(
+                    0,
+                    MAX_BODY,
+                  );
+                } catch {
+                  continue;
+                }
+              }
+              const match = findText(q, values[field] ?? '', options, true)[0];
+              if (!match) continue;
+              const [start, end] = match.matches[0];
+              hits.set(record.path, {
+                path: record.path,
+                title: record.title,
+                score: 0.1,
+                tags: record.tags,
+                snippet: (values[field] ?? '').slice(Math.max(0, start - 32), end + 32),
+                matchedField: field,
+                matchKind: match.kind,
+              });
+              break;
+            }
+          }),
+        );
+    }
+    const ordered = [...hits.values()].sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+    return limit > 0 ? ordered.slice(0, limit) : ordered;
   }
 
   /** Free-text terms from a query (operators like `tag:`/`path:` stripped),
    *  used to scan note bodies for highlightable occurrences. */
+  queryText(query: string): string {
+    const { filterText } = parseFielded(query);
+    return filterText || query;
+  }
   queryTerms(query: string): string[] {
     const { filterText } = parseFielded(query);
     return (filterText || query)
@@ -216,14 +241,20 @@ class QmdEngine {
   async matchesFor(
     rel: string,
     terms: string[],
-    opts: { caseSensitive?: boolean; maxContexts?: number } = {},
+    opts: {
+      caseSensitive?: boolean;
+      maxContexts?: number;
+      pinyin?: SearchOptions;
+      pinyinQuery?: string;
+    } = {},
   ): Promise<NoteMatches> {
     const needles = terms.map((t) => (opts.caseSensitive ? t : t.toLowerCase())).filter(Boolean);
-    if (!needles.length) return { path: rel, count: 0, contexts: [] };
+    if (!needles.length && !opts.pinyinQuery) return { path: rel, count: 0, contexts: [] };
 
     let body = '';
     try {
       body = parseNote(rel, await readFileText(rel)).body;
+      if (opts.pinyin) body = body.slice(0, MAX_BODY);
     } catch {
       return { path: rel, count: 0, contexts: [] };
     }
@@ -235,6 +266,13 @@ class QmdEngine {
       for (let i = hay.indexOf(n); i !== -1; i = hay.indexOf(n, i + n.length)) {
         raw.push({ start: i, len: n.length });
       }
+    }
+    if (opts.pinyin && /[a-z].*[a-z]/i.test(opts.pinyinQuery ?? terms.join(''))) {
+      for (const match of findText(opts.pinyinQuery ?? terms.join(''), body, {
+        ...opts.pinyin,
+        caseSensitive: opts.caseSensitive,
+      }))
+        for (const [start, end] of match.matches) raw.push({ start, len: end - start });
     }
     if (!raw.length) return { path: rel, count: 0, contexts: [] };
     raw.sort((a, b) => a.start - b.start || b.len - a.len);
@@ -264,12 +302,20 @@ class QmdEngine {
       // length-preserving newline/tab → space so range offsets stay valid
       const text = body.slice(winStart, winEnd).replace(/[\n\r\t]/g, ' ');
       const ranges = group.map((o) => [o.start - winStart, o.len] as [number, number]);
-      contexts.push({ text: text.trim(), ranges: shiftRanges(text, ranges), pre: winStart > 0, post: winEnd < body.length });
+      contexts.push({
+        text: text.trim(),
+        ranges: shiftRanges(text, ranges),
+        pre: winStart > 0,
+        post: winEnd < body.length,
+      });
       group = [];
     };
 
     for (const o of occ) {
-      if (group.length && o.start - (group[group.length - 1].start + group[group.length - 1].len) > MERGE_GAP) {
+      if (
+        group.length &&
+        o.start - (group[group.length - 1].start + group[group.length - 1].len) > MERGE_GAP
+      ) {
         flush();
       }
       group.push(o);
@@ -281,12 +327,10 @@ class QmdEngine {
 
   allTags(): { tag: string; count: number }[] {
     const counts = new Map<string, number>();
-    for (const tags of this.tagSet.values()) {
+    for (const { tags } of this.catalog.notes.values()) {
       for (const t of tags) counts.set(t, (counts.get(t) ?? 0) + 1);
     }
-    return [...counts.entries()]
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count);
+    return [...counts.entries()].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count);
   }
 
   /** Vault-wide frontmatter property keys (for the property-name suggester). */
@@ -298,7 +342,7 @@ class QmdEngine {
       count.set(k, 0);
       types.set(k, new Map([['list', 1]]));
     }
-    for (const meta of this.propMeta.values()) {
+    for (const { properties: meta } of this.catalog.notes.values()) {
       for (const [k, t] of Object.entries(meta)) {
         count.set(k, (count.get(k) ?? 0) + 1);
         const tm = types.get(k) ?? new Map<string, number>();
@@ -310,53 +354,35 @@ class QmdEngine {
       .map(([key, c]) => {
         let best = 'text';
         let bn = 0;
-        for (const [t, n] of types.get(key) ?? []) if (n > bn) { bn = n; best = t; }
+        for (const [t, n] of types.get(key) ?? [])
+          if (n > bn) {
+            bn = n;
+            best = t;
+          }
         return { key, type: best, count: c };
       })
       .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
   }
 
-  private async persist(): Promise<void> {
+  async save(): Promise<void> {
     try {
       await fs.mkdir(config.dataDir, { recursive: true });
       const payload = {
+        version: SEARCH_VERSION,
+        root: await getVaultRoot(),
         mini: this.mini.toJSON(),
-        snippets: [...this.snippets.entries()],
-        tags: [...this.tagSet.entries()],
-        propMeta: [...this.propMeta.entries()],
+        catalog: this.catalog.serialize(),
       };
-      await fs.writeFile(INDEX_FILE, JSON.stringify(payload));
+      const tmp = INDEX_FILE + '.tmp';
+      await fs.writeFile(tmp, JSON.stringify(payload));
+      await fs.rename(tmp, INDEX_FILE);
     } catch {
-      /* non-fatal */
+      /* disposable cache */
     }
   }
-
-  async restore(): Promise<boolean> {
-    try {
-      const raw = await fs.readFile(INDEX_FILE, 'utf8');
-      const payload = JSON.parse(raw);
-      this.mini = MiniSearch.loadJSON<QmdDoc>(JSON.stringify(payload.mini), {
-        fields: FIELDS as unknown as string[],
-        storeFields: ['title', 'path', 'tags'],
-        autoVacuum: false,
-      });
-      // A persisted *empty* index (e.g. a prior build ran while the vault was
-      // briefly unreadable) must not be trusted — restoring it would leave the
-      // engine ready=true with zero docs, so every query returns nothing and we
-      // never rebuild. Treat it as a cache miss so initSearch() builds fresh.
-      if (this.mini.documentCount === 0) return false;
-      this.snippets = new Map(payload.snippets);
-      this.tagSet = new Map(payload.tags);
-      this.propMeta = new Map(payload.propMeta ?? []);
-      this.ready = true;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async save(): Promise<void> {
-    await this.persist();
+  restoreMini(json: unknown) {
+    this.mini = MiniSearch.loadJSON<QmdDoc>(JSON.stringify(json), this.indexOptions());
+    this.ready = true;
   }
 }
 
@@ -383,10 +409,13 @@ function parseFielded(query: string): { filterText: string; fields: string[] } {
   return { filterText: rest.join(' '), fields: [...fields] };
 }
 
-export const qmd = new QmdEngine();
+export let qmd = new QmdEngine();
+export function replaceSearch(next: QmdEngine) {
+  qmd = next;
+}
 
 /** Initialize the engine: restore from disk or build fresh. */
 export async function initSearch(): Promise<void> {
-  const restored = await qmd.restore();
-  if (!restored) await qmd.build();
+  const { rebuildVaultIndex } = await import('./vaultindex.js');
+  await rebuildVaultIndex(true);
 }

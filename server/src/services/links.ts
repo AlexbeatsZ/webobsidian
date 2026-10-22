@@ -1,61 +1,28 @@
 import path from 'node:path';
-import { TargetIndex } from '@webobsidian/markdown-core';
-import { listMarkdownFiles, readFileText } from './vault.js';
+import { catalog } from './catalog.js';
+import { readFileText } from './vault.js';
 import { parseNote, linkKey, type ParsedNote } from './markdown.js';
 
 interface LinkGraph {
-  /** outgoing[rel] = set of target keys */
-  outgoing: Map<string, Set<string>>;
-  /** keyToPath[linkKey] = rel path (for resolving wikilinks to files) */
-  keyToPath: Map<string, string>;
-  /** rawLinks[rel] = original wikilink targets (before normalization) */
-  rawLinks: Map<string, string[]>;
-  /** tags[rel] = tags declared in the note */
-  tags: Map<string, string[]>;
-  index: TargetIndex;
   resolved: Map<string, Set<string>>;
   incoming: Map<string, Set<string>>;
   dependencies: Map<string, Set<string>>;
   sourceKeys: Map<string, Set<string>>;
 }
-
-let graph: LinkGraph = {
-  outgoing: new Map(),
-  keyToPath: new Map(),
-  rawLinks: new Map(),
-  tags: new Map(),
-  index: new TargetIndex(), resolved: new Map(), incoming: new Map(),
-  dependencies: new Map(), sourceKeys: new Map(),
-};
-
-export async function buildLinkGraph(): Promise<void> {
-  const files = await listMarkdownFiles();
-  const outgoing = new Map<string, Set<string>>();
-  const keyToPath = new Map<string, string>();
-  const rawLinks = new Map<string, string[]>();
-  const tags = new Map<string, string[]>();
-
-  for (const rel of files) {
-    const base = path.basename(rel).replace(/\.(md|markdown)$/i, '').toLowerCase();
-    keyToPath.set(base, rel);
-    keyToPath.set(rel.replace(/\.(md|markdown)$/i, '').toLowerCase(), rel);
-  }
-
-  for (const rel of files) {
-    try {
-      const note = parseNote(rel, await readFileText(rel));
-      outgoing.set(rel, new Set(note.links.map(linkKey)));
-      rawLinks.set(rel, note.links);
-      tags.set(rel, note.tags);
-    } catch {
-      outgoing.set(rel, new Set());
-      rawLinks.set(rel, []);
-      tags.set(rel, []);
-    }
-  }
-  graph = { outgoing, keyToPath, rawLinks, tags, index: new TargetIndex(files),
-    resolved: new Map(), incoming: new Map(), dependencies: new Map(), sourceKeys: new Map() };
-  for (const rel of files) updateResolvedSource(rel);
+const emptyGraph = (): LinkGraph => ({
+  resolved: new Map(),
+  incoming: new Map(),
+  dependencies: new Map(),
+  sourceKeys: new Map(),
+});
+let graph = emptyGraph();
+export function rebuildGraphFromCatalog() {
+  graph = emptyGraph();
+  for (const rel of catalog.notes.keys()) updateResolvedSource(rel);
+}
+export async function buildLinkGraph() {
+  const { rebuildVaultIndex } = await import('./vaultindex.js');
+  await rebuildVaultIndex();
 }
 
 function removeResolvedSource(rel: string) {
@@ -74,9 +41,10 @@ function removeResolvedSource(rel: string) {
 }
 function updateResolvedSource(rel: string) {
   removeResolvedSource(rel);
-  const targets = new Set<string>(), keys = new Set<string>();
-  for (const raw of graph.rawLinks.get(rel) ?? []) {
-    for (const key of graph.index.dependencies(raw, rel)) keys.add(key);
+  const targets = new Set<string>(),
+    keys = new Set<string>();
+  for (const raw of catalog.notes.get(rel)?.links ?? []) {
+    for (const key of catalog.targets.dependencies(raw, rel)) keys.add(key);
     const target = resolveLink(raw, rel);
     if (target) targets.add(target);
   }
@@ -92,61 +60,39 @@ function updateResolvedSource(rel: string) {
   }
 }
 
-const stripExt = (rel: string) => rel.replace(/\.(md|markdown)$/i, '').toLowerCase();
-
 /**
  * Incrementally update the link graph for a single markdown file. Far cheaper
  * than buildLinkGraph() (which re-reads every file in the vault) — used by the
  * fs watcher so an external edit doesn't reparse thousands of notes each time.
  */
 export async function updateLinkGraphForFile(rel: string, removed = false): Promise<void> {
-  if (removed) { updateLinkGraphFromNote(rel, undefined, true); return; }
+  if (removed) {
+    updateLinkGraphFromNote(rel, undefined, true);
+    return;
+  }
   let note: ParsedNote | undefined;
-  try { note = parseNote(rel, await readFileText(rel)); } catch { /* retain empty node */ }
+  try {
+    note = parseNote(rel, await readFileText(rel));
+  } catch {
+    /* retain empty node */
+  }
   updateLinkGraphFromNote(rel, note);
 }
 
 export function updateLinkGraphFromNote(rel: string, note?: ParsedNote, removed = false): void {
-  // Files under a dot-dir (`.trash`, `.obsidian`, …) are not link targets — mirror
-  // listMarkdownFiles() so a note moved to `.trash` doesn't get re-added by the
-  // incremental watcher and shadow a real file with the same basename.
   if (rel.split('/').some((seg) => seg.startsWith('.'))) return;
-  const base = path.basename(rel).replace(/\.(md|markdown)$/i, '').toLowerCase();
-  const relKey = stripExt(rel);
-  const structural = removed ? graph.index.delete(rel) : graph.index.add(rel);
-  const affected = new Set<string>();
-  if (structural) for (const key of graph.index.keysFor(rel))
+  const affected = new Set<string>([rel]);
+  for (const key of catalog.targets.keysFor(rel))
     for (const source of graph.dependencies.get(key) ?? []) affected.add(source);
-
   if (removed) {
-    graph.outgoing.delete(rel);
-    graph.rawLinks.delete(rel);
-    graph.tags.delete(rel);
-    // only drop key→path entries that still point at this file (basenames can collide)
-    if (graph.keyToPath.get(base) === rel) graph.keyToPath.delete(base);
-    if (graph.keyToPath.get(relKey) === rel) graph.keyToPath.delete(relKey);
+    catalog.remove(rel);
     removeResolvedSource(rel);
-    for (const source of affected) if (source !== rel) updateResolvedSource(source);
-    return;
-  }
-
-  graph.keyToPath.set(base, rel);
-  graph.keyToPath.set(relKey, rel);
-  if (note) {
-    graph.outgoing.set(rel, new Set(note.links.map(linkKey)));
-    graph.rawLinks.set(rel, note.links);
-    graph.tags.set(rel, note.tags);
-  } else {
-    graph.outgoing.set(rel, new Set());
-    graph.rawLinks.set(rel, []);
-    graph.tags.set(rel, []);
-  }
-  affected.add(rel);
-  for (const source of affected) updateResolvedSource(source);
+    affected.delete(rel);
+  } else if (note && catalog.notes.get(rel)?.links !== note.links) catalog.putNote(rel, note);
+  for (const source of affected) if (catalog.notes.has(source)) updateResolvedSource(source);
 }
-
 export function resolveLink(target: string, sourcePath = ''): string | undefined {
-  const result = graph.index.resolve(target, sourcePath);
+  const result = catalog.resolve(target, sourcePath, 'markdown');
   return result.status === 'resolved' ? result.path : undefined;
 }
 
@@ -198,16 +144,17 @@ export function graphData(): GraphData {
     edges.push({ source, target });
   };
 
-  for (const rel of graph.outgoing.keys()) {
+  for (const rel of catalog.notes.keys()) {
     addNode({
       id: rel,
       label: path.basename(rel).replace(/\.(md|markdown)$/i, ''),
       kind: 'note',
-      tags: graph.tags.get(rel) ?? [],
+      tags: catalog.notes.get(rel)?.tags ?? [],
     });
   }
 
-  for (const [source, targets] of graph.rawLinks) {
+  for (const [source, record] of catalog.notes) {
+    const targets = record.links;
     for (const target of targets) {
       const dest = resolveLink(target, source);
       if (dest) {

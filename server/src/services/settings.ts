@@ -56,6 +56,28 @@ const SettingsSchema = z.object({
     .default({}),
   search: z
     .object({
+      chinese: z
+        .object({
+          enabled: z.boolean().default(true),
+          traditional: z.boolean().default(false),
+          fuzzyRules: z
+            .array(z.tuple([z.string().regex(/^[a-z]{1,6}$/), z.string().regex(/^[a-z]{1,6}$/)]))
+            .max(16)
+            .default([]),
+          usePath: z.boolean().default(false),
+          attachments: z.boolean().default(true),
+          showTags: z.boolean().default(true),
+          tagFilter: z.boolean().default(true),
+          showFirstHeading: z.boolean().default(true),
+          headingIndent: z.boolean().default(true),
+          templateFolder: z.string().default(''),
+          pinnedCommands: z.array(z.string()).default([]),
+          recentCommands: z.array(z.string()).max(100).default([]),
+          historyKeys: z.string().default('1234567890'),
+          shortcuts: z.record(z.string()).default({}),
+          migration: z.string().default(''),
+        })
+        .default({}),
       fuzzy: z.number().default(0.2),
       prefix: z.boolean().default(true),
       indexFrontmatter: z.boolean().default(true),
@@ -172,9 +194,7 @@ export async function getSettings(): Promise<Settings> {
 }
 
 /** Mutate settings via an updater fn, validate, persist, and refresh cache. */
-export async function updateSettings(
-  mutator: (draft: Settings) => void | Promise<void>,
-): Promise<Settings> {
+export async function updateSettings(mutator: (draft: Settings) => void | Promise<void>): Promise<Settings> {
   const current = await getSettings();
   const draft: Settings = JSON.parse(JSON.stringify(current));
   await mutator(draft);

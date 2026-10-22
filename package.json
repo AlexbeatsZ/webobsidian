@@ -7,7 +7,8 @@
     "server",
     "web",
     "desktop",
-    "packages/markdown-core"
+    "packages/markdown-core",
+    "packages/search-core"
   ],
   "scripts": {
     "dev": "npm run build:core && concurrently -n core,server,web -c yellow,blue,magenta \"npm:dev:core\" \"npm:dev:server\" \"npm:dev:web\"",
@@ -19,7 +20,7 @@
     "desktop": "npm run build && npm --workspace desktop run dev",
     "desktop:dist": "npm run build && npm --workspace desktop run dist",
     "desktop:publish": "npm run build && npm --workspace desktop run dist:publish",
-    "build:core": "npm --workspace @webobsidian/markdown-core run build",
+    "build:core": "npm --workspace @webobsidian/search-core run build && npm --workspace @webobsidian/markdown-core run build",
     "test:unit": "vitest run",
     "test:render": "playwright test --project=render",
     "test:integration": "playwright test --project=integration",

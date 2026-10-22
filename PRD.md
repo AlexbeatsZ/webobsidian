@@ -1,7 +1,13 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.11 · Cập nhật: 2026-10-22 · Trạng thái: Draft
+> Phiên bản: 1.12 · Cập nhật: 2026-10-22 · Trạng thái: Draft
+> Changelog 1.12 (native Chinese search): one VaultCatalog, one scoped path index,
+> and one MiniSearch instance for original/phonetic fields; native file/command/
+> folder/heading/template pickers and link/tag completion replace Fuzzy Chinese
+> Pinyin loading. Full-text panel opts into pinyin; literal agent/unlinked-mention
+> calls retain their semantics. See [Chinese search](docs/design/chinese-search.md).
+> Runtime and performance acceptance remain deferred; no new desktop package.
 > Changelog 1.11 (compact workspace; Windows portable delivery): Windows packaging
 > now defaults to x64 portable only, without a setup installer. Remove the visible desktop File/Edit menu;
 > share one 32px row between tabs, sidebar toggles and native window controls.

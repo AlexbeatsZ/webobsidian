@@ -81,13 +81,13 @@ export class TargetIndex {
     if (prepared.terminal) return [];
     return [...new Set([...prepared.names!, ...(prepared.fallback ? prepared.localNames! : [])].map(keyOf))];
   }
-  resolve(raw: string, sourcePath = ''): ResolvedTarget {
+  resolve(raw: string, sourcePath = '', accept: (path: string) => boolean = () => true): ResolvedTarget {
     const prepared = prepareTarget(raw, sourcePath);
     if (prepared.terminal) return prepared.terminal;
     const { names, localNames, fallback, normalized, result } = prepared;
     const match = (map: Map<string, Set<string>>, names: string[]) => {
       const found = new Set<string>();
-      for (const name of names) for (const file of map.get(keyOf(name)) ?? []) found.add(file);
+      for (const name of names) for (const file of map.get(keyOf(name)) ?? []) if (accept(file)) found.add(file);
       return [...found];
     };
     let found = match(this.exact, names!);

@@ -4,7 +4,18 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-10-22 (compact workspace chrome; static-only validation)
+Cập nhật lần cuối: 2026-10-22 (native Chinese search; static-only validation)
+
+## Native Chinese search (PRD 1.12)
+
+- [x] Shared spelling/initial/mixed/polyphonic matching and source-coordinate ranges.
+- [x] Unified VaultCatalog and build/update ownership; one MiniSearch and scoped path index.
+- [x] Native default pickers, command shortcuts/history, heading/template actions and link/tag completion.
+- [x] Explicit full-text pinyin mode; literal unlinked mentions and agent defaults preserved.
+- [x] Supported legacy preferences imported without rewriting original Obsidian configuration.
+- [x] Types, isolated production web/server bundles and static standalone dependency guard.
+- [ ] Runtime/UI/IME, fixture execution, live-vault and performance acceptance (deferred).
+- [ ] New desktop portable deliverable (not requested in this task).
 
 ## Compact workspace chrome (PRD 1.11)
 

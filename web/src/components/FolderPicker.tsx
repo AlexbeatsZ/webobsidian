@@ -1,23 +1,9 @@
+import MatchLabel from './MatchLabel';
+import { matchName, useSearch } from '../lib/search';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { api, type TreeNode } from '../lib/api';
 import { pruneDescendants } from '../lib/tree';
-
-/** Collect every folder path in the vault, in tree order. */
-function collectFolders(node: TreeNode | null): string[] {
-  if (!node) return [];
-  const out: string[] = [];
-  const walk = (n: TreeNode) => {
-    for (const c of n.children ?? []) {
-      if (c.type === 'folder') {
-        out.push(c.path);
-        walk(c);
-      }
-    }
-  };
-  walk(node);
-  return out;
-}
 
 /**
  * Obsidian's "Move file to…" folder suggester: type to filter folders, ↑↓ to
@@ -27,7 +13,7 @@ function collectFolders(node: TreeNode | null): string[] {
 export default function FolderPicker() {
   const movePath = useStore((s) => s.movePath);
   const setMovePath = useStore((s) => s.setMovePath);
-  const tree = useStore((s) => s.tree);
+  const { entries, settings: searchConfig } = useSearch();
   const loadTree = useStore((s) => s.loadTree);
   const openFile = useStore((s) => s.openFile);
   const closeTab = useStore((s) => s.closeTab);
@@ -48,18 +34,25 @@ export default function FolderPicker() {
   // Root + every folder, minus targets that would move a folder into itself or a
   // descendant of any source (and, for a single item, its own folder — a no-op).
   const folders = useMemo(() => {
-    const all = ['', ...collectFolders(tree)];
+    const all = ['', ...entries.filter((e) => e.kind === 'folder').map((e) => e.path)];
     return all.filter((f) => {
       if (single !== null && f === currentDir) return false;
       if (froms.some((src) => f === src || f.startsWith(`${src}/`))) return false;
       return true;
     });
-  }, [tree, froms, single, currentDir]);
+  }, [entries, froms, single, currentDir]);
 
   const lc = q.trim().toLowerCase();
   const matches = useMemo(
-    () => folders.filter((f) => !lc || (f || '/').toLowerCase().includes(lc)),
-    [folders, lc],
+    () =>
+      folders
+        .flatMap((f) => {
+          const match = matchName(lc, f || '/');
+          return match ? [{ f, score: match.score }] : [];
+        })
+        .sort((a, b) => b.score - a.score)
+        .map((x) => x.f),
+    [folders, lc, searchConfig],
   );
 
   // shift+↵ creates a new folder — offer it when the typed name isn't an exact match.
@@ -107,6 +100,12 @@ export default function FolderPicker() {
   };
 
   const onKey = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === 'Tab' && matches[sel] !== undefined) {
+      e.preventDefault();
+      setQ(matches[sel]);
+      return;
+    }
     if (e.key === 'Escape') setMovePath(null);
     else if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -141,15 +140,13 @@ export default function FolderPicker() {
               onMouseEnter={() => setSel(i)}
               onClick={() => move(f)}
             >
-              <span>{f || '/'}</span>
+              <span>
+                <MatchLabel text={f || '/'} ranges={matchName(q, f || '/')?.matches} />
+              </span>
             </div>
           ))}
           {canCreate && (
-            <div
-              className="palette-item"
-              onMouseEnter={() => setSel(-1)}
-              onClick={() => move(typed)}
-            >
+            <div className="palette-item" onMouseEnter={() => setSel(-1)} onClick={() => move(typed)}>
               <span>Create “{typed}”</span>
               <span className="kbd">⇧↵</span>
             </div>
@@ -157,10 +154,18 @@ export default function FolderPicker() {
           {matches.length === 0 && !canCreate && <div className="palette-item">No folders</div>}
         </div>
         <div className="palette-footer">
-          <span><span className="kbd">↑↓</span> to navigate</span>
-          <span><span className="kbd">↵</span> to move</span>
-          <span><span className="kbd">⇧↵</span> to create</span>
-          <span><span className="kbd">esc</span> to dismiss</span>
+          <span>
+            <span className="kbd">↑↓</span> to navigate
+          </span>
+          <span>
+            <span className="kbd">↵</span> to move
+          </span>
+          <span>
+            <span className="kbd">⇧↵</span> to create
+          </span>
+          <span>
+            <span className="kbd">esc</span> to dismiss
+          </span>
         </div>
       </div>
     </div>

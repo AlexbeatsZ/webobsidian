@@ -1,3 +1,5 @@
+import { runNativeCommand } from './lib/nativeCommands';
+import { refreshSearch, searchSettings } from './lib/search';
 import { useEffect, useState } from 'react';
 import { api, ApiError } from './lib/api';
 import { useStore } from './lib/store';
@@ -54,6 +56,7 @@ export default function App() {
   useEffect(() => {
     if (!authed) return;
     loadTree();
+    void refreshSearch().catch(console.error);
     // Deep link (/note/<path>) wins over the restored workspace's active note.
     const deepLink = initUrlSync();
     useStore
@@ -81,7 +84,11 @@ export default function App() {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'fs') {
           // Content saves update one stat; structure/unknown paths refresh the tree.
-          if (!(msg.event === 'change' && msg.stat && useStore.getState().applyFileStat(msg.path, msg.stat))) {
+          if (!(
+            msg.event === 'change' &&
+            msg.stat &&
+            useStore.getState().applyFileStat(msg.path, msg.stat)
+          )) {
             window.clearTimeout(treeTimer);
             treeTimer = window.setTimeout(() => loadTree(), 800);
           }
@@ -105,18 +112,59 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
+      if (e.defaultPrevented || e.isComposing) return;
+      const state = useStore.getState();
+      const reserved =
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        ['p', 'o', 's', 'n', 'e', 'f', '\\'].includes(e.key.toLowerCase());
+      if (!reserved)
+        for (const [id, binding] of Object.entries(searchSettings().shortcuts)) {
+          if (!binding) continue;
+          const parts = binding.toLowerCase().split('+');
+          const key = parts.pop();
+          const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+          const ctrl = parts.includes('ctrl') || (parts.includes('mod') && !mac),
+            meta = parts.includes('meta') || (parts.includes('mod') && mac);
+          if (
+            key === e.key.toLowerCase() &&
+            ctrl === e.ctrlKey &&
+            meta === e.metaKey &&
+            parts.includes('alt') === e.altKey &&
+            parts.includes('shift') === e.shiftKey
+          ) {
+            if (runNativeCommand(id) || sharedApp.commands.executeCommandById(id)) {
+              e.preventDefault();
+              return;
+            }
+          }
+        }
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
       const s = useStore.getState();
-      if (k === 'p') { e.preventDefault(); setPalette(true, e.shiftKey ? 'commands' : 'commands'); }
-      else if (k === 'o') { e.preventDefault(); setPalette(true, 'files'); }
-      else if (k === 's') { e.preventDefault(); sharedApp.commands.executeCommandById('editor:save-file'); }
-      else if (k === 'n') { e.preventDefault(); s.newNote(); }
-      else if (k === 'e') { e.preventDefault(); s.setViewMode(s.viewMode === 'reading' ? 'live' : 'reading'); }
-      else if (k === 'f' && e.shiftKey) { e.preventDefault(); s.setLeftPanel('search'); }
-      else if (k === '\\') { e.preventDefault(); s.toggleLeft(); }
+      if (k === 'p') {
+        e.preventDefault();
+        setPalette(true, e.shiftKey ? 'commands' : 'commands');
+      } else if (k === 'o') {
+        e.preventDefault();
+        setPalette(true, 'files');
+      } else if (k === 's') {
+        e.preventDefault();
+        sharedApp.commands.executeCommandById('editor:save-file');
+      } else if (k === 'n') {
+        e.preventDefault();
+        s.newNote();
+      } else if (k === 'e') {
+        e.preventDefault();
+        s.setViewMode(s.viewMode === 'reading' ? 'live' : 'reading');
+      } else if (k === 'f' && e.shiftKey) {
+        e.preventDefault();
+        s.setLeftPanel('search');
+      } else if (k === '\\') {
+        e.preventDefault();
+        s.toggleLeft();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -131,10 +179,15 @@ export default function App() {
   // Mobile: edge-swipe to open/close the drawers (Obsidian Mobile gesture).
   useEffect(() => {
     if (!isMobile) return;
-    let sx = 0, sy = 0, fromLeftEdge = false, fromRightEdge = false, tracking = false;
+    let sx = 0,
+      sy = 0,
+      fromLeftEdge = false,
+      fromRightEdge = false,
+      tracking = false;
     const onStart = (e: TouchEvent) => {
       const t = e.touches[0];
-      sx = t.clientX; sy = t.clientY;
+      sx = t.clientX;
+      sy = t.clientY;
       fromLeftEdge = sx <= 28;
       fromRightEdge = sx >= window.innerWidth - 28;
       tracking = true;
@@ -143,7 +196,8 @@ export default function App() {
       if (!tracking) return;
       tracking = false;
       const t = e.changedTouches[0];
-      const dx = t.clientX - sx, dy = t.clientY - sy;
+      const dx = t.clientX - sx,
+        dy = t.clientY - sy;
       if (Math.abs(dx) < 45 || Math.abs(dy) > Math.abs(dx)) return; // mostly-horizontal only
       const open = useStore.getState().mobileDrawer;
       if (dx > 0) {
@@ -163,9 +217,19 @@ export default function App() {
   }, [isMobile, setMobileDrawer]);
 
   if (checking) return <div className={theme} style={{ height: '100%' }} />;
-  if (!authed) return <div className={theme}><Login onAuthed={() => setAuthed(true)} /></div>;
+  if (!authed)
+    return (
+      <div className={theme}>
+        <Login onAuthed={() => setAuthed(true)} />
+      </div>
+    );
   // Signed in but still on the default password → block the app until it's changed.
-  if (mustChangePassword) return <div className={theme}><ForceChangePassword /></div>;
+  if (mustChangePassword)
+    return (
+      <div className={theme}>
+        <ForceChangePassword />
+      </div>
+    );
 
   // On mobile the sidebars are overlay drawers (always mounted, slid in/out by
   // CSS), driven by the device-local `mobileDrawer` state — not the persisted
@@ -179,13 +243,17 @@ export default function App() {
     isMobile ? 'mobile' : '',
     isMobile && mobileDrawer === 'left' ? 'drawer-left-open' : '',
     isMobile && mobileDrawer === 'right' ? 'drawer-right-open' : '',
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className={theme}>
       <div className={appCls}>
         <WorkspaceTabs />
-        {showLeft && <Ribbon onTheme={() => setTheme((t) => (t === 'theme-dark' ? 'theme-light' : 'theme-dark'))} />}
+        {showLeft && (
+          <Ribbon onTheme={() => setTheme((t) => (t === 'theme-dark' ? 'theme-light' : 'theme-dark'))} />
+        )}
         {showLeft && <Sidebar />}
         <Workspace />
         {showRight && <RightSidebar />}

@@ -1,37 +1,15 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { TargetIndex } from '@webobsidian/markdown-core';
-import { getVaultRoot, toRel } from './vault.js';
-
-const IGNORED = new Set(['.git', 'node_modules']);
-let files = new TargetIndex();
-
-export async function buildFileIndex(): Promise<void> {
-  const root = await getVaultRoot();
-  const next = new Set<string>();
-  async function walk(directory: string): Promise<void> {
-    const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      if (IGNORED.has(entry.name) || entry.name.startsWith('.')) continue;
-      const absolute = path.join(directory, entry.name);
-      if (entry.isDirectory()) await walk(absolute);
-      else if (entry.isFile()) next.add(toRel(root, absolute));
-    }
-  }
-  await walk(root);
-  files = new TargetIndex(next);
+import { catalog } from './catalog.js';
+export const resolveIndexedTarget = (target: string, sourcePath = '') => catalog.resolve(target, sourcePath);
+export function resolveFile(target: string, sourcePath = '') {
+  const r = resolveIndexedTarget(target, sourcePath);
+  return r.status === 'resolved' ? r.path : undefined;
 }
-
-export function resolveIndexedTarget(target: string, sourcePath = '') {
-  return files.resolve(target, sourcePath);
-}
-export function resolveFile(target: string, sourcePath = ''): string | undefined {
-  const result = resolveIndexedTarget(target, sourcePath);
-  return result.status === 'resolved' ? result.path : undefined;
-}
-export function indexFile(relative: string): void { files.add(relative); }
-export function unindexFile(relative: string): void { files.delete(relative); }
-export function hasIndexedFile(relative: string): boolean { return files.has(relative); }
-export function indexedFilesUnder(relative: string): string[] {
-  return [...files.paths()].filter((file) => file === relative || file.startsWith(relative + '/'));
+export const indexFile = (path: string) => catalog.putPath(path);
+export const unindexFile = (path: string) => catalog.remove(path);
+export const hasIndexedFile = (path: string) => catalog.targets.has(path);
+export const indexedFilesUnder = (path: string) =>
+  [...catalog.targets.paths()].filter((p) => p === path || p.startsWith(path + '/'));
+export async function buildFileIndex() {
+  const { rebuildVaultIndex } = await import('./vaultindex.js');
+  await rebuildVaultIndex();
 }

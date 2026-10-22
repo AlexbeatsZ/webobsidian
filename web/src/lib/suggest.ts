@@ -1,3 +1,6 @@
+import { searchEntries, searchSettings, subscribeSearch, matchName, fileCandidates } from './search';
+import { documents } from './documents';
+import { extractMetadata } from '@webobsidian/markdown-core';
 import { EditorView, ViewPlugin, ViewUpdate, keymap } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
 import { contextOf } from './renderContext';
@@ -22,7 +25,7 @@ interface Item {
 }
 
 interface Ctx {
-  mode: 'link' | 'tag';
+  mode: 'link' | 'tag' | 'yaml';
   embed: boolean;
   from: number; // start of the query text (after the trigger)
   query: string;
@@ -39,12 +42,24 @@ function detect(view: EditorView): Ctx | null {
   if (ob >= 0 && ob > cb) {
     const q = before.slice(ob + 2);
     // display-text / heading / block modes end basic file suggestions
-    if (!q.includes('|') && !q.includes('#') && !q.includes('\n')) {
+    if (!q.includes('\n') && !q.includes('^')) {
       return { mode: 'link', embed: ob > 0 && before[ob - 1] === '!', from: line.from + ob + 2, query: q };
     }
     return null;
   }
 
+  const all = view.state.doc.toString();
+  const yamlEnd = all.startsWith('---\n') || all.startsWith('---\r\n') ? all.indexOf('\n---', 4) : -1;
+  if (yamlEnd > sel.head) {
+    const prefix = all.slice(0, line.from);
+    const inTags =
+      /^tags?:\s*/.test(before) ||
+      (/^\s*-\s*/.test(before) && /(?:^|\n)tags?:\s*\n(?:[ \t]+-.*\n)*$/.test(prefix));
+    if (inTags) {
+      const value = before.match(/[^\s,\[\]"']*$/)?.[0] ?? '';
+      return { mode: 'yaml', embed: false, from: sel.head - value.length, query: value };
+    }
+  }
   const tm = before.match(TAG_TAIL_RE);
   if (tm) {
     const after = line.text[sel.head - line.from];
@@ -60,20 +75,80 @@ function computeItems(ctx: Ctx, view: EditorView): Item[] {
   const pq = prepareQuery(ctx.query);
   const out: Item[] = [];
   if (ctx.mode === 'link') {
-    for (const path of contextOf(view).files()) {
-      const target = path.replace(/\.md$/i, '');
-      const m = ctx.query ? fuzzySearchPath(pq, target) : { score: 0, matches: [] as [number, number][] };
-      if (!m) continue;
-      const slash = target.lastIndexOf('/');
-      out.push({
-        label: slash >= 0 ? target.slice(slash + 1) : target,
-        note: slash >= 0 ? target.slice(0, slash) : undefined,
-        insert: target,
-        match: m,
-      });
+    const hash = ctx.query.indexOf('#'),
+      pipe = ctx.query.indexOf('|');
+    if (hash >= 0 || pipe >= 0) {
+      const cut = hash >= 0 ? hash : pipe,
+        target = ctx.query.slice(0, cut),
+        query = ctx.query.slice(cut + 1);
+      const matches = searchEntries().filter(
+        (e) =>
+          e.path.replace(/\.(md|markdown)$/i, '') === target ||
+          e.path
+            .split('/')
+            .at(-1)!
+            .replace(/\.(md|markdown)$/i, '') === target,
+      );
+      const entry = target
+        ? matches.length === 1
+          ? matches[0]
+          : undefined
+        : searchEntries().find((e) => e.path === contextOf(view).sourcePath);
+      if (entry) {
+        const session = documents.get(entry.path);
+        const labels =
+          hash >= 0
+            ? session
+              ? extractMetadata(session.analysis).headings.map((h) => h.text)
+              : entry.headings
+            : entry.aliases;
+        for (const label of labels) {
+          const match = matchName(query, label);
+          if (match)
+            out.push({
+              label,
+              insert: ctx.query.slice(0, cut + 1) + label,
+              match: { ...match, matches: match.matches.map(([a, b]) => [a + cut + 1, b + cut + 1]) },
+            });
+        }
+      }
+    } else {
+      const available = new Set(contextOf(view).files());
+      const indexed = searchEntries().filter((e) => available.has(e.path));
+      const entries = indexed.length
+        ? indexed
+        : [...available].map((path) => ({
+            path,
+            kind: 'file' as const,
+            title: path
+              .split('/')
+              .at(-1)!
+              .replace(/\.(md|markdown)$/i, ''),
+            aliases: [],
+            tags: [],
+            headings: [],
+          }));
+      for (const { entry, label, match } of fileCandidates(ctx.query, entries)) {
+        const target = entry.path.replace(/\.(md|markdown)$/i, '');
+        const alias = entry.aliases.includes(label),
+          insert = target + (alias ? '|' + label : '');
+        const offset = insert.length - label.length;
+        out.push({
+          label,
+          note: entry.path,
+          insert,
+          match: { ...match, matches: match.matches.map(([a, b]) => [a + offset, b + offset]) },
+        });
+      }
     }
   } else {
-    for (const tag of (cachedTags.get(view) ?? [])) {
+    for (const tag of [
+      ...new Set(
+        [...searchEntries().flatMap((e) => e.tags), ...(cachedTags.get(view) ?? [])].map((t) =>
+          t.replace(/^#/, ''),
+        ),
+      ),
+    ]) {
       const m = ctx.query ? fuzzySearch(pq, tag) : { score: 0, matches: [] as [number, number][] };
       if (!m) continue;
       out.push({ label: tag, insert: tag, match: m });
@@ -110,8 +185,16 @@ class SuggestState {
   items: Item[] = [];
   selected = 0;
 
+  private stopSearch: () => void;
   constructor(readonly view: EditorView) {
-    void contextOf(view).tags().then((tags) => { if (!this.destroyed) cachedTags.set(view, tags); });
+    this.stopSearch = subscribeSearch(() => {
+      if (this.active) this.refresh();
+    });
+    void contextOf(view)
+      .tags()
+      .then((tags) => {
+        if (!this.destroyed) cachedTags.set(view, tags);
+      });
   }
 
   update(u: ViewUpdate) {
@@ -123,7 +206,7 @@ class SuggestState {
 
   refresh() {
     const view = this.view;
-    if (this.destroyed || view.state.readOnly || !view.hasFocus) return this.hide();
+    if (this.destroyed || view.composing || view.state.readOnly || !view.hasFocus) return this.hide();
     const ctx = detect(view);
     if (!ctx) return this.hide();
     this.ctx = ctx;
@@ -170,7 +253,9 @@ class SuggestState {
       dom.appendChild(el);
     });
     const ctx = this.ctx!;
-    const coords = view.coordsAtPos(ctx.from - (ctx.mode === 'link' ? 2 : 1));
+    const coords = view.coordsAtPos(
+      Math.max(0, ctx.from - (ctx.mode === 'link' ? 2 : ctx.mode === 'yaml' ? 0 : 1)),
+    );
     if (!coords) return this.hide();
     dom.style.left = `${Math.round(Math.min(coords.left, window.innerWidth - 320))}px`;
     dom.style.display = 'block';
@@ -204,7 +289,7 @@ class SuggestState {
   accept() {
     const ctx = this.ctx;
     const item = this.items[this.selected];
-    if (!ctx || !item) return;
+    if (!ctx || !item || this.view.composing) return;
     const view = this.view;
     const head = view.state.selection.main.head;
     if (ctx.mode === 'link') {
@@ -234,6 +319,7 @@ class SuggestState {
 
   destroy() {
     this.destroyed = true;
+    this.stopSearch();
     cachedTags.delete(this.view);
     this.hide();
   }
@@ -253,7 +339,7 @@ const plugin = ViewPlugin.fromClass(SuggestState, {
 /** Run `f` when the suggester popup is open; otherwise let the key fall through. */
 function whenActive(view: EditorView, f: (s: SuggestState) => void): boolean {
   const s = view.plugin(plugin);
-  if (!s || !s.active) return false;
+  if (view.composing || !s || !s.active) return false;
   f(s);
   return true;
 }

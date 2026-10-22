@@ -162,8 +162,8 @@ interface AppState {
   setMobileDrawer: (d: 'left' | 'right' | null) => void;
 
   paletteOpen: boolean;
-  paletteMode: 'all' | 'commands' | 'files';
-  setPalette: (v: boolean, mode?: 'all' | 'commands' | 'files') => void;
+  paletteMode: 'all' | 'commands' | 'files' | 'headings' | 'templates';
+  setPalette: (v: boolean, mode?: 'all' | 'commands' | 'files' | 'headings' | 'templates') => void;
   settingsOpen: boolean;
   setSettings: (v: boolean) => void;
   /** Open (true) or close (false) the Trash modal. */

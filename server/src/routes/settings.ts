@@ -38,7 +38,14 @@ settingsRouter.put(
         Object.assign(d.git, rest);
         if (typeof token === 'string' && token && token !== '••••••••') d.git.token = token;
       }
-      if (body.search) Object.assign(d.search, body.search);
+      if (body.search) {
+        const { chinese, ...rest } = body.search;
+        Object.assign(d.search, rest);
+        if (chinese) {
+          Object.assign(d.search.chinese, chinese);
+          if (!d.search.chinese.migration) d.search.chinese.migration = 'Native settings';
+        }
+      }
       if (body.ui) Object.assign(d.ui, body.ui);
       if (body.api && typeof body.api.rateLimitPerMin === 'number') {
         d.api.rateLimitPerMin = body.api.rateLimitPerMin;
@@ -93,7 +100,6 @@ async function assertVaultPathAllowed(v: any): Promise<void> {
     throw Object.assign(new Error('Vault path is not an existing directory'), { status: 400 });
   }
 }
-
 
 /** Safe folder browser for picking a vault path, limited to allowed roots. */
 settingsRouter.get(

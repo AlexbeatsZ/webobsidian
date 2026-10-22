@@ -33,9 +33,19 @@ function EditorPane() {
       <div className="markdown-preview">
         <div className="preview-inner">
           {isVideo ? (
-            <video className="media-embed media-fileview" src={api.rawUrl(activePath)} controls preload="metadata" />
+            <video
+              className="media-embed media-fileview"
+              src={api.rawUrl(activePath)}
+              controls
+              preload="metadata"
+            />
           ) : (
-            <audio className="media-embed media-fileview" src={api.rawUrl(activePath)} controls preload="metadata" />
+            <audio
+              className="media-embed media-fileview"
+              src={api.rawUrl(activePath)}
+              controls
+              preload="metadata"
+            />
           )}
         </div>
       </div>
@@ -92,6 +102,9 @@ export default function Workspace() {
                 <Icon name="file-text" size={48} />
               </div>
               <p>No file is open — pick a note, or press ⌘O</p>
+              <button className="btn" onClick={() => useStore.getState().setPalette(true, 'files')}>
+                打开文件
+              </button>
             </div>
           </div>
         )}

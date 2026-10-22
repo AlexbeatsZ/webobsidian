@@ -1,3 +1,5 @@
+import { useIndexVersion } from '../lib/indexEvents';
+import { useSearch } from '../lib/search';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type SearchHit, type MatchContext, type NoteMatches } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -32,6 +34,8 @@ function highlight(c: MatchContext): ReactNode[] {
 
 export default function SearchPanel() {
   const [q, setQ] = useState('');
+  const indexVersion = useIndexVersion();
+  const { settings: searchConfig } = useSearch();
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [matches, setMatches] = useState<Map<string, NoteMatches>>(new Map());
   const [matchCase, setMatchCase] = useState(false);
@@ -48,6 +52,7 @@ export default function SearchPanel() {
   const sentinel = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const inflight = useRef<Set<string>>(new Set());
+  const matchGeneration = useRef(0);
   const queryRef = useRef(q);
   const caseRef = useRef(matchCase);
   queryRef.current = q;
@@ -64,25 +69,30 @@ export default function SearchPanel() {
       setHits([]);
       return;
     }
+    const controller = new AbortController();
     timer.current = window.setTimeout(async () => {
       try {
-        const r = await api.search(q); // no limit — server returns every match
-        setHits(r.hits);
+        const r = await api.search(q, undefined, controller.signal, 'pinyin'); // no limit — server returns every match
+        if (!controller.signal.aborted) setHits(r.hits);
       } catch {
-        setHits([]);
+        if (!controller.signal.aborted) setHits([]);
       }
     }, 180);
-    return () => window.clearTimeout(timer.current);
-  }, [q]);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer.current);
+    };
+  }, [q, indexVersion, searchConfig]);
 
   // Reset the render window when the result set or its ordering changes.
   useEffect(() => setVisible(50), [hits, sort, matchCase]);
   // Drop cached per-note matches + collapse overrides when the query changes.
   useEffect(() => {
+    matchGeneration.current++;
     setMatches(new Map());
     setNoteOverride(new Map());
     inflight.current.clear();
-  }, [q, matchCase]);
+  }, [q, matchCase, indexVersion, searchConfig]);
   // Toggling the global collapse switch clears individual overrides.
   useEffect(() => setNoteOverride(new Map()), [collapsed]);
 
@@ -116,12 +126,18 @@ export default function SearchPanel() {
     if (!need.length) return;
     const batch = need.slice(0, 60);
     batch.forEach((p) => inflight.current.add(p));
+    const generationAt = matchGeneration.current;
     const qAt = q;
     const caseAt = matchCase;
     api
-      .searchMatches(qAt, batch, caseAt)
+      .searchMatches(qAt, batch, caseAt, false, undefined, 'pinyin')
       .then((r) => {
-        if (qAt !== queryRef.current || caseAt !== caseRef.current) return; // stale
+        if (
+          generationAt !== matchGeneration.current ||
+          qAt !== queryRef.current ||
+          caseAt !== caseRef.current
+        )
+          return; // stale
         setMatches((prev) => {
           const next = new Map(prev);
           for (const m of r.matches) next.set(m.path, m);
@@ -129,7 +145,9 @@ export default function SearchPanel() {
         });
       })
       .catch(() => {})
-      .finally(() => batch.forEach((p) => inflight.current.delete(p)));
+      .finally(() => {
+        if (generationAt === matchGeneration.current) batch.forEach((p) => inflight.current.delete(p));
+      });
   }, [shown, visible, q, matchCase, matches]);
 
   // Load the next chunk when the sentinel at the bottom scrolls into view.
@@ -202,7 +220,11 @@ export default function SearchPanel() {
             </label>
             <label className="search-opt">
               <span>Show more context</span>
-              <input type="checkbox" checked={moreContext} onChange={(e) => setMoreContext(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={moreContext}
+                onChange={(e) => setMoreContext(e.target.checked)}
+              />
             </label>
           </div>
         )}
@@ -263,31 +285,30 @@ export default function SearchPanel() {
                 </button>
                 <span className="rg-title" onClick={() => openFile(h.path)}>
                   {h.title}
+                  {h.matchedField && <small> · {h.matchedField}</small>}
                 </span>
                 {m && m.count > 0 && <span className="rg-badge">{m.count}</span>}
               </div>
               {!noteCollapsed && (
                 <div className="rg-body">
-                  {contexts.length > 0 ? (
-                    contexts.map((c, i) => (
-                      <div
-                        key={i}
-                        className={`rg-match ${moreContext ? 'expanded' : ''}`}
-                        onClick={() => openFile(h.path)}
-                      >
-                        {highlight(c)}
-                      </div>
-                    ))
-                  ) : (
-                    h.snippet && (
-                      <div
-                        className={`rg-match ${moreContext ? 'expanded' : ''}`}
-                        onClick={() => openFile(h.path)}
-                      >
-                        {h.snippet}
-                      </div>
-                    )
-                  )}
+                  {contexts.length > 0
+                    ? contexts.map((c, i) => (
+                        <div
+                          key={i}
+                          className={`rg-match ${moreContext ? 'expanded' : ''}`}
+                          onClick={() => openFile(h.path)}
+                        >
+                          {highlight(c)}
+                        </div>
+                      ))
+                    : h.snippet && (
+                        <div
+                          className={`rg-match ${moreContext ? 'expanded' : ''}`}
+                          onClick={() => openFile(h.path)}
+                        >
+                          {h.snippet}
+                        </div>
+                      )}
                 </div>
               )}
             </div>
@@ -295,7 +316,9 @@ export default function SearchPanel() {
         })}
         <div ref={sentinel} />
         {visible < shown.length && (
-          <div className="search-more">Showing {visible} of {shown.length}…</div>
+          <div className="search-more">
+            Showing {visible} of {shown.length}…
+          </div>
         )}
       </div>
     </div>
