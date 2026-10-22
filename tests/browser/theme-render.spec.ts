@@ -19,6 +19,51 @@ async function reset(page: import('@playwright/test').Page, source: string) {
   });
 }
 
+test('theme colors reach inherited UI text, body-mounted plugin modals and editor search', async ({ page }) => {
+  await reset(page, 'Plain body text\n\nend');
+  await expect(page.locator('body')).toHaveCSS('color', 'rgb(34, 34, 34)');
+  await page.evaluate(async () => {
+    const modulePath = '/src/lib/obsidian/ui.ts';
+    const { Modal } = await import(modulePath);
+    const modal = new Modal({});
+    modal.setTitle('Theme probe');
+    modal.contentEl.innerHTML = '<label>Label<input><select><option>Value</option></select><textarea></textarea><button>Button</button></label>';
+    modal.open();
+    // Ordinary app text must inherit the wrapper's foreground without a local rule.
+    const label = document.createElement('h2');
+    label.dataset.themeProbe = 'true';
+    label.textContent = 'Settings heading';
+    document.querySelector('[data-slot="0"]')!.parentElement!.append(label);
+    window.renderHarness.focus(0);
+  });
+  await page.keyboard.press('Control+f');
+  const panel = page.locator('[data-slot="0"] .cm-panels');
+  await expect(panel).toBeVisible();
+  for (const [theme, foreground, surface] of [
+    ['dark', 'rgb(218, 218, 218)', 'rgb(36, 36, 36)'],
+    ['light', 'rgb(34, 34, 34)', 'rgb(250, 250, 250)'],
+    ['dark', 'rgb(218, 218, 218)', 'rgb(36, 36, 36)'],
+  ]) {
+    await page.evaluate(theme => {
+      const wrapper = document.querySelector('[data-slot="0"]')!.parentElement!;
+      for (const host of [document.body, wrapper]) {
+        host.classList.remove('theme-light', 'theme-dark');
+        host.classList.add('theme-' + theme);
+      }
+    }, theme);
+    await expect(page.locator('[data-theme-probe]')).toHaveCSS('color', foreground);
+    for (const selector of ['h2', 'label', 'input', 'select', 'textarea', 'button']) {
+      await expect(page.locator('.plugin-modal ' + selector)).toHaveCSS('color', foreground);
+    }
+    await expect(panel).toHaveCSS('color', foreground);
+    await expect(panel).toHaveCSS('background-color', surface);
+    await expect(panel.locator('.cm-textfield').first()).toHaveCSS('color', foreground);
+    await expect(panel.locator('.cm-button').first()).toHaveCSS('color', foreground);
+    await expect(page.locator('[data-slot="0"] .cm-content')).toHaveCSS('color', foreground);
+  }
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('Plain body text\n\nend');
+});
+
 test('Markdown and HTML image rows preserve captions, aliases, sizing and source', async ({ page }) => {
   const source = '![[/theme-media/one.png|图一|140]] ![图二|100](/theme-media/two.png)\n\n![plain.png|80](/theme-media/plain.png)\n\n<div><img src="/theme-media/html.png" alt="HTML 说明" width="120"><img src="/theme-media/html2.png" alt="second.png" width="80"></div>\n\nend';
   await reset(page, source);

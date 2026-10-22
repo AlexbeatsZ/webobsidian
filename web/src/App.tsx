@@ -2,7 +2,7 @@ import { ensureWriting, writingFileChanged, watchExternalWritingSources } from '
 import { runWritingHotkey, bindWritingNavigation } from './lib/writing/commands';
 import { runNativeCommand } from './lib/nativeCommands';
 import { refreshSearch, searchSettings } from './lib/search';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { api, ApiError, invalidateVaultRequests } from './lib/api';
 import { useStore } from './lib/store';
 import Login from './components/Login';
@@ -48,6 +48,18 @@ export default function App() {
   const toast = useStore((s) => s.toast);
   const [checking, setChecking] = useState(true);
   const [theme, setTheme] = useState<'theme-dark' | 'theme-light'>('theme-light');
+
+  useLayoutEffect(() => {
+    // Plugin modals/notices/suggesters mount outside React's theme wrapper.
+    const body = document.body;
+    const previous = ['theme-light', 'theme-dark'].filter(name => body.classList.contains(name));
+    body.classList.remove('theme-light', 'theme-dark');
+    body.classList.add(theme);
+    return () => {
+      body.classList.remove('theme-light', 'theme-dark');
+      body.classList.add(...previous);
+    };
+  }, [theme]);
 
   useEffect(() => {
     api

@@ -51,6 +51,7 @@
 }
 
 /* ---------- Obsidian light (default) ---------- */
+:root,
 .theme-light {
   --document-surface: #fafafa;
   --document-nested-surface: #f5f5f5;
@@ -246,7 +247,10 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
-.theme-light, .theme-dark { height: 100%; }
+.theme-light, .theme-dark {
+  height: 100%;
+  color: var(--text-normal);
+}
 body {
   font-family: var(--font-ui);
   color: var(--text-normal);
@@ -261,7 +265,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 a { color: var(--text-accent); text-decoration: none; }
 a:hover { color: var(--text-accent-hover); }
-button { font-family: inherit; }
+button, input, select, textarea { font-family: inherit; color: inherit; }
 .icon { display: inline-flex; align-items: center; justify-content: center; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -443,6 +447,35 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-secondary-selection, .cm-editor ::selection { background: var(--text-selection); }
 .cm-editor .cm-cursor { border-left-color: var(--text-normal); }
 .cm-secondary-cursors .cm-cursor { display: block; }
+
+/* CodeMirror's default light surfaces are independent of the app theme. */
+.cm-host .cm-editor .cm-panels,
+.cm-host .cm-editor .cm-tooltip {
+  background: var(--background-primary-alt);
+  color: var(--text-normal);
+  border-color: var(--background-modifier-border);
+}
+.cm-host .cm-editor .cm-tooltip-section:not(:first-child) { border-top-color: var(--background-modifier-border); }
+.cm-host .cm-editor .cm-tooltip .cm-tooltip-arrow::before {
+  border-top-color: var(--background-modifier-border);
+  border-bottom-color: var(--background-modifier-border);
+}
+.cm-host .cm-editor .cm-tooltip .cm-tooltip-arrow::after {
+  border-top-color: var(--background-primary-alt);
+  border-bottom-color: var(--background-primary-alt);
+}
+.cm-host .cm-editor .cm-textfield {
+  background: var(--background-modifier-form-field);
+  color: var(--text-normal);
+  border-color: var(--background-modifier-border);
+}
+.cm-host .cm-editor .cm-button {
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+}
+.cm-host .cm-editor .cm-button:hover,
+.cm-host .cm-editor .cm-button:active { background: var(--interactive-hover); }
 
 .cm-heading-labelled::before { content: attr(data-heading-label); white-space: nowrap; position: absolute; right: calc(100% + 6px); bottom: 0; font: normal 0.6rem/1.5 var(--font-ui); color: var(--text-muted); pointer-events: none; }
 /* ---- Obsidian editor typography (cm-s-obsidian, §19/§20) ---- */
