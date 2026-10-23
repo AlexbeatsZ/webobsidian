@@ -571,6 +571,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   border: solid var(--text-on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 /* Math (MathJax SVG; one spacing owner for display formulas) */
+/* CM sees one inline widget rectangle even when MathJax wraps its SVG output. */
+.cm-math-rendered.math-inline { display: inline-block; max-width: 100%; text-indent: 0; }
 .cm-math-rendered.math-block { display: block; text-align: center; text-indent: 0; padding: 0.5em 0; width: 100%; min-width: 0; max-width: 100%; }
 .cm-math-rendered.math-block > .cm-math-body { display: block; min-width: 0; overflow-x: auto; }
 .cm-highlight .math-inline, .cm-highlight + .cm-widgetBuffer + .math-inline { background-color: var(--text-highlight-bg); }

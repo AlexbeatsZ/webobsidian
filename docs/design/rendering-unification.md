@@ -392,3 +392,48 @@ window. No generic host, extra state field or renderer is introduced.
 
 Evidence is source inspection of CM DOM transfer and the resource callers only.
 No tests/types/build/probes/app/server/browser or runtime acceptance were run.
+
+## Inline formula hit geometry (2026-10-23)
+
+The B2 click screenshot has a source match in the disposable note
+`02笔记/数学/抽象代数/抽象代数 02有限群表示论.md`: line 332 contains the
+single-dollar trace formula, line 333 the A1/A2 and B1/B2 paragraph. These are
+inline MathWidgets, rather than the properties block from the older iaa/SCF
+report. The screenshot does not establish their runtime coordinates or prove
+that either report has the same cause.
+
+CM's `basicMouseSelection` calls `posAtCoords`, which first picks a source line
+from its measured height map, then `InlineCoordsScan` scans that line's tile
+rectangles. For an inline widget this uses the widget root's `getClientRects`;
+it does not derive a TeX position from the inner SVG. MathWidget has no mouse
+selection dispatch, and DocumentSession already normalizes the note's line
+endings, so this change adds neither a pointer handler nor a source offset map.
+
+There is a concrete host-contract gap: MathJax 4.1.3 enables inline line breaking
+and can emit multiple SVG siblings and `mjx-break[newline]::before` newlines.
+The previous MathWidget root was an ordinary inline span with the default
+`WidgetType.lineBreaks = 0`. CM requires ordinary inline widgets to report added
+line breaks; a span's fragment rectangles also need not enclose the inner SVG
+like one atomic box. The inline root now uses `inline-block`, with the existing
+column-width limit and a local text-indent reset, so internal SVG layout stays
+inside the single box measured and scanned by CM. It retains the normal baseline
+and automatic line height. Display widgets keep their existing block shell.
+There is no guessed break count, fixed height, mouse adjustment or new state.
+Only MathWidget creates `.cm-math-rendered.math-inline`; the plugin adapter's
+separate `.math.math-inline` output and the tooltip are outside this selector.
+Readonly/embedded/print views that deliberately mount the same MarkdownView use
+the same corrected host contract, without a global SVG or reading-output reset.
+
+Math regions/source visibility, the shared selection lifecycle, source ranges,
+MathJax queue/cache, width invalidation and completion measurement remain the
+existing owners. There is no selection-only observer/measurement pass or second
+coordinate system. This replaces the unbounded inline root behavior for every
+inline formula rather than adding a screenshot-specific rule. The Callout
+Backspace investigation belongs to its separate owner; no common cause has been
+confirmed from the source reads.
+
+Only the screenshot, source/callers and Git differences were inspected. No
+tests/types/build/probes/app/server/browser/EXE/UI/IME/performance acceptance or
+new cases ran. The contract gap is source-supported; actual before/after click
+placement, long-formula wrapping and the screenshot's runtime root cause remain
+unverified. No note, profile, server/public or release artifact was changed.

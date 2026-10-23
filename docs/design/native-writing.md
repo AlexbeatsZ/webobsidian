@@ -159,8 +159,13 @@ Width must not flow back into the editor's own width:
   body, not the content element, so a wide intrinsic SVG cannot widen `.cm-content`.
   `.cm-content` itself keeps `min-width: 0` inside the flex document column.
 - An inline formula converts against the content box of `view.contentDOM` (padding
-  subtracted once). The inline tooltip keeps CodeMirror's default fixed
-  positioning, sizes to `max-content` with a bounded width, and scrolls inside its
+  subtracted once). Its inline-block root contains all inner SVG fragments in one
+  CM widget rectangle, so MathJax's internal wrapping does not introduce anonymous
+  inline breaks with an undeclared `WidgetType.lineBreaks` count. The root resets
+  inherited list text-indent and keeps the column-width limit; baseline and line
+  height remain native. See rendering-unification.md for the B2 click investigation
+  and its unverified runtime boundary. The inline tooltip keeps CodeMirror's
+  default fixed positioning, sizes to `max-content` with a bounded width, and scrolls inside its
   own body. Restoring absolute positioning or a shrink-to-fit root inside the
   editable DOM risks coupling width and position again. This is a source-supported
   feedback risk, not a confirmed runtime explanation for either reported jitter.
