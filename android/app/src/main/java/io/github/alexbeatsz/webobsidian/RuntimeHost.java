@@ -15,7 +15,9 @@ final class RuntimeHost {
     private static boolean started;
     private static native int startNode(String[] args, String[] env, String directory, String log);
 
-    static synchronized void start(Context context) {
+    static synchronized boolean isStarted() { return started; }
+
+    static synchronized void start(Context context, String initialVault) {
         if (started) return;
         started = true;
         Context app = context.getApplicationContext();
@@ -29,8 +31,14 @@ final class RuntimeHost {
                     copyAssets(app.getAssets(), "server", new File(code, "server"));
                     Files.write(ready.toPath(), new byte[0]);
                 }
-                File vault = new File(files, "Vault"); vault.mkdirs();
                 File data = new File(files, "server-data"); data.mkdirs();
+                String configured = initialVault;
+                if (configured == null) {
+                    String json = new String(Files.readAllBytes(new File(data, "settings.json").toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                    configured = new org.json.JSONObject(json).getJSONObject("vault").getString("path");
+                }
+                File vault = new File(configured);
+                if (!vault.isDirectory() || !vault.canRead() || !vault.canWrite()) throw new IOException("无法访问所选笔记库：" + vault);
                 File logs = new File(files, "logs"); logs.mkdirs();
                 int port;
                 try (ServerSocket socket = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) { port = socket.getLocalPort(); }
@@ -38,10 +46,11 @@ final class RuntimeHost {
                 String roots = files.getAbsolutePath();
                 // Permission is requested only by an explicit storage action in the UI.
                 if (Environment.isExternalStorageManager())
-                    roots += "," + Environment.getExternalStorageDirectory().getAbsolutePath();
+                    roots += "," + Environment.getExternalStorageDirectory().getAbsolutePath() + "," + vault.getCanonicalPath();
                 String[] env = {
                     "NODE_ENV=production", "HOST=127.0.0.1", "PORT=" + port,
                     "DATA_DIR=" + data, "VAULT_PATH=" + vault, "ALLOWED_ROOTS=" + roots,
+                    "WEBOBSIDIAN_INITIAL_VAULT=" + (initialVault == null ? "" : initialVault),
                     "HOME=" + files, "TMPDIR=" + app.getCacheDir(),
                     "NODE_OPTIONS=--max-old-space-size=384", "WEBOBSIDIAN_PLATFORM=android"
                 };

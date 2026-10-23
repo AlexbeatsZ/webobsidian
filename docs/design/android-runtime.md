@@ -18,7 +18,7 @@ loss/pagehide/native background events. The normal 900ms autosave remains in
 Editor. There is no guarantee against an OS kill before an in-flight save;
 conflicts retain their existing behavior instead of overwriting disk.
 
-Node starts once per app process and survives Activity recreation. Closing a
+Node starts only after explicit Vault selection, once per app process, and survives Activity recreation. Closing a
 window/backgrounding does not attempt to restart Node in-process. Android may
 kill a background app; the next process starts the same persistent Vault and
 indexes. No background foreground-service or permanent wake lock is added.
@@ -28,15 +28,29 @@ of the asset extraction. Native stdout/stderr go to `files/logs/server.log`.
 
 ## Storage
 
-The default Vault is ordinary UTF-8 files in `getFilesDir()/Vault`; server state
-is in `getFilesDir()/server-data`. This works without storage permission or
-internet. Application backups are disabled; uninstalling removes private notes.
-First-use UI explains this and offers the system all-files access screen for an
-existing folder. The user can grant access later in Android's application
-settings. Restart the app after changing this permission, then use the existing
-Vault settings/folder picker to select e.g. `/storage/emulated/0/Documents/...`.
-Allowed roots include shared storage only if the OS grant is present at boot.
-Android still restricts other applications' private directories.
+First launch remains on a native selection screen. No runtime or Vault is
+created until the user chooses: open an existing local folder through Android's
+all-files permission screen and system directory picker, or explicitly create
+an app-private Vault with an entered name and confirmation. Cancel leaves the
+selection flow without creating a Vault. Only local external-storage provider
+URIs resolve to real filesystem paths; cloud/unsupported providers receive an
+explicit error, never an imported/mirrored substitute. The chosen path is shown
+for confirmation. Old 0.1.17 `files/Vault` contents are retained and offered as
+an explicit existing-Vault choice; upgrading does not silently adopt them.
+
+New private Vaults use `getFilesDir()/vaults/<chosen-name>`. Uninstall removes
+private files; the create dialog explains this. Server state remains in
+`getFilesDir()/server-data`. The native preference stores only whether initial
+selection succeeded, not a second selected path. `RuntimeHost` reads the existing
+settings.json Vault on subsequent starts, checks accessibility, and never calls
+mkdir on an implicit/default Vault. It passes a first choice once through
+WEBOBSIDIAN_INITIAL_VAULT. Before indexing or any client/watcher exists, server
+index calls the same `assertVaultPathAllowed`, `updateSettings`,
+`ensureVaultBrowsable` and workspace selection used by the existing settings
+route. Existing notes/configuration are retained, with ordinary settings backups.
+Later Vault changes remain the normal settings/maintenance flow. Allowed roots
+include external storage/selected volume only if the OS all-files grant is
+present. Android still restricts other applications' private directories.
 
 This deliberately uses the original filesystem authority: no SAF-to-private
 mirror, periodic import, hidden sync or duplicate note store. Cloud-only
@@ -62,6 +76,27 @@ The native host reserves only the middle200dp segment at each28dp edge through
 Android's system gesture-exclusion API, so sidebar swipes there are not stolen
 by system Back; Back remains available on the rest of each edge. See Android's
 [gesture-navigation guidance](https://developer.android.com/develop/ui/views/touch-and-input/gestures/gesturenav).
+The outer native FrameLayout owns this exclusion rather than WebView, which
+can refresh its own gesture-exclusion list. Actual 0.1.17 device evidence showed
+12px edge swipes received no touch events while60px (24CSSpx) did receive them
+and opened the existing drawer; this is not a JavaScript recognizer failure.
+
+## Native window lifetime and Insets (0.1.18)
+
+MainActivity is singleTask: repeated launcher/explicit starts reuse the existing
+Activity/WebView. Actual 0.1.17 task dumps showed two Activity records after
+repeated start, explaining the old paused WebView and unanswered maintenance
+check; rotation alone was not established as the cause. Tablet size/layout
+configuration changes retain the original view. Real destruction detaches,
+navigates blank and destroys the view; no stale-client exemption is added to
+server maintenance. Node remains process-owned.
+
+One outer FrameLayout applies system-bars (including caption), display-cutout
+and IME Insets to child layout bounds. It forwards zero remaining overlap to
+WebView. Removed WebView padding and decorFitsSystemWindows=true compensation:
+padding WebView did not shrink its actual CSS viewport and status-bar text
+overlapped tab/settings controls on Android15. No CSS offset pipeline is added.
+This follows [Android's parent-layout Insets guidance](https://developer.android.com/develop/ui/views/layout/webapps/understand-window-insets).
 
 ## Build and delivery
 
@@ -85,7 +120,8 @@ Release key/properties remain in ignored `android/.signing` and must be retained
 for future updates. `io.github.alexbeatsz.webobsidian` is the signed personal
 release; `.debug` is a distinct application identity and data directory for
 acceptance. Neither build command installs, starts, uninstalls or clears an app.
-Current app version is inherited from desktop/package.json; Android versionCode17.
+Android version.properties owns Android0.1.18/versionCode18 independently;
+the accepted Mac packages remain0.1.17 and are not rebuilt for this correction.
 
 Runtime is pinned to [fogtape/nodejs-mobile v24.22.1-0](https://github.com/fogtape/nodejs-mobile/releases/tag/v24.22.1-0),
 full ICU, based on Node24 LTS, distributed as a **prerelease** by that project.

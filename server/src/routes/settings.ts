@@ -132,7 +132,7 @@ async function effectiveRoots(newAllowed?: unknown): Promise<string[]> {
   return roots.map((r) => path.resolve(r));
 }
 
-async function assertVaultPathAllowed(v: any): Promise<void> {
+export async function assertVaultPathAllowed(v: any): Promise<void> {
   const target = path.resolve(String(v.path));
   const roots = await effectiveRoots(v.allowedRoots);
   const within = roots.some((r) => target === r || target.startsWith(r + path.sep));

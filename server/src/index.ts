@@ -11,14 +11,15 @@ import { WebSocketServer } from 'ws';
 import chokidar from 'chokidar';
 
 import { config } from './config.js';
-import { loadSettings, getSettings } from './services/settings.js';
+import { loadSettings, getSettings, updateSettings, ensureVaultBrowsable } from './services/settings.js';
 import { errorHandler } from './middleware/error.js';
 import { requireLocal, isLocalRequest } from './middleware/localAccess.js';
 import { filesRouter } from './routes/files.js';
 import { operationsRouter } from './routes/operations.js';
 import { bindOperationClient, operationWorkspaceMessage } from './services/operationWorkspace.js';
 import { searchRouter } from './routes/search.js';
-import { settingsRouter, configureVaultSwitch } from './routes/settings.js';
+import { settingsRouter, configureVaultSwitch, assertVaultPathAllowed } from './routes/settings.js';
+import { selectVaultWorkspace } from './services/uistate.js';
 import { gitRouter } from './routes/git.js';
 import { pluginsRouter } from './routes/plugins.js';
 import { uiStateRouter } from './routes/uistate.js';
@@ -53,6 +54,19 @@ process.on('unhandledRejection', (reason) => {
 
 async function main() {
   await loadSettings();
+  // A native first-use choice is committed before any index/watcher/client
+  // exists. Subsequent selections use the normal settings maintenance path.
+  const initialVault = process.env.WEBOBSIDIAN_INITIAL_VAULT;
+  if (initialVault) {
+    await assertVaultPathAllowed({ path: initialVault, allowedRoots: config.allowedRoots });
+    const previous = (await getSettings()).vault.path;
+    await updateSettings(draft => {
+      draft.vault.path = path.resolve(initialVault);
+      draft.vault.allowedRoots = config.allowedRoots;
+      ensureVaultBrowsable(draft);
+    });
+    if (path.resolve(previous) !== path.resolve(initialVault)) await selectVaultWorkspace(previous, initialVault);
+  }
   await ensureVault();
 
   const app = express();
