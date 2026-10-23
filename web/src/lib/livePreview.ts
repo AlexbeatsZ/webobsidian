@@ -842,6 +842,28 @@ export const calloutFoldState = StateField.define<readonly number[]>({
         v = v.includes(e.value) ? v.filter((x) => x !== e.value) : [...v, e.value];
       }
     }
+    // A caret must never remain hidden in a collapsed body, including after a
+    // separator deletion merges quotes. Closing via the button already moves
+    // an interior selection to the title in this same transaction.
+    if ((tr.docChanged || tr.selection) && tr.state.field(livePreviewState) && !tr.state.field(livePreviewReadonly)) {
+      const containers = tr.state.field(blockModel).containers;
+      for (const range of tr.newSelection.ranges) {
+        if (!range.empty) continue;
+        for (let node = tr.state.field(syntaxModel).tree.resolveInner(range.head, -1); node; node = node.parent!) {
+          if (node.name !== 'Blockquote') continue;
+          const from = tr.newDoc.lineAt(node.from).from;
+          // Containers are source-ordered; inspect only this caret's ancestors.
+          let lo = 0, hi = containers.length;
+          while (lo < hi) { const mid = (lo + hi) >>> 1; if (containers[mid].from < from) lo = mid + 1; else hi = mid; }
+          for (let i = lo; i < containers.length && containers[i].from === from; i++) {
+            const block = containers[i];
+            if (block.kind !== 'callout' || block.to !== node.to || range.head < block.bodyFrom || range.head > block.to) continue;
+            const toggled = v.includes(block.from);
+            if ((block.fold === '-') !== toggled) v = toggled ? v.filter(pos => pos !== block.from) : [...v, block.from];
+          }
+        }
+      }
+    }
     return v;
   },
 });
@@ -1861,7 +1883,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           const line = doc.lineAt(node.from);
           const lv = HEADING_LEVEL[name];
           all.push(
-            Decoration.line({ class: `cm-h${lv} HyperMD-header HyperMD-header-${lv}${!doc.sliceString(fmEnd, line.from).trim() ? ' cm-leading-heading' : ''}${lineActive(node.from) ? "" : " cm-heading-labelled"}`, attributes: { "data-heading-label": `H${lv}` } }).range(line.from, line.from),
+            Decoration.line({ class: `cm-h${lv} HyperMD-header HyperMD-header-${lv}${!doc.sliceString(fmEnd, line.from).trim() ? ' cm-leading-heading' : ''}` }).range(line.from, line.from),
           );
           const m = doc.sliceString(line.from, line.to).match(/^((?: {0,3}> ?)*)(#{1,6}\s+)/);
           if (m) {
@@ -1966,13 +1988,12 @@ function buildDecorations(view: EditorView): DecorationSet {
           }
           if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
           bodyStart = header.prefixTo - line.from;
-        } else if (!touches(line.from, line.from + bodyStart)) pushReplace(line.from, line.from + bodyStart, hidden);
-        if (touches(line.from, header?.prefixTo ?? line.from + bodyStart)) {
-          // Shift only visible quote glyphs; preserve prefix advance, body text
-          // and native source selection without changing the measured wrappers.
-          for (let i = 0; i < prefix.length; i++) if (prefix[i] === '>') {
-            all.push(Decoration.mark({ class: 'cm-quote-source-marker' }).range(line.from + i, line.from + i + 1));
-          }
+        } else {
+          // Keep native prefix text and advance in both states. The existing
+          // hanging-layout measure places it in the wrapper's quote gutter.
+          all.push(Decoration.line({ attributes: { 'data-quote-prefix-end': String(line.from + bodyStart) } }).range(line.from));
+          all.push(Decoration.mark({ class: 'cm-quote-prefix' +
+            (touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
         }
       }
 

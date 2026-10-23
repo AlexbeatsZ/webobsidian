@@ -1,4 +1,4 @@
-import { codeFolding, foldEffect, foldedRanges, foldKeymap, foldService, unfoldEffect } from '@codemirror/language';
+import { codeFolding, foldable, foldEffect, foldedRanges, foldKeymap, foldService, unfoldEffect } from '@codemirror/language';
 import { EditorState, type Range, type StateEffect } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
 import { markdownListFold, markdownListLine } from './listLayout';
@@ -17,15 +17,21 @@ function listRange(state: EditorState, from: number, to: number) {
 }
 
 class ListFoldWidget extends WidgetType {
-  constructor(readonly range: { from: number; to: number }, readonly folded: boolean) { super(); }
-  eq(other: ListFoldWidget) { return this.range.from === other.range.from && this.range.to === other.range.to && this.folded === other.folded; }
+  constructor(readonly range: { from: number; to: number }, readonly folded: boolean, readonly heading = 0) { super(); }
+  eq(other: ListFoldWidget) { return this.range.from === other.range.from && this.range.to === other.range.to && this.folded === other.folded && this.heading === other.heading; }
   toDOM(view: EditorView) {
     const anchor = document.createElement('span');
-    anchor.className = 'cm-list-fold-anchor';
+    anchor.className = 'cm-list-fold-anchor' + (this.heading ? ' cm-heading-controls' : '');
+    if (this.heading) {
+      const label = document.createElement('span');
+      label.className = 'cm-heading-label'; label.textContent = `H${this.heading}`;
+      label.setAttribute('aria-hidden', 'true'); anchor.appendChild(label);
+    }
+    if (this.range.to <= this.range.from) return anchor;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'cm-list-fold' + (this.folded ? ' is-folded' : '');
-    button.setAttribute('aria-label', this.folded ? '展开列表项' : '折叠列表项');
+    button.setAttribute('aria-label', this.heading ? (this.folded ? '展开标题章节' : '折叠标题章节') : (this.folded ? '展开列表项' : '折叠列表项'));
     button.setAttribute('aria-expanded', String(!this.folded));
     button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + iconPaths['chevron-down'] + '</svg>';
     button.addEventListener('mousedown', event => event.preventDefault());
@@ -44,7 +50,7 @@ class ListFoldWidget extends WidgetType {
 }
 
 function build(view: EditorView): DecorationSet {
-  if (!view.state.field(livePreviewState)) return Decoration.none;
+  const live = view.state.field(livePreviewState);
   const decorations: Range<Decoration>[] = [], visited = new Set<number>();
   const folded = foldedRanges(view.state);
   for (const visible of view.visibleRanges) {
@@ -52,7 +58,15 @@ function build(view: EditorView): DecorationSet {
       const line = view.state.doc.line(number);
       if (visited.has(number) || sourceOwns(view.state, line) || blockEffectOwns(view.state, line)) continue;
       visited.add(number);
-      const range = listRange(view.state, line.from, line.to);
+      // The Markdown language already owns section ends. BodyHeading (#######)
+      // is deliberately excluded; no second section parser or fold state.
+      let heading = 0, headingFrom = line.from;
+      for (let node = view.state.field(syntaxModel).tree.resolveInner(line.to, -1); node && node.from >= line.from; node = node.parent!) {
+        const match = /^(?:ATX|Setext)Heading([1-6])$/.exec(node.name);
+        if (match) { heading = Number(match[1]); headingFrom = node.from; break; }
+      }
+      if (!live && !heading) continue;
+      const range = heading ? foldable(view.state, line.from, line.to) ?? { from: line.to, to: line.to } : listRange(view.state, line.from, line.to);
       if (!range) continue;
       let collapsed = false;
       let controlRange = range;
@@ -60,8 +74,9 @@ function build(view: EditorView): DecorationSet {
         if (from === range.from && to <= range.to) { collapsed = true; controlRange = { from, to }; }
       });
       const marker = line.text.match(/^(?: {0,3}> ?)*[ \t]*/)?.[0].length ?? 0;
+      if (heading) decorations.push(Decoration.line({ attributes: { 'data-native-heading-gutter': 'true' } }).range(line.from));
       if (collapsed) decorations.push(Decoration.line({ class: 'cm-list-folded' }).range(line.from));
-      decorations.push(Decoration.widget({ widget: new ListFoldWidget(controlRange, collapsed), side: -1 }).range(line.from + marker));
+      decorations.push(Decoration.widget({ widget: new ListFoldWidget(controlRange, collapsed, heading), side: -1 }).range(heading ? headingFrom : line.from + marker));
     }
   }
   return Decoration.set(decorations, true);

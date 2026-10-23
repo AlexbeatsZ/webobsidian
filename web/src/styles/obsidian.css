@@ -513,7 +513,12 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-host .cm-editor .cm-button:hover,
 .cm-host .cm-editor .cm-button:active { background: var(--interactive-hover); }
 
-.cm-heading-labelled::before { content: attr(data-heading-label); white-space: nowrap; position: absolute; right: calc(100% + 6px); bottom: 0; font: normal 0.6rem/1.5 var(--font-ui); color: var(--text-muted); pointer-events: none; }
+/* Heading gutter belongs to the first text line, independent of block padding
+   and source marker visibility. No line pseudo-element competes with snippets. */
+.cm-s-obsidian .cm-line[data-native-heading-gutter]::before { content: none !important; }
+.cm-s-obsidian .cm-heading-controls { vertical-align: top; }
+.cm-s-obsidian .cm-heading-label { position: absolute; right: 6px; top: 0; height: 100%; display: flex; align-items: center; font: normal 0.6rem/1.5 var(--font-ui); white-space: nowrap; color: var(--text-muted); pointer-events: none; }
+.cm-s-obsidian .cm-heading-controls .cm-list-fold { right: calc(6px + 2rem); }
 /* ---- Obsidian editor typography (cm-s-obsidian, §19/§20) ---- */
 /* Live Preview block spacing: heading lines carry padding-top = --p-spacing (1rem) */
 .cm-s-obsidian .cm-line.HyperMD-header { line-height: var(--line-height-tight); padding-top: var(--p-spacing); }

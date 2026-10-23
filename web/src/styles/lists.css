@@ -14,5 +14,6 @@
 .cm-s-obsidian .cm-list-fold:focus-visible, .cm-s-obsidian .cm-callout-fold:focus-visible { outline: 1px solid var(--text-accent); outline-offset: 2px; }
 .cm-s-obsidian .cm-callout-fold { font: inherit; line-height: inherit; }
 .cm-s-obsidian .cm-callout-fold svg { display: block; }
-/* Keep the prefix's source width; move only its visible glyph into the gutter. */
-.cm-s-obsidian .cm-quote-source-marker { position: relative; left: -1ch; }
+/* Native prefix advance is stable: reveal color only, never its source width. */
+.cm-s-obsidian .cm-quote-prefix { color: transparent; text-indent: 0; }
+.cm-s-obsidian .cm-quote-prefix.is-revealed { color: var(--text-faint); }

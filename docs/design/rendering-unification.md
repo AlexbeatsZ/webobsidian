@@ -158,8 +158,9 @@ for the private vault; shares and print do not receive it.
 - Existing theme definitions are replaced in place, without a user-theme override
   layer. Light/dark surfaces, gray highlights, dark bold weight, 3px quote rules,
   neutral bordered callouts and their colored title rules are shared by all clients.
-- Heading labels use the same active-line predicate as heading source reveal.
-  Reading always displays labels; editing suppresses them on the active heading.
+- H1–H6 labels and fold controls share an inline first-line anchor, independent
+  of source-marker reveal and heading block padding. The old bottom-anchored line
+  pseudo-label is removed; native heading foldService/ranges remain authoritative.
 - Custom proof/think/tactic and attention color/icon slots belong to callouts.ts.
 - Callout headers have a dedicated `callout-title` block wrapper. The 3px rule
   belongs to that container with `top: 0; bottom: 0`; the 8px body gap is measured

@@ -60,6 +60,7 @@ export function markdownListFold(state: EditorState, line: Line): SourceSpan | n
 
 /** Measure the actual rendered marker (font/widgets included), not a guessed ch width. */
 class ListLayout {
+  private selector = '.cm-line[data-list-body-start], .cm-line[data-quote-prefix-end]';
   private observer: MutationObserver;
   private original = new WeakMap<HTMLElement, { padding: string; indent: string; base: number; classes: string }>();
   private previous = new Set<HTMLElement>();
@@ -70,12 +71,13 @@ class ListLayout {
       if (records.some(record => {
         const target = record.target instanceof Element ? record.target : record.target.parentElement;
         if (target?.closest('.cm-content') !== view.contentDOM) return false;
-        if (record.attributeName === 'data-list-body-start') return true;
-        return target?.closest('.cm-line[data-list-body-start]') || [...record.addedNodes, ...record.removedNodes].some(node =>
-          node instanceof Element && (node.matches('.cm-line[data-list-body-start]') || node.querySelector('.cm-line[data-list-body-start]')));
+        if (record.attributeName === 'class' && target?.matches('.cm-quote-prefix')) return false;
+        if (record.attributeName === 'data-list-body-start' || record.attributeName === 'data-quote-prefix-end') return true;
+        return target?.closest(this.selector) || [...record.addedNodes, ...record.removedNodes].some(node =>
+          node instanceof Element && (node.matches(this.selector) || node.querySelector(this.selector)));
       })) this.schedule();
     });
-    this.observer.observe(view.contentDOM, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-list-body-start'] });
+    this.observer.observe(view.contentDOM, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-list-body-start', 'data-quote-prefix-end'] });
     this.schedule();
   }
   destroy() { this.observer.disconnect(); }
@@ -87,19 +89,23 @@ class ListLayout {
     this.view.requestMeasure({
       key: this,
       read: (view) => {
-        const current = new Set([...view.contentDOM.querySelectorAll<HTMLElement>('.cm-line[data-list-body-start]')]
+        const current = new Set([...view.contentDOM.querySelectorAll<HTMLElement>(this.selector)]
           .filter(line => line.closest('.cm-content') === view.contentDOM));
         const reset = [...this.previous].filter((line) => !current.has(line));
         const metrics = [...current].map((line) => {
           const old = this.original.get(line);
-          if (old && old.classes !== line.className) return { line, reset: true, width: 0, base: 0 };
+          if (old && old.classes !== line.className) return { line, reset: true, width: 0, quoteWidth: 0, base: 0 };
           const style = getComputedStyle(line);
           const base = old?.base ?? parseFloat(style.paddingLeft);
           if (!old) this.original.set(line, { padding: line.style.paddingLeft, indent: line.style.textIndent, base, classes: line.className });
-          const position = Number(line.dataset.listBodyStart);
+          const quoteEnd = Number(line.dataset.quotePrefixEnd);
+          const position = Number(line.dataset.listBodyStart ?? line.dataset.quotePrefixEnd);
+          const start = view.coordsAtPos(view.posAtDOM(line), 1);
           const coordinates = position <= view.state.doc.length ? view.coordsAtPos(position) : null;
-          const width = coordinates ? Math.max(0, coordinates.left - line.getBoundingClientRect().left - base - parseFloat(style.borderLeftWidth || '0')) : 0;
-          return { line, reset: false, width, base };
+          const quoteCoordinates = quoteEnd <= view.state.doc.length ? view.coordsAtPos(quoteEnd) : null;
+          const width = coordinates && start ? Math.max(0, coordinates.left - start.left) : 0;
+          const quoteWidth = quoteCoordinates && start ? Math.max(0, quoteCoordinates.left - start.left) : 0;
+          return { line, reset: false, width, quoteWidth, base };
         });
         return { current, reset, metrics };
       },
@@ -113,7 +119,7 @@ class ListLayout {
         reset.forEach(restore);
         for (const metric of metrics) {
           if (metric.reset) { restore(metric.line); again = true; continue; }
-          const padding = `${metric.base + metric.width}px`, indent = `${-metric.width}px`;
+          const padding = `${metric.base + metric.width - metric.quoteWidth}px`, indent = `${-metric.width}px`;
           if (metric.line.style.paddingLeft !== padding) metric.line.style.paddingLeft = padding;
           if (metric.line.style.textIndent !== indent) metric.line.style.textIndent = indent;
         }

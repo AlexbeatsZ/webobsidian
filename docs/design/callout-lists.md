@@ -29,16 +29,33 @@ rest keeps its normal decoration. Source mode remains available for arbitrary
 Markdown edits. Existing padding-only wrappers retain CodeMirror measurement and
 mouse coordinate ownership, including tables/formulas inside the Callout.
 
-When live editing reveals quote prefixes, only each visible `>` receives the
-`cm-quote-source-marker` mark and a relative `left: -1ch` offset. Its original
-inline advance and following whitespace remain intact, so body text and wrapper
-padding do not move. Nested prefixes use the same mark; hidden/readonly prefixes
-and full source mode retain their existing behavior. There is no replacement
-text, extra selection dispatch, measurement loop or persisted state.
+Quote prefixes remain native text with the same width when hidden and revealed;
+only their color changes through `cm-quote-prefix`. The previous marker-only
+`left: -1ch` offset and hidden-prefix replacement were removed after user feedback.
+The existing listLayout measurement reads the source prefix endpoints in the
+same requestMeasure pass. For a prefix width Q and total list prefix width W,
+line text-indent is -W and padding is base + W - Q. A plain quote has W = Q,
+so body text and wraps stay at the wrapper's original content edge while its
+prefix occupies the existing gutter. Quoted lists retain their own marker/indent
+width. Native .md-quote wrappers continue to own continuous/nested rules, including
+lazy continuation lines; no second rule renderer, observer or fold state exists.
+Callout title replacement remains its existing icon/title control path; body
+prefixes use the same native-text layout. Full source mode retains literal text.
+See reference-editor-layout.md for the local Obsidian package evidence and limits.
 
 `calloutFoldState` keeps its identity for unrelated transactions. Fold decorations
 depend on document/source/mode/block-effect changes and actual fold toggles,
 instead of rebuilding when the caret moves around ordinary text.
+After document or selection changes, an empty caret in a Callout body expands
+that Callout through the same override state. This includes deleting a separator
+and merging two blockquotes: merging is valid, but the caret inside the merged
+body must not stay hidden. Only the caret's Blockquote ancestors are looked up
+in the source-ordered existing containers by binary search; no full-note scan,
+extra parser or separate fold state. The title caret still does not expand a
+fold; explicit close moves a body selection to the title in the same transaction.
+Nonempty selections, normal text patches, deletion and DocumentSession undo
+remain unchanged. Remote/content changes use the same mapped local caret rule,
+not a special Backspace or multiple-change heuristic. Reading mode is excluded.
 
 ## Lists
 
