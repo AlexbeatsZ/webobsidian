@@ -192,3 +192,25 @@ regions and history; they were not executed. Adapted legacy algorithms retain
 `@ts-nocheck`; new host boundaries and the shared template compiler are type
 checked. No actual typing/IME, UI, migration execution or performance acceptance
 is claimed, and no new desktop executable was built.
+
+## 2026-10-23 configuration file settings
+
+Advanced writing settings now use the current Vault's
+`.obsidian/webobsidian/writing.jsonc` through the existing VaultConfiguration IO.
+The file owns version/migration/latex/linter/hotkeys; `/api/writing` returns its
+source/revision along with the existing effective math profile. Missing native
+files use the original per-Vault app settings/importer as a preserved fallback.
+Opening Settings does not create the native file; an explicit save/create action
+writes it exclusively, and subsequent UI saves carry the source revision and Vault
+token. External edits reject stale saves rather than overwriting them. Invalid
+JSONC/schema keeps the client's previous compiled settings through the existing
+refresh failure path. Native replacementSyntax stays latex-suite-v1; unmarked
+legacy replacements still pass the one existing importer.
+
+The same watcher/configuration notification now recognizes writing.jsonc and uses
+refreshWriting. There is no added watcher, settings store, snippet compiler or
+editor hot-path work. Ordinary toggles/formatter row controls still call
+updateWriting; complex arrays/regexes/JS/JSON are edited externally. The old
+JsonEditor and rule-specific nested details/cards are removed. Formula/format
+behavior, rule ordering and source-range patches are unchanged by this UI change.
+This batch has source/diff review only, without types/build/tests/runtime.

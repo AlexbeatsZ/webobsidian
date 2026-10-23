@@ -4,6 +4,9 @@ import { migrateLinterReplacements, REPLACEMENT_SYNTAX } from '@webobsidian/mark
 import { getSettings, updateSettings } from './settings.js';
 import { resolveInVault } from './vault.js';
 import { readMathConfiguration } from './mathSettings.js';
+import { applyEdits, modify } from 'jsonc-parser';
+import { z } from 'zod';
+import { readVaultConfiguration, writeVaultConfiguration, parseConfiguration, type VaultConfigurationSource } from './vaultConfiguration.js';
 
 export interface WritingSettings {
   version: 1;
@@ -26,10 +29,18 @@ async function storedWritingSettings(): Promise<WritingSettings> {
   return operation;
 }
 export async function writingSettings() {
-  const value = await storedWritingSettings();
+  const source = await readVaultConfiguration('writing.jsonc');
+  const value: WritingSettings = source.exists
+    ? WritingConfigurationSchema.parse(parseConfiguration(source.content))
+    : await storedWritingSettings();
   const math = await readMathConfiguration();
-  return { ...value, math: math.configuration, mathSource: math.source };
+  return { ...value, source, math: math.configuration, mathSource: math.source };
 }
+const WritingConfigurationSchema = z.object({
+  version: z.literal(1), migration: z.string().default(''),
+  latex: z.record(z.unknown()), linter: z.record(z.unknown()),
+  hotkeys: z.record(z.array(z.object({ modifiers: z.array(z.string()), key: z.string() }))).default({}),
+}).strict().transform(value => ({ ...value, linter: migrateLinterReplacements(value.linter) }));
 async function migrate(key: string, current?: WritingSettings): Promise<WritingSettings> {
   if (current) {
     const updated = await updateSettings((d) => {
@@ -83,24 +94,28 @@ async function migrate(key: string, current?: WritingSettings): Promise<WritingS
 }
 export async function saveWritingSettings(
   patch: Partial<Pick<WritingSettings, 'latex' | 'linter' | 'hotkeys'>>,
+  expected?: VaultConfigurationSource,
 ) {
   const key = path.resolve((await getSettings()).vault.path);
   const settings = await writingSettings();
   if (path.resolve((await getSettings()).vault.path) !== key) throw new Error('Vault changed');
+  if (expected && (expected.path !== 'writing.jsonc' || expected.vault !== settings.source.vault ||
+      expected.exists !== settings.source.exists || expected.revision !== settings.source.revision))
+    throw Object.assign(new Error('写作配置已在外部改变，请重新加载后再保存'), { status: 409 });
   if (patch.linter?.replacementSyntax !== undefined && patch.linter.replacementSyntax !== REPLACEMENT_SYNTAX)
     throw new Error('Only LaTeX Suite replacement syntax is supported');
-  const result = await updateSettings((d) => {
-    if (path.resolve(d.vault.path) !== key) throw new Error('Vault changed');
-    const current = (d.writing[key] as WritingSettings) ?? settings;
-    const ruleConfigs = { ...current.linter.ruleConfigs };
-    for (const [id, value] of Object.entries(patch.linter?.ruleConfigs ?? {}))
-      ruleConfigs[id] = { ...ruleConfigs[id], ...(value as object) };
-    d.writing[key] = {
-      ...current,
-      ...patch,
-      latex: { ...current.latex, ...patch.latex },
-      linter: { ...current.linter, ...patch.linter, ruleConfigs },
-    };
+  const ruleConfigs = { ...settings.linter.ruleConfigs };
+  for (const [id, value] of Object.entries(patch.linter?.ruleConfigs ?? {}))
+    ruleConfigs[id] = { ...ruleConfigs[id], ...(value as object) };
+  const next = WritingConfigurationSchema.parse({
+    version: settings.version, migration: settings.migration,
+    hotkeys: patch.hotkeys ?? settings.hotkeys,
+    latex: { ...settings.latex, ...patch.latex },
+    linter: { ...settings.linter, ...patch.linter, ruleConfigs },
   });
-  return result.writing[key];
+  let content = settings.source.content || '{}';
+  for (const [field, value] of Object.entries(next))
+    content = applyEdits(content, modify(content, [field], value, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } }));
+  const source = await writeVaultConfiguration({ ...settings.source, content });
+  return { ...next, source };
 }

@@ -1177,7 +1177,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .settings-content details { border: 1px solid var(--bg-modifier-border); border-radius: 8px; padding: 0 12px; margin-block: 12px; }
 .settings-content summary { padding-block: 10px; cursor: pointer; color: var(--text-normal); }
 .settings-content details[open] > summary { border-bottom: 1px solid var(--bg-modifier-border); margin-bottom: 10px; }
-.settings-content details > details { background: var(--bg-secondary); }
+.formatting-rule:last-child > .setting-row:last-child { border-bottom: 0; }
+.setting-config-status { color: var(--text-muted); font-size: 12px; }
 .settings-content code, .settings-content pre { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
 .settings-content [role="alert"] { color: var(--text-error, #e5534b); }
 .settings-content .setting-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; gap: 16px; border-bottom: 1px solid var(--bg-modifier-border); }

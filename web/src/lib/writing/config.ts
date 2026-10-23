@@ -20,6 +20,7 @@ export interface WritingSettings {
   latex: Record<string, any>;
   linter: Record<string, any>;
   hotkeys: Record<string, { modifiers: string[]; key: string }[]>;
+  source?: VaultConfigurationSource;
   math?: MathConfiguration;
   mathSource?: VaultConfigurationSource;
 }
@@ -213,7 +214,7 @@ export function updateWriting(patch: Partial<WritingSettings>) {
       let persisted: WritingSettings, compiled: LatexSuiteCMSettings;
       try {
         compiled = await compile(next, candidate.commands);
-        persisted = await request<WritingSettings>('', patch.math ? { math: patch.math, mathSource: settings.mathSource } : patch);
+        persisted = await request<WritingSettings>('', patch.math ? { math: patch.math, mathSource: settings.mathSource } : { ...patch, source: settings.source });
       } catch (cause) { candidate.dispose(); throw cause; }
       if (generation !== startingGeneration) {
         candidate.dispose();
@@ -237,7 +238,7 @@ export function writingFileChanged(path: string) {
   ].filter(Boolean);
   if (relevant.some((p) => path === p || path.startsWith(p.replace(/\/$/, '') + '/')))
     void refreshWriting(true).catch(console.error);
-  else if (path === '.obsidian/webobsidian/math.jsonc' || path === settings.math?.preambleFile)
+  else if (path === '.obsidian/webobsidian/writing.jsonc' || path === '.obsidian/webobsidian/math.jsonc' || path === settings.math?.preambleFile)
     void refreshWriting().catch(console.error);
 }
 

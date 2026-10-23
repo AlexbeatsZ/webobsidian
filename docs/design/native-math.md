@@ -161,3 +161,13 @@ production web build and standalone-server bundle checks. Regression sources are
 prepared without execution. Actual macro migration, rendering, package output,
 hot reload, IME, split views, public share, printing and performance remain user
 acceptance. No real Vault writes, app/server/browser launch or portable package.
+
+## 2026-10-23 settings simplification
+
+The native settings page now saves package toggles through the same updateWriting
+candidate pipeline. It no longer owns a MathConfiguration draft, macro textarea
+or package-options JSON editor. math.jsonc and an optional preamble path open in
+an external editor; missing files are created only by an explicit save/create
+button. Source/revision handling, package dependencies/conflicts and MathJax's
+single queue/cache/profile lifecycle stay in their existing owners. No runtime,
+types, build or test validation was performed for this settings change.

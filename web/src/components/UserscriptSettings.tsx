@@ -2,59 +2,39 @@ import { useEffect, useState } from 'react';
 import { bootstrapUserscripts, refreshUserscripts, useUserscripts, userscriptRequest } from '../lib/userscripts/client';
 import type { ScriptRecord, ScriptMenu } from '../lib/userscripts/types';
 import { SettingGroup, SettingRow } from './SettingRow';
+import ConfigurationFile from './ConfigurationFile';
 
-const editorStyle = { width: '100%', fontFamily: 'monospace', minHeight: 180 };
 function permissions(script: ScriptRecord) {
   return `${script.metadata.grants.join(', ') || '(无 GM 权限，页面 world)'}\n@connect: ${script.metadata.connects.join(', ') || '(仅同源)'}\nURL: ${[...script.metadata.matches, ...script.metadata.includes].join(', ') || '(无匹配)'}\n排除: ${[...script.metadata.excludes, ...script.metadata.excludeMatches].join(', ') || '(无)'}`;
 }
-function ScriptCard({ script, run }: { script: ScriptRecord; run: (work: () => Promise<unknown>) => void }) {
-  const [editing, setEditing] = useState(false), [source, setSource] = useState(script.source);
-  const [values, setValues] = useState<string>(), [valuesChanged, setValuesChanged] = useState(false);
-  const [keepValues, setKeepValues] = useState(true), [removing, setRemoving] = useState(false);
-  const [reviewed, setReviewed] = useState(false);
-  const pending = script.update.pending;
-  useEffect(() => { if (!editing) setSource(script.source); setReviewed(false); }, [script.revision]);
+function ScriptSettings({ script, run }: { script: ScriptRecord; run: (work: () => Promise<unknown>) => void }) {
+  const [reviewed, setReviewed] = useState(false), [removing, setRemoving] = useState(false), [keepValues, setKeepValues] = useState(true);
+  useEffect(() => setReviewed(false), [script.revision, script.update.candidateId]);
   const action = (name: string, extra: Record<string, unknown> = {}) => userscriptRequest(name, { id: script.id, revision: script.revision, ...extra });
-  return <SettingGroup title={script.metadata.name}>
-    <p>{script.metadata.version || '无版本号'}</p>
-    <p>{script.metadata.description}</p>
-    <SettingRow name="启用脚本" desc="下次页面加载生效"><input type="checkbox" aria-label="启用脚本" checked={script.enabled} onChange={e => run(() => action('configure', { enabled: e.target.checked }))} /></SettingRow>
-    <SettingRow name="允许自动更新"><input type="checkbox" aria-label="允许自动更新" checked={script.autoUpdate} onChange={e => run(() => action('configure', { autoUpdate: e.target.checked }))} /></SettingRow>
-    <p role="status">更新：{script.update.state}{script.update.availableVersion && ` → ${script.update.availableVersion}`}{script.update.checkedAt && ` · ${new Date(script.update.checkedAt).toLocaleString()}`}</p>
+  const pending = script.update.pending;
+  return <SettingGroup title={script.metadata.name} desc={`${script.metadata.version || '无版本号'} · ${script.metadata.description}`}>
+    <SettingRow name="启用脚本" desc="下次页面加载生效。"><input type="checkbox" checked={script.enabled} onChange={event => run(() => action('configure', { enabled: event.target.checked }))} /></SettingRow>
+    <SettingRow name="允许自动更新"><input type="checkbox" checked={script.autoUpdate} onChange={event => run(() => action('configure', { autoUpdate: event.target.checked }))} /></SettingRow>
+    <SettingRow name="脚本源码" desc="在外部查看；编辑后从文件重新导入，同身份脚本进入审批。"><button onClick={() => run(() => action('open-source'))}>外部打开</button></SettingRow>
+    <SettingRow name="检查更新" desc={`${script.update.state}${script.update.availableVersion ? ` → ${script.update.availableVersion}` : ''}`}><button onClick={() => run(() => action('check'))}>检查更新</button></SettingRow>
+    <SettingRow name="安装可用更新"><button onClick={() => run(() => action('update'))}>更新</button></SettingRow>
     {script.update.error && <p role="alert">{script.update.error}；已保留原版本。</p>}
-    <details><summary>匹配、权限与兼容提示</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{permissions(script)}</pre>
+    <details><summary>匹配、权限与兼容提示</summary><pre>{permissions(script)}</pre>
+      {script.warnings.map(warning => <p key={warning}>{warning}</p>)}
       <p>执行时机：{script.metadata.runAt}；仅主文档。{script.sourceUrl && `导入来源：${script.sourceUrl}`}</p>
-      {script.warnings.map(w => <p key={w}>{w}</p>)}
-      <p>此脚本的 GM 存储由本机应用独立保存；使用页面 world 时，匹配网站也可访问该脚本的存储和授权能力。</p>
-      <label><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} />我已检查当前源码、匹配范围及权限</label>{' '}
+      <SettingRow name="已检查当前源码、匹配范围与权限"><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} /></SettingRow>
       <button disabled={!reviewed} onClick={() => run(async () => { await action('approve'); setReviewed(false); })}>批准当前版本权限</button>
     </details>
-    <div className="setting-actions">
-      <button onClick={() => { setSource(script.source); setEditing(!editing); }}>查看 / 编辑源码</button>
-      <button onClick={() => run(() => action('check'))}>检查更新</button>
-      <button onClick={() => run(() => action('update'))}>安装可用更新</button>
-      <button onClick={() => run(async () => { setValues(JSON.stringify(await action('values'), null, 2)); setValuesChanged(false); })}>脚本存储 / 设置</button>
-      <button onClick={() => setRemoving(!removing)}>卸载…</button>
-    </div>
-    {editing && <div><p>保存前会解析源码并准备全部 @require / @resource。脚本启用状态、授权和存储会保留；新增权限需重新批准。</p>
-      <textarea aria-label={`${script.metadata.name} 源码`} spellCheck={false} value={source} onChange={e => setSource(e.target.value)} rows={18} style={editorStyle} />
-      <button disabled={source === script.source} onClick={() => run(async () => { await action('save', { source }); setEditing(false); })}>保存源码</button>{' '}
-      <button onClick={() => setEditing(false)}>取消</button>
-    </div>}
-    {pending && <details><summary>待更新版本 {pending.metadata.version}：检查源码与权限</summary>
-      <pre style={{ whiteSpace: 'pre-wrap' }}>{permissions({ ...script, metadata: pending.metadata })}</pre>
-      {pending.warnings.map(w => <p key={w}>{w}</p>)}
-      <textarea aria-label="待更新源码" readOnly value={pending.source} rows={12} style={editorStyle} />
-      <p>更新保留启用状态、GM 存储及自动更新选项。匹配范围或授权扩展需要批准。</p>
+    {pending && <details><summary>待更新版本 {pending.metadata.version}</summary>
+      <pre>{permissions({ ...script, metadata: pending.metadata })}</pre>
+      {pending.warnings.map(warning => <p key={warning}>{warning}</p>)}
+      <button onClick={() => run(() => action('open-source', { pending: true, candidateId: script.update.candidateId }))}>外部查看待更新源码</button>{' '}
       <button onClick={() => run(() => action('approve', { pending: true, candidateId: script.update.candidateId }))}>批准并安装以上更新</button>
     </details>}
-    {values !== undefined && <div><p>GM 持久存储（JSON 对象）；脚本自带界面也通过同一存储保存设置。</p>
-      <textarea aria-label="GM 持久存储" spellCheck={false} value={values} onChange={e => { setValues(e.target.value); setValuesChanged(true); }} rows={10} style={editorStyle} />
-      <button disabled={!valuesChanged} onClick={() => run(async () => { await action('set-values', { values: JSON.parse(values) }); setValuesChanged(false); })}>保存存储</button>{' '}
-      <button onClick={() => setValues(undefined)}>关闭</button>
-    </div>}
-    {removing && <div><p>卸载后请重新加载已打开的匹配页面；脚本对页面的已有修改要在重新加载后清除。</p>
-      <label><input type="checkbox" checked={keepValues} onChange={e => setKeepValues(e.target.checked)} />保留此脚本存储</label>{' '}
+    <SettingRow name="卸载脚本"><button onClick={() => setRemoving(!removing)}>卸载…</button></SettingRow>
+    {removing && <div>
+      <SettingRow name="保留此脚本存储"><input type="checkbox" checked={keepValues} onChange={event => setKeepValues(event.target.checked)} /></SettingRow>
+      <p>卸载后请重新加载已打开的匹配页面。</p>
       <button onClick={() => run(() => action('remove', { keepValues }))}>确认卸载</button>{' '}<button onClick={() => setRemoving(false)}>取消</button>
     </div>}
   </SettingGroup>;
@@ -62,47 +42,55 @@ function ScriptCard({ script, run }: { script: ScriptRecord; run: (work: () => P
 
 export function UserscriptSettings() {
   const { snapshot, error, supported } = useUserscripts();
-  const [busy, setBusy] = useState(false), [failure, setFailure] = useState(''), [source, setSource] = useState(''), [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false), [failure, setFailure] = useState(''), [url, setUrl] = useState('');
   const [menus, setMenus] = useState<ScriptMenu[]>([]);
+  const [storePath, setStorePath] = useState('');
   useEffect(() => bootstrapUserscripts(), []);
+  useEffect(() => {
+    if (!supported) return;
+    let active = true;
+    void userscriptRequest('paths').then(paths => { if (active) setStorePath(paths.store); })
+      .catch(cause => { if (active) setFailure(String(cause)); });
+    return () => { active = false; };
+  }, [supported, snapshot?.vault]);
   const run = (work: () => Promise<unknown>) => {
     if (busy) return;
     setBusy(true); setFailure('');
-    void work().then(() => refreshUserscripts()).catch(e => setFailure(String(e))).finally(() => setBusy(false));
+    void work().then(() => refreshUserscripts()).catch(cause => setFailure(String(cause))).finally(() => setBusy(false));
   };
-  if (!supported) return <p>用户脚本需要原生桌面的内置浏览器。普通浏览器客户端不提供注入能力。</p>;
+  if (!supported) return <p>用户脚本需要原生桌面的内置浏览器。</p>;
   return <section aria-label="内置浏览器用户脚本" aria-busy={busy}>
-    <h2>内置浏览器 · 用户脚本</h2>
-    <p>导入后脚本默认关闭。检查源码、匹配范围与权限后批准，再启用并重新加载目标页面。仅运行你信任的脚本。</p>
+    <h2>内置浏览器脚本</h2>
     {(failure || error) && <p role="alert">{failure || error}</p>}
-    {busy && <p role="status">正在处理…</p>}
-    <fieldset disabled={busy} style={{ border: 0, padding: 0 }}>
-      <SettingGroup title="导入脚本">
-      <SettingRow name=".user.js URL"><input aria-label="用户脚本 URL" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…/script.user.js" /></SettingRow>
-      <button disabled={!url.trim()} onClick={() => run(async () => { await userscriptRequest('import', { url: url.trim() }); setUrl(''); })}>从 URL 导入</button>
-      <SettingRow name="文件导入"><input aria-label="文件导入" type="file" accept=".js,.user.js,text/javascript" onChange={e => {
-        const file = e.target.files?.[0]; if (file) run(async () => { if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MiB'); setSource(await file.text()); }); e.target.value = '';
-      }} /></SettingRow>
-      <details><summary>粘贴 / 检查导入源码</summary><textarea aria-label="导入源码" value={source} onChange={e => setSource(e.target.value)} rows={12} spellCheck={false} style={editorStyle} /></details>
-      {source && <button onClick={() => run(async () => { await userscriptRequest('import', { source }); setSource(''); })}>导入以上源码（默认关闭）</button>}
+    <fieldset disabled={busy}>
+      <SettingGroup title="配置与源码">
+        {storePath && <ConfigurationFile name="脚本配置与存储" path={storePath} desc="在外部查看存储；脚本设置由各脚本自带界面保存。" onOpen={() => userscriptRequest('open-store')}>
+          <button onClick={() => run(() => userscriptRequest('open-directory'))}>打开文件夹</button>
+          <button onClick={() => run(() => refreshUserscripts())}>刷新列表</button>
+        </ConfigurationFile>}
+      </SettingGroup>
+      <SettingGroup title="导入脚本" desc="导入后默认关闭。请先在外部查看源码、匹配范围和权限，批准后再启用。">
+        <SettingRow name=".user.js URL"><input value={url} onChange={event => setUrl(event.target.value)} placeholder="https://…/script.user.js" /><button disabled={!url.trim()} onClick={() => run(async () => { await userscriptRequest('import', { url: url.trim() }); setUrl(''); })}>导入</button></SettingRow>
+        <SettingRow name="从文件导入"><input aria-label="从文件导入用户脚本" type="file" accept=".js,.user.js,.txt,text/javascript,text/plain" onChange={event => {
+          const file = event.target.files?.[0]; event.target.value = '';
+          if (file) run(async () => { if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MiB'); await userscriptRequest('import', { source: await file.text() }); });
+        }} /></SettingRow>
       </SettingGroup>
       {snapshot && <>
-        <p>{snapshot.migration}</p>
         <SettingGroup title="更新调度">
-        <SettingRow name="自动更新调度"><input type="checkbox" aria-label="自动更新调度" checked={snapshot.autoUpdate} onChange={e => run(() => userscriptRequest('settings', { autoUpdate: e.target.checked }))} /></SettingRow>
-        <SettingRow name="检查间隔" desc="以小时为单位"><input aria-label="更新间隔" type="number" min={1} max={720} defaultValue={snapshot.intervalHours} onBlur={e => { const v = Number(e.target.value); if (v !== snapshot.intervalHours) run(() => userscriptRequest('settings', { intervalHours: v })); }} /></SettingRow>
-        <button onClick={() => run(() => userscriptRequest('check'))}>检查全部更新</button>
-        <p>更新失败保留旧版；新增权限或匹配范围等待批准。已经打开的页面继续当前代码，重载后使用新版本。</p>
+          <SettingRow name="自动更新调度"><input type="checkbox" checked={snapshot.autoUpdate} onChange={event => run(() => userscriptRequest('settings', { autoUpdate: event.target.checked }))} /></SettingRow>
+          <SettingRow name="检查间隔" desc="以小时为单位。"><input type="number" min={1} max={720} key={snapshot.intervalHours} defaultValue={snapshot.intervalHours} onBlur={event => {
+            const value = Number(event.target.value); if (value !== snapshot.intervalHours) run(() => userscriptRequest('settings', { intervalHours: value }));
+          }} /></SettingRow>
+          <SettingRow name="检查全部更新" desc="失败保留旧版；新增权限或匹配范围等待批准。"><button onClick={() => run(() => userscriptRequest('check'))}>检查更新</button></SettingRow>
         </SettingGroup>
         {!snapshot.scripts.length && <p>尚未安装脚本。</p>}
-        {snapshot.scripts.map(script => <ScriptCard key={script.id} script={script} run={run} />)}
-        <details><summary>页面执行状态</summary>
-          {snapshot.statuses.map((s, i) => <p key={i}>{s.url} · {snapshot.scripts.find(script => script.id === s.scriptId)?.metadata.name || 'guest'} · {s.state}{s.message && `：${s.message}`}</p>)}
-        </details>
+        {snapshot.scripts.map(script => <ScriptSettings key={script.id} script={script} run={run} />)}
+        <details><summary>页面执行状态</summary>{snapshot.statuses.map((status, index) => <p key={index}>{status.url} · {snapshot.scripts.find(script => script.id === status.scriptId)?.metadata.name || 'guest'} · {status.state}{status.message && `：${status.message}`}</p>)}</details>
       </>}
       <SettingGroup title="已打开页面的脚本菜单">
-      <button onClick={() => run(async () => setMenus(await userscriptRequest('menus')))}>刷新脚本菜单</button>
-      {menus.map(menu => <p key={`${menu.guestId}:${menu.scriptId}:${menu.id}`}><button onClick={() => run(() => userscriptRequest('invoke-menu', menu))}>{menu.label}</button> <small>{menu.url}</small></p>)}
+        <SettingRow name="刷新脚本菜单"><button onClick={() => run(async () => setMenus(await userscriptRequest('menus')))}>刷新</button></SettingRow>
+        {menus.map(menu => <SettingRow key={`${menu.guestId}:${menu.scriptId}:${menu.id}`} name={menu.label} desc={menu.url}><button onClick={() => run(() => userscriptRequest('invoke-menu', menu))}>执行</button></SettingRow>)}
       </SettingGroup>
     </fieldset>
   </section>;

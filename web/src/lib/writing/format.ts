@@ -42,13 +42,7 @@ export function compileFormattingSettings(raw: Record<string, any>) {
   for (const value of raw.foldersToIgnore ?? [])
     if (typeof value !== 'string') throw new Error('Ignored folders must be paths');
   for (const value of raw.filesToIgnore ?? []) if (value.match) new RegExp(value.match, value.flags);
-  const locale =
-    raw.linterLocale === 'system-default' || !raw.linterLocale
-      ? typeof navigator === 'undefined'
-        ? 'en'
-        : navigator.language
-      : raw.linterLocale;
-  setLanguage(locale);
+  setLanguage('zh-CN');
   const ruleConfigs = Object.fromEntries(
     rules.map((rule) => [rule.alias, { ...rule.getDefaultOptions(), ...raw.ruleConfigs?.[rule.alias] }]),
   );
@@ -97,7 +91,7 @@ function runOptions(
         ? 'en'
         : navigator.language || 'en'
       : settings.linterLocale;
-  setLanguage(locale);
+  setLanguage('zh-CN');
   log.setLevel(settings.logLevel?.toLowerCase() ?? 'error');
   const file = {
     path,

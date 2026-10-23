@@ -93,7 +93,7 @@ sandbox and synchronous loops cannot be preempted by an AbortSignal.
 No startup user code is executed when loading definitions. Only enabled registered
 commands execute on explicit invocation or an explicitly configured template rule.
 Disabling/replacing a command aborts in-flight helper operations and releases its
-registrations. Editing settings drafts does not change active commands until saved.
+registrations. Settings lists enable toggles, paths and reload actions; command code and template bindings/rules are edited externally in automation.jsonc. There is no settings-local code or JSON draft. Each toggle still uses the same revision-checked automation.save path.
 
 ## Portable configuration and file creation
 
