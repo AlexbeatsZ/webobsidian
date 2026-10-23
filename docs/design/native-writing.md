@@ -27,10 +27,11 @@ exclude them; Header Increment must neither rewrite them nor use them to map
 the following ordinary headings. General body/whitespace rules and explicit
 custom regexes retain their configured scope. See body-headings.md.
 
-Linter imports all rule settings, ordered custom regexes, ignore paths and
-timestamp policy. Rules retain pre/regular/custom/post ordering. Paste formatting
-is a separate entry point. Snippets and formatting share LaTeX Suite replacement
-semantics; migration translates the old Linter replacement strings once.
+The adapted Linter evaluates native rule settings, ordered custom regexes,
+ignore paths and timestamp policy. Rules retain pre/regular/custom/post ordering.
+Paste formatting is a separate entry point. Snippets and formatting share native
+LaTeX Suite replacement semantics; runtime never imports old Linter settings or
+converts legacy replacement strings implicitly.
 
 ## Replacement language and migration
 
@@ -84,7 +85,7 @@ files remain untouched and are not startup configuration sources.
 - Manual save formats once before persistence. Autosave, navigation saves,
   plugin writes and external changes do not trigger whole-document formatting.
 - The timestamp rule's opt-in delayed update changes only timestamps, through
-  one debouncer per session. Its imported setting is `never`; background autosave
+  one debouncer per session. Its default setting is `never`; background autosave
   itself still only persists. File-change formatting follows its explicit option.
 - Format on a working copy, reject stale results and report errors before
   committing. Honor document conflicts and ignore settings.
