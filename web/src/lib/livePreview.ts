@@ -409,7 +409,7 @@ class CalloutMathSourcesWidget extends WidgetType {
   toDOM(view: EditorView) {
     const controls = document.createElement('span'); controls.className = 'cm-callout-math-sources';
     this.formulas.forEach((formula, i) => controls.appendChild(sourceButton(view, formula,
-      this.formulas.length > 1 ? `formula ${i + 1}` : 'formula', { selection: { from: formula.bodyFrom, to: formula.bodyTo } })));
+      this.formulas.length > 1 ? `公式 ${i + 1}` : '公式', { selection: { from: formula.bodyFrom, to: formula.bodyTo } })));
     return controls;
   }
   ignoreEvent() { return true; }
@@ -466,7 +466,7 @@ class MathWidget extends WidgetType {
     this.subscriptions.set(span, subscribeMathConfiguration(render)); render();
     if (this.display && this.range && !this.preview && !this.sourceInTitle && !view.state.readOnly) {
       const formula = editorMathRegions(view.state).find(r => r.from === this.range!.from && r.to === this.range!.to);
-      span.appendChild(sourceButton(view, this.range, 'formula', {
+      span.appendChild(sourceButton(view, this.range, '公式', {
         selection: formula ? { from: formula.bodyFrom, to: formula.bodyTo } : this.range }));
     }
     return span;
@@ -606,7 +606,7 @@ class MermaidWidget extends WidgetType {
         // mermaid leaves an orphaned error element in <body> on parse failure
         document.getElementById(`dcm-mmd-${mermaidSeq}`)?.remove();
       }).finally(() => { delete div.dataset.renderPending; });
-    if (this.range && !view.state.readOnly) div.appendChild(sourceButton(view, this.range, 'diagram'));
+    if (this.range && !view.state.readOnly) div.appendChild(sourceButton(view, this.range, '图表'));
     return div;
   }
 }
@@ -853,7 +853,7 @@ class TableWidget extends WidgetType {
     const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap'; wrap.dataset.tableFrom = String(b.from);
     const frame = document.createElement('div'); frame.className = 'cm-table-frame'; wrap.appendChild(frame);
     const cleanup: (() => void)[] = []; this.cleanup.set(wrap, cleanup);
-    if (!this.ro) frame.appendChild(sourceButton(view, b, 'table'));
+    if (!this.ro) frame.appendChild(sourceButton(view, b, '表格'));
     const table = document.createElement('table'); table.className = 'cm-table'; frame.appendChild(table);
     const apply = (changes: SourceChange[]) => {
       if (view.state.readOnly || view.state.sliceDoc(b.from, b.to) !== b.key) return;
@@ -1159,7 +1159,7 @@ class FrontmatterWidget extends WidgetType {
     box.className = 'properties cm-properties';
     block.appendChild(box);
     const range = view.state.field(syntaxModel).frontmatter;
-    if (!this.ro && range) box.appendChild(sourceButton(view, range, 'properties'));
+    if (!this.ro && range) box.appendChild(sourceButton(view, range, '属性'));
 
     // Commit source patches only, preserving every unrelated YAML token.
     const commit = (props: Prop[]) => {

@@ -126,7 +126,7 @@ class CodeWidget extends WidgetType {
       });
     // Code processors receive their fenced body, matching Obsidian's contract.
     if (!view.state.readOnly)
-      host.append(sourceButton(view, () => this.identity.range, 'code block'));
+      host.append(sourceButton(view, () => this.identity.range, '代码块'));
     return host;
   }
   destroy(dom: HTMLElement) {

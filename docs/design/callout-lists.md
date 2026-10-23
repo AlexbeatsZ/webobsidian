@@ -125,3 +125,20 @@ may rebuild lines and discard inline measurements. Queries exclude nested editor
 content, whose coordinates belong to its own editor. No measured speedup is
 claimed. UI, keyboard, readonly, IME, selection, nested folding and performance
 remain unverified under the user's no-acceptance instruction.
+
+## Callout 第一行公式源码入口（2026-10-23）
+
+显示公式的 `</>` 从公式自身移到所属 Callout 的标题行，避免一个 Callout 内多个公式
+各自占用正文位置。归属在现有不可变分析里算一次：`blockModel` 用 `containers` 的
+`bodyFrom..to` 找出包含该公式的最深 Callout，得到 `mathCallout`（公式起点 → 标题起点）
+与 `calloutMath`（标题起点 → 公式列表）。选择变化只读取这两张缓存表，不重新解析。
+
+标题行的控件是一个独立 widget：按 `calloutMath` 生成与公式数相同的 `sourceButton`，
+沿用同一 `sourceRegion` 和选区/失焦/Escape 自动恢复，点击后选中该公式正文。因此
+Callout 内公式不再渲染自己的源码按钮（`MathWidget.sourceInTitle`）；正文 `</>`（HTML、
+Mermaid、表格、属性、代码块、块效果）保持原位。只读、整篇折叠、正被源码显示或由块效果
+接管的公式不生成控件；折叠状态改变会随现有装饰重建一起更新。
+
+标题行的 `--callout-formula-controls` 只为文本预留控件宽度（上限 50%），按钮组绝对定位在
+标题右上、`height: 1lh` 内垂直居中，超出时自身横向滚动。折叠箭头继续使用既有
+`1lh` 内联锚点与 accent 令牌，与第一行居中；没有新增第二套按钮状态、解析器或折叠状态。

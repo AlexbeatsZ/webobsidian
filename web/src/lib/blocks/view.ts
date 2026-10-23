@@ -57,7 +57,7 @@ class EffectWidget extends WidgetType {
       } finally { if (!stopped && run === current) { delete host.dataset.renderPending; measure(); } }
     };
     mounts.set(host, { stop() { stopped = true; run?.unload(); } });
-    if (!view.state.readOnly) host.append(sourceButton(view, () => this.identity.range, 'block effect'));
+    if (!view.state.readOnly) host.append(sourceButton(view, () => this.identity.range, '块效果'));
     void render(); return host;
   }
   destroy(dom: HTMLElement) { mounts.get(dom)?.stop(); mounts.delete(dom); }

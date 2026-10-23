@@ -51,7 +51,7 @@ export function sourceButton(view: EditorView, range: SourceSpan | (() => Source
   button.type = 'button';
   button.className = 'cm-source-toggle';
   button.textContent = '</>';
-  button.title = `Edit ${label} source`;
+  button.title = `编辑${label}源码`;
   button.setAttribute('aria-label', button.title);
   button.addEventListener('mousedown', (event) => {
     event.preventDefault(); event.stopPropagation();
