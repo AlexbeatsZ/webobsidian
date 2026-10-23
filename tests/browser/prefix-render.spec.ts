@@ -111,3 +111,26 @@ for (const [name, delimiter] of [['bold', '**'], ['italic', '*'], ['strike', '~~
     expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
   });
 }
+
+test('@prefix multiline inline code keeps HTML-shaped body literal', async ({ page }) => {
+  const source = '`CodeFirst\n<u>LiteralTag</u>\nCodeLast`\n\nTail';
+  await reset(page, source);
+  for (const slot of [0, 1]) {
+    const content = page.locator(`[data-slot="${slot}"] .cm-content`);
+    await expect(content).toContainText('<u>LiteralTag</u>');
+    await expect(content.locator('.cm-html-block, .md-html-u')).toHaveCount(0);
+  }
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+});
+
+test('@prefix fenced code keeps quote, list and HTML syntax literal', async ({ page }) => {
+  const source = '```markdown\n> - **LiteralFence**\n<u>FenceTag</u>\n```\n\nTail';
+  await reset(page, source);
+  for (const slot of [0, 1]) {
+    const content = page.locator(`[data-slot="${slot}"] .cm-content`);
+    await expect(content).toContainText('> - **LiteralFence**');
+    await expect(content).toContainText('<u>FenceTag</u>');
+    await expect(content.locator('.cm-quote-prefix, .cm-list-prefix, .cm-bullet, .cm-html-block, .md-html-u')).toHaveCount(0);
+  }
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+});

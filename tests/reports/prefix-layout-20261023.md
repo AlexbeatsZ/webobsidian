@@ -64,3 +64,29 @@ npm --prefix <snapshot> exec -- playwright test --config playwright.prefix.confi
 这一配置错误不计为应用启动回归，也不计为前缀用例通过／失败。
 
 本组不是全仓、性能、IME、打印或原生窗口验收；不覆盖原用户笔记的所有布局组合。
+
+## 源码修正后的复跑
+
+原源码 owner 交付 `9aaeaec1b8f33ae8ac133b4c90ff3eb80030bc24` 后，使用显式
+`git archive 9aaeaec` 更新同一独立快照，核对新的 `lineExcludedRanges` 与
+InlineCode 路径。保留正确的 web 工作区 picomatch 4.0.3、隔离配置和缓存；在快照中
+重新编译 search-core/markdown-core，均完成。没有修改功能源码、关闭错误检查或弱化原断言。
+
+1. **Run3：原六项全部通过，10.1 秒。** 此前失败的跨行行内代码引用／列表前缀断言通过；
+   32 组、4 个锚点的最大水平变化仍为 **0 CSS px**。旧 red trace 与截图保持原样。
+2. 随后只追加两个直接保护本次代码范围调整的边界：跨行行内代码中的 HTML-shaped 行
+   保持字面文本、不生成 HTML widget；围栏代码中的引用／列表／HTML 语法仍保持字面文本。
+   两个边界同时检查 live 和 readonly 视图。
+3. **Run4：六项原回归加两个边界全部通过，共 8 项，12.0 秒。** 页面／控制台错误断言
+   均未触发，源码保留断言通过。此结果只适用于上述合成 fixture 和浏览器环境。
+
+新增证据位于相同临时目录：
+
+- `provenance-run3.json`：明确源码提交、测试来源及快照路径。
+- `results-run3.json`、`prefix-position-samples-run3.json`：原六项 green 与几何数据。
+- `results-run4.json`、`prefix-position-samples-run4.json`：最终八项结果与几何数据。
+- `REPORT.md` 保留首次依赖配置错误、真实 red、源码修正和 green 的完整过程。
+
+原 **5 pass / 1 fail** 是修正前的真实结果，没有被覆盖为通过。源码修正由原 owner 实施；
+测试提交只增加两个边界与本报告。没有重跑无关旧套件，没有操作真实 Vault/profile 或新 EXE。
+原生新包验收与是否重新打包由协调者、构建负责人另行记录，本报告不把浏览器通过冒充原生通过。
