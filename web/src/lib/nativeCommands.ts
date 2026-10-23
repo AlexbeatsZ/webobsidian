@@ -2,6 +2,7 @@ import { useStore } from './store';
 import { api } from './api';
 import { writingCommands } from './writing/commands';
 import { hotkeyCommandId } from '@webobsidian/search-core';
+import { setActiveEditorMode } from './activeEditor';
 import type { NativeCommand } from './commands';
 import { nativeEditorCommands } from './nativeEditorCommands';
 import { nativeWorkspaceCommands } from './nativeWorkspaceCommands';
@@ -12,6 +13,12 @@ import { tagCommands } from './tags/commands';
 import { headingLevelCommands } from './headingLevelCommands';
 
 /** Native command definitions shared by the palette and configurable shortcuts. */
+function setMode(mode: 'live' | 'reading' | 'source' | 'toggle-preview' | 'toggle-source') {
+  if (setActiveEditorMode(mode)) return;
+  const state = useStore.getState();
+  state.setViewMode(mode === 'toggle-preview' ? (state.viewMode === 'reading' ? 'live' : 'reading')
+    : mode === 'toggle-source' ? (state.viewMode === 'source' ? 'live' : 'source') : mode);
+}
 export const nativeCommands: NativeCommand[] = [
   ...nativeEditorCommands,
   ...nativeWorkspaceCommands,
@@ -65,11 +72,11 @@ export const nativeCommands: NativeCommand[] = [
   { id: 'graph', title: '打开关系图谱', run: () => useStore.getState().setGraph(true) },
   { id: 'settings', title: '打开设置', run: () => useStore.getState().setSettings(true) },
   { id: 'trash', title: '打开回收站', run: () => useStore.getState().setTrash(true) },
-  { id: 'reading', title: '切换到阅读模式', run: () => useStore.getState().setViewMode('reading') },
-  { id: 'live', title: '切换到实时预览', run: () => useStore.getState().setViewMode('live') },
-  { id: 'source', title: '切换到源码模式', run: () => useStore.getState().setViewMode('source') },
-  { id: 'toggle-preview', title: '切换阅读与编辑模式', hotkeys: [{ modifiers: ['Mod'], key: 'E' }], run: () => { const state = useStore.getState(); state.setViewMode(state.viewMode === 'reading' ? 'live' : 'reading'); } },
-  { id: 'toggle-source', title: '切换源码与实时预览', run: () => { const state = useStore.getState(); state.setViewMode(state.viewMode === 'source' ? 'live' : 'source'); } },
+  { id: 'reading', title: '切换到阅读模式', run: () => setMode('reading') },
+  { id: 'live', title: '切换到实时预览', run: () => setMode('live') },
+  { id: 'source', title: '切换到源码模式', run: () => setMode('source') },
+  { id: 'toggle-preview', title: '切换阅读与编辑模式', hotkeys: [{ modifiers: ['Mod'], key: 'E' }], run: () => setMode('toggle-preview') },
+  { id: 'toggle-source', title: '切换源码与实时预览', run: () => setMode('toggle-source') },
   {
     id: 'reindex',
     title: '重建搜索索引',

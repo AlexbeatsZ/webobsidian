@@ -5,6 +5,7 @@ import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { editorSelection } from '../lib/editorSelection';
+import { bindEditorMode } from '../lib/activeEditor';
 import { editorPhrases } from '../lib/editorPhrases';
 import { bindFragmentNavigation } from '../lib/fragmentNavigation';
 import { nativeWritingExtensions } from '../lib/writing/extensions';
@@ -302,12 +303,18 @@ export default function MarkdownView(props: MarkdownViewProps) {
       ],
     });
     const v = new EditorView({ state, parent: host.current });
+    const stopMode = bindEditorMode(v, request => {
+      const current = latest.current;
+      const mode = request === 'toggle-preview' ? (current.mode === 'reading' ? 'live' : 'reading')
+        : request === 'toggle-source' ? (current.mode === 'source' ? 'live' : 'source') : request;
+      current.onModeChange?.(mode);
+    });
     const stopNavigation = bindFragmentNavigation(v, p.snapshot.id,
       !p.context.embedTrail?.length && !p.context.equations?.from);
     view.current = v;
     p.onReady?.(v);
     if (p.autoFocus) v.focus();
-    return () => { stopNavigation(); p.onReady?.(null); view.current = null; v.destroy(); };
+    return () => { stopMode(); stopNavigation(); p.onReady?.(null); view.current = null; v.destroy(); };
   }, [snapshot.id]);
 
   useEffect(() => { sync(snapshot); }, [snapshot]);

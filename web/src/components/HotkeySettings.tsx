@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { eventHotkey, hotkeyLabel, hotkeySignature, type Hotkey } from '@webobsidian/search-core';
 import { sharedApp, pluginRevision, subscribePlugins } from '../lib/plugins';
-import { consumeHotkeySettingsRequest, matchName, updateHotkeys, useSearch } from '../lib/search';
+import { consumeHotkeySettingsRequest, peekHotkeySettingsRequest, matchName, updateHotkeys, useSearch } from '../lib/search';
 import { SettingGroup, SettingRow } from './SettingRow';
 import Icon from './Icon';
 import '../styles/hotkeys.css';
@@ -11,9 +11,9 @@ const mac = () => /Mac|iPhone|iPad/.test(navigator.platform);
 
 /** One live command catalog serves this page, the palette and key dispatch. */
 export default function HotkeySettings() {
-  const { hotkeys } = useSearch();
+  const { hotkeys, hotkeyError } = useSearch();
   const revision = useSyncExternalStore(subscribePlugins, pluginRevision);
-  const [query, setQuery] = useState(consumeHotkeySettingsRequest);
+  const [query, setQuery] = useState(peekHotkeySettingsRequest);
   const [filter, setFilter] = useState<Filter>('all');
   const [recording, setRecording] = useState('');
   const [busy, setBusy] = useState('');
@@ -21,6 +21,7 @@ export default function HotkeySettings() {
   const recorder = useRef<HTMLInputElement>(null);
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => {
+    consumeHotkeySettingsRequest();
     const focus = (event: Event) => {
       const id = (event as CustomEvent<string>).detail || consumeHotkeySettingsRequest();
       consumeHotkeySettingsRequest(); setQuery(id || ''); setFilter('all'); search.current?.focus();
@@ -71,6 +72,7 @@ export default function HotkeySettings() {
     </div>
     <p className="hotkey-summary" role="status">显示 {filtered.length} / {catalog.length} 项 · {catalog.filter(command => command.installed).length} 个可用命令 · {catalog.filter(conflicted).length} 项冲突</p>
     {error && <p className="hotkey-error" role="alert">{error}</p>}
+    {hotkeyError && <p className="hotkey-error" role="alert">{hotkeyError}</p>}
     {hotkeys.migration && <p className="hotkey-migration">{hotkeys.migration}</p>}
     <SettingGroup className="hotkey-list">
       {filtered.map(command => <SettingRow key={command.id} className={command.installed ? '' : 'hotkey-unavailable'} name={<><span>{command.name}</span>{!command.installed && <span className="hotkey-status">不可用</span>}</>} desc={<><code>{command.id}</code>{command.custom && <span className="hotkey-status">{command.bindings.length ? (hotkeys.imported.includes(command.id) ? '已迁移 / 自定义' : '自定义') : '已禁用'}</span>}</>}>

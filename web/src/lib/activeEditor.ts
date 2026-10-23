@@ -10,6 +10,21 @@ interface EditorCommands {
 }
 const mounted = new Map<EditorView, EditorCommands>();
 let active: EditorView | null = null;
+type ViewMode = 'live' | 'reading' | 'source';
+type ModeRequest = ViewMode | 'toggle-preview' | 'toggle-source';
+const modeHandlers = new Map<EditorView, (mode: ModeRequest) => void>();
+/** The mounted Markdown view keeps ownership of its own mode and React callback. */
+export function bindEditorMode(view: EditorView, handler: (mode: ModeRequest) => void): () => void {
+  modeHandlers.set(view, handler);
+  return () => { if (modeHandlers.get(view) === handler) modeHandlers.delete(view); };
+}
+export function setActiveEditorMode(mode: ModeRequest): boolean {
+  const view = getActiveEditor();
+  if (!view) return false;
+  modeHandlers.get(view)?.(mode);
+  // An editor without a mode switch must never redirect the action to another pane.
+  return true;
+}
 const available = (view: EditorView) => view.dom.isConnected && !view.dom.closest('[hidden], [aria-hidden="true"]');
 
 export function registerEditor(view: EditorView, commands: EditorCommands): () => void {

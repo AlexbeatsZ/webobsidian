@@ -1,11 +1,11 @@
-import { useSearch, fileCandidates, matchName, remember, updateSearch } from '../lib/search';
+import { useSearch, fileCandidates, matchName, remember, updateSearch, requestHotkeySettings } from '../lib/search';
 import MatchLabel from './MatchLabel';
 import { documents } from '../lib/documents';
 import { extractMetadata } from '@webobsidian/markdown-core';
 import { getEditorForPath } from '../lib/activeEditor';
 import { EditorView } from '@codemirror/view';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { fileTitleError, parseSearchQuery } from '@webobsidian/search-core';
+import { fileTitleError, parseSearchQuery, hotkeyLabel, type Hotkey } from '@webobsidian/search-core';
 import Icon from './Icon';
 import { sharedApp, pluginRevision, subscribePlugins } from '../lib/plugins';
 import { useStore } from '../lib/store';
@@ -19,14 +19,7 @@ interface Cmd {
   path?: string;
   level?: number;
   tags?: string[];
-  shortcut?: string;
-}
-
-const defaultShortcuts: Record<string, string> = { files: 'Mod+O', commands: 'Mod+P', new: 'Mod+N', save: 'Mod+S', reading: 'Mod+E', search: 'Mod+Shift+F' };
-function shortcutLabel(binding: string): string {
-  return binding.split('+').map(key => key.toLowerCase() === 'mod'
-    ? (/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl')
-    : key.length === 1 ? key.toUpperCase() : key).join(' + ');
+  shortcuts?: Hotkey[];
 }
 
 export default function CommandPalette() {
@@ -45,7 +38,7 @@ export default function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const pluginVersion = useSyncExternalStore(subscribePlugins, pluginRevision);
 
-  const { entries, settings } = useSearch();
+  const { entries, settings, hotkeys } = useSearch();
   const content = useStore((s) => s.content);
   const recent = useStore((s) => s.recent);
 
@@ -123,7 +116,7 @@ export default function CommandPalette() {
     const commands: Cmd[] = sharedApp.commands.listCommands().map((c) => ({
       id: c.id,
       title: c.name,
-      shortcut: settings.shortcuts[c.id] || defaultShortcuts[c.id] || (c.hotkeys?.[0] ? [...c.hotkeys[0].modifiers, c.hotkeys[0].key].join('+') : undefined),
+      shortcuts: sharedApp.commands.getHotkeys(c.id),
       run: () => {
         sharedApp.commands.executeCommandById(c.id);
       },
@@ -144,7 +137,7 @@ export default function CommandPalette() {
     return mode === 'commands' || q.startsWith('>')
       ? commandItems
       : [...commandItems.slice(0, 3), ...fileItems];
-  }, [open, q, mode, entries, settings, pluginVersion, activePath, content, recent, rightTabId]);
+  }, [open, q, mode, entries, settings, hotkeys, pluginVersion, activePath, content, recent, rightTabId]);
   const choose = (item: Cmd | undefined, event?: { ctrlKey: boolean; metaKey: boolean; altKey: boolean }) => {
     if (!item) return;
     setOpen(false);
@@ -200,7 +193,7 @@ export default function CommandPalette() {
       e.preventDefault();
       setOpen(false);
       setSettings(true);
-      window.dispatchEvent(new CustomEvent('search-settings-open', { detail: items[sel]?.id }));
+      requestHotkeySettings(items[sel]?.id);
       return;
     }
     if (
@@ -298,7 +291,7 @@ export default function CommandPalette() {
                   {settings.pinnedCommands.includes(it.id) ? '★' : '☆'}
                 </button>
               )}
-              {it.shortcut && <kbd className="palette-shortcut">{shortcutLabel(it.shortcut)}</kbd>}
+              {it.shortcuts?.map((binding, index) => <kbd className="palette-shortcut" key={index}>{hotkeyLabel(binding, /Mac|iPhone|iPad/.test(navigator.platform))}</kbd>)}
               {it.path && !q && recent.includes(it.path) && settings.historyKeys[i] &&
                 <kbd className="palette-history-key">{settings.historyKeys[i]}</kbd>}
             </div>

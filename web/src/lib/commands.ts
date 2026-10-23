@@ -100,7 +100,8 @@ export class CommandManager extends Events {
       const custom = Object.hasOwn(config.bindings, command.id);
       for (const binding of this.getHotkeys(command.id)) {
         const signature = hotkeySignature(binding, mac);
-        bindings.set(signature, [...bindings.get(signature) ?? [], { command, custom }]);
+        const candidates = bindings.get(signature) ?? [];
+        if (!candidates.some(candidate => candidate.command.id === command.id)) bindings.set(signature, [...candidates, { command, custom }]);
       }
       if (custom) for (const binding of command.hotkeys ?? []) blocked.add(hotkeySignature(binding, mac));
     }

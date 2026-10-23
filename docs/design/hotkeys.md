@@ -43,8 +43,26 @@ Fuzzy/编辑命令/标题移位/插件 ID → 本体命令）。`writing/command
 错误。命令面板的“配置快捷键”通过 `hotkeys-settings-open`/`search-settings-open` 事件跳到
 该命令。
 
+## 2026-10-23 目录接线修正
+
+- 命令弹窗只从 `CommandManager.getHotkeys` 读取有效绑定，显示全部组合，显式空列表不回退到旧
+  `search.chinese.shortcuts` 或弹窗私有默认表。跳转配置页先保存 pending command，设置挂载后消费；
+  初始化只读 pending，避免 React StrictMode 重复 initializer 消耗目标 ID。
+- `refreshSearch` 分别接受 catalog、搜索设置与快捷键请求结果，单项失败保留该项最后有效快照，
+  不丢弃其他成功结果；快捷键错误显示在设置页。快捷键写入在排队和成功时递增独立 generation，
+  先前/写入中开始的 GET 不得在 PUT 完成后覆盖绑定。
+- `CommandManager` 的平台 signature 索引对同一命令去重。Windows 的 Mod/Ctrl 或 macOS 的
+  Mod/Meta 同义绑定不会制造与自身的冲突；不同命令之间的同优先级冲突规则保持不变。
+- 模式切换由已挂载 MarkdownView 注册回调，回调读取该视图最新 mode/onModeChange；原生命令
+  先调用当前编辑器对应的回调。侧栏笔记保留自己的模式状态，没有 mode handler 的只读视图
+  不会把操作重定向到中央。视图销毁时解除注册；无活跃编辑器时才沿用工作区模式入口。
+- 缩进规则由列表 owner 接到同一 `indentMarkdown`，Tab 与目录命令不再分别实现缩进算法。
+
+本修正只做源码/调用关系/Git diff 检查，未运行 tests、类型检查、构建、应用、服务、浏览器或
+真实键盘/IME/性能验收；无新测试或打包，原始 Vault/config/profile 保持不变。
+
 ## 交付边界
 
-2026-10-23 收尾：修复 `HotkeySettings` 的 React 事件类型错误，删除被统一目录取代的
+2026-10-23 早先收尾：修复 `HotkeySettings` 的 React 事件类型错误，删除被统一目录取代的
 `runWritingHotkey`/`writingCommandId`。已做全仓 `typecheck`；未运行 tests、构建、应用、
 服务、浏览器、真实键盘/IME 或性能验收，未写真实 Vault 快捷键文件。

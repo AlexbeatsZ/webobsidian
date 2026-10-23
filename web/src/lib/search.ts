@@ -19,12 +19,14 @@ let entries: CatalogEntry[] = [],
 let revision = 0,
   generation = 0;
 let hotkeys: VaultHotkeys = { ...emptyHotkeys(), vault: '' };
+let hotkeyGeneration = 0, hotkeyError = '';
 let pendingHotkeyCommand = '';
 export function requestHotkeySettings(command = '') {
   pendingHotkeyCommand = command;
   window.dispatchEvent(new CustomEvent('hotkeys-settings-open', { detail: command }));
 }
 export function consumeHotkeySettingsRequest() { const command = pendingHotkeyCommand; pendingHotkeyCommand = ''; return command; }
+export const peekHotkeySettingsRequest = () => pendingHotkeyCommand;
 export const hotkeySettings = () => hotkeys;
 const listeners = new Set<() => void>();
 export const subscribeSearch = (fn: () => void) => {
@@ -39,7 +41,7 @@ const changed = () => {
 };
 export function useSearch() {
   useSyncExternalStore(subscribeSearch, () => revision);
-  return { entries, settings, hotkeys };
+  return { entries, settings, hotkeys, hotkeyError };
 }
 export const searchSettings = () => settings;
 export const searchEntries = () => entries;
@@ -54,21 +56,30 @@ export function searchTags(): string[] {
 }
 export async function refreshSearch() {
   const current = ++generation;
-  const [result, config, keys] = await Promise.all([api.catalog(), api.getSettings(), request<VaultHotkeys>('/api/settings/hotkeys')]);
+  const keyGeneration = hotkeyGeneration;
+  const [result, config, keys] = await Promise.allSettled([api.catalog(), api.getSettings(), request<VaultHotkeys>('/api/settings/hotkeys')]);
   if (current !== generation) return;
-  entries = result.entries;
-  settings = { ...searchDefaults, ...config.search.chinese };
-  hotkeys = keys;
+  if (result.status === 'fulfilled') entries = result.value.entries;
+  else console.error(result.reason);
+  if (config.status === 'fulfilled') settings = { ...searchDefaults, ...config.value.search.chinese };
+  else console.error(config.reason);
+  // A GET begun before or during a binding write must not replace that write.
+  if (keyGeneration === hotkeyGeneration) {
+    if (keys.status === 'fulfilled') { hotkeys = keys.value; hotkeyError = ''; }
+    else hotkeyError = `快捷键载入失败，保留上次有效配置：${String(keys.reason)}`;
+  }
   changed();
 }
 let hotkeyWrites: Promise<unknown> = Promise.resolve();
 /** Server serializes patches; no optimistic reset or loss of another command's bindings. */
 export function updateHotkeys(command: string, bindings: Hotkey[] | null) {
   const vault = hotkeys.vault;
+  hotkeyGeneration++;
   const operation = hotkeyWrites.catch(() => {}).then(async () => {
     const next = await request<VaultHotkeys>('/api/settings/hotkeys', { method: 'PUT', body: JSON.stringify({ vault, command, bindings }) });
     if (hotkeys.vault !== vault) return;
-    hotkeys = next; changed();
+    hotkeyGeneration++;
+    hotkeys = next; hotkeyError = ''; changed();
   });
   hotkeyWrites = operation;
   return operation;
