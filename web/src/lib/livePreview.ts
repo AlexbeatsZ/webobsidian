@@ -12,7 +12,7 @@ import { markdownListLine } from './listLayout';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { iconPaths, setIcon } from './icons';
 import { openLightbox } from './imageLightbox';
-import { applyImagePresentation, presentHtmlImages } from './imagePresentation';
+import { applyImagePresentation, presentHtmlImages, markdownImageAt } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
 import { syntaxModel, blockModel, equationsOf } from './syntaxModel';
 import { compositionSelection } from './inlineHtml';
@@ -205,7 +205,6 @@ function writeImageWidth(view: EditorView, wrap: HTMLElement, width: number): vo
     return;
   }
   const line = view.state.doc.lineAt(pos);
-  const off = pos - line.from;
   const isSize = (s: string) => /^\s*\d+\s*(?:x\s*\d+\s*)?$/.test(s);
   const withSize = (segs: string[]): string => {
     if (segs.length > 1 && isSize(segs[segs.length - 1])) segs.pop();
@@ -220,8 +219,16 @@ function writeImageWidth(view: EditorView, wrap: HTMLElement, width: number): vo
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(line.text))) {
-      if (m.index <= off && off <= m.index + m[0].length) {
-        const from = line.from + m.index;
+      const from = line.from + m.index;
+      const parsed = line.text.slice(m.index, m.index + 3) !== '![[' ? markdownImageAt(view.state.field(syntaxModel), from) : undefined;
+      const to = parsed?.to ?? from + m[0].length;
+      re.lastIndex = to - line.from;
+      if (from <= pos && pos <= to) {
+        if (parsed) {
+          // Resize only the alt; preserve every byte of the URL/title/payload.
+          view.dispatch({ changes: { from: from + 2, to: parsed.altTo, insert: withSize(parsed.alt.split('|')) } });
+          return;
+        }
         view.dispatch({ changes: { from, to: from + m[0].length, insert: build(m) } });
         return;
       }
@@ -2141,12 +2148,19 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       // Markdown images ![alt](url) — URL may contain spaces (real-world vaults)
       const imgRe = /!\[([^\]]*)\]\(([^)]+)\)/g;
+      const imageSpans: { from: number; to: number }[] = [];
       while ((m = imgRe.exec(text))) {
         const s = line.from + m.index;
-        const e = s + m[0].length;
+        const parsed = markdownImageAt(model, s);
+        const e = parsed?.to ?? s + m[0].length;
+        if (e > line.to) continue;
+        // Reuse parser-owned bounds; a data URL can contain balanced rgb(...).
+        // The old match remains a fallback for Vault filenames containing spaces.
+        imgRe.lastIndex = e - line.from;
+        imageSpans.push({ from: m.index, to: e - line.from });
         if (touches(s, e) || inCode(s, e)) continue;
         // size param lives in the alt text: `![alt|300](url)` / `![|300x200](url)`
-        let alt = m[1];
+        let alt = parsed?.alt ?? m[1];
         let w: number | undefined;
         let h: number | undefined;
         const ai = alt.lastIndexOf('|');
@@ -2158,7 +2172,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             alt = alt.slice(0, ai);
           }
         }
-        const url = m[2].replace(/\s+"[^"]*"$/, '').trim();
+        const url = parsed?.target ?? m[2].replace(/\s+"[^"]*"$/, '').trim();
         // Browser-loadable URLs load directly; anything else (a relative path or
         // any custom scheme) is resolved by basename via the vault file index.
         const webLoadable = /^(https?|data|blob|file):/i.test(url);
@@ -2167,8 +2181,13 @@ function buildDecorations(view: EditorView): DecorationSet {
         pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt, w, h, readonly, url) }));
       }
 
-      const imageOnly = text.replace(/^(?: {0,3}> ?)*/, '')
-        .replace(/!\[\[[^\]]+\]\]|!\[[^\]]*\]\([^)]+\)/g, '').trim() === '';
+      let withoutImages = text;
+      for (let i = imageSpans.length - 1; i >= 0; i--) {
+        const span = imageSpans[i];
+        withoutImages = withoutImages.slice(0, span.from) + withoutImages.slice(span.to);
+      }
+      const imageOnly = withoutImages.replace(/^(?: {0,3}> ?)*/, '')
+        .replace(/!\[\[[^\]]+\]\]/g, '').trim() === '';
       if (imageOnly && hasRenderedImage && !lineActive(line.from)) all.push(Decoration.line({ class: 'cm-image-row' }).range(line.from));
 
       // Markdown links [text](url) — not preceded by ! (those are images)

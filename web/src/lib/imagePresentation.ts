@@ -1,15 +1,46 @@
+import type { MarkdownModel, SourceSpan } from '@webobsidian/markdown-core';
+
+interface MarkdownImage extends SourceSpan { alt: string; altTo: number; target: string }
+const markdownImages = new WeakMap<MarkdownModel, Map<number, MarkdownImage>>();
+
+/** The existing grammar owns balanced destinations, including SVG data payloads. */
+export function markdownImageAt(model: MarkdownModel, from: number): MarkdownImage | undefined {
+  let images = markdownImages.get(model);
+  if (!images) {
+    images = new Map();
+    for (const range of model.nodes) {
+      if (range.name !== 'Image') continue;
+      let image = model.tree.resolveInner(range.from, 1);
+      while (image.name !== 'Image' && image.parent) image = image.parent;
+      if (image.name !== 'Image' || image.from !== range.from) continue;
+      const destination = image.getChild('URL'), closingAlt = image.getChildren('LinkMark')[1];
+      if (!destination || !closingAlt) continue;
+      images.set(range.from, { from: range.from, to: range.to,
+        alt: model.text.slice(range.from + 2, closingAlt.from),
+        altTo: closingAlt.from,
+        target: model.text.slice(destination.from, destination.to).replace(/^<|>$/g, ''),
+      });
+    }
+    markdownImages.set(model, images);
+  }
+  return images.get(from);
+}
+
 /** Presentation metadata is kept separate from the resolved/request URL. */
 export function imagePresentation(target: string, alt: string) {
-  const path = target.split(/[?#]/)[0];
+  const dataImage = /^data:image\//i.test(target);
+  // Encoded SVG text/base64 is image content, never a filename/theme marker.
+  const presentation = dataImage ? '' : target;
+  const path = presentation.split(/[?#]/)[0];
   let scale = 1;
-  for (const value of [1.5, 2, 0.5]) if (target.includes('#x' + value)) scale = value;
+  for (const value of [1.5, 2, 0.5]) if (presentation.includes('#x' + value)) scale = value;
   return {
     target, alt,
     // Preserve the active STEM rule: only .jpg/.png filename alts are suppressed.
     caption: alt && !alt.endsWith('.jpg') && !alt.endsWith('.png') ? alt : '',
-    svg: /\.svg$/i.test(path),
-    center: target.includes('#center'), full: target.includes('#full'), scale,
-    dark: target.includes('dark'), wiki: target.includes('Wiki'),
+    svg: /\.svg$/i.test(path) || /^data:image\/svg\+xml(?:[;,])/i.test(target),
+    center: presentation.includes('#center'), full: presentation.includes('#full'), scale,
+    dark: presentation.includes('dark'), wiki: presentation.includes('Wiki'),
   };
 }
 
