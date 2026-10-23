@@ -233,10 +233,12 @@ Earlier browser/build results did not cover this real-note workflow.
   Native primary selection/caret now track actual text boxes, including wrapped
   callout lines. Secondary selections use text marks and secondary cursors use a
   measured overlay. Both cursor styles follow document theme colors.
-- Callout title `</>` enters the existing source region, including nested content;
-  Close source / Escape restores live decoration without serializing Markdown.
-  Source controls also accept keyboard-generated clicks. Inline HTML responds to
-  source-close effects even if the selection did not change.
+- Callout editing reveals only the title prefix or body quote markers at the
+  caret; the former whole-callout `</>` entry has been removed. Original CM text
+  and wrappers stay in place. Only `-` defaults to folded; `+` and an absent
+  marker default to expanded and all three have a fold control. See callout-lists.md.
+  Other explicit source fallbacks retain their shared lifecycle. Inline HTML
+  responds to source-close effects even if the selection did not change.
 - Tables retain the full-column outer layout contract, but an intrinsic-width
   inner frame owns the table and all its controls. Vertical spacing is padding,
   included in the block widget's measured height. Table models are derived once

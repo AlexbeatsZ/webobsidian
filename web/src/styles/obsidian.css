@@ -593,13 +593,13 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   background-repeat: no-repeat; background-size: 2px 100%, 2px 100%; background-position: 22px 0, 46px 0;
 }
 /* List indentation guides (one per indent unit) — same mechanism as Obsidian:
-   absolutely positioned 1px rule spanning the full line height, offset 0.85em. */
+   absolutely positioned 1px rule spanning the full line height, at a bullet's center. */
 .cm-s-obsidian .cm-line { position: relative; }
 .cm-s-obsidian .cm-indent { display: inline-block; }
 .cm-s-obsidian .cm-indent::before {
   content: '\200B'; display: block; width: 1px; color: transparent;
   border-right: 1px solid rgba(var(--mono-rgb-100), 0.12);
-  position: absolute; top: 0; bottom: 0; margin-inline-start: 0.85em;
+  position: absolute; top: 0; bottom: 0; margin-inline-start: 0.275em;
 }
 /* Transclusions share the document layout without a frame, duplicate title or scroll cap. */
 .cm-note-embed { position: relative; border: 0; padding: 0; margin: 4px 0; white-space: normal; width: fit-content; min-width: 100%; max-width: none; }
@@ -638,7 +638,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s);
   background: #fff; resize: vertical; overflow: auto; }
 /* Callout fold chevron */
-.cm-callout-fold { display: inline-flex; align-items: center; height: 1lh; vertical-align: top; margin-left: 6px; cursor: pointer;
+.cm-callout-fold { display: inline-flex; align-items: center; height: 1lh; vertical-align: top; margin-left: 6px; padding: 0; border: 0; background: transparent; cursor: pointer;
   color: rgb(var(--callout-color, var(--callout-default))); transition: transform var(--transition); }
 .cm-callout-fold svg { width: 16px; height: 16px; }
 .cm-callout-fold.is-folded { transform: rotate(-90deg); }
@@ -693,7 +693,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 }
 /* Keep CM's inline text/caret layout intact. Reserve one icon column for all
    wrapped lines and center the SVG on the complete title container. */
-.md-callout-title > .cm-line { flex: 1; min-width: 0; position: static; padding: 0 46px 0 22px; }
+.md-callout-title > .cm-line { flex: 1; min-width: 0; position: static; padding: 0 8px 0 22px; }
 .md-callout-title { margin-bottom: 0; }
 .md-callout-title .cm-callout-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); }
 .md-callout .md-code, .md-callout .cm-code { background: var(--document-nested-surface); }

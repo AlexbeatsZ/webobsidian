@@ -2,18 +2,35 @@ import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
 
 /** Measure the actual rendered marker (font/widgets included), not a guessed ch width. */
 class ListLayout {
+  private observer: MutationObserver;
   private original = new WeakMap<HTMLElement, { padding: string; indent: string; base: number; classes: string }>();
   private previous = new Set<HTMLElement>();
-  constructor(private view: EditorView) { this.schedule(); }
+  constructor(private view: EditorView) {
+    this.observer = new MutationObserver(records => {
+      // Selection/effect updates need no measurement unless they actually replace
+      // list DOM or reveal a marker. Ignore our own measured inline styles.
+      if (records.some(record => {
+        const target = record.target instanceof Element ? record.target : record.target.parentElement;
+        if (target?.closest('.cm-content') !== view.contentDOM) return false;
+        if (record.attributeName === 'data-list-body-start') return true;
+        return target?.closest('.cm-line[data-list-body-start]') || [...record.addedNodes, ...record.removedNodes].some(node =>
+          node instanceof Element && (node.matches('.cm-line[data-list-body-start]') || node.querySelector('.cm-line[data-list-body-start]')));
+      })) this.schedule();
+    });
+    this.observer.observe(view.contentDOM, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-list-body-start'] });
+    this.schedule();
+  }
+  destroy() { this.observer.disconnect(); }
   update(update: ViewUpdate) {
     // Async formula/font layout can rebuild line DOM and discard measured styles.
-    if (update.docChanged || update.selectionSet || update.geometryChanged || update.transactions.some((tr) => tr.effects.length)) this.schedule();
+    if (update.docChanged || update.viewportChanged || update.geometryChanged) this.schedule();
   }
   private schedule() {
     this.view.requestMeasure({
       key: this,
       read: (view) => {
-        const current = new Set(view.dom.querySelectorAll<HTMLElement>('.cm-line[data-list-body-start]'));
+        const current = new Set([...view.contentDOM.querySelectorAll<HTMLElement>('.cm-line[data-list-body-start]')]
+          .filter(line => line.closest('.cm-content') === view.contentDOM));
         const reset = [...this.previous].filter((line) => !current.has(line));
         const metrics = [...current].map((line) => {
           const old = this.original.get(line);

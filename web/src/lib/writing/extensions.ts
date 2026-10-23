@@ -68,7 +68,7 @@ export function nativeWritingExtensions() {
     EditorState.allowMultipleSelections.of(true),
     Prec.high(keyboardEventPlugin),
     Prec.high(EditorView.inputHandler.of(onInput)),
-    snippetStateField,
+    Prec.high(snippetStateField),
     snippetExtensions,
     mathTooltipExtension,
     visuals.of(display()),

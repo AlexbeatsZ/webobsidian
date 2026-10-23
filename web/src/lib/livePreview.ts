@@ -7,8 +7,9 @@ import {
   WidgetType,
 } from '@codemirror/view';
 import { StateField, StateEffect, type EditorState, type Range, type Text } from '@codemirror/state';
-import { syntaxTree } from '@codemirror/language';
+import { getIndentUnit, syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
+import { iconPaths } from './icons';
 import { openLightbox } from './imageLightbox';
 import { applyImagePresentation, presentHtmlImages } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
@@ -373,26 +374,23 @@ class CalloutFoldWidget extends WidgetType {
   constructor(readonly folded: boolean, readonly titleFrom: number) { super(); }
   eq(o: CalloutFoldWidget) { return o.folded === this.folded && o.titleFrom === this.titleFrom; }
   toDOM(view: EditorView) {
-    const control = document.createElement('span');
+    const control = document.createElement('button');
+    control.type = 'button';
     control.className = 'cm-callout-fold' + (this.folded ? ' is-folded' : '');
-    control.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
-    control.addEventListener('mousedown', event => {
-      event.preventDefault();
-      view.dispatch({ effects: toggleCalloutFold.of(this.titleFrom) });
+    control.setAttribute('aria-label', this.folded ? 'Expand callout' : 'Collapse callout');
+    control.setAttribute('aria-expanded', String(!this.folded));
+    control.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + iconPaths['chevron-down'] + '</svg>';
+    control.addEventListener('mousedown', event => { event.preventDefault(); });
+    control.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation();
+      if (view.composing) return;
+      const block = view.state.field(blockModel).containers.find(block => block.kind === 'callout' && block.from === this.titleFrom);
+      const hidesCaret = !this.folded && block && view.state.selection.ranges.some(range => range.to >= block.bodyFrom && range.from <= block.to);
+      view.dispatch({ effects: toggleCalloutFold.of(this.titleFrom),
+        ...(hidesCaret ? { selection: { anchor: view.state.doc.lineAt(this.titleFrom).to } } : {}),
+      });
     });
     return control;
-  }
-  ignoreEvent(event: Event) { return event.type === 'mousedown'; }
-}
-
-/** Only a title control; the callout body stays in the editor's text lines. */
-class CalloutSourceWidget extends WidgetType {
-  constructor(readonly range: { from: number; to: number }) { super(); }
-  eq(other: CalloutSourceWidget) { return other.range.from === this.range.from && other.range.to === this.range.to; }
-  toDOM(view: EditorView) {
-    const button = sourceButton(view, this.range, 'callout');
-    button.classList.add('cm-callout-source');
-    return button;
   }
   ignoreEvent() { return true; }
 }
@@ -750,7 +748,7 @@ export const htmlPreviewField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-/* ---------------- callout folding (`[!type]-` / `[!type]+`) ---------------- */
+/* ---------------- callout folding (only `-` defaults to folded) ---------------- */
 
 export const toggleCalloutFold = StateEffect.define<number>();
 
@@ -765,7 +763,7 @@ const QUOTE_MARKERS_RE = /^(?: {0,3}> ?)+/;
 export const calloutFoldState = StateField.define<readonly number[]>({
   create: () => [],
   update(value, tr) {
-    let v = tr.docChanged ? value.map((p) => tr.changes.mapPos(p, 1)) : [...value];
+    let v = tr.docChanged ? value.map((p) => tr.changes.mapPos(p, 1)) : value;
     for (const e of tr.effects) {
       if (e.is(toggleCalloutFold)) {
         v = v.includes(e.value) ? v.filter((x) => x !== e.value) : [...v, e.value];
@@ -783,12 +781,10 @@ function isCalloutFolded(state: EditorState, titleFrom: number, foldChar: string
 
 function buildCalloutFolds(state: EditorState): DecorationSet {
   if (!state.field(livePreviewState, false)) return Decoration.none;
-  const ro = state.field(livePreviewReadonly, false) ?? false;
   const claimed: { from: number; to: number }[] = [];
   const ranges: Range<Decoration>[] = [];
   for (const block of state.field(blockModel).containers) {
-    if (block.kind !== 'callout' || !block.fold || !isCalloutFolded(state, block.from, block.fold) || sourceIsOpen(state, block) || blockEffectOwns(state, block)) continue;
-    if (caretTouches(block, state.field(compositionSelection).selection.ranges, ro)) continue;
+    if (block.kind !== 'callout' || !isCalloutFolded(state, block.from, block.fold) || sourceIsOpen(state, block) || blockEffectOwns(state, block)) continue;
     if (block.bodyFrom >= block.to) continue;
     const from = Math.max(block.from, block.bodyFrom - 1);
     if (from >= block.to || claimed.some((outer) => from >= outer.from && block.to <= outer.to)) continue;
@@ -802,11 +798,7 @@ function buildCalloutFolds(state: EditorState): DecorationSet {
 export const calloutFoldDeco = StateField.define<DecorationSet>({
   create: (state) => buildCalloutFolds(state),
   update(value, tr) {
-    if (
-      tr.docChanged ||
-      tr.selection ||
-      tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(refreshBlockEffects))
-    ) {
+    if (decorationInputsChanged(tr, false) || tr.startState.field(calloutFoldState) !== tr.state.field(calloutFoldState)) {
       return buildCalloutFolds(tr.state);
     }
     return value.map(tr.changes);
@@ -915,7 +907,7 @@ class BulletWidget extends WidgetType {
   toDOM() {
     const s = document.createElement('span');
     s.className = 'cm-bullet';
-    s.textContent = '•';
+    s.setAttribute('aria-hidden', 'true');
     return s;
   }
 }
@@ -1810,19 +1802,16 @@ function buildDecorations(view: EditorView): DecorationSet {
         const header = view.state.field(blockModel).containers.find((block) => block.kind === 'callout' && block.from === line.from);
         if (header) {
           const slot = CALLOUT_SLOT[header.type] ?? 'default';
-          const folded = header.fold ? isCalloutFolded(view.state, header.from, header.fold) : false;
+          const folded = isCalloutFolded(view.state, header.from, header.fold);
           if (!touches(line.from, header.prefixTo)) {
             pushReplace(line.from, header.prefixTo, Decoration.replace({
               widget: new CalloutHeadWidget(slot, header.title ? '' : calloutDefaultTitle(header.type)),
             }));
-            if (header.fold) all.push(Decoration.widget({
-              widget: new CalloutFoldWidget(folded, header.from), side: -1,
-            }).range(line.to));
           }
-          if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
-          if (!view.state.readOnly) all.push(Decoration.widget({
-            widget: new CalloutSourceWidget(header), side: 1,
+          all.push(Decoration.widget({
+            widget: new CalloutFoldWidget(folded, header.from), side: -1,
           }).range(line.to));
+          if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
           bodyStart = header.prefixTo - line.from;
         } else if (!touches(line.from, line.from + bodyStart)) pushReplace(line.from, line.from + bodyStart, hidden);
       }
@@ -1836,11 +1825,11 @@ function buildDecorations(view: EditorView): DecorationSet {
       if (prefix) all.push(Decoration.line({ attributes: {
         'data-list-body-start': String(bodyFrom + prefix[0].length),
       } }).range(line.from));
-      // Indentation guides for nested lists (one cm-indent per tab / 4-space unit).
+      // Use the same indentation unit as contextual Tab, not a fixed four spaces.
       const indentGuides = (ws: string) => {
         let i = 0;
         while (i < ws.length) {
-          const end = Math.min(i + (ws[i] === '\t' ? 1 : 4), ws.length);
+          const end = Math.min(i + (ws[i] === '\t' ? 1 : getIndentUnit(view.state)), ws.length);
           all.push(Decoration.mark({ class: 'cm-indent' }).range(bodyFrom + i, bodyFrom + end));
           i = end;
         }
@@ -1868,7 +1857,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           const start = bodyFrom + bullet[1].length;
           const markerEnd = start + 1;
           const spaceEnd = markerEnd + bullet[3].length;
-          if (!touches(start, spaceEnd)) {
+          if (!touches(start, markerEnd)) {
             pushReplace(start, markerEnd, Decoration.replace({ widget: new BulletWidget() }));
             if (bullet[3].length > 1) pushReplace(markerEnd + 1, spaceEnd, hidden);
           }

@@ -1,0 +1,9 @@
+/* Small, font-independent markers; source markers remain untouched. */
+.cm-s-obsidian .cm-bullet { display: inline-block; width: .55em; height: 1em; vertical-align: -.1em; position: relative; text-indent: 0; }
+.cm-s-obsidian .cm-bullet::before { content: ''; position: absolute; width: 5px; height: 5px; border-radius: 50%; background: currentColor; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.cm-s-obsidian .cm-list-fold { display: inline-flex; align-items: center; justify-content: center; position: absolute; width: 18px; height: 1lh; margin-left: -21px; padding: 0; border: 0; background: transparent; color: var(--text-faint); cursor: pointer; opacity: 0; text-indent: 0; }
+.cm-s-obsidian .cm-list-fold svg { width: 14px; height: 14px; }
+.cm-s-obsidian .cm-list-fold.is-folded svg { transform: rotate(-90deg); }
+.cm-s-obsidian .cm-list-fold.is-folded, .cm-s-obsidian .cm-line:hover .cm-list-fold, .cm-s-obsidian .cm-list-fold:focus-visible { opacity: 1; }
+.cm-s-obsidian .cm-list-fold:hover, .cm-s-obsidian .cm-callout-fold:hover { color: var(--text-normal); }
+.cm-s-obsidian .cm-list-fold:focus-visible, .cm-s-obsidian .cm-callout-fold:focus-visible { outline: 1px solid var(--text-accent); outline-offset: 2px; }

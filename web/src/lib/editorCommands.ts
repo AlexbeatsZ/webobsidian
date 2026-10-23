@@ -1,6 +1,57 @@
 import { EditorView, KeyBinding } from '@codemirror/view';
 import { EditorSelection, type ChangeSpec } from '@codemirror/state';
 import { insertNewlineContinueMarkup, deleteMarkupBackward } from '@codemirror/lang-markdown';
+import { getIndentUnit, indentUnit } from '@codemirror/language';
+import { syntaxModel } from './syntaxModel';
+
+/** List-only Tab fallback. Snippets and suggesters run before this keymap. */
+function indentList(view: EditorView, outdent: boolean): boolean {
+  const { state } = view;
+  if (state.readOnly || view.composing) return false;
+  const model = state.field(syntaxModel);
+  const lines = new Map<number, number>();
+  for (const range of state.selection.ranges) {
+    const first = state.doc.lineAt(range.from).number;
+    const last = state.doc.lineAt(range.to > range.from ? range.to - 1 : range.to).number;
+    for (let number = first; number <= last; number++) {
+      const line = state.doc.line(number);
+      if (model.frontmatter && line.from < model.frontmatter.to) return false;
+      let node = model.tree.resolveInner(number === first ? range.from : line.to, -1);
+      while (node.name !== 'ListItem') {
+        if (['FencedCode', 'CodeBlock', 'InlineCode'].includes(node.name) || !node.parent) return false;
+        node = node.parent;
+      }
+      const header = state.doc.lineAt(node.from);
+      const quoteDepth = header.text.match(/^(?: {0,3}>[ \t]?)+/)?.[0].match(/>/g)?.length ?? 0;
+      const end = header.number === number ? state.doc.lineAt(node.to).number : number;
+      for (let child = number; child <= end; child++) lines.set(child, Math.min(lines.get(child) ?? quoteDepth, quoteDepth));
+    }
+  }
+  const changes: ChangeSpec[] = [];
+  for (const [number, quoteDepth] of [...lines].sort(([a], [b]) => a - b)) {
+    const line = state.doc.line(number);
+    // Quote prefixes stay in place; only the list's own indentation changes.
+    let quote = 0;
+    for (let depth = 0; depth < quoteDepth; depth++) quote += line.text.slice(quote).match(/^ {0,3}>[ \t]?/)?.[0].length ?? 0;
+    const start = line.from + quote;
+    if (!outdent) changes.push({ from: start, insert: state.facet(indentUnit) });
+    else {
+      const whitespace = line.text.slice(quote).match(/^[ \t]*/)?.[0] ?? '';
+      const width = whitespace[0] === '\t' ? 1 : Math.min(getIndentUnit(state), whitespace.match(/^ */)![0].length);
+      if (width) changes.push({ from: start, to: start + width });
+    }
+  }
+  if (changes.length) {
+    const changeSet = state.changes(changes);
+    view.dispatch({ changes: changeSet, selection: state.selection.map(changeSet, 1), scrollIntoView: true, userEvent: 'input.indent' });
+  }
+  return lines.size > 0;
+}
+
+export const markdownListKeymap: KeyBinding[] = [
+  { key: 'Tab', run: view => indentList(view, false) },
+  { key: 'Shift-Tab', run: view => indentList(view, true) },
+];
 
 /**
  * Obsidian editor commands & default hotkeys (docs §4).
