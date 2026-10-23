@@ -7,9 +7,7 @@ import { getLatexSuiteConfig } from '../snippets/codemirror/config';
 import { formulaTree } from '../parser/language';
 import { MathMode, type Bounds } from './context';
 import { sourceIsOpen } from '../../../sourceControls';
-import { livePreviewState } from '../../../renderState';
-import { compositionSelection } from '../../../inlineHtml';
-import { forceRendered } from '../../../sourceControls';
+import { mathSourceVisible } from './mathPresentation';
 
 export type MathBounds = Bounds & {
   mode: MathMode;
@@ -78,14 +76,8 @@ export class MathBoundsPlugin {
     return this.mathBounds
       .filter(
         (b) =>
-          !state.readOnly &&
-          (!concealing || !sourceIsOpen(state, { from: b.outer_start, to: b.outer_end })) &&
-          !forceRendered(state, { from: b.outer_start, to: b.outer_end }) &&
-          (!state.field(livePreviewState, false) ||
-            sourceIsOpen(state, { from: b.outer_start, to: b.outer_end }) ||
-            state
-              .field(compositionSelection)
-              .selection.ranges.some((s) => s.empty && s.head >= b.outer_start && s.head <= b.outer_end)),
+          mathSourceVisible(state, { from: b.outer_start, to: b.outer_end }) &&
+          (!concealing || !sourceIsOpen(state, { from: b.outer_start, to: b.outer_end })),
       )
       .map((bound) => ({
         bound,

@@ -237,14 +237,20 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
             ['自动放大括号', 'autoEnlargeBrackets'],
             ['括号着色', 'colorPairedBracketsEnabled'],
             ['光标括号高亮', 'highlightCursorBracketsEnabled'],
+            ['LaTeX 语法高亮', 'syntaxHighlightingEnabled'],
             ['公式分隔符检查', 'highlightDollarEnabled'],
-            ['公式预览', 'mathPreviewEnabled'],
+            ['编辑时公式预览', 'mathPreviewEnabled'],
             ['预览参数高亮', 'mathPreviewBracketHighlighting'],
-            ['实时编辑块公式浮层', 'mathPreviewLivePreviewDisplay'],
+            ['实时编辑块公式文档内预览', 'mathPreviewLivePreviewDisplay'],
             ['Unicode 简化显示', 'concealEnabled'],
           ].map(([label, key]) =>
             checkbox(label, Boolean((raw as any)[key]), (v) => attempt({ latex: { [key]: v } })),
           )}
+          <label className="setting-row">
+            <span>预览中显示光标（无法可靠定位时显示普通公式）</span>
+            <input type="checkbox" checked={Boolean(raw.mathPreviewCursor)}
+              onChange={e => attempt({ latex: { mathPreviewCursor: e.target.checked ? '▶' : '' } })} />
+          </label>
           <JsonEditor label="高级公式与片段配置" value={settings.latex} onSave={(latex) => save({ latex })} />
         </>
       )}

@@ -1,26 +1,26 @@
 import { NodeType, Tree } from '@lezer/common';
 import type { EditorState } from '@codemirror/state';
 import { parser } from './mathjax/latex-parser';
-import { mathRegions } from '@webobsidian/markdown-core';
+import { mathRegions, type MarkdownModel } from '@webobsidian/markdown-core';
 import { syntaxModel } from '../../../syntaxModel';
 import { getLatexSuiteConfig } from '../snippets/codemirror/config';
 
 const rootType = NodeType.define({ id: 0, name: 'FormulaDocument', top: true });
 const cache = new Map<string, Tree>();
-const positioned = new WeakMap<EditorState, Map<string, Tree>>();
+const positioned = new WeakMap<MarkdownModel, Map<string, Tree>>();
 /** TeX trees are local to formulas. Markdown parsing remains owned by the host. */
 export function formulaTree(state: EditorState, from: number, to: number): Tree {
-  let trees = positioned.get(state);
+  const model = state.field(syntaxModel), languages = getLatexSuiteConfig(state).forceMathLanguages;
+  let trees = positioned.get(model);
   if (!trees) {
     trees = new Map();
-    positioned.set(state, trees);
+    positioned.set(model, trees);
   }
-  const key = from + ':' + to;
+  const key = languages.join('\0') + ':' + from + ':' + to;
   const existing = trees.get(key);
   if (existing) return existing;
-  const model = state.field(syntaxModel);
   let source = model.text.slice(from, to);
-  const region = mathRegions(model, getLatexSuiteConfig(state).forceMathLanguages).find(
+  const region = mathRegions(model, languages).find(
     (r) => r.bodyFrom === from && r.bodyTo === to,
   );
   if (region) {

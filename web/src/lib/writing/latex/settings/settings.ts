@@ -30,6 +30,7 @@ export interface LatexSuiteBasicSettings {
 	concealRevealTimeout: number;
 	colorPairedBracketsEnabled: boolean;
 	highlightCursorBracketsEnabled: boolean;
+	syntaxHighlightingEnabled: boolean;
 	mathPreviewEnabled: boolean;
 	mathPreviewPositionIsAbove: boolean;
 	mathPreviewCursor: string;
@@ -152,11 +153,12 @@ export const DEFAULT_SETTINGS: LatexSuitePluginSettings = {
 	concealMaps: JSON.stringify(EMPTY_MAPPING, null, "\t"),
 	colorPairedBracketsEnabled: true,
 	highlightCursorBracketsEnabled: true,
+	syntaxHighlightingEnabled: true,
 	mathPreviewEnabled: true,
 	mathPreviewPositionIsAbove: true,
 	mathPreviewCursor: "▶",
 	mathPreviewBracketHighlighting: false,
-	mathPreviewLivePreviewDisplay: false,
+	mathPreviewLivePreviewDisplay: true,
 	autofractionEnabled: true,
 	autofractionSymbol: "\\frac",
 	autofractionBreakingChars: "+-=\t",

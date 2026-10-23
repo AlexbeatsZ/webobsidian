@@ -98,6 +98,53 @@ versions produce an error instead of silently changing meaning.
 - Settings, commands and file events use the existing host services. Preserve
   code/HTML/public-share execution boundaries.
 
+## Formula editing presentation (2026-10-22 opinion changes)
+
+`mathPresentation.ts` owns the shared source-visible and edit-preview policy used
+by Live Preview, native TeX overlays and previews. Dollar edges are inclusive for
+preview; snippet context still uses the formula body boundaries. Readonly views
+always render. A caret or selection in a formula reveals its source, and the
+shared formula source entry selects the body without its dollar delimiters.
+Formula/table entries use the common selection/focus lifecycle to restore output;
+they do not create another persistent visibility switch.
+
+Display and multiline formulas preview within the document below their source.
+Only inline formulas use a tooltip. Both hosts call `mathPreviewTex` and the same
+`renderMath` queue with source-order definition context and transient output.
+Selections, IME, delimiter edges, command names, unbraced arguments and opaque
+literal/chemistry/unit contexts use normal TeX when a cursor cannot be placed
+reliably. Preview markup never changes note source. Bracket highlighting shares
+the same safety gate. Unknown or incomplete TeX is still rendered normally by
+MathJax instead of inventing a cursor inside a control word.
+
+Multiline dollar formulas belong to the direct block decoration field even when
+their opening delimiter shares a line with TeX; they must not become multiline
+replacements in a ViewPlugin. The shared blockModel derives those ranges and the
+remaining inline groups from the same mathRegions result. Markdown tree/regex
+decoration skips formula content so TeX underscores, links or highlight-like text
+cannot claim a partial replacement before the formula renderer.
+
+The inline tooltip is derived directly in its StateField. No extra update effect,
+microtask dispatch or second preview state machine is needed. Native safe visuals
+are installed once by MarkdownView independently of user snippets/plugin execution.
+Private writing settings retain their existing configuration facet/hot reload.
+The settings page exposes syntax highlighting, edit previews, display previews,
+bracket highlights and the preview cursor through the existing LaTeX settings.
+`mathPreviewLivePreviewDisplay` now controls the document preview, with a true
+default; an explicitly stored false remains respected.
+
+Syntax colors come from the existing formula-local Lezer tree, including control
+sequences, numbers, operators, delimiters, environments, literal text and comments.
+Only visible source formulas need marks. Positioned trees are cached by immutable
+MarkdownModel, body range and configured math languages, so selection-only states
+reuse the same tree and token marks. The existing bounded source-tree cache and
+MathJax cache remain authoritative; no second parser or macro cache is introduced.
+
+The user explicitly prohibited acceptance/tests for this opinion batch. Only
+source and Git diff inspection were performed; no new tests were authored and no
+typecheck, build, fixture, application, server or browser was run. UI, rendering,
+IME and performance behavior for these changes remain unverified.
+
 ## Module map
 
 - Core `math`, `syntax`, `tables`, `properties` and `source`: shared formula

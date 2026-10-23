@@ -8,7 +8,6 @@ import {
   keyboardEventPlugin,
   onInput,
   snippetStateField,
-  handleUpdate,
   handleKeydown,
 } from './latex/latex_suite';
 import { snippetExtensions } from './latex/snippets/codemirror/extensions';
@@ -19,7 +18,6 @@ import {
 } from './latex/editor_extensions/highlight_brackets';
 import { highlight_dollar_extension } from './latex/editor_extensions/highlight_dollar';
 import { mkConcealPlugin } from './latex/editor_extensions/conceal';
-import { mathTooltipExtension } from './latex/editor_extensions/math_tooltip';
 import { formatPaste } from './format';
 import { contextOf } from '../renderContext';
 import { writingOperation } from './editing';
@@ -70,17 +68,8 @@ export function nativeWritingExtensions() {
     Prec.high(EditorView.inputHandler.of(onInput)),
     Prec.high(snippetStateField),
     snippetExtensions,
-    mathTooltipExtension,
     visuals.of(display()),
     lifecycle,
-    EditorView.updateListener.of((update) => {
-      // Preview computations may dispatch effects; run after CM has completed this update.
-      if (update.view.composing || update.state.readOnly) return;
-      const state = update.state;
-      queueMicrotask(() => {
-        if (update.view.state === state && update.view.dom.isConnected) handleUpdate(update);
-      });
-    }),
     EditorView.domEventHandlers({
       compositionend(_event, view) {
         const config = writingCMSettings();

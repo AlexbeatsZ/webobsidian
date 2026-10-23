@@ -9,23 +9,12 @@ import { setSelectionToNextTabstop, tempKeyPress } from "./snippets/snippet_mana
 import { getLatexSuiteConfig } from "./snippets/codemirror/config";
 import { clearSnippetQueue } from "./snippets/codemirror/snippet_queue_state_field";
 
-import { handleMathTooltip } from "./editor_extensions/math_tooltip";
 import { isComposing } from "./utils/editor_utils";
 import { autoDelete$ } from "./editor_extensions/autoDelete$";
 import type { GroupedSnippets, LatexSuiteCMSettings } from "./settings/settings";
 import { getFilePathFromState, notice } from "./editor_extensions/obsidian_utils";
 import { EditorState, StateField } from "@codemirror/state";
 import { serializeSnippetLike, type Snippet } from "./snippets/snippets";
-
-export const handleUpdate = (update: ViewUpdate) => {
-	const settings = getLatexSuiteConfig(update.state);
-
-	// The math tooltip handler is driven by view updates because it utilizes
-	// information about visual line, which is not available in EditorState
-	if (settings.mathPreviewEnabled && !update.transactions.some(tr => tr.annotation(tempKeyPress))) {
-		handleMathTooltip(update);
-	}
-}
 
 export const keyboardEventPlugin = ViewPlugin.fromClass(class {
 	lastKeyboardEvent: KeyboardEvent | null = null;

@@ -1,216 +1,54 @@
-// @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
-import { type Tooltip, showTooltip, EditorView, ViewUpdate, tooltips } from "@codemirror/view";
-import { StateField, EditorState, EditorSelection, StateEffect } from "@codemirror/state";
-import { renderMath, canDecorateMath, mathDefinitionContext } from "../../../mathjax";
-import { mathRegions, mathBodyOffset } from '@webobsidian/markdown-core';
+import { type Tooltip, showTooltip, EditorView, tooltips } from '@codemirror/view';
+import { StateField, type EditorState } from '@codemirror/state';
+import { renderMath, mathDefinitionContext, subscribeMathConfiguration } from '../../../mathjax';
 import { syntaxModel } from '../../../syntaxModel';
-import { contextOf } from '../../../renderContext';
-import { livePreviewState as editorLivePreviewField } from "../../../renderState";
-import { type Bounds, Context, getContextPlugin } from "../editor_context/context";
-import { getLatexSuiteConfig } from "../snippets/codemirror/config";
-import { cmDarkClass, cmLightClass, createElement } from "./obsidian_utils";
-import { isBoundMultiline } from "../utils/editor_utils";
+import { contextOf, renderContext } from '../../../renderContext';
+import { decorationInputsChanged } from '../../../decorationDependencies';
+import { mathPreview, mathPreviewTex, PREVIEW_HIGHLIGHT_CLASS as HIGHLIGHT_CLASS } from '../editor_context/mathPresentation';
+import { getLatexSuiteConfig } from '../snippets/codemirror/config';
+import { cmDarkClass, cmLightClass } from './obsidian_utils';
+import { mathSyntaxHighlighting } from './math_highlight';
 
-type MathTooltip = {
-	equation: string,
-	bounds: Bounds,
-	pos: number,
-	tooltip: Tooltip,
-}
-const HIGHLIGHT_CLASS = "mjx-latex-suite-math-preview-highlight";
-const CURSOR_CLASS = "mjx-latex-suite-cursor";
-export const updateTooltipEffect = StateEffect.define<MathTooltip[]>();
-
+interface MathTooltip { equation: string; from: number; to: number; definitions: readonly string[]; sourcePath?: string; tooltip: Tooltip }
 export const cursorTooltipField = StateField.define<readonly MathTooltip[]>({
-	create: () => [],
-
-	update(tooltips, tr) {
-        if(tr.reconfigured || tr.state.readOnly || !getLatexSuiteConfig(tr.state).mathPreviewEnabled) return [];
-		for (const effect of tr.effects) {
-			if (effect.is(updateTooltipEffect)) return effect.value;
-		}
-
-		return tooltips;
-	},
-
-	provide: (f) => showTooltip.computeN([f], (state) => state.field(f).map(t=> t.tooltip)),
+  create(state) { const tooltip = inlineTooltip(state); return tooltip ? [tooltip] : []; },
+  update(value, tr) {
+    if (!decorationInputsChanged(tr)) return value;
+    const next = inlineTooltip(tr.state), current = value[0];
+    if (!next) return value.length ? [] : value;
+    if (current && next.equation === current.equation && next.from === current.from && next.to === current.to &&
+      next.sourcePath === current.sourcePath && next.tooltip.above === current.tooltip.above &&
+      next.definitions.length === current.definitions.length && next.definitions.every((d, i) => d === current.definitions[i])) return value;
+    return [next];
+  },
+  provide: field => showTooltip.computeN([field], state => state.field(field).map(t => t.tooltip)),
 });
 
-const findMatchingBrackets = (text: string, cursorPos: number, openBracket: string, closeBracket: string): {left: number, right: number} => {
-	const aux = (text: string, start: number, openBracket: string, closeBracket: string, direction: -1 | 1): number => {
-		let depth = 0;
-		for (let i = start; i >= 0 && i < text.length; i += direction) {
-			if (text[i] === openBracket) depth++;
-			if (text[i] === closeBracket) {
-				if (depth === 0) return i;
-				depth--;
-			}
-		}
-		return -1;
-	};
-
-	// If the cursor is right before a close bracket, that doesn't count to balancing the brackets.
-	const leftStart = text[cursorPos] === closeBracket ? cursorPos - 1 : cursorPos;
-	const left = aux(text, leftStart, closeBracket, openBracket, -1);
-	const right = aux(text, cursorPos, openBracket, closeBracket, 1);
-	return { left, right };
-}
-
-// update the tooltip by dispatching an updateTooltipEffect
-export function handleMathTooltip(update: ViewUpdate) {
-	const shouldUpdate = update.docChanged || update.selectionSet || update.transactions.some(tr=>tr.reconfigured) || update.startState.field(editorLivePreviewField)!==update.state.field(editorLivePreviewField);
-	if (!shouldUpdate) return;
-	const settings = getLatexSuiteConfig(update.state);
-
-	// We don't need to update the tooltip every time the cursor moves.
-	// Only update when we leaf or enter a LaTeX block. High impact.
-	const ctx = getContextPlugin(update.view);
-	const eqnBounds = shouldShowTooltip(update.state, ctx);
-
-	if (!eqnBounds) {
-		const currTooltips = update.state.field(cursorTooltipField);
-		// a little optimization:
-		// If the tooltip is not currently shown and there is no need to show it,
-		// we don't dispatch an transaction.
-		if (currTooltips.length > 0) {
-			update.view.dispatch({
-				effects: [updateTooltipEffect.of([])],
-			});
-		}
-		return;
-	}
-
-	/*
-	* process when there is a need to show the tooltip: from here
-	*/
-
-	const model = update.state.field(syntaxModel);
-	const region = mathRegions(model, settings.forceMathLanguages).find(r => r.bodyFrom === eqnBounds.inner_start && r.bodyTo === eqnBounds.inner_end);
-	const eqn = region?.tex ?? update.state.sliceDoc(eqnBounds.inner_start, eqnBounds.inner_end);
-	const pos = ctx.pos;
-
-	const eqnPos = region ? mathBodyOffset(region, pos) : pos - eqnBounds.inner_start;
-
-	let eqnWithDecorations: string;
-	// skip \{\} as thats not an argument to a macro
-	const tempEscapedEqn = eqn.replaceAll(/\\[\\{}]/g, "\\R")
-	const { left, right } = settings.mathPreviewBracketHighlighting && !ctx.mode.snippetlessEnv
-		? findMatchingBrackets(tempEscapedEqn, eqnPos, "{", "}")
-		: { left: -1, right: -1 };
-	const mathPreviewCursor = !ctx.mode.snippetlessEnv && settings.mathPreviewCursor !== ""
-		? ` \\class{${CURSOR_CLASS}}{}` + settings.mathPreviewCursor
-		: "";
-
-	if (right !== -1 && left !== -1) {
-		// If the cursor is next to a bracket, move it inside the bracket pair
-		// case when eqnPos === left
-		const maxPosOrLeft = Math.max(left + 1, eqnPos);
-		eqnWithDecorations =
-			eqn.slice(0, left + 1) +
-			`\\class{${HIGHLIGHT_CLASS}}{` +
-			eqn.slice(left + 1, maxPosOrLeft) +
-			mathPreviewCursor +
-			eqn.slice(maxPosOrLeft, right) +
-			"}" +
-			eqn.slice(right);
-	} else {
-		eqnWithDecorations =
-			eqn.slice(0, eqnPos) +
-			mathPreviewCursor +
-			eqn.slice(eqnPos);
-	}
-	// Opaque chemistry/unit grammars cannot accept injected cursor/class macros.
-	if(!canDecorateMath(eqn))eqnWithDecorations=eqn;
-    const oldTooltips = update.state.field(cursorTooltipField);
-	// a little optimization: if the tooltip is currently shown and the equation with decorations is the same as the one in the tooltip, we don't need to update it.
-	if (
-		oldTooltips.length === 1 &&
-		oldTooltips[0]!.equation === eqnWithDecorations &&
-		oldTooltips[0]!.bounds.inner_start === eqnBounds.inner_start &&
-		oldTooltips[0]!.bounds.inner_end === eqnBounds.inner_end
-	) {
-		return;
-	}
-	const isEqnMultiline = isBoundMultiline(update.view, eqnBounds);
-
-	const above = settings.mathPreviewPositionIsAbove;
-	const create = () => {
-		const dom = createElement("div")
-		dom.classList.add("cm-tooltip-cursor");
-		dom.classList.add(above ? "cm-tooltip-above" : "cm-tooltip-below");
-        const controller = new AbortController();
-        void renderMath(dom, eqnWithDecorations, ctx.mode.inDisplayMath(), controller.signal, {transient:true,
-          sourcePath: contextOf(update.view).sourcePath,
-          definitions: mathDefinitionContext(contextOf(update.view).mathSource?.model ?? model,
-            (region?.from ?? eqnBounds.outer_start) + (contextOf(update.view).mathSource?.from ?? 0))})
-          .then(()=>{if(!controller.signal.aborted)dom.querySelector('.'+CURSOR_CLASS)?.scrollIntoView({block:'nearest'});})
-          .catch(error=>{if(!controller.signal.aborted){dom.textContent=eqn;dom.title=String(error);}});
-        return {dom,destroy:()=>controller.abort()};
-	};
-
-	let newTooltips: Tooltip[] = [];
-
-	if (isEqnMultiline) {
-		newTooltips = [{
-			pos: above ? eqnBounds.inner_start : eqnBounds.inner_end,
-			above: above,
-			strictSide: true,
-			arrow: true,
-			create: create,
-		}];
-	} else if (!isEqnMultiline && above) {
-		newTooltips = [{
-			pos: eqnBounds.inner_start,
-			above: true,
-			strictSide: true,
-			arrow: true,
-			create: create,
-		}];
-	} else if (!isEqnMultiline && !above) {
-		const endRange = EditorSelection.range(eqnBounds.inner_end, eqnBounds.inner_end);
-
-		newTooltips = [{
-			pos: Math.max(
-				eqnBounds.inner_start,
-				// the beginning position of the visual line where eqnBounds.end is
-				// located
-				update.view.moveToLineBoundary(endRange, false).anchor,
-			),
-			above: false,
-			strictSide: true,
-			arrow: true,
-			create: create,
-		}];
-	}
-
-	update.view.dispatch({
-		effects: [
-			updateTooltipEffect.of(
-				newTooltips.map((t) => ({
-					equation: eqnWithDecorations,
-					bounds: eqnBounds,
-					pos: t.pos,
-					tooltip: t,
-				})),
-			),
-		],
-	});
-}
-
-function shouldShowTooltip(state: EditorState, ctx: Context): Bounds | null {
-	if (state.readOnly || !ctx.mode.inMath()) return null;
-	const settings = getLatexSuiteConfig(state);
-	const isLivePreview = state.field(editorLivePreviewField);
-	if (ctx.mode.blockMath && isLivePreview && !settings.mathPreviewLivePreviewDisplay) return null;
-
-	const eqnBounds = ctx.getBounds();
-	if (!eqnBounds) return null;
-
-	// Don't render an empty equation
-	const eqn = state.sliceDoc(eqnBounds.inner_start, eqnBounds.inner_end).trim();
-	if (eqn === "") return null;
-
-	return eqnBounds;
+function inlineTooltip(state: EditorState): MathTooltip | undefined {
+  const preview = mathPreview(state);
+  if (preview?.placement !== 'inline') return;
+  const region = preview.region, equation = mathPreviewTex(state, region);
+  const context = state.facet(renderContext), source = context.mathSource;
+  const model = source?.model ?? state.field(syntaxModel);
+  const definitions = mathDefinitionContext(model, region.from + (source?.from ?? 0));
+  const above = getLatexSuiteConfig(state).mathPreviewPositionIsAbove;
+  return { equation, from: region.from, to: region.to, definitions, sourcePath: context.sourcePath, tooltip: {
+    pos: above ? region.from : region.to, above, strictSide: true, arrow: true,
+    create(view) {
+      const dom = document.createElement('div');
+      dom.className = 'cm-tooltip-cursor ' + (above ? 'cm-tooltip-above' : 'cm-tooltip-below');
+      let controller = new AbortController();
+      const render = () => {
+        controller.abort(); controller = new AbortController();
+        const signal = controller.signal;
+        void renderMath(dom, equation, false, controller.signal, {
+          transient: true, sourcePath: contextOf(view).sourcePath, definitions,
+        }).catch(error => { if (!signal.aborted) { dom.textContent = region.tex; dom.title = String(error); } });
+      };
+      const stop = subscribeMathConfiguration(render); render();
+      return { dom, destroy() { controller.abort(); stop(); } };
+    },
+  } };
 }
 
 export const cursorTooltipBaseTheme = EditorView.baseTheme({
@@ -265,19 +103,10 @@ export const cursorTooltipBaseTheme = EditorView.baseTheme({
 });
 
 export const mathTooltipExtension = [
-	cursorTooltipField.extension,
-	cursorTooltipBaseTheme,
-	tooltips({
-		position: "absolute",
-		tooltipSpace(view) {
-			const dom = view.dom;
-			const rect = dom.getBoundingClientRect();
-			return {
-				top: rect.top,
-				left: rect.left,
-				bottom: rect.bottom,
-				right: rect.right,
-			};
-		},
-	}),
-]
+  cursorTooltipField,
+  cursorTooltipBaseTheme,
+  tooltips({ position: 'absolute', tooltipSpace: view => view.dom.getBoundingClientRect() }),
+];
+
+/** Safe native visuals; this does not install snippets, user code or plugin processors. */
+export const mathEditingExtensions = [mathTooltipExtension, mathSyntaxHighlighting];
