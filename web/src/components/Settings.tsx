@@ -21,6 +21,7 @@ import { readNativeFeatures, saveNativeFeatures, type NativeFeaturePreferences }
 import { notifyIndexChanged } from '../lib/indexEvents';
 import { documents } from '../lib/documents';
 import { workspaceMaintenanceBlockers } from '../lib/vaultMaintenance';
+import { SettingRow as Row, SettingGroup } from './SettingRow';
 
 type Section =
   'search' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
@@ -35,6 +36,13 @@ export default function Settings() {
   const [features, setFeatures] = useState<NativeFeaturePreferences | null>(null);
   const [featureError, setFeatureError] = useState('');
   const [navQuery, setNavQuery] = useState('');
+  const vaultName = useStore(s => s.tree?.name ?? 'Vault');
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) setOpen(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [open, setOpen]);
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -80,33 +88,21 @@ export default function Settings() {
   if (!open) return null;
 
   return (
-    <div className="modal-bg" onClick={() => setOpen(false)}>
-      <div className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-bg settings-backdrop" onClick={() => setOpen(false)}>
+      <div className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(e) => e.stopPropagation()}>
+        <div className="settings-header"><span id="settings-title">设置 — {vaultName}</span>
+          <button type="button" title="关闭设置" aria-label="关闭设置" onClick={() => setOpen(false)}><Icon name="x" size={16} /></button></div>
         <div className="settings-layout">
           <div className="settings-nav">
             <label className="settings-search"><Icon name="search" size={15} /><input aria-label="搜索设置" placeholder="搜索设置…" value={navQuery} onChange={event => setNavQuery(event.target.value)} /></label>
-            <div className="settings-nav-label">设置</div>
-            {(
-              [
-                'search',
-                'automation',
-                'writing',
-                'formatting',
-                'userscripts',
-                'menus',
-                'tags',
-                'vault',
-                'git',
-                'api',
-                'sharing',
-                'plugins',
-                'appearance',
-                'account',
-                'about',
-              ] as Section[]
-            ).filter(s => labels[s].toLowerCase().includes(navQuery.toLowerCase())).map((s) => (
+            {NAV_GROUPS.map(group => {
+              const entries = group.sections.filter(s => labels[s].toLowerCase().includes(navQuery.toLowerCase()));
+              return entries.length ? <div className="settings-nav-group" key={group.title}>
+                <div className="settings-nav-label">{group.title}</div>
+                {entries.map((s) => (
               <button
                 key={s}
+                type="button" aria-current={!pluginTab && section === s ? 'page' : undefined}
                 className={!pluginTab && section === s ? 'active' : ''}
                 onClick={() => {
                   setSection(s);
@@ -115,10 +111,10 @@ export default function Settings() {
               >
                 <Icon name={sectionIcons[s]} size={16} /><span>{labels[s]}</span>
               </button>
-            ))}
+            ))}</div> : null; })}
             {pluginTabs.size > 0 && <div className="settings-nav-label">第三方插件</div>}
             {[...pluginTabs].filter(([, tab]) => tab.name.toLowerCase().includes(navQuery.toLowerCase())).map(([id, tab]) => (
-              <button key={id} className={pluginTab === id ? 'active' : ''} onClick={() => setPluginTab(id)}>
+              <button key={id} type="button" aria-current={pluginTab === id ? 'page' : undefined} className={pluginTab === id ? 'active' : ''} onClick={() => setPluginTab(id)}>
                 <Icon name="puzzle" size={16} /><span>{tab.name}</span>
               </button>
             ))}
@@ -205,18 +201,12 @@ const sectionIcons: Record<Section, string> = {
   search: 'search', automation: 'command', writing: 'code', formatting: 'pencil', userscripts: 'globe', menus: 'list',
   tags: 'hash', vault: 'folder', git: 'refresh-cw', api: 'key', sharing: 'link', plugins: 'puzzle', appearance: 'palette', account: 'user', about: 'info',
 };
-
-function Row({ name, desc, children }: { name: string; desc?: string; children: React.ReactNode }) {
-  return (
-    <div className="setting-row">
-      <div className="info">
-        <div className="name">{name}</div>
-        {desc && <div className="desc">{desc}</div>}
-      </div>
-      <div className="control">{children}</div>
-    </div>
-  );
-}
+const NAV_GROUPS: { title: string; sections: Section[] }[] = [
+  { title: '常规', sections: ['account', 'vault', 'appearance', 'search'] },
+  { title: '编辑', sections: ['writing', 'formatting', 'tags', 'automation'] },
+  { title: '扩展', sections: ['userscripts', 'menus', 'plugins'] },
+  { title: '服务', sections: ['git', 'api', 'sharing', 'about'] },
+];
 
 function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
   const [path, setPath] = useState(s.vault.path);
@@ -246,8 +236,9 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
     setBrowser(await api.browse(dir).catch((e) => ({ error: e.message })));
   return (
     <div>
-      <h2>Vault & Files</h2>
-      <Row name="Vault path" desc="Absolute path on the server to your notes folder">
+      <h2>仓库与文件</h2>
+      <SettingGroup title="仓库位置">
+      <Row name="仓库路径" desc="服务器上存放笔记的文件夹">
         <input
           className="text-input"
           style={{ width: 260 }}
@@ -255,9 +246,9 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
           onChange={(e) => setPath(e.target.value)}
         />
       </Row>
-      <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
+      <div className="setting-actions">
         <button className="btn secondary" onClick={() => browse()}>
-          Browse…
+          浏览…
         </button>
         <button className="btn" onClick={save} disabled={switching}>
           {switching ? '正在切换…' : '切换仓库'}
@@ -300,6 +291,8 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
         </div>
       )}
       {browser?.error && <div style={{ color: '#e5534b' }}>{browser.error}</div>}
+      </SettingGroup>
+      <SettingGroup title="文件删除">
       <Row
         name="When deleting a file"
         desc="Move to .trash keeps a recoverable copy (Open trash to restore). Permanently delete removes it immediately."
@@ -314,6 +307,7 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
           <option value="permanent">Permanently delete</option>
         </select>
       </Row>
+      </SettingGroup>
     </div>
   );
 }
@@ -355,6 +349,7 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
   return (
     <div>
       <h2>GitHub Sync</h2>
+      <SettingGroup title="连接与身份">
       <Row name="Enable git sync">
         <input type="checkbox" checked={g.enabled} onChange={(e) => set('enabled', e.target.checked)} />
       </Row>
@@ -397,6 +392,8 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           onChange={(e) => set('authorEmail', e.target.value)}
         />
       </Row>
+      </SettingGroup>
+      <SettingGroup title="同步方式">
       <Row name="Auto-sync" desc="Periodic pull+commit+push on the interval below">
         <input type="checkbox" checked={g.autoSync} onChange={(e) => set('autoSync', e.target.checked)} />
       </Row>
@@ -424,7 +421,8 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           onChange={(e) => set('lfsPatterns', e.target.value.split(/\s+/).filter(Boolean))}
         />
       </Row>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+      </SettingGroup>
+      <div className="setting-actions">
         <button className="btn" onClick={save}>
           Save
         </button>
@@ -512,6 +510,7 @@ function ApiKeys() {
       <p style={{ color: 'var(--text-muted)' }}>
         Keys let AI agents call <code>/api/v1</code>. The raw key is shown once.
       </p>
+      <SettingGroup title="创建密钥">
       <Row name="Name">
         <input className="text-input" value={name} onChange={(e) => setName(e.target.value)} />
       </Row>
@@ -542,7 +541,8 @@ function ApiKeys() {
           {'\n'}⚠ Copy now — it will not be shown again.
         </pre>
       )}
-      <div style={{ marginTop: 16 }}>
+      </SettingGroup>
+      <SettingGroup title="已有密钥">
         {keys.map((k) => (
           <div className="setting-row" key={k.id}>
             <div className="info">
@@ -564,7 +564,7 @@ function ApiKeys() {
             </button>
           </div>
         ))}
-      </div>
+      </SettingGroup>
     </div>
   );
 }
@@ -630,6 +630,7 @@ function Shares() {
           {shares.length === 0 ? 'No notes are shared publicly.' : 'No shared note matches the search.'}
         </div>
       )}
+      <SettingGroup title="分享链接">
       {filtered.map((s) => (
         <div className="setting-row" key={s.id}>
           <div className="info" style={{ minWidth: 0 }}>
@@ -656,7 +657,7 @@ function Shares() {
               {new Date(s.createdAt).toLocaleDateString()}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <div className="control setting-share-actions">
             <button
               className="btn secondary"
               disabled={!s.enabled}
@@ -681,6 +682,7 @@ function Shares() {
           </div>
         </div>
       ))}
+      </SettingGroup>
     </div>
   );
 }
@@ -712,6 +714,7 @@ function Plugins() {
   return (
     <div>
       <h2>Community Plugins</h2>
+      <SettingGroup title="安装插件">
       <Row name="Install from GitHub" desc="owner/repo — pulls manifest.json + main.js from latest release">
         <span style={{ display: 'flex', gap: 8 }}>
           <input
@@ -725,8 +728,9 @@ function Plugins() {
           </button>
         </span>
       </Row>
+      </SettingGroup>
       {msg && <div style={{ color: 'var(--text-muted)', margin: '6px 0' }}>{msg}</div>}
-      <div style={{ marginTop: 12 }}>
+      <SettingGroup title="已安装插件">
         {plugins.length === 0 && (
           <div style={{ color: 'var(--text-faint)' }}>No plugins installed in .obsidian/plugins</div>
         )}
@@ -760,7 +764,7 @@ function Plugins() {
             </label>
           </div>
         ))}
-      </div>
+      </SettingGroup>
       <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 14 }}>
         Plugin status reports loading separately from workflow compatibility. Native Node/Electron modules
         require the desktop plugin host.
@@ -778,13 +782,15 @@ function Appearance({ s }: { s: any }) {
   };
   return (
     <div>
-      <h2>Appearance</h2>
-      <Row name="Theme">
+      <h2>外观</h2>
+      <SettingGroup title="主题">
+      <Row name="基础颜色" desc="设置应用界面、编辑和阅读视图的配色">
         <select className="text-input" value={theme} onChange={(e) => save(e.target.value)}>
           <option value="obsidian-dark">Obsidian Dark</option>
           <option value="obsidian-light">Obsidian Light</option>
         </select>
       </Row>
+      </SettingGroup>
     </div>
   );
 }
@@ -840,6 +846,7 @@ function AccountSettings({ s, reload }: { s: any; reload: () => void }) {
           </>
         )}
       </p>
+      <SettingGroup title="登录密码">
       <Row name="Mật khẩu hiện tại" desc={usingDefault ? 'Mặc định là 123456' : undefined}>
         <input
           className="text-input"
@@ -870,6 +877,7 @@ function AccountSettings({ s, reload }: { s: any; reload: () => void }) {
           autoComplete="new-password"
         />
       </Row>
+      </SettingGroup>
       {err && <div style={{ color: '#e5534b', margin: '6px 0' }}>{err}</div>}
       {msg && <div style={{ color: 'var(--text-accent, #4caf50)', margin: '6px 0' }}>{msg}</div>}
       <button className="btn" onClick={save} disabled={busy || !current || !next}>
@@ -921,6 +929,7 @@ function SearchSettingsPanel({ focus }: { focus: string }) {
     setError('');
     void updateSearch(patch).catch((e) => setError(String(e)));
   };
+  const commandNames = new Map(sharedApp.commands.listCommands().map(command => [command.id, command.name]));
   const toggles = [
     ['enabled', '中文拼音搜索'],
     ['traditional', '繁体字拼音'],
@@ -932,8 +941,8 @@ function SearchSettingsPanel({ focus }: { focus: string }) {
   ] as const;
   return (
     <div ref={panel}>
-      <h2>Search & Shortcuts</h2>
-      <p className="setting-description">文件与正文搜索共用 #标签、-#排除；多个标签以空格分隔。#父标签 同时包含子标签。</p>
+      <h2>搜索与快捷键</h2>
+      <SettingGroup title="搜索" desc="文件与正文搜索共用 #标签、-#排除；多个标签以空格分隔。#父标签 同时包含子标签。">
       {toggles.map(([key, label]) => (
         <Row key={key} name={label}>
           <input
@@ -966,21 +975,26 @@ function SearchSettingsPanel({ focus }: { focus: string }) {
           onChange={(e) => save({ historyKeys: e.target.value })}
         />
       </Row>
+      </SettingGroup>
+      <SettingGroup title="快捷键" desc="直接编辑快捷键，例如 Mod+O、Alt+H；留空使用默认行为。应用已有快捷键优先。">
       {[
         ...new Set([
-          ...sharedApp.commands.listCommands().map(c => c.id),
+          ...commandNames.keys(),
           ...Object.keys(settings.shortcuts),
         ]),
       ].map((id) => (
-        <Row key={id} name={id} desc="例如 Mod+O、Alt+H；应用已有快捷键优先">
+        <Row key={id} name={commandNames.get(id) ?? id} desc={commandNames.has(id) ? id : undefined} className="setting-shortcut">
           <input
             className="text-input"
+            aria-label={`${commandNames.get(id) ?? id} 快捷键`}
+            placeholder="未设置"
             data-command={id}
             value={settings.shortcuts[id] ?? ''}
             onChange={(e) => save({ shortcuts: { ...settings.shortcuts, [id]: e.target.value } })}
           />
         </Row>
       ))}
+      </SettingGroup>
       <p>{settings.migration}</p>
       {error && <p role="alert">{error}</p>}
     </div>

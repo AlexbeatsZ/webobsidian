@@ -5,6 +5,7 @@ import { formatRules, formatterSettings } from '../lib/writing/format';
 import { DropdownOption, TextAreaOption } from '../lib/writing/linter/option';
 import { useStore } from '../lib/store';
 import MathSettings from './MathSettings';
+import { SettingGroup, SettingRow } from './SettingRow';
 
 function JsonEditor({
   label,
@@ -64,10 +65,9 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
   };
   const raw = { ...DEFAULT_SETTINGS, ...settings.latex };
   const checkbox = (label: string, value: boolean, change: (value: boolean) => void) => (
-    <label className="setting-row" key={label}>
-      <span>{label}</span>
-      <input type="checkbox" checked={value} onChange={(e) => change(e.target.checked)} />
-    </label>
+    <SettingRow name={label} key={label}>
+      <input type="checkbox" aria-label={label} checked={value} onChange={(e) => change(e.target.checked)} />
+    </SettingRow>
   );
   const fmt = formatterSettings();
   return (
@@ -85,21 +85,23 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
       </button>
       {formatting ? (
         <>
+          <SettingGroup title="保存与格式化">
           {checkbox('手动保存时格式化', fmt.lintOnSave, (v) => attempt({ linter: { lintOnSave: v } }))}
           {checkbox('切换或关闭文档时格式化', fmt.lintOnFileChange, (v) =>
             attempt({ linter: { lintOnFileChange: v } }),
           )}
           <p>后台自动保存只保存内容。规则按配置顺序执行，忽略路径适用于手动保存及批量格式化。</p>
-          <label>
-            忽略文件夹（每行一个）
+          <SettingRow name="忽略文件夹" desc="每行一个，适用于手动保存和批量格式化">
             <textarea
+              aria-label="忽略文件夹"
               rows={4}
               defaultValue={fmt.foldersToIgnore.join('\n')}
               onBlur={(e) =>
                 attempt({ linter: { foldersToIgnore: e.target.value.split('\n').filter(Boolean) } })
               }
             />
-          </label>
+          </SettingRow>
+          </SettingGroup>
           {['YAML', 'Heading', 'Footnote', 'Content', 'Spacing', 'Paste'].map((type) => (
             <details key={type}>
               <summary>
@@ -140,8 +142,7 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
                       const set = (value: any) =>
                         attempt({ linter: { ruleConfigs: { [rule.alias]: { [option.configKey]: value } } } });
                       return (
-                        <label className="setting-row" key={option.configKey}>
-                          <span>{option.getName()}</span>
+                        <SettingRow name={option.getName()} key={option.configKey}>
                           {typeof current === 'boolean' ? (
                             <input
                               type="checkbox"
@@ -182,7 +183,7 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
                               }
                             />
                           )}
-                        </label>
+                        </SettingRow>
                       );
                     })}
                   </details>
@@ -204,6 +205,7 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
       ) : (
         <>
           <MathSettings />
+          <SettingGroup title="片段">
           <p>
             当前载入 {writingCMSettings().snippets.all.length}{' '}
             条片段。修改规则文件后自动重载；失败时继续使用上一次有效规则。
@@ -211,9 +213,9 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
           {checkbox('启用片段与占位符', raw.snippetsEnabled, (v) =>
             attempt({ latex: { snippetsEnabled: v } }),
           )}
-          <label>
-            片段文件／文件夹
+          <SettingRow name="片段文件／文件夹">
             <input
+              aria-label="片段文件或文件夹"
               key={raw.snippetsFileLocation}
               defaultValue={raw.snippetsFileLocation}
               onBlur={(e) =>
@@ -225,12 +227,14 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
                 })
               }
             />
-          </label>
+          </SettingRow>
           {raw.loadSnippetsFromFile && (
             <button onClick={() => void useStore.getState().openFile(raw.snippetsFileLocation)}>
               编辑片段文件
             </button>
           )}
+          </SettingGroup>
+          <SettingGroup title="公式编辑与预览">
           {[
             ['自动分式', 'autofractionEnabled'],
             ['Tab 跳出', 'taboutEnabled'],
@@ -246,11 +250,11 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
           ].map(([label, key]) =>
             checkbox(label, Boolean((raw as any)[key]), (v) => attempt({ latex: { [key]: v } })),
           )}
-          <label className="setting-row">
-            <span>预览中显示光标（无法可靠定位时显示普通公式）</span>
-            <input type="checkbox" checked={Boolean(raw.mathPreviewCursor)}
+          <SettingRow name="预览中显示光标" desc="无法可靠定位时显示普通公式">
+            <input type="checkbox" aria-label="预览中显示光标" checked={Boolean(raw.mathPreviewCursor)}
               onChange={e => attempt({ latex: { mathPreviewCursor: e.target.checked ? '▶' : '' } })} />
-          </label>
+          </SettingRow>
+          </SettingGroup>
           <JsonEditor label="高级公式与片段配置" value={settings.latex} onSave={(latex) => save({ latex })} />
         </>
       )}

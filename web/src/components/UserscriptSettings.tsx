@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { bootstrapUserscripts, refreshUserscripts, useUserscripts, userscriptRequest } from '../lib/userscripts/client';
 import type { ScriptRecord, ScriptMenu } from '../lib/userscripts/types';
+import { SettingGroup, SettingRow } from './SettingRow';
 
 const editorStyle = { width: '100%', fontFamily: 'monospace', minHeight: 180 };
 function permissions(script: ScriptRecord) {
@@ -14,11 +15,11 @@ function ScriptCard({ script, run }: { script: ScriptRecord; run: (work: () => P
   const pending = script.update.pending;
   useEffect(() => { if (!editing) setSource(script.source); setReviewed(false); }, [script.revision]);
   const action = (name: string, extra: Record<string, unknown> = {}) => userscriptRequest(name, { id: script.id, revision: script.revision, ...extra });
-  return <article style={{ borderTop: '1px solid var(--background-modifier-border)', paddingBlock: 16 }}>
-    <h3>{script.metadata.name} <small>{script.metadata.version || '无版本号'}</small></h3>
+  return <SettingGroup title={script.metadata.name}>
+    <p>{script.metadata.version || '无版本号'}</p>
     <p>{script.metadata.description}</p>
-    <label><input type="checkbox" checked={script.enabled} onChange={e => run(() => action('configure', { enabled: e.target.checked }))} />启用（下次页面加载生效）</label>{' '}
-    <label><input type="checkbox" checked={script.autoUpdate} onChange={e => run(() => action('configure', { autoUpdate: e.target.checked }))} />允许自动更新</label>
+    <SettingRow name="启用脚本" desc="下次页面加载生效"><input type="checkbox" aria-label="启用脚本" checked={script.enabled} onChange={e => run(() => action('configure', { enabled: e.target.checked }))} /></SettingRow>
+    <SettingRow name="允许自动更新"><input type="checkbox" aria-label="允许自动更新" checked={script.autoUpdate} onChange={e => run(() => action('configure', { autoUpdate: e.target.checked }))} /></SettingRow>
     <p role="status">更新：{script.update.state}{script.update.availableVersion && ` → ${script.update.availableVersion}`}{script.update.checkedAt && ` · ${new Date(script.update.checkedAt).toLocaleString()}`}</p>
     {script.update.error && <p role="alert">{script.update.error}；已保留原版本。</p>}
     <details><summary>匹配、权限与兼容提示</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{permissions(script)}</pre>
@@ -28,7 +29,7 @@ function ScriptCard({ script, run }: { script: ScriptRecord; run: (work: () => P
       <label><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} />我已检查当前源码、匹配范围及权限</label>{' '}
       <button disabled={!reviewed} onClick={() => run(async () => { await action('approve'); setReviewed(false); })}>批准当前版本权限</button>
     </details>
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+    <div className="setting-actions">
       <button onClick={() => { setSource(script.source); setEditing(!editing); }}>查看 / 编辑源码</button>
       <button onClick={() => run(() => action('check'))}>检查更新</button>
       <button onClick={() => run(() => action('update'))}>安装可用更新</button>
@@ -56,7 +57,7 @@ function ScriptCard({ script, run }: { script: ScriptRecord; run: (work: () => P
       <label><input type="checkbox" checked={keepValues} onChange={e => setKeepValues(e.target.checked)} />保留此脚本存储</label>{' '}
       <button onClick={() => run(() => action('remove', { keepValues }))}>确认卸载</button>{' '}<button onClick={() => setRemoving(false)}>取消</button>
     </div>}
-  </article>;
+  </SettingGroup>;
 }
 
 export function UserscriptSettings() {
@@ -76,28 +77,33 @@ export function UserscriptSettings() {
     {(failure || error) && <p role="alert">{failure || error}</p>}
     {busy && <p role="status">正在处理…</p>}
     <fieldset disabled={busy} style={{ border: 0, padding: 0 }}>
-      <label>.user.js URL <input aria-label="用户脚本 URL" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…/script.user.js" style={{ width: '75%' }} /></label>{' '}
+      <SettingGroup title="导入脚本">
+      <SettingRow name=".user.js URL"><input aria-label="用户脚本 URL" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…/script.user.js" /></SettingRow>
       <button disabled={!url.trim()} onClick={() => run(async () => { await userscriptRequest('import', { url: url.trim() }); setUrl(''); })}>从 URL 导入</button>
-      <p><label>文件导入 <input type="file" accept=".js,.user.js,text/javascript" onChange={e => {
+      <SettingRow name="文件导入"><input aria-label="文件导入" type="file" accept=".js,.user.js,text/javascript" onChange={e => {
         const file = e.target.files?.[0]; if (file) run(async () => { if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MiB'); setSource(await file.text()); }); e.target.value = '';
-      }} /></label></p>
+      }} /></SettingRow>
       <details><summary>粘贴 / 检查导入源码</summary><textarea aria-label="导入源码" value={source} onChange={e => setSource(e.target.value)} rows={12} spellCheck={false} style={editorStyle} /></details>
       {source && <button onClick={() => run(async () => { await userscriptRequest('import', { source }); setSource(''); })}>导入以上源码（默认关闭）</button>}
+      </SettingGroup>
       {snapshot && <>
         <p>{snapshot.migration}</p>
-        <label><input type="checkbox" checked={snapshot.autoUpdate} onChange={e => run(() => userscriptRequest('settings', { autoUpdate: e.target.checked }))} />启用自动更新调度</label>{' '}
-        <label>检查间隔（小时）<input aria-label="更新间隔" type="number" min={1} max={720} defaultValue={snapshot.intervalHours} onBlur={e => { const v = Number(e.target.value); if (v !== snapshot.intervalHours) run(() => userscriptRequest('settings', { intervalHours: v })); }} /></label>{' '}
+        <SettingGroup title="更新调度">
+        <SettingRow name="自动更新调度"><input type="checkbox" aria-label="自动更新调度" checked={snapshot.autoUpdate} onChange={e => run(() => userscriptRequest('settings', { autoUpdate: e.target.checked }))} /></SettingRow>
+        <SettingRow name="检查间隔" desc="以小时为单位"><input aria-label="更新间隔" type="number" min={1} max={720} defaultValue={snapshot.intervalHours} onBlur={e => { const v = Number(e.target.value); if (v !== snapshot.intervalHours) run(() => userscriptRequest('settings', { intervalHours: v })); }} /></SettingRow>
         <button onClick={() => run(() => userscriptRequest('check'))}>检查全部更新</button>
         <p>更新失败保留旧版；新增权限或匹配范围等待批准。已经打开的页面继续当前代码，重载后使用新版本。</p>
+        </SettingGroup>
         {!snapshot.scripts.length && <p>尚未安装脚本。</p>}
         {snapshot.scripts.map(script => <ScriptCard key={script.id} script={script} run={run} />)}
         <details><summary>页面执行状态</summary>
           {snapshot.statuses.map((s, i) => <p key={i}>{s.url} · {snapshot.scripts.find(script => script.id === s.scriptId)?.metadata.name || 'guest'} · {s.state}{s.message && `：${s.message}`}</p>)}
         </details>
       </>}
-      <h3>已打开页面的脚本菜单</h3>
+      <SettingGroup title="已打开页面的脚本菜单">
       <button onClick={() => run(async () => setMenus(await userscriptRequest('menus')))}>刷新脚本菜单</button>
       {menus.map(menu => <p key={`${menu.guestId}:${menu.scriptId}:${menu.id}`}><button onClick={() => run(() => userscriptRequest('invoke-menu', menu))}>{menu.label}</button> <small>{menu.url}</small></p>)}
+      </SettingGroup>
     </fieldset>
   </section>;
 }

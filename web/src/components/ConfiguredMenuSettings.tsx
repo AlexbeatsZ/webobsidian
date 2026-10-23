@@ -5,6 +5,7 @@ import { MENU_CONFIG_EXAMPLE } from '../lib/configuredMenus/example';
 import { downloadMenuConfiguration } from '../lib/configuredMenus/commands';
 import type { MenuConfigurationController } from '../lib/configuredMenus/controller';
 import type { MenuSource } from '../lib/configuredMenus/types';
+import { SettingGroup } from './SettingRow';
 
 /** Editor owns its draft until explicitly saved/reloaded. External events never replace typing. */
 function MenuConfigEditor({ controller }: { controller: MenuConfigurationController }) {
@@ -38,10 +39,11 @@ function MenuConfigEditor({ controller }: { controller: MenuConfigurationControl
   };
   const paths = [...new Set([MENU_CONFIG_ROOT, ...state.sources.map((s) => s.path), ...Object.keys(drafts)])];
   return <section className="configured-menu-settings">
-    <h3>自定义右键菜单</h3>
+    <h2>右键菜单</h2>
     <p>配置只作用于当前 Vault。支持 JSONC 注释、导入文件、条件、稳定 ID、排序、分组和子菜单。保存或重新加载后立即生效。</p>
     <p><code>{MENU_CONFIG_DIRECTORY}{path}</code></p>
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+    <SettingGroup title="配置文件">
+    <div className="setting-actions">
       <label>文件 <select value={path} disabled={busy} onChange={(e) => setPath(e.target.value)}>{paths.map((p) => <option key={p}>{p}</option>)}</select></label>
       <button type="button" disabled={busy || !source} onClick={() => void save()}>保存并应用</button>
       <button type="button" disabled={busy || state.loading} onClick={() => void reload()}>重新加载磁盘配置</button>
@@ -55,6 +57,7 @@ function MenuConfigEditor({ controller }: { controller: MenuConfigurationControl
     {error && <p role="alert">{error}</p>}
     {state.diagnostics.length > 0 && <div role="alert"><p>配置未应用。保留上一个有效配置；首次配置出错时使用默认菜单。</p><ul>{state.diagnostics.map((d, i) => <li key={i}><code>{d.file}:{d.line}:{d.column}</code> — {d.message}</li>)}</ul></div>}
     <p>新增动作使用应用已有命令 ID。插件无 ID 的菜单项只能显式弱匹配；语言或标题改变后需要调整。导出包含磁盘已加载文件，不包含未保存草稿。</p>
+    </SettingGroup>
   </section>;
 }
 
