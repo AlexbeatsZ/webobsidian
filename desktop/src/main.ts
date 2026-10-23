@@ -293,7 +293,7 @@ async function pickVaultDialog(firstRun: boolean): Promise<string> {
 // ---------------------------------------------------------------------------
 // Window + menu
 // ---------------------------------------------------------------------------
-function createWindow(): void {
+function createWindow(starting = false): void {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -304,7 +304,7 @@ function createWindow(): void {
     icon: app.isPackaged ? undefined : path.join(__dirname, '..', 'buildResources', 'icon.png'),
     ...(process.platform !== 'darwin' ? {
       titleBarStyle: 'hidden' as const,
-      titleBarOverlay: { color: '#f6f6f6', symbolColor: '#333333', height: 32 },
+      titleBarOverlay: { color: starting ? '#1e1e1e' : '#f6f6f6', symbolColor: starting ? '#dddddd' : '#333333', height: 32 },
     } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -321,7 +321,6 @@ function createWindow(): void {
   // Retain native actions/accelerators behind F10, without a visible menu row.
   if (process.platform !== 'darwin') mainWindow.setMenuBarVisibility(false);
 
-  mainWindow.loadURL(baseUrl(serverPort));
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const target = new URL(url);
     if (target.origin !== baseUrl(serverPort) || !(target.pathname === '/' || target.pathname.startsWith('/note/'))) {
@@ -358,6 +357,13 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Show a real window before cold Vault indexing. A second click must focus
+  // this window rather than looking as though the first launch did nothing.
+  void mainWindow.loadURL(starting ? `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>WebObsidian</title>
+<style>html{color-scheme:dark}body{margin:0;background:#1e1e1e;color:#ddd;font:15px system-ui;display:grid;place-content:center;height:100vh;text-align:center}.drag{-webkit-app-region:drag;position:fixed;inset:0 140px auto 0;height:32px}p{color:#aaa;font-size:13px}.spinner{margin:0 auto 20px;width:28px;height:28px;border:3px solid #444;border-top-color:#b9a3e3;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}</style></head>
+<body><div class="drag"></div><div class="spinner"></div><div role="status">正在打开笔记库</div><p>正在准备本地服务与索引，首次打开可能需要一些时间。</p></body></html>`)}` : baseUrl(serverPort));
 }
 
 async function switchVault(): Promise<void> {
@@ -485,14 +491,16 @@ if (!app.requestSingleInstanceLock()) {
       cfg = await ensureVault(cfg);
       desktopConfig = cfg;
       await writeConfig(cfg); // persist freshly-generated secret on first run
+      createWindow(true);
       await startServer(cfg);
+      if (!mainWindow || mainWindow.isDestroyed()) return;
       buildMenu();
       if (process.platform !== 'darwin') registerTitleBar();
       registerNativePlugins();
       userscripts = new UserscriptService({ dataDir: DATA_DIR(), fallbackVault: cfg.vaultPath!,
         window: () => mainWindow, hostAllowed: event => !!desktopWindow(event) });
       await userscripts.start();
-      createWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(baseUrl(serverPort));
     } catch (err) {
       dialog.showErrorBox('WebObsidian failed to start', String(err instanceof Error ? err.stack ?? err.message : err));
       app.quit();

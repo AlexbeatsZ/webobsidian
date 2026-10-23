@@ -1,6 +1,6 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "WebObsidian desktop app (Electron shell around the self-hosted server)",
   "author": "xnohat <xnohat@gmail.com>",
@@ -67,6 +67,7 @@
       "artifactName": "${productName}-${version}-win-${arch}.${ext}"
     },
     "portable": {
+      "unpackDirName": true,
       "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
     },
     "linux": {

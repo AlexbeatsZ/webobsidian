@@ -58,6 +58,35 @@ right tabs. It fails on renderer initialization/runtime errors. This is browser
 and server integration evidence; native Electron window controls and guests
 still require separate desktop acceptance.
 
+## Portable launcher lifetime (0.1.8)
+
+The 0.1.7 native-window failure was reproduced against the real portable EXE:
+its first launch could render/edit/save, but a second launch removed the first
+instance's `resources/server/public/index.html`. Electron's single-instance
+lock correctly rejected the second app, after its NSIS launcher had already
+reused the first launch's extraction directory. On exit, that launcher recursively
+cleaned the shared directory. Locked EXE/DLL/asar files remained, concealing the
+loss until a page or lazy asset was requested; `/healthz` still returned success.
+
+Set `build.portable.unpackDirName: true` for the pinned electron-builder 25.1.8.
+Its actual `NsisTarget` implementation treats true as per-launch `$PLUGINSDIR`
+and otherwise defaults to one build-specific directory. Do not change this to
+false based on the contradictory option comment; check the installed source
+and real portable regression when upgrading electron-builder. Each launch must
+clean only its own extraction, including a rejected second instance.
+
+The BrowserWindow now appears before server indexing with a local, script-free
+loading document. A second click focuses this window. Once health, login and
+userscripts are ready, the same window loads the workspace. The server still
+indexes before listening; this does not implement background indexing.
+
+`npm run test:desktop-portable -- <portable-exe>` runs the actual launcher with
+a temporary `--user-data-dir`, disposable Vault and Electron's real Chromium.
+It checks native auto-login/edit/save, a second launcher exiting without removing
+the first app's resources, HTTP 200 and a successful native renderer reload. It
+failed on 0.1.7 at the missing-index assertion. This test complements the
+production-browser regression, which cannot cover the NSIS extraction lifetime.
+
 ## Persisted Vault selection and local test data
 
 On Windows the desktop profile is

@@ -52,6 +52,9 @@ workspace layout without native caption insets or draggable regions.
   theme wrapper, never editor descendants. A blank draggable fallback is present
   during loading/login and hidden when the React workspace mounts; it never
   subtracts another row from the root height.
+- The main BrowserWindow opens before cold server indexing with a script-free
+  local loading document and a 32px drag strip. The same window navigates to the
+  workspace after server/login/userscript readiness; repeated launches focus it.
 - obsidian.css uses native titlebar-area-x/width safe-area variables (138px
   caption-width fallback), keeps controls/tabs no-drag, and reserves at least
   40px of empty drag space. Narrow Electron windows retain the native 32px row

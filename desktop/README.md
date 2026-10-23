@@ -79,6 +79,13 @@ the full startup deadline. Version 0.1.6 allows up to 120 seconds for a live
 server to finish cold Vault indexing before the HTTP listener opens. The log
 records each startup time and elapsed time until its health check succeeds.
 
+Version 0.1.8 displays a loading window while the local server indexes the Vault.
+Its Windows portable launcher uses an independent extraction directory per launch,
+so opening the EXE again focuses the existing window without deleting its web
+resources. Test this actual launcher behavior with a disposable profile/Vault:
+`npm run test:desktop-portable -- desktop/release/0.1.8/WebObsidian-0.1.8-win-x64-portable.exe`.
+The server still completes its initial index before opening the workspace.
+
 Version 0.1.7 also fixes a native LaTeX configuration initialization cycle that
 could leave the window blank after the server was healthy. To check the real
 production entry and integrated note workflows with a disposable fixture, run

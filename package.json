@@ -25,6 +25,7 @@
     "test:render": "playwright test --project=render",
     "test:integration": "playwright test --project=integration",
     "test:packaged-startup": "node tests/packaged-startup.mjs",
+    "test:desktop-portable": "node tests/desktop-portable.mjs",
     "dev:core": "npm --workspace @webobsidian/markdown-core run dev"
   },
   "devDependencies": {
