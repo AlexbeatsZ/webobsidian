@@ -1132,8 +1132,13 @@ class FrontmatterWidget extends WidgetType {
     return true;
   }
   toDOM(view: EditorView) {
+    // CM measures this root's rectangle, not margins between block siblings.
+    // A flow root contains the existing properties margins and divider intact.
+    const block = document.createElement('div');
+    block.className = 'cm-properties-block';
     const box = document.createElement('div');
     box.className = 'properties cm-properties';
+    block.appendChild(box);
     const range = view.state.field(syntaxModel).frontmatter;
     if (!this.ro && range) box.appendChild(sourceButton(view, range, 'properties'));
 
@@ -1249,7 +1254,7 @@ class FrontmatterWidget extends WidgetType {
     box.appendChild(header);
     if (!canEditProperties(this.yaml)) {
       const hint = document.createElement('div'); hint.className = 'prop-unsupported';
-      hint.textContent = 'Complex or invalid YAML. Use the source entry to edit.'; box.appendChild(hint); return box;
+      hint.textContent = 'Complex or invalid YAML. Use the source entry to edit.'; box.appendChild(hint); return block;
     }
 
     const editable = (el: HTMLElement, onCommit: () => void) => {
@@ -1619,7 +1624,7 @@ class FrontmatterWidget extends WidgetType {
         inp.addEventListener('click', (event) => event.preventDefault());
       }
     }
-    return box;
+    return block;
   }
 }
 
@@ -2342,15 +2347,15 @@ export const livePreviewTheme = EditorView.baseTheme({
   '.cm-h1 span, .cm-h2 span, .cm-h3 span, .cm-h4 span, .cm-h5 span, .cm-h6 span': {
     textDecoration: 'none !important',
   },
-  // Inline title = h1 alias (§19).
+  // Inline title = h1 alias (§19); keep its gap inside the measured widget.
   '.cm-inline-title': {
     fontSize: 'var(--h1-size)',
     fontWeight: 'var(--h1-weight)',
     lineHeight: 'var(--line-height-tight)',
     letterSpacing: '-0.015em',
     color: 'var(--text-normal)',
-    margin: '0 0 0.5em',
-    padding: '0',
+    margin: '0',
+    padding: '0 0 0.5em',
   },
   '.cm-em': { fontStyle: 'italic' },
   '.cm-strike': { textDecoration: 'line-through' },

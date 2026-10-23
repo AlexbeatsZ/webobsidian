@@ -665,7 +665,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-html-break { display: inline; }
 .cm-source-toggle { position: absolute; right: 4px; top: 2px; z-index: 2; font: 12px var(--font-mono); color: var(--text-muted); background: transparent; border: 0; border-radius: 4px; padding: 3px 5px; cursor: pointer; opacity: 0; }
 .cm-source-toggle:hover, .cm-source-toggle:focus-visible { color: var(--text-normal); background: var(--background-modifier-hover); }
-.cm-source-toggle:active { background: var(--background-modifier-active-hover); }
+.cm-source-toggle:active { background: var(--bg-modifier-active); }
 .cm-table-frame:hover > .cm-source-toggle, .cm-properties:hover > .cm-source-toggle, .cm-html-block:hover > .cm-source-toggle,
 .cm-source-toggle:focus-visible { opacity: 1; }
 .cm-source-close { font: 12px var(--font-ui); margin-right: 8px; cursor: pointer; }
@@ -794,6 +794,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .internal-link:hover { text-decoration: underline; }
 
 /* Properties block */
+/* Contain property margins inside the block rectangle CM uses for hit testing. */
+.cm-properties-block { display: flow-root; }
 .properties { margin: 0 0 24px; padding-bottom: 12px; border-bottom: 1px solid var(--bg-modifier-border); }
 .prop-row { display: flex; align-items: center; gap: 12px; padding: 4px 0; font-size: 14px; }
 .prop-key { color: var(--text-muted); min-width: 130px; display: flex; align-items: center; gap: 8px; }

@@ -278,3 +278,35 @@ draft must leave editing before reordering, preventing stale-table edits.
 The table changes were inspected as source only after the user revoked testing
 and acceptance. No post-change type/build/browser/UI/performance result is
 claimed; nested Callout geometry, actual pointer input and undo remain unverified.
+
+## Properties and title measurement (2026-10-22)
+
+The reported click mismatch has an exact source match in the disposable Vault:
+the note about SCF convergence has YAML on lines 1-9, `iaa` on line 10 and the
+SCF paragraph on line 11. The screenshot shows ordinary text, not a Callout or
+list; neither a special mouse handler nor a synthetic cursor correction belongs
+in this path.
+
+FrontmatterWidget previously returned `.properties.cm-properties` directly as
+a block replacement. Its vertical margins (the stylesheet's 24px bottom margin
+and the existing base-theme override) sit outside the element rectangle. CM 6.43
+measures direct block siblings by their rectangle heights and uses the resulting
+height map to choose a line in posAtCoords before scanning inline text. Those
+unmeasured gaps can therefore select the following line even when the pointer
+visually overlaps the preceding one. The inline title also had an external 0.5em
+bottom margin. This source chain explains the symptom; no runtime reproduction
+or measurement was performed under the user's no-acceptance instruction.
+
+FrontmatterWidget now returns a flow-root shell around the existing properties
+element. The shell contains the properties margins, so their spacing participates
+in CM's measured height without moving the divider into the gap or duplicating
+property/editor state. Both normal and unsupported-YAML paths return that shell;
+source mode and notes without frontmatter create none. A hidden properties child
+contributes no margins. The title's 0.5em gap is padding within its own rectangle.
+Native primary selection, pointer handling, source ranges and line heights stay
+owned by CodeMirror; there is no second cursor dispatch or fixed-height offset.
+
+Only source and Git diff review were performed. Actual click placement, folded
+or hidden properties, title combinations, wrapping, IME and browser/native UI
+behavior remain unverified. No new tests, type/build checks, probes or application
+launches were performed for this change.
