@@ -142,6 +142,37 @@ bracket highlights and the preview cursor through the existing LaTeX settings.
 `mathPreviewLivePreviewDisplay` now controls the document preview, with a true
 default; an explicitly stored false remains respected.
 
+### Formula measurement and width feedback (2026-10-23)
+
+`WidgetType.toDOM` runs before CodeMirror inserts the widget, so nothing there may
+convert a formula or read its metrics. `MathWidget` and the inline tooltip both
+start `renderMath` from `view.requestMeasure`, after the host is connected, and
+read the fallback width only from that attached container. Conversion results are
+keyed by the widget span so a pending render is not restarted by an unrelated
+measure.
+
+Width must not flow back into the editor's own width:
+
+- A display formula keeps `width: 100%`/`min-width: 0`/`max-width: 100%`; its inner
+  `.cm-math-body` scrolls horizontally. The conversion container is that inner
+  body, not the content element, so a wide intrinsic SVG cannot widen `.cm-content`.
+  `.cm-content` itself keeps `min-width: 0` inside the flex document column.
+- An inline formula converts against the content box of `view.contentDOM` (padding
+  subtracted once). The inline tooltip keeps CodeMirror's default fixed
+  positioning, sizes to `max-content` with a bounded width, and scrolls inside its
+  own body. Restoring absolute positioning or a shrink-to-fit root inside the
+  editable DOM reintroduces the width/position feedback that moved unselected
+  characters and the caret-entering formula.
+- Completion requests one further measure (scrollbar/height), and configuration
+  changes re-run the existing queue. There is no timer, ResizeObserver or
+  measure-triggered conversion loop.
+
+Resizing the window is not converted again until the formula is recreated, so
+width-sensitive TeX line breaking after a resize is not claimed as handled. The
+two reported oscillation cases are addressed by the shared chain above; no single
+runtime root cause has been confirmed.
+
+
 Syntax colors come from the existing formula-local Lezer tree, including control
 sequences, numbers, operators, delimiters, environments, literal text and comments.
 Only visible source formulas need marks. Positioned trees are cached by immutable
