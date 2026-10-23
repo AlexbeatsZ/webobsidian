@@ -424,10 +424,14 @@ class CalloutMathSourcesWidget extends WidgetType {
 
 /* ---------------- math (locally bundled MathJax, loaded on demand) ---------------- */
 
+// CM can transfer equal widgets' DOM to a new WidgetType instance. Resources
+// belong to that DOM mount, so destroy must not depend on the creator instance.
+const mathMounts = new WeakMap<HTMLElement, { controller?: AbortController; stop: () => void }>();
 class MathWidget extends WidgetType {
-  private controllers = new WeakMap<HTMLElement, AbortController>();
-  private subscriptions = new WeakMap<HTMLElement, () => void>();
-  destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); this.subscriptions.get(dom)?.(); }
+  destroy(dom: HTMLElement) {
+    const mount = mathMounts.get(dom); mathMounts.delete(dom);
+    mount?.controller?.abort(); mount?.stop();
+  }
   constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }, readonly number?: string, readonly anchor?: string, readonly definitions: readonly string[] = [], readonly preview = false, readonly sourceInTitle = false) {
     super();
   }
@@ -448,9 +452,11 @@ class MathWidget extends WidgetType {
       span.appendChild(label);
     }
     span.dataset.renderPending = 'true';
+    const mount = { controller: undefined as AbortController | undefined, stop: () => {} };
+    mathMounts.set(span, mount);
     const render = () => {
-      this.controllers.get(span)?.abort();
-      const controller = new AbortController(); this.controllers.set(span, controller);
+      mount.controller?.abort();
+      const controller = new AbortController(); mount.controller = controller;
       span.dataset.renderPending = 'true';
       // toDOM runs before insertion. Read metrics only after CM mounts the widget,
       // alongside its other layout reads, rather than caching detached fallbacks.
@@ -470,7 +476,7 @@ class MathWidget extends WidgetType {
         .finally(() => { if (!controller.signal.aborted) { delete span.dataset.renderPending; view.requestMeasure(); } });
       } });
     };
-    this.subscriptions.set(span, subscribeMathConfiguration(render)); render();
+    mount.stop = subscribeMathConfiguration(render); render();
     if (this.display && this.range && !this.preview && !this.sourceInTitle && !view.state.readOnly) {
       const formula = editorMathRegions(view.state).find(r => r.from === this.range!.from && r.to === this.range!.to);
       span.appendChild(sourceButton(view, this.range, '公式', {
@@ -504,10 +510,12 @@ function embedNotFound(el: HTMLElement, target: string) {
   el.textContent = `"${target}" could not be found.`;
 }
 
+const noteEmbedMounts = new WeakMap<HTMLElement, { controller: AbortController; cleanup: (() => void)[] }>();
 class NoteEmbedWidget extends WidgetType {
-  private controllers = new WeakMap<HTMLElement, AbortController>();
-  private cleanup = new WeakMap<HTMLElement, (() => void)[]>();
-  destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); this.cleanup.get(dom)?.forEach(stop => stop()); }
+  destroy(dom: HTMLElement) {
+    const mount = noteEmbedMounts.get(dom); noteEmbedMounts.delete(dom);
+    mount?.controller.abort(); mount?.cleanup.forEach(stop => stop());
+  }
   constructor(readonly target: string) {
     super();
   }
@@ -534,10 +542,9 @@ class NoteEmbedWidget extends WidgetType {
     content.textContent = '…';
     box.append(open, content);
     const controller = new AbortController();
-    this.controllers.set(box, controller);
     const context = contextOf(view);
     const trail = context.embedTrail ?? [context.sourcePath];
-    const cleanup: (() => void)[] = []; this.cleanup.set(box, cleanup);
+    const cleanup: (() => void)[] = []; noteEmbedMounts.set(box, { controller, cleanup });
     if (trail.length > 4) { content.textContent = '嵌入层级已达上限'; return box; }
     box.dataset.renderPending = 'true';
     void context.renderEmbed(this.target, controller.signal).then(res => {
@@ -686,8 +693,8 @@ export const htmlRenderedState = StateField.define<readonly number[]>({
 
 /** Sandbox execution remains opt-in. Its source entry uses the shared temporary
  *  region, so editing never needs a second HTML-specific close control. */
+const htmlPreviewMounts = new WeakMap<HTMLElement, () => void>();
 class HtmlPreviewWidget extends WidgetType {
-  private onResize: (() => void) | null = null;
   constructor(readonly code: string, readonly range: { from: number; to: number }, readonly rendered: boolean) {
     super();
   }
@@ -713,9 +720,10 @@ class HtmlPreviewWidget extends WidgetType {
       const sync = () => {
         wrap.style.width = view.scrollDOM.clientWidth + 'px';
       };
-      requestAnimationFrame(sync);
-      this.onResize = sync;
-      window.addEventListener('resize', sync);
+      const win = wrap.ownerDocument.defaultView!;
+      const frameRequest = win.requestAnimationFrame(sync);
+      win.addEventListener('resize', sync);
+      htmlPreviewMounts.set(wrap, () => { win.cancelAnimationFrame(frameRequest); win.removeEventListener('resize', sync); });
     } else {
       const button = document.createElement('button');
       button.type = 'button';
@@ -729,8 +737,8 @@ class HtmlPreviewWidget extends WidgetType {
     }
     return wrap;
   }
-  destroy() {
-    if (this.onResize) window.removeEventListener('resize', this.onResize);
+  destroy(dom: HTMLElement) {
+    const cleanup = htmlPreviewMounts.get(dom); htmlPreviewMounts.delete(dom); cleanup?.();
   }
 }
 
@@ -849,17 +857,17 @@ export const calloutFoldDeco = StateField.define<DecorationSet>({
 
 type TableBlock = TableModel;
 
+const tableMounts = new WeakMap<HTMLElement, (() => void)[]>();
 class TableWidget extends WidgetType {
-  private cleanup = new WeakMap<HTMLElement, (() => void)[]>();
   constructor(readonly block: TableBlock, readonly ro: boolean, readonly mathDependencies: string) { super(); }
   eq(o: TableWidget) { return o.block.key === this.block.key && o.block.from === this.block.from && o.ro === this.ro && o.mathDependencies === this.mathDependencies; }
   ignoreEvent() { return true; }
-  destroy(dom: HTMLElement) { this.cleanup.get(dom)?.forEach(stop => stop()); }
+  destroy(dom: HTMLElement) { const cleanup = tableMounts.get(dom); tableMounts.delete(dom); cleanup?.forEach(stop => stop()); }
   toDOM(view: EditorView) {
     const b = this.block, context = contextOf(view);
     const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap'; wrap.dataset.tableFrom = String(b.from);
     const frame = document.createElement('div'); frame.className = 'cm-table-frame'; wrap.appendChild(frame);
-    const cleanup: (() => void)[] = []; this.cleanup.set(wrap, cleanup);
+    const cleanup: (() => void)[] = []; tableMounts.set(wrap, cleanup);
     if (!this.ro) frame.appendChild(sourceButton(view, b, '表格'));
     const table = document.createElement('table'); table.className = 'cm-table'; frame.appendChild(table);
     const apply = (changes: SourceChange[]) => {

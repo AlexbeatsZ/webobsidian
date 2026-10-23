@@ -376,3 +376,18 @@ control were deliberately left unchanged under the user's test-maintenance stop.
 Tests, types, builds, probes, app/server/browser launches and acceptance did not
 run. Actual focus/selection/IME/script remount/UI behavior remains unverified;
 the already built 0.1.10 executable predates this correction.
+
+## DOM-owned widget resources (2026-10-23)
+
+CodeMirror may keep a widget DOM node while assigning it to a new equal WidgetType
+instance during a block-wrapper rebuild (for example, a same-length Callout type
+change). Its later destroy call reaches that new instance. Per-instance WeakMaps
+therefore cannot own mounted controllers, subscriptions, fragments or listeners.
+MathWidget, NoteEmbedWidget, TableWidget and HtmlPreviewWidget now keep their
+existing resource records in module-level WeakMaps keyed by the mounted root DOM.
+Destroy removes the record before aborting/disposal, making repeated destruction
+inert. The HTML mount also cancels its pending animation frame using its owning
+window. No generic host, extra state field or renderer is introduced.
+
+Evidence is source inspection of CM DOM transfer and the resource callers only.
+No tests/types/build/probes/app/server/browser or runtime acceptance were run.
