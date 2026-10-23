@@ -73,7 +73,7 @@ async function sources(
   );
   if (/^(?:[A-Za-z]:[\\/]|\/|~\/)/.test(location)) {
     const native = (window as any).webobsidianNativeRequire;
-    if (!native) throw new Error('External snippet paths require the trusted desktop host');
+    if (!native) throw new Error('外部片段路径需要可信桌面宿主');
     const fs = native('node:fs/promises'),
       path = native('node:path'),
       os = native('node:os');
@@ -95,7 +95,7 @@ async function sources(
   const values: { path: string; text: string }[] = [];
   const visit = async (path: string) => {
     const { stat } = await api.pluginAdapter('stat', path);
-    if (!stat) throw new Error('Rule file not found: ' + path);
+    if (!stat) throw new Error('找不到规则文件：' + path);
     if (stat.type === 'folder') {
       const list = await api.pluginAdapter('list', path);
       for (const dir of list.folders.sort()) await visit(dir);
@@ -200,7 +200,7 @@ export function updateWriting(patch: Partial<WritingSettings>) {
     .catch(() => {})
     .then(async () => {
       const startingGeneration = ++generation;
-      if (patch.math && Object.keys(patch).some(key => key !== 'math')) throw new Error('Save math settings separately');
+      if (patch.math && Object.keys(patch).some(key => key !== 'math')) throw new Error('请单独保存公式设置');
       const ruleConfigs = { ...settings.linter.ruleConfigs };
       for (const [id, value] of Object.entries(patch.linter?.ruleConfigs ?? {}))
         ruleConfigs[id] = { ...ruleConfigs[id], ...(value as object) };

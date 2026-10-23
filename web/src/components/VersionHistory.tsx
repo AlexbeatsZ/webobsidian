@@ -30,7 +30,7 @@ export default function VersionHistory() {
         setCommits(r.commits);
         if (r.commits[0]) setSelected(r.commits[0].hash);
       })
-      .catch((e) => setError(e.message || 'Failed to load history'))
+      .catch((e) => setError(e.message || '加载历史失败'))
       .finally(() => setLoading(false));
   }, [path]);
 
@@ -39,7 +39,7 @@ export default function VersionHistory() {
     api
       .gitShow(selected, path)
       .then((r) => setPreview(r.content))
-      .catch(() => setPreview('(could not load this version)'));
+      .catch(() => setPreview('（无法加载此版本）'));
   }, [path, selected]);
 
   if (!path) return null;

@@ -70,6 +70,6 @@ export function installBlockEffects(currentApp: App): () => void {
 
 /** Both fenced JS and configured effects use exactly the same run implementation. */
 export function createEffectRun(container: HTMLElement, context: ConstructorParameters<typeof JavascriptRun>[2], invalidate: () => void, measure: () => void) {
-  if (!app) throw new Error('Block effects are unavailable for this Vault');
+  if (!app) throw new Error('此仓库不支持块效果');
   const run = new JavascriptRun(app, container, context, invalidate, measure); void run.load(); return run;
 }

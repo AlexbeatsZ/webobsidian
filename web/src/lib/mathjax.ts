@@ -104,9 +104,9 @@ export function loadMathJax(): Promise<MathJaxRuntime> {
     script.src = `${assetRoot}/startup.js`; script.async = true;
     script.onload = () => {
       const loaded = owner.MathJax as MathJaxRuntime;
-      if (!loaded.startup?.promise) { reject(new Error('MathJax did not initialize')); return; }
+      if (!loaded.startup?.promise) { reject(new Error('MathJax 初始化失败')); return; }
       void loaded.startup.promise.then(() => {
-        if (loaded.version !== __MATHJAX_VERSION__) throw new Error('Unexpected MathJax version');
+        if (loaded.version !== __MATHJAX_VERSION__) throw new Error('MathJax 版本不符');
         // Legacy plugins retain an isolated compatibility processor. Native
         // preambles are imported once and never depend on its mutable state.
         resolve(loaded);
@@ -131,7 +131,7 @@ async function createEngine(profile: MathProfile, definitions: readonly string[]
   const mathjax = await loadMathJax(), packages = resolveMathPackages(profile.configuration.packages);
   await mathjax.loader.load(...packages.map(p => p.component));
   const Input = mathjax.startup.constructors.tex;
-  if (!Input || !mathjax.startup.mathjax?.document) throw new Error('MathJax context constructors unavailable');
+  if (!Input || !mathjax.startup.mathjax?.document) throw new Error('MathJax 上下文构造器不可用');
   let validating = true;
   const input = new Input({
     packages: ['base', 'ams', 'newcommand', 'textmacros', 'configmacros', 'begingroup', 'require', ...packages.map(p => p.id)],

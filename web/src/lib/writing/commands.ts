@@ -130,7 +130,7 @@ export const writingCommands = [
       if (!view || view.state.readOnly) return;
       const state = view.state;
       const text = await navigator.clipboard.readText();
-      if (view.state !== state) throw new Error('Selection changed before paste');
+      if (view.state !== state) throw new Error('粘贴前选区已变化');
       const { formatPaste } = await import('./format');
       const s = state.selection.main;
       const result = formatPaste(

@@ -37,7 +37,7 @@ export async function preparePrintDocument(snapshot: DocumentSnapshot, context: 
       });
       const pending = host.querySelector('[data-render-pending],.cm-gap') || [...host.querySelectorAll('img')].some(img => !img.complete) || doc.fonts.status === 'loading';
       stable = pending ? 0 : stable + 1;
-      if (performance.now() > deadline) throw new Error('Print resources or full layout did not finish loading');
+      if (performance.now() > deadline) throw new Error('打印资源或整页布局未加载完成');
     }
     await doc.fonts.ready;
     const frozen = host.cloneNode(true) as HTMLElement;

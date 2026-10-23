@@ -12,10 +12,10 @@ import { MenuList } from './ContextMenu';
 type SortMode = 'relevance' | 'name-asc' | 'name-desc' | 'path-asc';
 
 const SORT_LABELS: Record<SortMode, string> = {
-  relevance: 'Relevance',
-  'name-asc': 'File name (A to Z)',
-  'name-desc': 'File name (Z to A)',
-  'path-asc': 'Path (A to Z)',
+  relevance: '相关度',
+  'name-asc': '文件名（A 到 Z）',
+  'name-desc': '文件名（Z 到 A）',
+  'path-asc': '路径（A 到 Z）',
 };
 
 /** Render a match context with its highlighted ranges as React nodes. */

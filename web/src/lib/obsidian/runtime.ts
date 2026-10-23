@@ -709,7 +709,7 @@ export async function loadPlugins(): Promise<void> {
       };
       pluginCommands.set('webviewer:open', {
         id: 'webviewer:open',
-        name: 'Open web viewer',
+        name: '打开网页视图',
         callback: () => promptWebViewer(sharedApp),
       });
     }

@@ -94,7 +94,7 @@ export default function FolderPicker() {
     useStore.getState().setSelected([]);
     if (reopen) await openFile(reopen);
     if (moved) {
-      const dest = folder || 'vault root';
+      const dest = folder || '仓库根目录';
       notify(moved > 1 ? `已移动 ${moved} 项至 ${dest}` : `已移动至 ${dest}`);
     }
   };

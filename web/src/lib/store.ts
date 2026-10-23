@@ -516,7 +516,7 @@ export const useStore = create<AppState>()(
         set((s) => ({
           tabs: s.tabs.some((t) => t.path === GRAPH_PATH)
             ? s.tabs
-            : [...s.tabs, { path: GRAPH_PATH, title: 'Graph view' }],
+            : [...s.tabs, { path: GRAPH_PATH, title: '关系图谱' }],
           activePath: GRAPH_PATH,
           content: '',
           dirty: false,
@@ -592,7 +592,7 @@ export const useStore = create<AppState>()(
           const resolved = await api.resolve(target, sourcePath ?? get().activePath ?? '');
           const { path } = resolved;
           if (resolved.status === 'ambiguous' || resolved.status === 'denied') {
-            get().notify(resolved.status === 'ambiguous' ? 'Ambiguous link: ' + target : 'Link is not allowed');
+            get().notify(resolved.status === 'ambiguous' ? '链接有歧义：' + target : '不允许打开该链接');
             return;
           }
           if (path) {

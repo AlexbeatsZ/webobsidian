@@ -90,12 +90,12 @@ export class WebViewerView extends ItemView {
   async setState(state: any) {
     const url = new URL(state.url);
     if (!['http:', 'https:'].includes(url.protocol))
-      throw new Error('Web viewer requires an HTTP(S) URL');
+      throw new Error('网页视图需要 HTTP(S) 地址');
     if (this.url === url.href && this.webview?.src) return;
     this.url = url.href;
     this.title = '';
     this.address.value = this.url;
-    if (!this.webview) throw new Error('Web viewer requires the native desktop client');
+    if (!this.webview) throw new Error('网页视图需要桌面客户端');
     this.webview.src = this.url;
   }
   getState() {
@@ -109,7 +109,7 @@ export class WebViewerView extends ItemView {
 }
 export function promptWebViewer(app: any) {
   const modal = new Modal(app);
-  modal.setTitle('Open web viewer');
+  modal.setTitle('打开网页视图');
   let url = 'https://';
   new Setting(modal.contentEl)
     .setName('URL')

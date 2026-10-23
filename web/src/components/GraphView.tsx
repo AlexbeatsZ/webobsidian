@@ -820,7 +820,7 @@ export default function GraphView() {
       simRef.current = null;
       nodesRef.current = [];
       linksRef.current = [];
-      setBuildError('Could not render the graph with the current filters.');
+      setBuildError('当前筛选条件下无法绘制关系图谱。');
       setSceneVersion((v) => v + 1);
     }
 
@@ -1109,10 +1109,10 @@ function FilterPanel({
           value={s.search}
           onChange={(e) => patch({ search: e.target.value })}
         />
-        <Toggle label="Tags" checked={s.tags} onChange={(v) => patch({ tags: v })} />
-        <Toggle label="Attachments" checked={s.attachments} onChange={(v) => patch({ attachments: v })} />
-        <Toggle label="Existing files only" checked={s.existingOnly} onChange={(v) => patch({ existingOnly: v })} />
-        <Toggle label="Orphans" checked={s.orphans} onChange={(v) => patch({ orphans: v })} />
+        <Toggle label="标签" checked={s.tags} onChange={(v) => patch({ tags: v })} />
+        <Toggle label="附件" checked={s.attachments} onChange={(v) => patch({ attachments: v })} />
+        <Toggle label="仅现存文件" checked={s.existingOnly} onChange={(v) => patch({ existingOnly: v })} />
+        <Toggle label="孤立笔记" checked={s.orphans} onChange={(v) => patch({ orphans: v })} />
       </Section>
 
       <Section title="分组">
@@ -1141,20 +1141,20 @@ function FilterPanel({
       </Section>
 
       <Section title="显示">
-        <Toggle label="Arrows" checked={s.arrows} onChange={(v) => patch({ arrows: v })} />
-        <Slider label="Text fade threshold" min={-3} max={3} step={0.1} value={s.textFade} onChange={(v) => patch({ textFade: v })} />
-        <Slider label="Node size" min={0.1} max={5} step={0.1} value={s.nodeSize} onChange={(v) => patch({ nodeSize: v })} />
-        <Slider label="Link thickness" min={0.1} max={5} step={0.1} value={s.linkThickness} onChange={(v) => patch({ linkThickness: v })} />
+        <Toggle label="箭头" checked={s.arrows} onChange={(v) => patch({ arrows: v })} />
+        <Slider label="文字淡出阈值" min={-3} max={3} step={0.1} value={s.textFade} onChange={(v) => patch({ textFade: v })} />
+        <Slider label="节点大小" min={0.1} max={5} step={0.1} value={s.nodeSize} onChange={(v) => patch({ nodeSize: v })} />
+        <Slider label="连线粗细" min={0.1} max={5} step={0.1} value={s.linkThickness} onChange={(v) => patch({ linkThickness: v })} />
         <button className="btn" style={{ width: '100%', marginTop: 6 }} onClick={onAnimate}>
           动画
         </button>
       </Section>
 
       <Section title="作用力">
-        <Slider label="Center force" min={0} max={1} step={0.01} value={s.centerForce} onChange={(v) => patch({ centerForce: v })} />
-        <Slider label="Repel force" min={0} max={20} step={0.1} value={s.repelForce} onChange={(v) => patch({ repelForce: v })} />
-        <Slider label="Link force" min={0} max={1} step={0.01} value={s.linkForce} onChange={(v) => patch({ linkForce: v })} />
-        <Slider label="Link distance" min={30} max={500} step={1} value={s.linkDistance} onChange={(v) => patch({ linkDistance: v })} />
+        <Slider label="向心力" min={0} max={1} step={0.01} value={s.centerForce} onChange={(v) => patch({ centerForce: v })} />
+        <Slider label="斥力" min={0} max={20} step={0.1} value={s.repelForce} onChange={(v) => patch({ repelForce: v })} />
+        <Slider label="连线力" min={0} max={1} step={0.01} value={s.linkForce} onChange={(v) => patch({ linkForce: v })} />
+        <Slider label="连线长度" min={30} max={500} step={1} value={s.linkDistance} onChange={(v) => patch({ linkDistance: v })} />
       </Section>
     </div>
   );

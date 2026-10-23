@@ -2,7 +2,7 @@ import { getMenuConfigurationController } from './controller';
 
 export function downloadMenuConfiguration(): void {
   const controller = getMenuConfigurationController();
-  if (!controller) throw new Error('Menu configuration is not initialized');
+  if (!controller) throw new Error('菜单配置尚未初始化');
   const url = URL.createObjectURL(new Blob([controller.exportSources()], { type: 'application/json;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;

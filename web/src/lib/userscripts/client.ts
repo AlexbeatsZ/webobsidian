@@ -13,7 +13,7 @@ export const userscriptSnapshot = () => snapshot;
 export function subscribeUserscripts(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 export const userscriptBridge = (): UserscriptBridge | undefined => (window as any).webobsidianDesktop?.userscripts;
 export async function userscriptRequest<T = any>(action: string, payload?: unknown): Promise<T> {
-  const bridge = userscriptBridge(); if (!bridge) throw new Error('Userscripts require the native desktop Web Viewer');
+  const bridge = userscriptBridge(); if (!bridge) throw new Error('用户脚本需要桌面版网页视图');
   return bridge.request(action, payload);
 }
 export function refreshUserscripts() {

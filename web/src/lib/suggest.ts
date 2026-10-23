@@ -244,7 +244,7 @@ class SuggestState {
         if (this.targetPath !== target || !this.targetLoad) {
           this.targetPath = target;
           this.targetLoad = api.resolve(target, path).then(result => {
-            if (!result.path || result.status === 'ambiguous' || result.status === 'denied') throw new Error('Target note is unavailable or ambiguous');
+            if (!result.path || result.status === 'ambiguous' || result.status === 'denied') throw new Error('目标笔记不存在或有歧义');
             if (!/\.(md|markdown)$/i.test(result.path)) throw new Error('公式引用只支持 Markdown 笔记');
             return documents.open(result.path);
           });

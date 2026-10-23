@@ -51,7 +51,7 @@ export class FileSystemAdapter {
     return this.vault.getName();
   }
   getBasePath(): string {
-    if (!this.basePath) throw new Error('Vault base path is not initialized');
+    if (!this.basePath) throw new Error('仓库基础路径尚未初始化');
     return this.basePath;
   }
   async read(path: string) {

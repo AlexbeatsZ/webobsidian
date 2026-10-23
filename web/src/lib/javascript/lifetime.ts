@@ -24,7 +24,7 @@ export class JavascriptRun extends Component {
     return super.addChild(child);
   }
   onunload() { this.disposed = true; this.abort.abort(); this.container.remove(); }
-  assertActive() { if (this.disposed) throw new DOMException('JavaScript run was disposed', 'AbortError'); }
+  assertActive() { if (this.disposed) throw new DOMException('JavaScript 运行已释放', 'AbortError'); }
   onCleanup = (cleanup: () => void) => this.register(cleanup);
   watch = (path: string) => {
     this.assertActive(); path = path.replace(/\\/g, '/').replace(/^\.\//, '');
@@ -64,7 +64,7 @@ export class JavascriptRun extends Component {
   async renderMarkdown(markdown: string, target = this.container, context = this.context) {
     this.assertActive();
     const mount = this.context.mountFragment;
-    if (!mount) throw new Error('Markdown fragment rendering is unavailable');
+    if (!mount) throw new Error('Markdown 片段渲染不可用');
     // Register immediately, even if disposal happens before React reports ready.
     await new Promise<void>(resolve => {
       const done = () => { this.signal.removeEventListener('abort', done); resolve(); };

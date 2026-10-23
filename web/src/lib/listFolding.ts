@@ -25,7 +25,7 @@ class ListFoldWidget extends WidgetType {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'cm-list-fold' + (this.folded ? ' is-folded' : '');
-    button.setAttribute('aria-label', this.folded ? 'Expand list item' : 'Collapse list item');
+    button.setAttribute('aria-label', this.folded ? '展开列表项' : '折叠列表项');
     button.setAttribute('aria-expanded', String(!this.folded));
     button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + iconPaths['chevron-down'] + '</svg>';
     button.addEventListener('mousedown', event => event.preventDefault());

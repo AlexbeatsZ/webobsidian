@@ -14,14 +14,14 @@ export function clearNativeFeaturePreferences() { current = undefined; generatio
 export async function readNativeFeatures() {
   const started = generation;
   const value = await request<NativeFeaturePreferences>('/api/native-features');
-  if (started !== generation) throw new Error('Vault changed while reading feature settings');
+  if (started !== generation) throw new Error('读取功能设置期间仓库已切换');
   current = value;
   return value;
 }
 export async function saveNativeFeatures(value: { vault: string; tags?: Partial<TagPreferences>; attachments?: CleanupOptions }) {
   const started = generation;
   const result = await request<NativeFeaturePreferences>('/api/native-features', { method: 'PUT', body: JSON.stringify(value) });
-  if (started !== generation) throw new Error('Vault changed while saving feature settings');
+  if (started !== generation) throw new Error('保存功能设置期间仓库已切换');
   current = result;
   return result;
 }

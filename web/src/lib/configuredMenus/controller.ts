@@ -56,7 +56,7 @@ export class MenuConfigurationController {
       try {
         source = await this.storage.read(file, vault);
         if (this.disposed || generation !== this.generation) return;
-        if (vault !== undefined && source.vault !== vault) throw new Error('Vault changed during menu reload');
+        if (vault !== undefined && source.vault !== vault) throw new Error('重新加载菜单期间仓库已切换');
         vault = source.vault;
       } catch (e) {
         diagnostics.push(menuDiagnostic(file, '', String((e as Error).message ?? e)));
@@ -65,9 +65,9 @@ export class MenuConfigurationController {
       }
       sources.set(file, source);
       bytes += new TextEncoder().encode(source.content).length;
-      if (bytes > MENU_CONFIG_MAX_BYTES) { diagnostics.push(menuDiagnostic(file, source.content, 'Menu configuration exceeds 1 MiB')); visiting.delete(key); return; }
+      if (bytes > MENU_CONFIG_MAX_BYTES) { diagnostics.push(menuDiagnostic(file, source.content, '菜单配置超过 1 MiB')); visiting.delete(key); return; }
       if (!source.exists) {
-        if (file !== MENU_CONFIG_ROOT) diagnostics.push(menuDiagnostic(file, '', 'Included configuration does not exist'));
+        if (file !== MENU_CONFIG_ROOT) diagnostics.push(menuDiagnostic(file, '', '包含的配置不存在'));
         visiting.delete(key); loaded.add(key); return;
       }
       const parsed = parseMenuConfig(file, source.content);
@@ -98,9 +98,9 @@ export class MenuConfigurationController {
     return !diagnostics.length;
   }
   async save(source: MenuSource, content: string): Promise<boolean> {
-    if (this.disposed) throw new Error('Menu session is closed');
+    if (this.disposed) throw new Error('菜单会话已关闭');
     const currentVault = this.state.sources[0]?.vault;
-    if (!currentVault || currentVault !== source.vault) throw new Error('Vault changed; reopen menu settings before saving');
+    if (!currentVault || currentVault !== source.vault) throw new Error('仓库已切换，请重新打开菜单设置再保存');
     await this.storage.write(source.path, content, source);
     return this.reload();
   }

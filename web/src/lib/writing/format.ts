@@ -27,7 +27,7 @@ let defaults: Map<string, string> | undefined;
 const formattedVersions = new WeakMap<DocumentSession, number>();
 export function compileFormattingSettings(raw: Record<string, any>) {
   if (raw.replacementSyntax !== undefined && raw.replacementSyntax !== REPLACEMENT_SYNTAX)
-    throw new Error('Unsupported replacement syntax: ' + raw.replacementSyntax);
+    throw new Error('不支持的替换语法：' + raw.replacementSyntax);
   for (const key of ['ruleConfigs', 'commonStyles'])
     if (raw[key] !== undefined && (!raw[key] || typeof raw[key] !== 'object' || Array.isArray(raw[key])))
       throw new Error(`Invalid formatter ${key}`);
@@ -40,7 +40,7 @@ export function compileFormattingSettings(raw: Record<string, any>) {
   ])
     if (raw[key] !== undefined && !Array.isArray(raw[key])) throw new Error(`Invalid formatter ${key}`);
   for (const value of raw.foldersToIgnore ?? [])
-    if (typeof value !== 'string') throw new Error('Ignored folders must be paths');
+    if (typeof value !== 'string') throw new Error('忽略目录必须是路径');
   for (const value of raw.filesToIgnore ?? []) if (value.match) new RegExp(value.match, value.flags);
   setLanguage('zh-CN');
   const ruleConfigs = Object.fromEntries(
@@ -144,20 +144,20 @@ async function prepareCorrections(settings: any) {
   };
 }
 export async function formatSession(session: DocumentSession, timestampOnly = false) {
-  if (session.snapshot.conflict) throw new Error('Resolve the external file conflict before formatting');
+  if (session.snapshot.conflict) throw new Error('请先解决外部修改冲突再格式化');
   const settings = timestampOnly ? formatterSettings() : await prepareCorrections(formatterSettings());
   if (ignoresFormatting(session.id, settings)) return false;
   const { stat } = await api.pluginAdapter('stat', session.id);
   // Use the latest snapshot after async reads, never the one before them.
   const snapshot = session.snapshot;
-  if (snapshot.conflict) throw new Error('Document has an external conflict');
+  if (snapshot.conflict) throw new Error('文档存在外部修改冲突');
   useWritingModel(session.analysis);
   const options = runOptions(snapshot.text, session.id, stat ?? {}, settings);
   (options as any).userModified = session.userEditVersion > (formattedVersions.get(session) ?? 0);
   const runner = new RulesRunner();
   const after = timestampOnly ? runner.runYAMLTimestampByItself(options) : runner.lintText(options);
   if (snapshot.version !== session.snapshot.version)
-    throw new Error('Document changed during formatting; save again');
+    throw new Error('格式化期间文档发生变化，请重新保存');
   const changes = changesBetween(snapshot.text, after);
   if (!changes.length) {
     formattedVersions.set(session, session.userEditVersion);
@@ -276,10 +276,10 @@ export async function runAfterCommands() {
     if (command.enabled && command.id && !ids.has(command.id)) {
       ids.add(command.id);
       if (command.id.startsWith('obsidian-linter:') || command.id === 'editor:save-file')
-        throw new Error('Recursive formatting command blocked: ' + command.id);
+        throw new Error('已阻止递归格式化指令：' + command.id);
       const { sharedApp } = await import('../plugins');
       if (!sharedApp.commands.executeCommandById(command.id))
-        throw new Error('Unknown formatting command: ' + command.id);
+        throw new Error('未知格式化指令：' + command.id);
     }
 }
 export async function formatPath(path: string, save = false) {

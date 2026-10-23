@@ -9,20 +9,20 @@ type KeyPath = (string | number)[];
 
 /** Includes are relative to their importing file and cannot escape the menu directory. */
 export function resolveMenuInclude(from: string, input: string): string {
-  if (!input || /[\\\x00-\x1f:?#%]/.test(input) || input.startsWith('/')) throw new Error('Use a relative .jsonc path with forward slashes');
+  if (!input || /[\\\x00-\x1f:?#%]/.test(input) || input.startsWith('/')) throw new Error('请使用以正斜杠分隔的相对 .jsonc 路径');
   const parts = from.split('/').slice(0, -1);
   for (const part of input.split('/')) {
     if (part === '.' || part === '') continue;
     if (part === '..') {
-      if (!parts.length) throw new Error('Include escapes the menu configuration directory');
+      if (!parts.length) throw new Error('include 路径超出菜单配置目录');
       parts.pop();
     } else {
-      if (!/^[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/.test(part) || part.endsWith('.') || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(part)) throw new Error('Invalid menu configuration filename');
+      if (!/^[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/.test(part) || part.endsWith('.') || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(part)) throw new Error('菜单配置文件名无效');
       parts.push(part);
     }
   }
   const result = parts.join('/');
-  if (!/\.jsonc$/i.test(result) || result.length > 240) throw new Error('Menu configuration files must use .jsonc');
+  if (!/\.jsonc$/i.test(result) || result.length > 240) throw new Error('菜单配置文件必须使用 .jsonc');
   return result;
 }
 
@@ -43,39 +43,39 @@ function parseMenuConfigUnchecked(file: string, content: string): { config?: Men
   const errors: ParseError[] = [];
   const tree = parseTree(content.replace(/^\uFEFF/, ' '), errors, { allowTrailingComma: true, disallowComments: false });
   for (const error of errors) diagnostics.push(menuDiagnostic(file, content, printParseErrorCode(error.error), error.offset, error.length));
-  if (errors.length || !tree) return { diagnostics: diagnostics.length ? diagnostics : [menuDiagnostic(file, content, 'Expected a version 1 menu configuration')] };
+  if (errors.length || !tree) return { diagnostics: diagnostics.length ? diagnostics : [menuDiagnostic(file, content, '需要 version 为 1 的菜单配置')] };
   const fail = (at: KeyPath, message: string) => {
     const node = findNodeAtLocation(tree, at) ?? tree;
     diagnostics.push(menuDiagnostic(file, content, message, node.offset, node.length));
   };
   const object = (value: unknown, at: KeyPath, keys: string[]): value is Record<string, any> => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) { fail(at, 'Expected an object'); return false; }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) { fail(at, '应为对象'); return false; }
     for (const key of Object.keys(value)) if (!keys.includes(key)) fail([...at, key], `Unknown field: ${key}`);
     return true;
   };
   const text = (value: unknown, at: KeyPath, empty = false) => {
-    if (typeof value !== 'string' || (!empty && !value.trim()) || value.length > 2000) fail(at, 'Expected a nonempty string (maximum 2000 characters)');
+    if (typeof value !== 'string' || (!empty && !value.trim()) || value.length > 2000) fail(at, '应为非空字符串（最多 2000 字符）');
   };
   const texts = (value: unknown, at: KeyPath) => {
-    if (!Array.isArray(value) || !value.length || value.length > 128) { fail(at, 'Expected an array of 1-128 strings'); return; }
+    if (!Array.isArray(value) || !value.length || value.length > 128) { fail(at, '应为 1–128 个字符串的数组'); return; }
     value.forEach((v, i) => text(v, [...at, i]));
   };
-  const bool = (v: unknown, at: KeyPath) => { if (typeof v !== 'boolean') fail(at, 'Expected a boolean'); };
-  const number = (v: unknown, at: KeyPath, integer = false) => { if (typeof v !== 'number' || !Number.isFinite(v) || (integer && (!Number.isInteger(v) || v < 0))) fail(at, integer ? 'Expected a nonnegative integer' : 'Expected a finite number'); };
+  const bool = (v: unknown, at: KeyPath) => { if (typeof v !== 'boolean') fail(at, '应为布尔值'); };
+  const number = (v: unknown, at: KeyPath, integer = false) => { if (typeof v !== 'number' || !Number.isFinite(v) || (integer && (!Number.isInteger(v) || v < 0))) fail(at, integer ? '应为非负整数' : '应为有限数字'); };
   const condition = (v: unknown, at: KeyPath, depth = 0) => {
-    if (depth > 12) { fail(at, 'Conditions may nest at most 12 levels'); return; }
+    if (depth > 12) { fail(at, '条件最多嵌套 12 层'); return; }
     if (!object(v, at, ['contexts', 'sources', 'selection', 'files', 'fileTypes', 'fileMatch', 'paths', 'link', 'tag', 'modifiers', 'all', 'any', 'not'])) return;
     for (const key of ['contexts', 'sources', 'fileTypes', 'paths']) if (v[key] !== undefined) texts(v[key], [...at, key]);
-    if (v.selection !== undefined && !['none', 'text'].includes(v.selection)) fail([...at, 'selection'], 'Expected none or text');
-    if (v.fileMatch !== undefined && !['all', 'any'].includes(v.fileMatch)) fail([...at, 'fileMatch'], 'Expected all or any');
+    if (v.selection !== undefined && !['none', 'text'].includes(v.selection)) fail([...at, 'selection'], '只能为 none 或 text');
+    if (v.fileMatch !== undefined && !['all', 'any'].includes(v.fileMatch)) fail([...at, 'fileMatch'], '只能为 all 或 any');
     for (const key of ['link', 'tag']) if (v[key] !== undefined) bool(v[key], [...at, key]);
     if (v.files !== undefined && object(v.files, [...at, 'files'], ['min', 'max'])) {
       for (const key of ['min', 'max']) if (v.files[key] !== undefined) number(v.files[key], [...at, 'files', key], true);
-      if (v.files.min > v.files.max) fail([...at, 'files'], 'min cannot exceed max');
+      if (v.files.min > v.files.max) fail([...at, 'files'], 'min 不能大于 max');
     }
     if (v.modifiers !== undefined && object(v.modifiers, [...at, 'modifiers'], ['shift', 'ctrl', 'alt', 'meta'])) for (const key of Object.keys(v.modifiers)) bool(v.modifiers[key], [...at, 'modifiers', key]);
     for (const key of ['all', 'any']) if (v[key] !== undefined) {
-      if (!Array.isArray(v[key]) || !v[key].length || v[key].length > 128) fail([...at, key], 'Expected 1-128 conditions');
+      if (!Array.isArray(v[key]) || !v[key].length || v[key].length > 128) fail([...at, key], '应为 1–128 个条件');
       else v[key].forEach((c: unknown, i: number) => condition(c, [...at, key, i], depth + 1));
     }
     if (v.not !== undefined) condition(v.not, [...at, 'not'], depth + 1);
@@ -86,22 +86,22 @@ function parseMenuConfigUnchecked(file: string, content: string): { config?: Men
     if (v.order !== undefined) number(v.order, [...at, 'order']);
   };
   const addition = (v: unknown, at: KeyPath, depth = 0) => {
-    if (depth > 12) { fail(at, 'Submenus may nest at most 12 levels'); return; }
+    if (depth > 12) { fail(at, '子菜单最多嵌套 12 层'); return; }
     if (!object(v, at, ['id', 'title', 'icon', 'command', 'separator', 'submenu', 'when', 'order', 'group'])) return;
     text(v.id, [...at, 'id']);
     common(v, at);
     if (v.separator !== undefined) bool(v.separator, [...at, 'separator']);
     if (v.separator === true) {
-      if (v.command !== undefined || v.submenu !== undefined) fail(at, 'Separators cannot have commands or submenus');
+      if (v.command !== undefined || v.submenu !== undefined) fail(at, '分隔符不能带命令或子菜单');
     } else {
       text(v.title, [...at, 'title']);
-      if ((v.command === undefined) === (v.submenu === undefined)) fail(at, 'Provide exactly one command or submenu');
+      if ((v.command === undefined) === (v.submenu === undefined)) fail(at, '必须且只能提供 command 或 submenu 之一');
       if (v.command !== undefined) text(v.command, [...at, 'command']);
       if (v.submenu !== undefined) array(v.submenu, [...at, 'submenu'], (x, p) => addition(x, p, depth + 1));
     }
   };
   const array = (v: unknown, at: KeyPath, each: (x: unknown, p: KeyPath) => void) => {
-    if (!Array.isArray(v) || v.length > 1024) { fail(at, 'Expected an array (maximum 1024 entries)'); return; }
+    if (!Array.isArray(v) || v.length > 1024) { fail(at, '应为数组（最多 1024 项）'); return; }
     v.forEach((x, i) => each(x, [...at, i]));
   };
   const valueOf = (node: Node): any => node.type === 'object'
@@ -109,7 +109,7 @@ function parseMenuConfigUnchecked(file: string, content: string): { config?: Men
     : node.type === 'array' ? (node.children ?? []).map(valueOf) : node.value;
   const value = valueOf(tree);
   if (!object(value, [], ['version', 'includes', 'imports', 'rules', 'items'])) return { diagnostics };
-  if (value.version !== 1) fail(['version'], 'Expected version: 1');
+  if (value.version !== 1) fail(['version'], 'version 必须为 1');
   for (const key of ['includes', 'imports']) if (value[key] !== undefined) {
     array(value[key], [key], (v, at) => {
       text(v, at);
@@ -122,7 +122,7 @@ function parseMenuConfigUnchecked(file: string, content: string): { config?: Men
     common(v, at);
     if (v.hide !== undefined) bool(v.hide, [...at, 'hide']);
     if (object(v.match, [...at, 'match'], ['id', 'weak'])) {
-      if ((v.match.id === undefined) === (v.match.weak === undefined)) fail([...at, 'match'], 'Provide exactly one id or explicit weak match');
+      if ((v.match.id === undefined) === (v.match.weak === undefined)) fail([...at, 'match'], '必须提供 id 或显式 weak 匹配之一');
       if (v.match.id !== undefined) Array.isArray(v.match.id) ? texts(v.match.id, [...at, 'match', 'id']) : text(v.match.id, [...at, 'match', 'id']);
       if (v.match.weak !== undefined && object(v.match.weak, [...at, 'match', 'weak'], ['title', 'icon', 'section'])) {
         text(v.match.weak.title, [...at, 'match', 'weak', 'title']);

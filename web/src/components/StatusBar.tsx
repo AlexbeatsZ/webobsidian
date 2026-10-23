@@ -42,10 +42,10 @@ export default function StatusBar() {
   const words = isText ? content.trim().split(/\s+/).filter(Boolean).length : 0;
 
   const gitLabel = !git?.isRepo
-    ? 'No vault sync'
+    ? '未同步仓库'
     : git.clean
       ? `git ${git.branch}${git.ahead ? ` ↑${git.ahead}` : ''}${git.behind ? ` ↓${git.behind}` : ''}`
-      : `${git.modified + git.notAdded} unsaved changes`;
+      : `${git.modified + git.notAdded} 未保存更改`;
 
   return (
     <div className="status-bar">

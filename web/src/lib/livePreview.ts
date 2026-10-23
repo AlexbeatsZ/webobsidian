@@ -379,7 +379,7 @@ class CalloutFoldWidget extends WidgetType {
     const control = document.createElement('button');
     control.type = 'button';
     control.className = 'cm-callout-fold' + (this.folded ? ' is-folded' : '');
-    control.setAttribute('aria-label', this.folded ? 'Expand callout' : 'Collapse callout');
+    control.setAttribute('aria-label', this.folded ? '展开 Callout' : '折叠 Callout');
     control.setAttribute('aria-expanded', String(!this.folded));
     control.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + iconPaths['chevron-down'] + '</svg>';
     control.addEventListener('mousedown', event => { event.preventDefault(); });
@@ -515,7 +515,7 @@ class NoteEmbedWidget extends WidgetType {
     box.className = 'internal-embed markdown-embed cm-note-embed';
     const open = document.createElement('span');
     open.className = 'markdown-embed-link';
-    open.title = 'Open link';
+    open.title = '打开链接';
     open.innerHTML =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
     open.addEventListener('mousedown', (e) => {
@@ -531,18 +531,18 @@ class NoteEmbedWidget extends WidgetType {
     const context = contextOf(view);
     const trail = context.embedTrail ?? [context.sourcePath];
     const cleanup: (() => void)[] = []; this.cleanup.set(box, cleanup);
-    if (trail.length > 4) { content.textContent = 'Embed depth limit reached'; return box; }
+    if (trail.length > 4) { content.textContent = '嵌入层级已达上限'; return box; }
     box.dataset.renderPending = 'true';
     void context.renderEmbed(this.target, controller.signal).then(res => {
       if (controller.signal.aborted) return;
       if (!res) { embedNotFound(content, this.target); return; }
-      if (trail.includes(res.path)) { content.textContent = 'Circular embed: ' + res.path; return; }
+      if (trail.includes(res.path)) { content.textContent = '循环嵌入：' + res.path; return; }
       let stop: (() => void) | undefined, previous: string | undefined, revision: string | undefined;
       cleanup.push(() => stop?.());
       const refresh = () => {
         if (controller.signal.aborted) return;
         const fragment = res.read();
-        if (!fragment) { stop?.(); content.textContent = 'Embedded section or block could not be found'; return; }
+        if (!fragment) { stop?.(); content.textContent = '找不到嵌入的章节或块'; return; }
         if (fragment.source === previous && fragment.equations?.revision === revision) return;
         previous = fragment.source; revision = fragment.equations?.revision; stop?.(); content.replaceChildren();
         const host = document.createElement('div'); host.className = 'cm-note-fragment'; content.appendChild(host);
@@ -552,7 +552,7 @@ class NoteEmbedWidget extends WidgetType {
       };
       cleanup.push(res.subscribe(refresh)); refresh();
     }).catch(error => {
-      if (!controller.signal.aborted) { content.textContent = 'Unable to load embed'; context.reportError?.(String(error)); }
+      if (!controller.signal.aborted) { content.textContent = '无法加载嵌入内容'; context.reportError?.(String(error)); }
     }).finally(() => { delete box.dataset.renderPending; });
     return box;
   }
@@ -1167,7 +1167,7 @@ class FrontmatterWidget extends WidgetType {
       const text = view.state.doc.toString();
       const fm = text.match(/^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
       try {
-        if (!fm || fm[1] !== this.yaml) throw new Error('Properties changed while editing; draft was not written');
+        if (!fm || fm[1] !== this.yaml) throw new Error('编辑期间属性已变化，草稿未写入');
         const offset = fm[0].indexOf('\n') + 1;
         const changes = patchPropertyRows(this.yaml, props).map((change) => ({ ...change, from: change.from + offset, to: change.to + offset }));
         if (changes.length) view.dispatch({ changes, userEvent: 'input.properties' });
