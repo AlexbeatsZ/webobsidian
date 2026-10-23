@@ -190,7 +190,7 @@ export default function SearchPanel() {
           <Icon name="search" size={15} className="search-lead" />
           <input
             className="search-input has-lead"
-            placeholder="Search   (try tag:idea, path:notes)"
+            placeholder="搜索正文、#标签、-#排除…"
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}

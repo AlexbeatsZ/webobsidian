@@ -38,6 +38,10 @@ adapter for source locations, unsaved state, event ordering and legacy resolutio
 
 ## Interfaces and compatibility
 
+File and command palette layout and the shared `#tag`/`-#tag` grammar are
+specified in [palette-search.md](palette-search.md). Both file and body search
+consume the same search-core query parser; existing `tag:` forms remain aliases.
+
 `GET /api/catalog` returns public file/folder summaries. Search and match-context
 requests accept `mode=pinyin`; omitted mode remains literal for agent clients and
 unlinked mentions. The main search panel explicitly opts in. Match results may

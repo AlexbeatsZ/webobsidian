@@ -88,7 +88,7 @@ describe('native tag query and page aliases', () => {
     expect(matchesTagFilters(['SCIENCE/physics', '课程/笔记'], filters)).toBe(true);
     expect(matchesTagFilters(['SCIENCE/old/topic', '课程'], filters)).toBe(false);
     expect(matchesTagFilters(['science-other', '课程'], filters)).toBe(false);
-    expect(withTagFilter('formula -tag:#science', 'Science', 'include')).toBe('formula tag:#Science');
+    expect(withTagFilter('formula -tag:#science', 'Science', 'include')).toBe('formula #Science');
   });
   it('indexes both alias case variants even when the first key is empty', () => {
     expect(readTagSourceNames('---\naliases: []\nAliases: ["#150化学", ordinary]\n---\n')).toEqual(['150化学']);

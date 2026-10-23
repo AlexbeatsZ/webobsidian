@@ -4,13 +4,14 @@ import { getSettings } from './settings.js';
 import { INDEX_FILE, config } from '../config.js';
 import { getVaultRoot, readFileText } from './vault.js';
 import { catalog as activeCatalog, VaultCatalog, CORE_LIST_PROPS, CATALOG_SCHEMA_VERSION } from './catalog.js';
-import { parseTagFilters, matchesTagFilters } from './tags/query.js';
+import { matchesTagFilters } from './tags/query.js';
 import {
   findText,
   phoneticTokens,
   candidateTokens,
   MAX_BODY,
   SEARCH_VERSION,
+  parseSearchQuery,
   type SearchOptions,
 } from '@webobsidian/search-core';
 import { parseNote, type ParsedNote } from './markdown.js';
@@ -142,8 +143,8 @@ export class QmdEngine {
       return qmd.search(query, limit, mode);
     }
     const s = await getSettings();
-    const tagFilters = parseTagFilters(query);
-    const { filterText, fields } = parseFielded(tagFilters.text);
+    const tagFilters = parseSearchQuery(query);
+    const { filterText, fields } = tagFilters;
     const q = filterText.trim();
     const selected = fields.length ? fields : [...FIELDS];
     const results = q
@@ -232,7 +233,7 @@ export class QmdEngine {
   /** Free-text terms from a query (operators like `tag:`/`path:` stripped),
    *  used to scan note bodies for highlightable occurrences. */
   queryText(query: string): string {
-    return parseFielded(parseTagFilters(query).text).filterText;
+    return parseSearchQuery(query).filterText;
   }
   queryTerms(query: string): string[] {
     return this.queryText(query)
@@ -391,29 +392,6 @@ export class QmdEngine {
     this.mini = MiniSearch.loadJSON<QmdDoc>(JSON.stringify(json), this.indexOptions());
     this.ready = true;
   }
-}
-
-/** Pull `field:` qualifiers out of a query into MiniSearch field filters. */
-function parseFielded(query: string): { filterText: string; fields: string[] } {
-  const fieldMap: Record<string, string> = {
-    tag: 'tags',
-    tags: 'tags',
-    title: 'title',
-    path: 'path',
-    heading: 'headings',
-  };
-  const fields = new Set<string>();
-  const rest: string[] = [];
-  for (const tok of query.split(/\s+/)) {
-    const m = tok.match(/^(\w+):(.+)$/);
-    if (m && fieldMap[m[1].toLowerCase()]) {
-      fields.add(fieldMap[m[1].toLowerCase()]);
-      rest.push(m[2]);
-    } else {
-      rest.push(tok);
-    }
-  }
-  return { filterText: rest.join(' '), fields: [...fields] };
 }
 
 export let qmd = new QmdEngine();

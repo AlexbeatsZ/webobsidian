@@ -19,6 +19,7 @@ export default defineConfig({
     { name: 'integration', testMatch: /integration\.spec\.ts/ },
     { name: 'plugins', testMatch: /plugins\.spec\.ts/ },
     { name: 'workspace', testMatch: /sidebar\.spec\.ts/ },
+    { name: 'palette', testMatch: /palette\.spec\.ts/ },
   ],
   webServer: {
     command: 'npm run build:core && npm --workspace web run dev -- --host 127.0.0.1 --port 5179 --strictPort',

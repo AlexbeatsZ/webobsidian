@@ -6,6 +6,8 @@ import {
   type SearchSettings,
   type CatalogEntry,
   type TextMatch,
+  parseSearchQuery,
+  matchesTagFilters,
 } from '@webobsidian/search-core';
 import { api } from './api';
 export { matchText, matchPath };
@@ -64,12 +66,12 @@ export function matchName(query: string, text: string): TextMatch | null {
   return matchText(query, text, settings);
 }
 export function fileCandidates(query: string, source = entries, recent: readonly string[] = []) {
-  const tag = settings.tagFilter ? query.match(/(?:^|\s)#([^\s]+)/)?.[1] : undefined;
-  const text = tag ? query.replace(/(?:^|\s)#[^\s]+/, '').trim() : query.trim();
+  const filters = parseSearchQuery(query);
+  const text = filters.filterText;
   return source
     .filter((e) => e.kind === 'file' && (settings.attachments || /\.(md|markdown)$/i.test(e.path)))
     .flatMap((entry) => {
-      if (tag && !entry.tags.some((t) => matchName(tag, t.replace(/^#/, '')))) return [];
+      if (!matchesTagFilters(entry.tags, filters) || filters.fields.includes('body')) return [];
       const names = [
         ...new Set([
           entry.title,
@@ -80,13 +82,17 @@ export function fileCandidates(query: string, source = entries, recent: readonly
           ...entry.aliases,
         ]),
       ];
-      const matches = names.flatMap((label) => {
+      const matches = (filters.fields.length && !filters.fields.includes('title') ? [] : names).flatMap((label) => {
         const match = matchName(text, label);
         return match ? [{ entry, label, match }] : [];
       });
-      if (settings.usePath) {
+      if ((!filters.fields.length && settings.usePath) || filters.fields.includes('path')) {
         const match = matchPath(text, entry.path, settings);
-        if (match) matches.push({ entry, label: entry.path, match });
+        if (match) matches.push({ entry, label: entry.title, match: { ...match, matches: [] } });
+      }
+      if (filters.fields.includes('headings')) for (const heading of entry.headings) {
+        const match = matchName(text, heading);
+        if (match) matches.push({ entry, label: entry.title, match: { ...match, matches: [] } });
       }
       matches.sort((a, b) => b.match.score - a.match.score);
       return matches.slice(0, 1);

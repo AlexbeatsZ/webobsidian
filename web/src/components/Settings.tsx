@@ -912,13 +912,13 @@ function SearchSettingsPanel({ focus }: { focus: string }) {
     ['usePath', '文件路径参与搜索'],
     ['attachments', '搜索附件'],
     ['showTags', '显示文件标签'],
-    ['tagFilter', '允许 #标签 筛选'],
     ['showFirstHeading', '显示一级标题'],
     ['headingIndent', '标题层级缩进'],
   ] as const;
   return (
     <div ref={panel}>
       <h2>Search & Shortcuts</h2>
+      <p className="setting-description">文件与正文搜索共用 #标签、-#排除；多个标签以空格分隔。#父标签 同时包含子标签。</p>
       {toggles.map(([key, label]) => (
         <Row key={key} name={label}>
           <input

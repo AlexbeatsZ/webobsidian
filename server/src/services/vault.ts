@@ -5,6 +5,12 @@ import { indexedFilesUnder } from './fileindex.js';
 import { getSettings } from './settings.js';
 import { readTextFile, writeTextFile } from './textFile.js';
 import { planFolderTags } from './tags/folderRules.js';
+import { fileTitleError } from '@webobsidian/search-core';
+
+function assertFileTitle(rel: string): void {
+  const error = fileTitleError(rel);
+  if (error) throw Object.assign(new Error(error), { status: 400 });
+}
 
 export interface TreeNode {
   name: string;
@@ -160,9 +166,11 @@ export async function readFileBuffer(rel: string): Promise<Buffer> {
 
 export async function writeFileText(rel: string, content: string, baseRevision?: string, createOnly = false): Promise<{ revision: string }> {
   const abs = await resolveInVault(rel);
+  const creating = createOnly || (baseRevision === undefined && !await exists(rel));
+  if (creating) assertFileTitle(rel);
   // New notes have no existing document session. Apply the same native rules
   // before their initial bytes are written; established sessions prepare saves.
-  if (/\.(md|markdown)$/i.test(rel) && baseRevision === undefined && !await exists(rel)) {
+  if (/\.(md|markdown)$/i.test(rel) && baseRevision === undefined && creating) {
     const settings = await getSettings();
     const root = path.resolve(settings.vault.path), key = process.platform === 'win32' ? root.toLowerCase() : root;
     const rules = settings.nativeFeatures[key]?.tags.folderTags;
@@ -178,6 +186,7 @@ export async function writeFileText(rel: string, content: string, baseRevision?:
 
 export async function writeFileBuffer(rel: string, buf: Buffer): Promise<void> {
   const abs = await resolveInVault(rel);
+  if (!await exists(rel)) assertFileTitle(rel);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, buf);
   void queueFileUpdate(rel);
@@ -228,6 +237,7 @@ export async function exists(rel: string): Promise<boolean> {
 export async function rename(from: string, to: string): Promise<void> {
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
+  if ((await fs.stat(absFrom)).isFile() && path.basename(from) !== path.basename(to)) assertFileTitle(to);
   await fs.mkdir(path.dirname(absTo), { recursive: true });
   const children = indexedFilesUnder(from);
   await fs.rename(absFrom, absTo);
@@ -244,6 +254,7 @@ export async function rename(from: string, to: string): Promise<void> {
 export async function copy(from: string, to: string): Promise<string[]> {
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
+  if ((await fs.stat(absFrom)).isFile()) assertFileTitle(to);
   await fs.mkdir(path.dirname(absTo), { recursive: true });
   await fs.cp(absFrom, absTo, { recursive: true, errorOnExist: true, force: false });
   const root = await getVaultRoot();

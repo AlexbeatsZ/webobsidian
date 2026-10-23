@@ -1,5 +1,6 @@
 import simplified from './simplified.js';
 import traditional from './traditional.js';
+export * from './query.js';
 export { prepareQuery, type PreparedQuery } from './literal.js';
 import { prepareQuery, fuzzySearch as literalFuzzy } from './literal.js';
 

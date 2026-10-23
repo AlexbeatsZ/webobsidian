@@ -14,6 +14,9 @@ const fixture = await fs.mkdtemp(path.join(os.tmpdir(), '.agents/meta-obsidian-s
 const vault = path.join(fixture, 'vault'), data = path.join(fixture, 'data');
 await fs.mkdir(vault); await fs.mkdir(data);
 await fs.writeFile(path.join(vault, 'acceptance.md'), '# Production startup\n\nEditable fixture.\n');
+await fs.writeFile(path.join(vault, 'legacy#title.md'), '# Existing external file\n');
+await fs.writeFile(path.join(vault, 'tag-filter.md'), '---\ntags: [化学/物理, 笔记]\n---\n\n反应记录\n');
+await fs.writeFile(path.join(vault, 'tag-old.md'), '---\ntags: [化学, 笔记, 旧版/归档]\n---\n\n反应记录\n');
 const native = path.join(vault, '.obsidian/webobsidian');
 await fs.mkdir(path.join(native, 'blocks'), { recursive: true });
 await fs.mkdir(path.join(native, 'menus'), { recursive: true });
@@ -82,6 +85,14 @@ try {
     data: { currentPassword: '123456', newPassword: 'fixture-only-password' },
   });
   assert.equal(change.status(), 200);
+  for (const query of ['#化学 #笔记 -#旧版', 'tag:#化学 tags:笔记 -tag:旧版']) {
+    const response = await page.request.get(base + '/api/search?q=' + encodeURIComponent(query));
+    assert.deepEqual((await response.json()).hits.map(hit => hit.path), ['tag-filter.md']);
+  }
+  assert.equal((await page.request.put(base + '/api/files/content', { data: { path: 'bad#title.md', content: '# New\n', createOnly: true } })).status(), 400);
+  assert.equal((await page.request.patch(base + '/api/files/rename', { data: { from: 'acceptance.md', to: 'bad#rename.md' } })).status(), 400);
+  assert.equal((await page.request.post(base + '/api/files/copy', { data: { from: 'acceptance.md', to: 'bad#copy.md' } })).status(), 400);
+  assert.equal((await page.request.put(base + '/api/files/content', { data: { path: 'legacy#title.md', content: '# Existing external file\n\nStill editable.\n' } })).status(), 200);
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('.workspace-launcher').waitFor();
   await page.keyboard.press('Control+o');
