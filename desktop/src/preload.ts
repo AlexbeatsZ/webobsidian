@@ -11,6 +11,7 @@ const desktopApi = {
   isDesktop: true,
   platform: process.platform,
   nativePlugins: !!nativeArg,
+  openVaultPath: (path: string): Promise<void> => ipcRenderer.invoke('desktop:open-vault-path', path),
   webviewer: {
     subscribe: (listener: (page: { sourceGuestId: number; url: string }) => void) => {
       const handler = (_event: unknown, page: { sourceGuestId: number; url: string }) => listener(page);

@@ -1,5 +1,4 @@
-import { app, clipboard, ipcMain, Notification, shell, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
-import { promises as fs } from 'node:fs';
+import { app, clipboard, ipcMain, Notification, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { GuestStatus, ScriptMenu, ScriptRecord } from '../../../web/src/lib/userscripts/types';
@@ -7,6 +6,7 @@ import { matches, needsApproval, connectAllowed, identity } from './metadata';
 import { approval, prepareBundle, UserscriptStore } from './store';
 import { scriptFetch } from './network';
 import { UserscriptUpdater } from './updater';
+import { effectiveVaultPath, openExistingPath } from '../paths';
 
 type IpcEvent = IpcMainEvent | IpcMainInvokeEvent;
 interface Guest {
@@ -49,14 +49,12 @@ export class UserscriptService {
     if (this.switching) return this.switching;
     return this.switching = (async () => {
       try {
-        let vault = this.options.fallbackVault;
-        try { const settings = JSON.parse(await fs.readFile(path.join(this.options.dataDir, 'settings.json'), 'utf8')); vault = settings.vault.path; }
-        catch (e: any) { if (e.code !== 'ENOENT') throw e; }
-        vault = path.resolve(string(vault));
+        const vault = await effectiveVaultPath(this.options.dataDir, this.options.fallbackVault);
         if (this.store?.vault === vault && !this.error) return;
         this.imports.abort(); this.imports = new AbortController();
         await Promise.allSettled(this.operations);
         await this.updater?.stop();
+        await this.store?.dispose();
         for (const guest of this.guests.values()) this.resetGuest(guest);
         const store = new UserscriptStore(vault, this.options.dataDir, this.changed);
         await store.load(); this.store = store; this.error = undefined;
@@ -64,7 +62,7 @@ export class UserscriptService {
           this.statuses = [...this.statuses, { guestId: 0, url: '更新器', state: 'error', message: String(error), at: Date.now() }].slice(-128);
           this.changed();
         }); this.updater.start();
-      } catch (e) { this.error = String(e); this.store = undefined; }
+      } catch (e) { this.error = String(e); await this.store?.dispose(); this.store = undefined; }
     })().finally(() => { this.switching = undefined; });
   }
   attach(contents: WebContents) {
@@ -132,6 +130,17 @@ export class UserscriptService {
     const store = this.requireStore();
     switch (action) {
       case 'list': return { ...store.snapshot(), statuses: this.statuses };
+      case 'paths': return { store: store.file, directory: path.dirname(store.file) };
+      case 'open-store': case 'open-directory': {
+        await store.flush();
+        const target = action === 'open-store' ? store.file : path.dirname(store.file);
+        await openExistingPath(target); return target;
+      }
+      case 'open-source': {
+        const target = await store.exportSource(string(p.id, 200), p.revision,
+          p.pending === undefined ? false : bool(p.pending), p.candidateId);
+        await openExistingPath(target); return target;
+      }
       case 'menus': return [...this.guests.values()].flatMap(g => [...g.menus.values()].filter(m => {
         try { const s = store.get(m.scriptId); return s.enabled && matches(g.contents.getURL(), s.metadata); } catch { return false; }
       }));
@@ -270,6 +279,6 @@ export class UserscriptService {
     ipcMain.removeHandler('userscripts:guest-op'); ipcMain.removeListener('userscripts:status', this.status);
     app.removeListener('web-contents-created', this.created);
     for (const g of this.guests.values()) this.resetGuest(g);
-    await this.updater?.stop(); await Promise.allSettled(this.operations); await this.store?.flush();
+    await this.updater?.stop(); await Promise.allSettled(this.operations); await this.store?.dispose();
   }
 }

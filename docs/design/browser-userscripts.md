@@ -79,6 +79,29 @@ GM 请求，但无法逆转已修改 DOM、原型或定时器。
 GM 使用 guest 的 session；anonymous 请求不发 cookies。脚本/更新下载不发 cookies。
 总 store 限制 96 MiB，单次 GM 值修改 8 MiB；限制错误直接显示。
 
+## 外部源码与存储路径（2026-10-23）
+
+设置页不再内嵌源码或 GM JSON 编辑器。既有 `userscripts:manage` 管理通路增加：
+
+- `paths` 返回 `{store, directory}`，均为当前有效 Vault 对应的真实绝对路径。
+- `open-store` / `open-directory` 等待既有写队列后，用系统程序打开当前 JSON 文件或
+  所在目录，返回打开的路径；不存在或系统打开失败直接报错，不另建存储。
+- `open-source {id, revision, pending?, candidateId?}` 由唯一 UserscriptStore
+  导出当前源码或待审批源码的查看副本，绑定 revision / candidateId，过期请求拒绝。
+  返回路径并通过系统文本关联打开，使用 `.user.js.txt` 后缀避免当作 OS 脚本执行。
+
+源码副本仅在明确打开时生成于系统临时目录 `.agents/webobsidian-userscripts-*`，
+逐次使用随机文件名，不覆盖编辑中的副本；不监听、不自动导回、不参与执行。
+切库/退出在已启动的管理操作结束后清理该 store 的临时目录。外部编辑若要保留，
+应另存并通过既有文件导入；同身份候选仍走 prepareBundle、权限审阅与审批，ID、
+GM 值和原启用设置保持原有规则。JSON 仍是唯一已安装状态，不新增 reload-source、
+外部编辑器协议、第二份 store 或更新管线。页面复制/路径展示由现有设置行负责。
+
+主应用外部配置打开与 userscript 切库共用 `desktop/src/paths.ts` 的有效 Vault
+解析和现存文件打开检查，避免再次复制 `settings.json` 路径优先级逻辑。
+这轮只做源码/Git diff 检查，没有运行测试、typecheck/build/probe、应用/服务/浏览器、
+系统打开或验收；未改真实 Vault/profile/存储，没有产生新版便携包。
+
 ## 隔离与生命周期
 
 内置 WebViewer 不依赖 `trustedPlugins`。main 启用既有 webviewTag，但强制 guest

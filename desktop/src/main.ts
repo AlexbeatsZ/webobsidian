@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { UserscriptService } from './userscripts/service';
+import { effectiveVaultPath, openExistingPath } from './paths';
 
 // ---------------------------------------------------------------------------
 // Paths & persisted desktop config
@@ -390,8 +391,8 @@ function buildMenu(): void {
         {
           label: 'Open Vault Folder',
           click: async () => {
-            const cfg = await readConfig();
-            if (cfg.vaultPath) shell.openPath(cfg.vaultPath);
+            try { await openExistingPath(await effectiveVaultPath(DATA_DIR(), desktopConfig?.vaultPath)); }
+            catch (error) { dialog.showErrorBox('无法打开笔记库', String(error)); }
           },
         },
         { type: 'separator' },
@@ -465,7 +466,20 @@ function registerTitleBar(): void {
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
-function registerNativePlugins(): void {
+function registerDesktopRequests(): void {
+  ipcMain.handle('desktop:open-vault-path', async (event, requested: unknown) => {
+    if (!desktopWindow(event)) throw new Error('Local application frame required');
+    if (typeof requested !== 'string' || !requested.trim() || requested.length > 32768 || requested.includes('\0')) throw new Error('文件路径无效');
+    let target: string;
+    if (path.isAbsolute(requested)) target = path.normalize(requested);
+    else {
+      const vault = await effectiveVaultPath(DATA_DIR(), desktopConfig?.vaultPath);
+      target = path.resolve(vault, requested);
+      const relative = path.relative(vault, target);
+      if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new Error('相对路径必须位于当前笔记库内');
+    }
+    await openExistingPath(target);
+  });
   ipcMain.handle('desktop:plugin-request', async (event, options) => {
     if (!desktopWindow(event) || !desktopConfig?.trustedPlugins) throw new Error('Native plugins are disabled');
     const url = new URL(options.url);
@@ -496,7 +510,7 @@ if (!app.requestSingleInstanceLock()) {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       buildMenu();
       if (process.platform !== 'darwin') registerTitleBar();
-      registerNativePlugins();
+      registerDesktopRequests();
       userscripts = new UserscriptService({ dataDir: DATA_DIR(), fallbackVault: cfg.vaultPath!,
         window: () => mainWindow, hostAllowed: event => !!desktopWindow(event) });
       await userscripts.start();

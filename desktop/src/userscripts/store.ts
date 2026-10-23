@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import { Script } from 'node:vm';
 import type { ScriptBundle, ScriptRecord } from '../../../web/src/lib/userscripts/types';
@@ -52,6 +53,7 @@ function warnings(m: ScriptBundle['metadata']) {
 export class UserscriptStore {
   private data: StoreData;
   private tail: Promise<unknown> = Promise.resolve();
+  private sourceDirectory?: Promise<string>;
   readonly file: string;
   constructor(readonly vault: string, dataDir: string, private changed: () => void) {
     this.data = empty(vault);
@@ -104,6 +106,22 @@ export class UserscriptStore {
   }
   snapshot() { const { values: _values, ...rest } = this.data; return clone(rest); }
   get(id: string) { const r = this.data.scripts.find(s => s.id === id); if (!r) throw new Error('Script no longer exists'); return clone(r); }
+  async exportSource(id: string, revision: unknown, pending: boolean, candidateId: unknown): Promise<string> {
+    const script = this.get(id);
+    if (script.revision !== revision) throw new Error('源码版本已变化，请刷新后重新查看');
+    if (pending && (!script.update.pending || !script.update.candidateId || script.update.candidateId !== candidateId)) throw new Error('待更新源码已变化，请刷新后重新查看');
+    const source = pending ? script.update.pending!.source : script.source;
+    this.sourceDirectory ??= (async () => {
+      const root = path.join(os.tmpdir(), '.agents');
+      await fs.mkdir(root, { recursive: true });
+      return fs.mkdtemp(path.join(root, 'webobsidian-userscripts-'));
+    })().catch(error => { this.sourceDirectory = undefined; throw error; });
+    // A text suffix opens an editor instead of an OS JavaScript execution host.
+    // This is a disposable view, never an input to installed state or execution.
+    const file = path.join(await this.sourceDirectory, randomUUID() + '.user.js.txt');
+    await fs.writeFile(file, source, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    return file;
+  }
   values(id: string) { this.get(id); return clone(this.data.values[id] ?? {}); }
   async mutate<T>(fn: (draft: StoreData) => T, announce = true): Promise<T> {
     const operation = this.tail.catch(() => {}).then(async () => {
@@ -152,4 +170,14 @@ export class UserscriptStore {
     }, false);
   }
   async flush() { await this.tail; }
+  async dispose() {
+    try { await this.flush(); }
+    finally {
+      const sourceDirectory = this.sourceDirectory;
+      this.sourceDirectory = undefined;
+      // A text editor may still hold a view open; cleanup must not block quitting.
+      if (sourceDirectory) await sourceDirectory.then(directory => fs.rm(directory, { recursive: true, force: true }))
+        .catch(error => console.warn('Userscript source view cleanup:', error));
+    }
+  }
 }

@@ -110,6 +110,30 @@ are limited to the test Vault. Verify the effective server and native desktop
 paths before any separately authorized runtime test. Creating a test Vault does
 not change the user's static-only acceptance instruction.
 
+## External configuration files (2026-10-23)
+
+`window.webobsidianDesktop.openVaultPath(path): Promise<void>` is a narrow
+preload/main IPC entry for the existing settings path rows. It reuses
+`desktopWindow` to accept only the current local application main frame; WebViewer
+guests and other frames cannot invoke it. It works without enabling native plugins.
+
+Relative paths resolve beneath the effective Vault from
+`server-data/settings.json.vault.path`; `desktop-config.json.vaultPath` is only a
+fallback when that server settings file is absent. Absolute paths remain supported
+for existing snippet configuration outside the Vault. Invalid/malformed settings,
+escaping relative paths, missing targets and OS-open failures propagate to the
+setting row. Opening never creates a missing configuration file or directory.
+
+`desktop/src/paths.ts` is shared by this IPC, the existing Open Vault Folder menu
+and UserscriptService's Vault refresh. It owns effective-Vault precedence and the
+existing-file/system-open check, replacing the former userscript-only copy.
+No HTTP route, local service, watcher, content cache or additional store is added.
+The web declaration in `lib/desktop.d.ts` mirrors the existing limited preload API.
+
+This follow-up is source/diff-only: no tests, types/build/probes, app/server/browser
+or native open operation was run. Runtime/OS association/Vault-switch acceptance
+remains unverified and existing release outputs are unchanged.
+
 ## Local build retention
 
 Windows builds use only the x64 portable target, producing
