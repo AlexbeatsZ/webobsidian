@@ -48,9 +48,12 @@ loads the migrated Theme.css label rules; no Vault snippet was rewritten.
 ## Implementation
 
 - The existing listLayout requestMeasure/observer handles quote and list prefix
-  geometry together, using native source positions. Transparency preserves prefix
-  width in both reveal states; wrapper padding and native text/caret remain owned
-  by CodeMirror. No source rewrite, second observer or selection compensation.
+  geometry together. After the post-0.1.12 feedback, it measures isolated native
+  prefix boxes rather than caret coordinates at source boundaries. Transparency
+  preserves prefix width in both reveal states; wrapper padding and native
+  text/caret remain owned by CodeMirror. No source rewrite, second observer or
+  selection compensation. The superseded computed-base cache and style-reset
+  pass are removed rather than retained as another fallback.
 - listFolding's existing button widget also hosts standard heading labels/controls.
   For H1-H6 it asks CodeMirror foldable for the section extent; the language's
   headerIndent foldService already implements section termination. Fold effects,
@@ -62,6 +65,53 @@ loads the migrated Theme.css label rules; no Vault snippet was rewritten.
 - No fold is synthesized for ####### BodyHeading. Existing explicit list bounds
   and list folding normalization remain unchanged. Heading labels persist through
   source reveal; full source mode gets the same available section control.
+
+## Post-0.1.12 source correction
+
+The old W/Q formula read `coordsAtPos` at mark/replacement boundaries on a line
+whose own text-indent/padding had already been changed. It therefore lacked a
+source-independent prefix-width invariant, particularly when a block formula
+split the line or a mark/selection changed its caret side. The per-DOM WeakMap
+also cached computed base padding and saved inline styles; a class change ran a
+restore pass and then measured again. CM's LineTile attribute synchronization
+can clear outside inline styles, so that cache could no longer establish one
+style owner. These are static risks; no event trace proved which caused the
+reported jump or which version the user was running.
+
+Now Q (quote prefix) and L (list indent/marker) come only from independent
+inline-block/pre boxes, scaled with the existing view.scaleX and rounded to
+CSS layout subpixels. The stylesheet owns line padding `base + L` and indent
+`-(Q + L)`. Thus first-line body and wrapped lines both begin at base + L;
+ordinary quote L=0 adds no second wrapper gap. Reading a prefix width cannot
+depend on either written property, the frame width, formula text, caret side or
+the source/preview visibility of the following emphasis. CM attribute resets
+restore only missing width properties through the existing observer; no stored
+padding, class-based restore cycle or duplicate measurement channel remains.
+
+Native Callout frame/spacing now has a definite column width, preserving its
+vertical padding, title/body wrappers and plain-text editing. The earlier
+fit-content/min100% native wrapper and 100%-wide formula shell had opposing
+intrinsic sizing dependencies. Plugin .callout, HTML and wide table output keep
+their separate existing width contracts; MathWidget/MathJax metrics are unchanged.
+
+Actual image inspection also established the heading order requirement: the
+current a3e2fb32 screenshot is arrow, H2, long title with an excessive gutter;
+the 9a566da8 reference is H2, arrow, title. Only the existing label/button gutter
+columns change (label end22px, 14px arrow end4px). The zero-width first-line
+anchor, title font/weight, natural wrapping and native fold state stay the same.
+
+Screenshots inspected with view_image (all under C:/Users/Meta/AppData/Local/Temp):
+- codex-clipboard-39976d65-362c-46ed-8596-cd10e5f717f3.png (Callout with three formulas)
+- codex-clipboard-16966daf-13bc-4d4a-a483-9885e25310b8.png (ordinary quote gap)
+- codex-clipboard-a3e2fb32-93e8-458f-8b0b-3868ee8276ef.png (current heading controls)
+- codex-clipboard-9a566da8-650b-4800-b7d6-666f64010d7f.png (required heading order)
+- codex-clipboard-ed672321-38ee-4bc6-92e7-975bdc295de3.png
+- codex-clipboard-484159e3-3e46-458c-89f9-deab62a06c94.png (same maximum-likelihood section states)
+
+The last pair supports the user's instability report, not an exact pixel delta:
+crop/scroll/viewport state and actual event trace were not observed. Matching
+test-copy notes were read only. Emphasis source markers may legitimately be
+visible at an active caret; no blanket concealment rule was added.
 
 ## Validation boundary
 

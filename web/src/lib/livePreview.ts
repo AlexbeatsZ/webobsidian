@@ -825,7 +825,6 @@ export const htmlPreviewField = StateField.define<DecorationSet>({
 
 export const toggleCalloutFold = StateEffect.define<number>();
 
-const QUOTE_LINE_RE = /^ {0,3}>/;
 const QUOTE_MARKERS_RE = /^(?: {0,3}> ?)+/;
 
 /**
@@ -1969,10 +1968,11 @@ function buildDecorations(view: EditorView): DecorationSet {
       // `bodyStart` = offset past the `>` markers so list/task handling below
       // also works INSIDE quotes and callouts.
       let bodyStart = 0;
-      if (QUOTE_LINE_RE.test(text)) {
-        const prefix = text.match(QUOTE_MARKERS_RE)![0];
+      const quotePrefix = text.match(QUOTE_MARKERS_RE);
+      const header = quotePrefix ? view.state.field(blockModel).containers.find((block) => block.kind === 'callout' && block.from === line.from) : undefined;
+      if (quotePrefix) {
+        const prefix = quotePrefix[0];
         bodyStart = prefix.length;
-        const header = view.state.field(blockModel).containers.find((block) => block.kind === 'callout' && block.from === line.from);
         if (header) {
           const slot = CALLOUT_SLOT[header.type] ?? 'default';
           const folded = isCalloutFolded(view.state, header.from, header.fold);
@@ -1995,7 +1995,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         } else {
           // Keep native prefix text and advance in both states. The existing
           // hanging-layout measure places it in the wrapper's quote gutter.
-          all.push(Decoration.line({ attributes: { 'data-quote-prefix-end': String(line.from + bodyStart) } }).range(line.from));
+          all.push(Decoration.line({ attributes: { 'data-prefix-layout': 'true' } }).range(line.from));
           all.push(Decoration.mark({ class: 'cm-quote-prefix' +
             (touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
         }
@@ -2006,11 +2006,16 @@ function buildDecorations(view: EditorView): DecorationSet {
       // non-space status counts as checked (no hard-coded custom-state list).
       const body = bodyStart ? text.slice(bodyStart) : text;
       const bodyFrom = line.from + bodyStart;
-      const list = markdownListLine(view.state, line);
+      // Callout title padding/icon replacement belongs to its title wrapper,
+      // even when the entire Callout is nested in a parent list item.
+      const list = header ? null : markdownListLine(view.state, line);
       const prefix = list?.header ? body.match(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[.\][ \t]+)?/) : null;
-      if (list) all.push(Decoration.line({ class: 'HyperMD-list-line', attributes: {
-        'data-list-body-start': String(prefix ? bodyFrom + prefix[0].length : line.from + list.indentTo),
-      } }).range(line.from));
+      if (list) {
+        all.push(Decoration.line({ class: 'HyperMD-list-line', attributes: { 'data-prefix-layout': 'true' } }).range(line.from));
+        const from = line.from + list.quoteTo;
+        const to = prefix ? bodyFrom + prefix[0].length : line.from + list.indentTo;
+        if (to > from) all.push(Decoration.mark({ class: 'cm-list-prefix' }).range(from, to));
+      }
       // Use the same indentation unit as contextual Tab, not a fixed four spaces.
       if (list) {
         const ws = text.slice(list.quoteTo, list.indentTo);

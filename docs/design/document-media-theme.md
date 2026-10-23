@@ -54,8 +54,11 @@
 - 嵌入片段第一个正文标题隐藏，后续标题保留；标题源码与片段起始坐标不变。
 - 嵌入仍只读、订阅源笔记草稿，循环/深度限制不变。长内容仍可由 CodeMirror
   虚拟化，通过外部文档滚动查看，不能把“无内部高度上限”等同于“所有行始终在 DOM”。
-- 表格、HTML、Callout 与块公式的外壳使用 `width:fit-content;min-width:100%;max-width:none`。
-  普通文本正常换行，宽表格可以按固有最小宽度展开。
+- 表格、HTML 和插件生成 Callout 保留固有宽度外壳，宽表格可按最小宽度展开。
+  原生 CodeMirror Callout 与 spacing 包装层固定为已有正文栏宽，`min-width:0`，
+  原生 frame `max-width:100%`；块公式依赖该确定栏宽，在自己的既有宿主内处理超宽。
+  删除原生 frame 的 fit-content/min-width:100% 组合，避免其固有宽度反过来依赖
+  百分比公式宿主。此处不改表格、HTML、插件 .callout 的固有宽度，也不改纵向 padding。
 - 表格内层 `cm-table-frame` 跟随实际表格宽高；添加行/列与源码按钮以该层定位，
   不能以满栏宽度的外壳定位。表格外部纵向空隙用 padding 纳入编辑器高度测量。
 - Callout 正文保留原始 CodeMirror 文本行，外框只作包装装饰。纵向间距不用行间 margin：

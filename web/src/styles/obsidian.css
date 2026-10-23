@@ -517,8 +517,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
    and source marker visibility. No line pseudo-element competes with snippets. */
 .cm-s-obsidian .cm-line[data-native-heading-gutter]::before { content: none !important; }
 .cm-s-obsidian .cm-heading-controls { vertical-align: top; }
-.cm-s-obsidian .cm-heading-label { position: absolute; right: 6px; top: 0; height: 100%; display: flex; align-items: center; font: normal 0.6rem/1.5 var(--font-ui); white-space: nowrap; color: var(--text-muted); pointer-events: none; }
-.cm-s-obsidian .cm-heading-controls .cm-list-fold { right: calc(6px + 2rem); }
+.cm-s-obsidian .cm-heading-label { position: absolute; right: 22px; top: 0; height: 100%; display: flex; align-items: center; font: normal 0.6rem/1.5 var(--font-ui); white-space: nowrap; color: var(--text-muted); pointer-events: none; }
+.cm-s-obsidian .cm-heading-controls .cm-list-fold { right: 4px; width: 14px; }
 /* ---- Obsidian editor typography (cm-s-obsidian, §19/§20) ---- */
 /* Live Preview block spacing: heading lines carry padding-top = --p-spacing (1rem) */
 .cm-s-obsidian .cm-line.HyperMD-header { line-height: var(--line-height-tight); padding-top: var(--p-spacing); }
@@ -532,6 +532,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 /* Body-local titles replace the old > **title**: body size, bold, neutral 3px rule.
    Padding participates in CodeMirror measurement; no inter-line margins. */
 .cm-s-obsidian .cm-line.cm-body-heading, .markdown-preview .body-heading {
+  --cm-prefix-base-padding: 24px;
   border-left: 3px solid var(--text-normal); padding: 2px 24px;
   color: var(--text-normal); font-size: 1em;
   font-weight: calc(var(--font-weight) + var(--bold-modifier));
@@ -681,8 +682,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .md-quote { border-left: 3px solid var(--text-normal); padding-left: 24px; }
 .md-callout, .callout { width: fit-content; min-width: 100%; max-width: none; background: var(--document-surface); border: 0.5px solid var(--document-border); border-radius: 4px; padding: 12px 16px; margin: 16px 0; }
 /* CM measures wrapper padding, not vertical margins between its text lines. */
-.md-callout-spacing { padding: 16px 0; width: fit-content; min-width: 100%; }
-.md-callout { margin: 0; }
+.md-callout-spacing { padding: 16px 0; width: 100%; min-width: 0; }
+.md-callout { margin: 0; width: 100%; min-width: 0; max-width: 100%; }
 .md-callout-body { padding-top: 8px; }
 .callout-title {
   display: flex;

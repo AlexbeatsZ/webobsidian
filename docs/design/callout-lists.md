@@ -32,15 +32,20 @@ mouse coordinate ownership, including tables/formulas inside the Callout.
 Quote prefixes remain native text with the same width when hidden and revealed;
 only their color changes through `cm-quote-prefix`. The previous marker-only
 `left: -1ch` offset and hidden-prefix replacement were removed after user feedback.
-The existing listLayout measurement reads the source prefix endpoints in the
-same requestMeasure pass. For a prefix width Q and total list prefix width W,
-line text-indent is -W and padding is base + W - Q. A plain quote has W = Q,
-so body text and wraps stay at the wrapper's original content edge while its
-prefix occupies the existing gutter. Quoted lists retain their own marker/indent
-width. Native .md-quote wrappers continue to own continuous/nested rules, including
+The existing listLayout measures separate native inline-block boxes: quote
+prefix Q and list indent/marker prefix L. It reads their actual widths, never
+source-boundary caret coordinates or an already indented line's padding. CSS
+owns `text-indent: -(Q + L)` and `padding-left: base + L`; ordinary lines have
+base zero, while body-local headings declare their existing 24px base in their
+own stylesheet rule. A plain quote has L = 0, so body text and wraps stay at the
+wrapper's original content edge while its prefix occupies the existing gutter.
+Quoted lists retain their actual source whitespace/marker width. Native
+.md-quote wrappers continue to own continuous/nested rules, including
 lazy continuation lines; no second rule renderer, observer or fold state exists.
 Callout title replacement remains its existing icon/title control path; body
-prefixes use the same native-text layout. Full source mode retains literal text.
+prefixes use the same native-text layout. A Callout title is excluded from list
+prefix measurement even when it is nested in a parent ListItem, so its own icon
+padding stays authoritative. Full source mode retains literal text.
 See reference-editor-layout.md for the local Obsidian package evidence and limits.
 
 `calloutFoldState` keeps its identity for unrelated transactions. Fold decorations
@@ -147,15 +152,21 @@ or changing the existing hanging-layout measurement formula.
 
 ## List layout invalidation
 
-`listLayout` measures on document, viewport and geometry changes. A scoped
-MutationObserver schedules a measure only when actual list lines/markers change;
-selection-only and arbitrary effect transactions no longer schedule measurements
-unconditionally. Observer attributes exclude the inline styles written by the
-measurement itself. CodeMirror requestMeasure coalesces scheduled work.
+`listLayout` uses its one requestMeasure and one scoped MutationObserver. Native
+prefix boxes use `white-space: pre; text-indent: 0`, so changing the line's
+indent cannot change their measured width. The two measured CSS width properties
+are the only DOM writes, rounded to CSS subpixels and skipped when unchanged.
+There is no cached computed base padding, saved inline-style restoration,
+class-change reset pass or self-rescheduling write branch. CM may clear external
+style attributes when reusing DOM; the existing observer restores missing width
+properties but ignores completed own writes. Prefix/line insertions or prefix text
+changes invalidate; quote reveal color and formula/body mutations do not.
 
-Geometry changes remain an invalidation because asynchronous MathJax/font layout
-may rebuild lines and discard inline measurements. Queries exclude nested editor
-content, whose coordinates belong to its own editor. No measured speedup is
+Document, viewport and geometry changes remain invalidations for font/layout
+changes. Queries exclude nested editor content. Native Callout spacing/frame
+width is fixed to the existing column, allowing formula metrics to depend on
+that column instead of intrinsic formula width feeding back into the frame.
+Original vertical measured padding and native caret text stay in place. No measured speedup is
 claimed. UI, keyboard, readonly, IME, selection, nested folding and performance
 remain unverified under the user's no-acceptance instruction.
 
