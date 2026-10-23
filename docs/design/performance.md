@@ -24,6 +24,17 @@ API accepts optional AbortSignal arguments without changing existing callers.
 
 ## Dependency-aware decorations
 
+Callout formula-source hosting derives ownership from the existing ordered,
+nonoverlapping dollar-formula ranges and grammar-preorder containers. A forward
+cursor and temporary ancestor stack replace the formula-by-Callout nested loop.
+Each candidate Callout is consumed once and pushed/popped at most once, making
+this ownership step O(M + C), with O(depth) temporary stack space. A formula must
+fit entirely inside bodyFrom..to; crossing an inner boundary can select a valid
+outer owner. This uses the existing immutable blockModel cache and preserves its
+mathCallout/calloutMath results; selection-only updates do not repeat derivation.
+This is a source complexity claim, not measured latency or UI acceptance. No
+tests/types/build/probes/app/server/browser or new test cases ran for this change.
+
 Semantic reference definitions, footnote numbering and exclusion lookups are
 cached by immutable MarkdownModel identity in a WeakMap. Nested exclusion ranges
 use sorted starts and prefix maximum ends. Selection-only updates reuse semantic

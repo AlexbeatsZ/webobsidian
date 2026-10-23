@@ -149,6 +149,11 @@ remain unverified under the user's no-acceptance instruction.
 `bodyFrom..to` 找出包含该公式的最深 Callout，得到 `mathCallout`（公式起点 → 标题起点）
 与 `calloutMath`（标题起点 → 公式列表）。选择变化只读取这两张缓存表，不重新解析。
 
+归属派生复用容器的语法树前序与按源码排序且互不重叠的 dollar 公式：游标只推进一次，
+临时栈保留当前 Callout 祖先链，标题行不入本 Callout 正文；公式跨过内层结尾时回退到
+仍完整包含它的外层。每个容器至多入栈/出栈一次，替代每个公式遍历全部 Callout 的乘积
+扫描；输出仍是以上两张缓存表，不添加索引或解析器。仅源码复杂度分析，未测量运行耗时。
+
 标题行的控件是一个独立 widget：按 `calloutMath` 生成与公式数相同的 `sourceButton`，
 沿用同一 `sourceRegion` 和选区/失焦/Escape 自动恢复，点击后选中该公式正文。因此
 Callout 内公式不再渲染自己的源码按钮（`MathWidget.sourceInTitle`）；正文 `</>`（HTML、

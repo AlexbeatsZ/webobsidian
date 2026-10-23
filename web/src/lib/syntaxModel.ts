@@ -64,10 +64,20 @@ function blocks(model: MarkdownModel, doc: Text): Blocks {
     const math = displayMath.map(formula => ({ from: formula.from, to: formula.to, tex: formula.tex.trim() }));
     const containers = blockContainers(model), callouts = containers.filter(block => block.kind === 'callout');
     const mathCallout = new Map<number, number>(), calloutMath = new Map<number, MathRegion[]>();
+    // Containers are in grammar preorder; dollar formulas are ordered and do not
+    // overlap. Keep only the containing Callout chain instead of pairing M x C.
+    const activeCallouts: typeof containers = [];
+    let nextCallout = 0;
     for (const formula of displayMath) {
-      let owner: typeof containers[number] | undefined;
-      for (const callout of callouts) if (formula.from >= callout.bodyFrom && formula.to <= callout.to &&
-        (!owner || callout.depth > owner.depth)) owner = callout;
+      while (nextCallout < callouts.length && callouts[nextCallout].bodyFrom <= formula.from) {
+        const callout = callouts[nextCallout++];
+        while (activeCallouts.length && activeCallouts.at(-1)!.to <= callout.from) activeCallouts.pop();
+        if (callout.to > formula.from) activeCallouts.push(callout);
+      }
+      // A formula crossing an inner boundary belongs to its containing ancestor.
+      // Later dollar formulas start after this one, so popped entries stay spent.
+      while (activeCallouts.length && activeCallouts.at(-1)!.to < formula.to) activeCallouts.pop();
+      const owner = activeCallouts.at(-1);
       if (owner) {
         mathCallout.set(formula.from, owner.from);
         const formulas = calloutMath.get(owner.from) ?? [];
