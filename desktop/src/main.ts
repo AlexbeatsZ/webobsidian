@@ -212,9 +212,9 @@ async function ensureVault(cfg: DesktopConfig): Promise<DesktopConfig> {
 async function pickVaultDialog(firstRun: boolean): Promise<string> {
   const result = await dialog.showOpenDialog({
     title: "选择仓库文件夹",
-    message: 'Select a folder to use as your WebObsidian vault',
+    message: '选择用作 WebObsidian 仓库的文件夹',
     properties: ['openDirectory', 'createDirectory'],
-    buttonLabel: 'Use this folder',
+    buttonLabel: '使用此文件夹',
   });
   if (!result.canceled && result.filePaths[0]) return result.filePaths[0];
 
@@ -224,9 +224,9 @@ async function pickVaultDialog(firstRun: boolean): Promise<string> {
   if (firstRun) {
     await dialog.showMessageBox({
       type: 'info',
-      message: 'Using a default vault',
-      detail: `No folder chosen — your notes will live in:\n${fallback}\n\nYou can switch vaults later from the menu.`,
-      buttons: ['OK'],
+      message: '将使用默认仓库',
+      detail: `未选择文件夹 — 笔记将保存在：\n${fallback}\n\n之后可在菜单中切换仓库。`,
+      buttons: ['确定'],
     });
   }
   return fallback;
@@ -340,25 +340,44 @@ function buildMenu(): void {
         { label: "打开数据文件夹", click: () => shell.openPath(DATA_DIR()) },
         { label: "打开日志", click: () => shell.openPath(LOG_FILE()) },
         { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' },
+        isMac ? { role: 'close', label: '关闭窗口' } : { role: 'quit', label: '退出' },
       ],
     },
-    { role: 'editMenu' },
+    {
+      label: "编辑",
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'pasteAndMatchStyle', label: '粘贴并匹配样式' },
+        { role: 'delete', label: '删除' },
+        { role: 'selectAll', label: '全选' },
+      ],
+    },
     {
       label: "视图",
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
+        { role: 'reload', label: '重新加载' },
+        { role: 'forceReload', label: '强制重新加载' },
+        { role: 'toggleDevTools', label: '开发者工具' },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        { role: 'resetZoom', label: '实际大小' },
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
         { type: 'separator' },
-        { role: 'togglefullscreen' },
+        { role: 'togglefullscreen', label: '切换全屏' },
       ],
     },
-    { role: 'windowMenu' },
+    {
+      label: "窗口",
+      submenu: [
+        { role: 'minimize', label: '最小化' },
+        ...(isMac ? [{ role: 'zoom' as const, label: '缩放' }, { role: 'front' as const, label: '全部置于顶层' }] : [{ role: 'close' as const, label: '关闭窗口' }]),
+      ],
+    },
     {
       role: 'help',
       submenu: [

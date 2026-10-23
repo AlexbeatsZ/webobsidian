@@ -5,6 +5,7 @@ import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { editorSelection } from '../lib/editorSelection';
+import { editorPhrases } from '../lib/editorPhrases';
 import { bindFragmentNavigation } from '../lib/fragmentNavigation';
 import { nativeWritingExtensions } from '../lib/writing/extensions';
 import { mathEditingExtensions } from '../lib/writing/latex/editor_extensions/math_tooltip';
@@ -254,7 +255,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       doc: p.snapshot.text,
       selection: { anchor: initPos },
       extensions: [
-        indentUnit.of('    '), EditorState.tabSize.of(4),
+        indentUnit.of('    '), EditorState.tabSize.of(4), editorPhrases,
         editorSelection, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
         readonlyComp.of(readonlyExt(p.mode === 'reading')),
