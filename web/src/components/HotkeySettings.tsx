@@ -87,7 +87,7 @@ export default function HotkeySettings() {
           </div>
           {recording === command.id && <input ref={recorder} data-hotkey-recorder readOnly className="hotkey-recorder" placeholder="按下组合键；Esc 取消" aria-label={`录入 ${command.name} 的快捷键`} onBlur={() => setRecording('')} onKeyDown={event => {
             event.preventDefault(); event.stopPropagation();
-            if (event.isComposing || event.nativeEvent.isComposing || event.nativeEvent.getModifierState('AltGraph')) return;
+            if (event.nativeEvent.isComposing || event.nativeEvent.getModifierState('AltGraph')) return;
             if (event.key === 'Escape') { setRecording(''); return; }
             const binding = eventHotkey(event.nativeEvent);
             if (!binding) return;

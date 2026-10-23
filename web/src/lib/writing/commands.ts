@@ -160,40 +160,7 @@ export const writingCommands = [
     },
   },
 ];
-const aliases: Record<string, string> = {
-  'obsidian-linter:lint-file': 'format',
-  'obsidian-linter:lint-file-unless-ignored': 'format',
-  'obsidian-linter:lint-all-files': 'format-vault',
-  'obsidian-linter:lint-all-files-in-folder': 'format-folder',
-  'obsidian-linter:ignore-file': 'format-ignore-file',
-  'obsidian-linter:ignore-folder': 'format-ignore-folder',
-  'obsidian-linter:paste-as-plain-text': 'paste-plain',
-  'obsidian-latex-suite:latex-suite-box-equation': 'formula-box',
-  'obsidian-latex-suite:latex-suite-select-equation': 'formula-select',
-  'obsidian-latex-suite:latex-suite-enable-all-features': 'formula-input-enable',
-  'obsidian-latex-suite:latex-suite-disable-all-features': 'formula-input-disable',
-  'obsidian-latex-suite:latex-suite-toggle-all-features': 'formula-input-toggle',
-  'obsidian-latex-suite:latex-suite-toggle-conceal': 'formula-conceal',
-};
-export const writingCommandId = (id: string) => aliases[id] ?? id;
-export function runWritingHotkey(event: KeyboardEvent, execute: (id: string) => boolean) {
-  for (const [old, bindings] of Object.entries(writingSettings().hotkeys)) {
-    if (!aliases[old]) continue;
-    for (const binding of bindings) {
-      const mods = binding.modifiers;
-      const mac = /Mac/.test(navigator.platform);
-      if (
-        binding.key.toLowerCase() === event.key.toLowerCase() &&
-        event.ctrlKey === (mods.includes('Ctrl') || (mods.includes('Mod') && !mac)) &&
-        event.metaKey === (mods.includes('Meta') || (mods.includes('Mod') && mac)) &&
-        event.altKey === mods.includes('Alt') &&
-        event.shiftKey === mods.includes('Shift')
-      )
-        return execute(old);
-    }
-  }
-  return false;
-}
+
 export function bindWritingNavigation() {
   let queue: Promise<unknown> = Promise.resolve();
   return useStore.subscribe((next, previous) => {
