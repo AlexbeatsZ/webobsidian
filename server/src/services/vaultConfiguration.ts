@@ -70,8 +70,8 @@ async function readConfiguration(file: string, target: Awaited<ReturnType<typeof
     return { path: file, content: '', exists: false, vault: target.vault };
   }
 }
-export async function writeVaultConfiguration(input: VaultConfigurationSource): Promise<VaultConfigurationSource> {
-  const target = await location(input.path, input.vault);
+export async function writeVaultConfiguration(input: VaultConfigurationSource, extensions?: readonly string[]): Promise<VaultConfigurationSource> {
+  const target = await location(input.path, input.vault, extensions);
   return writeConfiguration(input, target);
 }
 /** Appearance is the only original Obsidian configuration this UI edits. */

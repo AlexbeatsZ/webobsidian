@@ -1,5 +1,7 @@
 import { useWriting, updateWriting, refreshWriting, writingCMSettings } from '../lib/writing/config';
-import { DEFAULT_SETTINGS } from '../lib/writing/latex/settings/settings';
+import { DEFAULT_SETTINGS, NATIVE_SNIPPETS_DIRECTORY } from '../lib/writing/latex/settings/settings';
+import { request } from '../lib/api';
+import { useStore } from '../lib/store';
 import { formatRules, formatterSettings } from '../lib/writing/format';
 import { DropdownOption, TextAreaOption } from '../lib/writing/linter/option';
 import MathSettings from './MathSettings';
@@ -64,13 +66,20 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
     </> : <>
       <MathSettings />
       <SettingGroup title="片段">
-        {checkbox('启用片段与占位符', raw.snippetsEnabled, value => attempt({ latex: { snippetsEnabled: value } }), `当前载入 ${writingCMSettings().snippets.all.length} 条片段。修改规则文件后自动重载；失败时保留上一次有效规则。`)}
-        <SettingRow name="片段文件／文件夹" desc="相对当前仓库的路径，或桌面客户端支持的外部绝对路径">
+        {checkbox('启用片段与占位符', raw.snippetsEnabled, value => attempt({ latex: { snippetsEnabled: value } }), `已载入 ${writingCMSettings().snippets.all.length} 条片段。`)}
+        <SettingRow name="片段文件／文件夹" desc="留空使用原生片段目录；也可指定其他文件或文件夹。">
           <input key={raw.snippetsFileLocation} defaultValue={raw.snippetsFileLocation} onBlur={event => attempt({ latex: {
-            snippetsFileLocation: event.target.value, loadSnippetsFromFile: Boolean(event.target.value),
+            snippetsFileLocation: event.target.value.trim() || NATIVE_SNIPPETS_DIRECTORY, loadSnippetsFromFile: true,
           } })} />
         </SettingRow>
         {raw.loadSnippetsFromFile && raw.snippetsFileLocation && <ConfigurationFile name="片段源码" path={raw.snippetsFileLocation} />}
+        {raw.loadSnippetsFromFile && raw.snippetsFileLocation === NATIVE_SNIPPETS_DIRECTORY && <SettingRow name="空片段文件">
+          <button disabled={!settings.source} onClick={() => {
+            void request('/api/writing/snippets', { method: 'POST', body: JSON.stringify({ vault: settings.source!.vault }) })
+              .then(async () => { await refreshWriting(true); await window.webobsidianDesktop?.openVaultPath(NATIVE_SNIPPETS_DIRECTORY + '/snippets.js'); })
+              .catch(cause => useStore.getState().notify(String(cause)));
+          }}>创建并打开</button>
+        </SettingRow>}
         {raw.loadSnippetVariablesFromFile && raw.snippetVariablesFileLocation && <ConfigurationFile name="片段变量" path={raw.snippetVariablesFileLocation} />}
       </SettingGroup>
       <SettingGroup title="公式编辑与预览">

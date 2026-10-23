@@ -596,7 +596,7 @@ function Appearance({ s }: { s: any }) {
         </select>
       </Row>
       </SettingGroup>
-      <SettingGroup title="CSS 样式片段" desc="在外部编辑 .css 文件；开关沿用当前仓库的 appearance.json。">
+      <SettingGroup title="CSS 样式片段">
         <ConfigurationFile name="片段文件夹" path=".obsidian/snippets">
           <button type="button" disabled={busy} onClick={reloadSnippets}>刷新</button>
         </ConfigurationFile>
@@ -705,7 +705,6 @@ function SearchSettingsPanel() {
         />
       </Row>
       </SettingGroup>
-      <p>{settings.migration}</p>
       {error && <p role="alert">{error}</p>}
     </div>
   );

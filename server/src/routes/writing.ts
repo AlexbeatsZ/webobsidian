@@ -1,9 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
-import { writingSettings, saveWritingSettings } from '../services/writing.js';
+import { writingSettings, saveWritingSettings, createNativeSnippets } from '../services/writing.js';
 import { MathConfigurationSchema, saveMathConfiguration } from '../services/mathSettings.js';
 export const writingRouter = Router();
+writingRouter.post('/snippets', asyncHandler(async (req, res) => {
+  const { vault } = z.object({ vault: z.string().min(1) }).strict().parse(req.body);
+  res.json(await createNativeSnippets(vault));
+}));
 writingRouter.get(
   '/',
   asyncHandler(async (_req, res) => res.json(await writingSettings())),

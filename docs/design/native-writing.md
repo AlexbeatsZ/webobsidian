@@ -8,8 +8,8 @@ the existing document session, source changes, syntax model and MathJax service.
 Do not load the original plugins as well. Preserve their files and Obsidian
 enablement. Preserve upstream MIT attribution for adapted source.
 
-Keep the configured snippet file as the editable rule source. Import settings
-once per Vault; existing native settings take precedence. Conceal defaults off;
+Keep the native snippet directory or an explicitly configured source authoritative.
+Do not import app/plugin settings on startup. Conceal defaults off;
 other retained visual/input features default on. Exclude matrix input shortcuts,
 automatic input-method switching and Vim. Matrix template snippets remain valid.
 Normal IME composition handling remains necessary. Future Excalidraw formula
@@ -61,7 +61,7 @@ create new tabstops or captures. Templates compile once with their settings.
 Match-prefix/suffix strings are lazy, avoiding full-prefix copies for ordinary
 snippet expansion and ordinary regex replacements.
 
-`legacyReplacement.ts` is used only by the server's importer. It reproduces the
+`legacyReplacement.ts` remains for historical test fixtures, outside runtime loading. It reproduces the
 old Linter escape-decoding order and JavaScript substitution rules, then emits
 native templates: `$1` becomes `[[0]]`, `$&` becomes `${MATCH}`, and `$$` becomes
 a literal dollar with an explicit escape only when needed. Named substitutions,
@@ -69,13 +69,10 @@ two-digit capture fallback, prefix/suffix substitutions and literal tokens are
 preserved. For the configured formula rules, `$1$$$2$$` becomes `[[0]]$[[1]]$`
 and `$$$$$1$$$$` becomes `$$[[0]]$$`.
 
-The imported settings carry `linter.replacementSyntax: "latex-suite-v1"`.
-Unmarked existing native configurations are upgraded once; a marked configuration
-is never reinterpreted as legacy. New edits always use the native syntax. The
-original plugin JSON and snippet file are retained. This migration occurs when
-the new application first loads the Vault's writing settings, not during a
-build. A failed conversion does not persist partial settings. Unknown syntax
-versions produce an error instead of silently changing meaning.
+Native configuration uses `linter.replacementSyntax: "latex-suite-v1"` (also the
+default for an omitted marker). Runtime reads never reinterpret replacement
+strings as legacy syntax. Unknown versions produce an error. Old plugin/app
+files remain untouched and are not startup configuration sources.
 
 ## Shared ownership
 
@@ -211,8 +208,8 @@ IME and performance behavior for these changes remain unverified.
   lifecycle, native CM extensions, bounded trigger matching and session history.
 - Client `writing/format`, `analysis`, `commands`: rule orchestration and the
   positional adapter over the existing Markdown model, with native commands.
-- Server `services/writing` and `routes/writing`: authenticated per-Vault import
-  and persistence, using the existing settings queue and Vault adapter.
+- Server `services/writing` and `routes/writing`: native Vault JSONC persistence
+  and explicit empty snippet-file creation through shared VaultConfiguration IO.
 
 The adapted upstream rule/TeX algorithms keep their MIT attribution and are
 isolated from plugin lifecycle/UI implementations. The 65 Linter rules are
@@ -248,13 +245,13 @@ Advanced writing settings now use the current Vault's
 `.obsidian/webobsidian/writing.jsonc` through the existing VaultConfiguration IO.
 The file owns version/migration/latex/linter/hotkeys; `/api/writing` returns its
 source/revision along with the existing effective math profile. Missing native
-files use the original per-Vault app settings/importer as a preserved fallback.
+files use native defaults; the former app/plugin fallback has been removed.
 Opening Settings does not create the native file; an explicit save/create action
 writes it exclusively, and subsequent UI saves carry the source revision and Vault
 token. External edits reject stale saves rather than overwriting them. Invalid
 JSONC/schema keeps the client's previous compiled settings through the existing
-refresh failure path. Native replacementSyntax stays latex-suite-v1; unmarked
-legacy replacements still pass the one existing importer.
+refresh failure path. Native replacementSyntax stays latex-suite-v1; no runtime
+legacy replacement conversion is performed.
 
 The same watcher/configuration notification now recognizes writing.jsonc and uses
 refreshWriting. There is no added watcher, settings store, snippet compiler or
@@ -263,3 +260,27 @@ updateWriting; complex arrays/regexes/JS/JSON are edited externally. The old
 JsonEditor and rule-specific nested details/cards are removed. Formula/format
 behavior, rule ordering and source-range patches are unchanged by this UI change.
 This batch has source/diff review only, without types/build/tests/runtime.
+
+## Native snippet directory (2026-10-23 follow-up)
+
+The application owns `.obsidian/webobsidian/snippets/` under its existing native
+configuration root. The default source is this directory, with zero snippets when
+it is absent. Startup neither creates the directory nor copies upstream examples
+or the user's old personal library. The unused upstream example corpus was removed.
+The variables parser and snippet compiler remain the same authoritative engines.
+
+`writing.jsonc` is the sole active writing configuration. Its absence no longer
+triggers LaTeX Suite/Linter/plugin hotkey reads, app-settings migration or app writes.
+Existing explicit source paths (including supported desktop absolute paths) and
+inline definitions in that native file remain user choices; no bulk rewrite occurs.
+Clearing the path field restores the native directory. A deliberate empty-file
+create action creates only `snippets/snippets.js` with `export default [];` through
+VaultConfiguration's existing Vault token, create-only and revision safeguards.
+An existing file is returned unchanged; normal file open never creates content.
+The existing native configuration watcher handles edits; no extra watcher/index,
+path service or parser is added. Explicit missing external paths still report errors.
+
+Old personal/plugin/app files are never moved, deleted, overwritten or converted.
+Any future import must be explicit; the old mandatory importer is deleted rather
+than retained as a dormant fallback. This follow-up is source/Git/document review
+only, with no tests/types/build/probe/app/server/browser/UI acceptance or new package.

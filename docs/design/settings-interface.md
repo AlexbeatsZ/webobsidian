@@ -33,8 +33,10 @@ exclusive-create/revision semantics; opening never creates or replaces a file.
 
 - WritingSettings calls updateWriting/refreshWriting. Advanced LaTeX, snippets,
   custom regexes and formatter arrays live in .obsidian/webobsidian/writing.jsonc.
-  Existing app writing settings remain a preserved migration source. Config-file
-  snippets/variables remain authoritative at their configured paths.
+  Missing native configuration uses native defaults, without reading old app or
+  plugin settings. Snippets default to .obsidian/webobsidian/snippets; an absent
+  directory is empty and is not created on read. Existing explicit source paths
+  and inline definitions in writing.jsonc remain authoritative.
 - MathSettings keeps package toggles through updateWriting. Macros, preamble and
   package options are edited externally in math.jsonc or its preamble file; the
   MathJax candidate validation and queue/cache remain unchanged.
@@ -77,3 +79,8 @@ open and refresh. It uses the one original enabledCssSnippets list in
 .obsidian/appearance.json, the existing Vault IO revision protection and the
 Plugins/runtime stylesheet lifetime. See css-snippets.md. Settings has no embedded
 CSS editor, and does not rewrite snippet source files.
+
+The 2026-10-23 follow-up removes standalone engineering/migration explanations
+outside setting cards, including Plus migration flags and CSS storage details.
+Names, short actionable row descriptions, file-open controls and real errors or
+operation results remain. No replacement tooltip/help UI is added.

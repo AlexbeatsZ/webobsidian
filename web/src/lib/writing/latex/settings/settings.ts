@@ -1,7 +1,6 @@
 // @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
 import { Snippet } from "../snippets/snippets";
 import type { Environment } from "../snippets/environment";
-import { DEFAULT_SNIPPETS } from "../utils/default_snippets";
 import { DEFAULT_SNIPPET_VARIABLES } from "../utils/default_snippet_variables";
 import * as v from "valibot";
 import type { SnippetVariables } from "../snippets/parse";
@@ -131,8 +130,9 @@ export type LatexSuiteCMSettings = LatexSuiteProcessedSchemaSettings &
 	LatexSuiteParsedSettings &
 	LatexSuiteCMKeymapSettings;
 
+export const NATIVE_SNIPPETS_DIRECTORY = '.obsidian/webobsidian/snippets';
 export const DEFAULT_SETTINGS: LatexSuitePluginSettings = {
-	snippets: DEFAULT_SNIPPETS,
+	snippets: '[]',
 	snippetVariables: DEFAULT_SNIPPET_VARIABLES,
 
 	// Basic settings
@@ -144,9 +144,9 @@ export const DEFAULT_SETTINGS: LatexSuitePluginSettings = {
 	suppressIMEWarning: false,
 	removeSnippetWhitespace: true,
 	autoDelete$: true,
-	loadSnippetsFromFile: false,
+	loadSnippetsFromFile: true,
 	loadSnippetVariablesFromFile: false,
-	snippetsFileLocation: "",
+	snippetsFileLocation: NATIVE_SNIPPETS_DIRECTORY,
 	snippetVariablesFileLocation: "",
 	concealEnabled: false,
 	concealRevealTimeout: 0,

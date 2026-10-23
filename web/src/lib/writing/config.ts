@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { api } from '../api';
 import {
   DEFAULT_SETTINGS,
+  NATIVE_SNIPPETS_DIRECTORY,
   processLatexSuiteSettings,
   type LatexSuiteCMSettings,
 } from './latex/settings/settings';
@@ -95,7 +96,10 @@ async function sources(
   const values: { path: string; text: string }[] = [];
   const visit = async (path: string) => {
     const { stat } = await api.pluginAdapter('stat', path);
-    if (!stat) throw new Error('找不到规则文件：' + path);
+    if (!stat) {
+      if (kind === 'snippets' && path === NATIVE_SNIPPETS_DIRECTORY) return;
+      throw new Error('找不到规则文件：' + path);
+    }
     if (stat.type === 'folder') {
       const list = await api.pluginAdapter('list', path);
       for (const dir of list.folders.sort()) await visit(dir);
