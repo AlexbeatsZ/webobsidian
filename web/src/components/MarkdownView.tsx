@@ -14,7 +14,7 @@ import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { search, searchKeymap } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { syntaxHighlighting } from '@codemirror/language';
+import { indentUnit, syntaxHighlighting } from '@codemirror/language';
 import { analyzeMarkdown, bodyHeadingSyntax, changesBetween, type DocumentSnapshot, type SourceChange, type MarkdownModel, type EditHistoryState } from '@webobsidian/markdown-core';
 import { obsidianHighlightStyle } from '../lib/highlight';
 import { obsidianKeymap, markdownListKeymap } from '../lib/editorCommands';
@@ -254,6 +254,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       doc: p.snapshot.text,
       selection: { anchor: initPos },
       extensions: [
+        indentUnit.of('    '), EditorState.tabSize.of(4),
         editorSelection, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
         readonlyComp.of(readonlyExt(p.mode === 'reading')),

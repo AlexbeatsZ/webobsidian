@@ -8,6 +8,7 @@ import {
 } from '@codemirror/view';
 import { StateField, StateEffect, type EditorState, type Range } from '@codemirror/state';
 import { getIndentUnit, foldedRanges } from '@codemirror/language';
+import { markdownListLine } from './listLayout';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { iconPaths } from './icons';
 import { openLightbox } from './imageLightbox';
@@ -1903,20 +1904,27 @@ function buildDecorations(view: EditorView): DecorationSet {
       // non-space status counts as checked (no hard-coded custom-state list).
       const body = bodyStart ? text.slice(bodyStart) : text;
       const bodyFrom = line.from + bodyStart;
-      const prefix = body.match(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[.\]\s+)?/);
-      if (prefix) all.push(Decoration.line({ attributes: {
-        'data-list-body-start': String(bodyFrom + prefix[0].length),
+      const list = markdownListLine(view.state, line);
+      const prefix = list?.header ? body.match(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[.\][ \t]+)?/) : null;
+      if (list) all.push(Decoration.line({ class: 'HyperMD-list-line', attributes: {
+        'data-list-body-start': String(prefix ? bodyFrom + prefix[0].length : line.from + list.indentTo),
       } }).range(line.from));
       // Use the same indentation unit as contextual Tab, not a fixed four spaces.
-      const indentGuides = (ws: string) => {
-        let i = 0;
+      if (list) {
+        const ws = text.slice(list.quoteTo, list.indentTo);
+        let i = 0, column = 0;
+        const unit = getIndentUnit(view.state);
         while (i < ws.length) {
-          const end = Math.min(i + (ws[i] === '\t' ? 1 : getIndentUnit(view.state)), ws.length);
-          all.push(Decoration.mark({ class: 'cm-indent' }).range(bodyFrom + i, bodyFrom + end));
+          let end = i;
+          const nextColumn = (Math.floor(column / unit) + 1) * unit;
+          while (end < ws.length && column < nextColumn) {
+            column += ws[end++] === '\t' ? view.state.tabSize - column % view.state.tabSize : 1;
+          }
+          all.push(Decoration.mark({ class: 'cm-indent' }).range(line.from + list.quoteTo + i, line.from + list.quoteTo + end));
           i = end;
         }
-      };
-      const task = body.match(/^(\s*)([-*+])\s+\[(.)\]\s/);
+      }
+      const task = prefix ? body.match(/^([ \t]*)([-*+])[ \t]+\[(.)\][ \t]/) : null;
       if (task) {
         all.push(
           Decoration.line({
@@ -1924,16 +1932,13 @@ function buildDecorations(view: EditorView): DecorationSet {
             attributes: { 'data-task': task[3] },
           }).range(line.from, line.from),
         );
-        indentGuides(task[1]);
-        const boxPos = bodyFrom + task[1].length + task[2].length + 2;
+        const boxPos = bodyFrom + task[0].length - 3;
         if (!touches(line.from, boxPos + 2)) {
           pushReplace(bodyFrom + task[1].length, boxPos + 2, Decoration.replace({ widget: new CheckboxWidget(task[3] !== ' ', boxPos) }));
         }
       } else {
-        const bullet = body.match(/^(\s*)([-*+])(\s+)/);
+        const bullet = prefix ? body.match(/^([ \t]*)([-*+])([ \t]+)/) : null;
         if (bullet) {
-          all.push(Decoration.line({ class: 'HyperMD-list-line' }).range(line.from, line.from));
-          indentGuides(bullet[1]);
           // Replace the `-`/`*`/`+` marker with a bullet and collapse its trailing
           // whitespace to a single space, so `-   Item` reads `• Item` like Obsidian.
           const start = bodyFrom + bullet[1].length;
@@ -1945,10 +1950,8 @@ function buildDecorations(view: EditorView): DecorationSet {
           }
         } else {
           // Ordered list: keep the `1.` but collapse extra spaces after it.
-          const ol = body.match(/^(\s*)(\d{1,9}[.)])(\s+)/);
+          const ol = prefix ? body.match(/^([ \t]*)(\d{1,9}[.)])([ \t]+)/) : null;
           if (ol) {
-            all.push(Decoration.line({ class: 'HyperMD-list-line' }).range(line.from, line.from));
-            indentGuides(ol[1]);
             if (ol[3].length > 1) {
               const markerEnd = bodyFrom + ol[1].length + ol[2].length;
               const spaceEnd = markerEnd + ol[3].length;

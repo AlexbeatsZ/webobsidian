@@ -1,8 +1,7 @@
 import { codeFolding, foldEffect, foldedRanges, foldKeymap, foldService, unfoldEffect } from '@codemirror/language';
 import { type EditorState, type Range } from '@codemirror/state';
-import type { SyntaxNode } from '@lezer/common';
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
-import { syntaxModel } from './syntaxModel';
+import { markdownListLine } from './listLayout';
 import { livePreviewState } from './renderState';
 import { sourceOwns } from './sourceControls';
 import { blockEffectOwns } from './blocks/model';
@@ -12,13 +11,8 @@ import '../styles/lists.css';
 
 /** Resolve the existing Markdown tree at one visible line, without rescanning notes. */
 function listRange(state: EditorState, from: number, to: number) {
-  const model = state.field(syntaxModel);
-  if (model.frontmatter && from < model.frontmatter.to) return null;
-  for (let node: SyntaxNode | null = model.tree.resolveInner(to, -1); node; node = node.parent) {
-    if (node.name === 'ListItem' && state.doc.lineAt(node.from).from === from && node.to > to) return { from: to, to: node.to };
-    if (['FencedCode', 'CodeBlock'].includes(node.name)) return null;
-  }
-  return null;
+  const context = markdownListLine(state, state.doc.lineAt(from));
+  return context?.header && context.item.to > to ? { from: to, to: context.item.to } : null;
 }
 
 class ListFoldWidget extends WidgetType {

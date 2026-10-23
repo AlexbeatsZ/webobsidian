@@ -1,11 +1,12 @@
 import { EditorView, KeyBinding } from '@codemirror/view';
-import { EditorSelection, type ChangeSpec } from '@codemirror/state';
+import { countColumn, EditorSelection, type ChangeSpec } from '@codemirror/state';
 import { insertNewlineContinueMarkup, deleteMarkupBackward } from '@codemirror/lang-markdown';
-import { getIndentUnit, indentUnit } from '@codemirror/language';
+import { getIndentUnit, indentString, indentUnit } from '@codemirror/language';
 import { syntaxModel } from './syntaxModel';
+import { markdownListLine } from './listLayout';
 
-/** List-only Tab fallback. Snippets and suggesters run before this keymap. */
-function indentList(view: EditorView, outdent: boolean): boolean {
+/** Source indentation for list items and plain continuation lines, never bullets. */
+function indentMarkdown(view: EditorView, outdent: boolean): boolean {
   const { state } = view;
   if (state.readOnly || view.composing) return false;
   const model = state.field(syntaxModel);
@@ -16,14 +17,14 @@ function indentList(view: EditorView, outdent: boolean): boolean {
     for (let number = first; number <= last; number++) {
       const line = state.doc.line(number);
       if (model.frontmatter && line.from < model.frontmatter.to) return false;
-      let node = model.tree.resolveInner(number === first ? range.from : line.to, -1);
-      while (node.name !== 'ListItem') {
-        if (['FencedCode', 'CodeBlock', 'InlineCode'].includes(node.name) || !node.parent) return false;
-        node = node.parent;
+      const position = number === first ? range.from : line.to;
+      for (let node = model.tree.resolveInner(position, position === line.from ? 1 : -1); node; node = node.parent!) {
+        if (['FencedCode', 'CodeBlock', 'InlineCode'].includes(node.name)) return false;
+        if (['Paragraph', 'ListItem'].includes(node.name)) break;
       }
-      const header = state.doc.lineAt(node.from);
-      const quoteDepth = header.text.match(/^(?: {0,3}>[ \t]?)+/)?.[0].match(/>/g)?.length ?? 0;
-      const end = header.number === number ? state.doc.lineAt(node.to).number : number;
+      const context = markdownListLine(state, line);
+      const quoteDepth = context?.quoteDepth ?? line.text.match(/^(?: {0,3}>[ \t]?)+/)?.[0].match(/>/g)?.length ?? 0;
+      const end = context?.header ? state.doc.lineAt(context.item.to).number : number;
       for (let child = number; child <= end; child++) lines.set(child, Math.min(lines.get(child) ?? quoteDepth, quoteDepth));
     }
   }
@@ -37,8 +38,10 @@ function indentList(view: EditorView, outdent: boolean): boolean {
     if (!outdent) changes.push({ from: start, insert: state.facet(indentUnit) });
     else {
       const whitespace = line.text.slice(quote).match(/^[ \t]*/)?.[0] ?? '';
-      const width = whitespace[0] === '\t' ? 1 : Math.min(getIndentUnit(state), whitespace.match(/^ */)![0].length);
-      if (width) changes.push({ from: start, to: start + width });
+      const indent = indentString(state, Math.max(0, countColumn(whitespace, state.tabSize) - getIndentUnit(state)));
+      let keep = 0;
+      while (keep < whitespace.length && keep < indent.length && whitespace[keep] === indent[keep]) keep++;
+      if (keep < whitespace.length || keep < indent.length) changes.push({ from: start + keep, to: start + whitespace.length, insert: indent.slice(keep) });
     }
   }
   if (changes.length) {
@@ -48,9 +51,31 @@ function indentList(view: EditorView, outdent: boolean): boolean {
   return lines.size > 0;
 }
 
+/** Native marker continuation remains authoritative; plain list text keeps its own indent. */
+function continueMarkdown(view: EditorView): boolean {
+  const { state } = view;
+  if (state.readOnly || view.composing) return false;
+  const lines = state.selection.ranges.map(range => {
+    const line = state.doc.lineAt(range.from), context = markdownListLine(state, line);
+    return range.empty && context?.paragraph && !context.header && line.text.slice(context.indentTo).trim() && range.from >= line.from + context.indentTo
+      ? { line, prefix: line.text.slice(0, context.indentTo) } : null;
+  });
+  if (lines.some(line => !line)) return insertNewlineContinueMarkup(view);
+  let index = 0;
+  const change = state.changeByRange(range => {
+    const { line, prefix } = lines[index++]!;
+    let from = range.from;
+    while (from > line.from + prefix.length && /[ \t]/.test(state.sliceDoc(from - 1, from))) from--;
+    const insert = state.lineBreak + prefix;
+    return { changes: { from, to: range.to, insert }, range: EditorSelection.cursor(from + insert.length) };
+  });
+  view.dispatch(change, { scrollIntoView: true, userEvent: 'input' });
+  return true;
+}
+
 export const markdownListKeymap: KeyBinding[] = [
-  { key: 'Tab', run: view => indentList(view, false) },
-  { key: 'Shift-Tab', run: view => indentList(view, true) },
+  { key: 'Tab', run: view => indentMarkdown(view, false) },
+  { key: 'Shift-Tab', run: view => indentMarkdown(view, true) },
 ];
 
 /**
@@ -226,8 +251,8 @@ export function obsidianKeymap(h: ObsidianKeymapHandlers): KeyBinding[] {
         return true; // swallow the browser save dialog regardless
       },
     },
-    // Obsidian list behaviour: Enter continues lists/quotes, Backspace eats markers.
-    { key: 'Enter', run: insertNewlineContinueMarkup },
+    // Native marker continuation plus exact indentation for unmarked list text.
+    { key: 'Enter', run: continueMarkdown },
     { key: 'Backspace', run: deleteMarkupBackward },
   ];
 }

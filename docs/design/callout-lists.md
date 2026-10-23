@@ -31,14 +31,29 @@ instead of rebuilding when the caret moves around ordinary text.
 
 ## Lists
 
-Enter continues Markdown markup through the existing
-`insertNewlineContinueMarkup`. Tab and Shift-Tab inspect the existing model's
-ListItem ancestors. They change indentation at the list's quote depth, moving
+Enter continues marker lines through the existing `insertNewlineContinueMarkup`.
+For an unmarked, nonempty paragraph line inside a ListItem, Enter preserves that
+line's exact quote and whitespace prefix. This avoids resetting an extra Tab to
+the parent's marker width or inserting a new bullet. Empty lines and other block
+types retain native Markdown continuation and list-exit behavior.
+
+MarkdownView explicitly installs four-space `indentUnit` and four-column
+`EditorState.tabSize` for every Markdown host, including readonly fragments and
+source mode. The old implicit two-space indent unit with four-column literal
+tabs was inconsistent. No existing note is reindented on load.
+
+Tab and Shift-Tab inspect the existing model's ListItem ancestors through
+`markdownListLine` in listLayout; folding and visible line presentation consume
+the same source owner instead of maintaining their own ancestor search.
+They change indentation at the list's quote depth, moving
 descendants together when their parent item is selected. Original markers,
 checkboxes, numbering and quote tokens remain untouched. Selection maps with
 forward association so a caret at the indentation boundary follows inserted
-indentation. Code/inline-code/frontmatter and non-list contexts fall through to
-the existing keymaps. No per-keystroke full-note list scan is introduced.
+indentation. Ordinary paragraph and quote continuation lines also accept Tab and
+Shift-Tab without acquiring a bullet. Dedent uses CodeMirror's column counting
+and indentString, so mixed spaces/tabs remove one configured unit. Code,
+inline-code and frontmatter keep their existing keymaps. Syntax lookup is local
+to the line/selection; no per-keystroke full-note list scan is introduced.
 
 Key ordering is: active suggester, native snippet/tabstop/math tabout, contextual
 list indentation, generic Tab. `markdownListKeymap` is installed by MarkdownView
@@ -54,8 +69,11 @@ without the live list buttons. Explicit source/block-effect ownership hides list
 controls until the shared invalidation contract releases the region.
 
 Bullets are small CSS circles independent of font glyph shape. Indentation guides
-use the same configured unit as Tab and align with bullet centers. Chevron paths
-come from the existing icon catalog.
+use the same configured unit and literal-tab columns as Tab and align with bullet
+centers. Marker-free ListItem lines receive the same guide and hanging-layout
+measurement as headers, using their actual source whitespace. Marker-shaped text
+without a ListItem syntax owner stays literal. Chevron paths come from the existing
+icon catalog.
 
 ## List layout invalidation
 

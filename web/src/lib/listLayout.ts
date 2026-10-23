@@ -1,4 +1,28 @@
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
+import type { EditorState, Line } from '@codemirror/state';
+import type { SyntaxNode } from '@lezer/common';
+import { stripQuotePrefix } from '@webobsidian/markdown-core';
+import { syntaxModel } from './syntaxModel';
+
+/** One source owner for list headers and marker-free paragraphs/continuations. */
+export function markdownListLine(state: EditorState, line: Line) {
+  const model = state.field(syntaxModel);
+  if (model.frontmatter && line.from < model.frontmatter.to) return null;
+  let paragraph = false;
+  for (let node: SyntaxNode | null = model.tree.resolveInner(line.to, -1); node; node = node.parent) {
+    if (['FencedCode', 'CodeBlock'].includes(node.name)) return null;
+    if (['Paragraph', 'Task'].includes(node.name) && node.parent?.name === 'ListItem') paragraph = true;
+    if (node.name !== 'ListItem' || node.to < line.from) continue;
+    let quoteDepth = 0;
+    for (let parent = node.parent; parent; parent = parent.parent) if (parent.name === 'Blockquote') quoteDepth++;
+    const body = stripQuotePrefix(line.text, quoteDepth);
+    const quoteTo = line.text.length - body.length;
+    return { item: node, quoteDepth, quoteTo, paragraph,
+      indentTo: quoteTo + (body.match(/^[ \t]*/)?.[0].length ?? 0),
+      header: state.doc.lineAt(node.from).from === line.from };
+  }
+  return null;
+}
 
 /** Measure the actual rendered marker (font/widgets included), not a guessed ch width. */
 class ListLayout {
