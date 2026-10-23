@@ -1,26 +1,26 @@
 import { Prec, StateEffect, StateField, type EditorState } from '@codemirror/state';
-import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import type { SourceSpan } from '@webobsidian/markdown-core';
 import { compositionSelection } from './editorSelection';
 
-/** Keep lifecycle metadata separate from a source object's domain-specific kind. */
-interface SourceRegion extends SourceSpan { sourceKind?: 'formula' | 'table' }
-export const toggleSourceRegion = StateEffect.define<SourceRegion | null>();
-export const sourceRegion = StateField.define<SourceRegion | null>({
+/** Every source entry is temporary; only source coordinates belong in this state. */
+export const toggleSourceRegion = StateEffect.define<SourceSpan | null>();
+export const sourceRegion = StateField.define<SourceSpan | null>({
   create: () => null,
   update(value, transaction) {
     if (transaction.state.readOnly) return null;
-    for (const effect of transaction.effects) if (effect.is(toggleSourceRegion)) return effect.value;
+    for (const effect of transaction.effects) if (effect.is(toggleSourceRegion))
+      return effect.value ? { from: effect.value.from, to: effect.value.to } : null;
     if (!value) return null;
-    const mapped = transaction.docChanged ? { ...value,
+    const mapped = transaction.docChanged ? {
       from: transaction.changes.mapPos(value.from, -1), to: transaction.changes.mapPos(value.to, 1) } : value;
-    if (mapped.sourceKind && !transaction.state.field(compositionSelection).selection.ranges.some(range =>
+    if (!transaction.state.field(compositionSelection).selection.ranges.some(range =>
       range.empty ? range.from >= mapped.from && range.from <= mapped.to : range.from < mapped.to && range.to > mapped.from)) return null;
     return mapped;
   },
 });
 
-/** Closing an explicit source entry renders it even if its caret has no outside position. */
+/** Escape/blur restore rendering even when the caret has no outside position. */
 export const forcedRenderedRegion = StateField.define<SourceSpan | null>({
   create: () => null,
   update(value, transaction) {
@@ -46,7 +46,7 @@ export function sourceOwns(state: EditorState, range: SourceSpan): boolean {
 }
 
 export function sourceButton(view: EditorView, range: SourceSpan | (() => SourceSpan), label: string,
-  options: { kind?: SourceRegion['sourceKind']; selection?: SourceSpan } = {}): HTMLButtonElement {
+  options: { selection?: SourceSpan } = {}): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'cm-source-toggle';
@@ -61,44 +61,18 @@ export function sourceButton(view: EditorView, range: SourceSpan | (() => Source
     if (view.state.readOnly) return;
     const current = typeof range === 'function' ? range() : range;
     const selection = options.selection;
-    view.dispatch({ effects: toggleSourceRegion.of({ ...current, sourceKind: options.kind }),
+    view.dispatch({ effects: toggleSourceRegion.of({ from: current.from, to: current.to }),
       selection: { anchor: selection?.from ?? current.from, head: selection?.to ?? current.from }, scrollIntoView: true });
     view.focus();
   });
   return button;
 }
 
-class CloseSourceWidget extends WidgetType {
-  eq() { return true; }
-  toDOM(view: EditorView) {
-    const button = document.createElement('button');
-    button.type = 'button'; button.className = 'cm-source-close'; button.textContent = 'Close source';
-    button.addEventListener('mousedown', (event) => {
-      event.preventDefault(); event.stopPropagation();
-    });
-    button.addEventListener('click', (event) => {
-      event.preventDefault(); event.stopPropagation();
-      view.dispatch({ effects: toggleSourceRegion.of(null) });
-      view.focus();
-    });
-    return button;
-  }
-  ignoreEvent() { return true; }
-}
-function closeDecoration(state: EditorState): DecorationSet {
-  const source = state.field(sourceRegion);
-  return source && !source.sourceKind ? Decoration.set([Decoration.widget({ widget: new CloseSourceWidget(), side: -1 }).range(source.from)]) : Decoration.none;
-}
-const closeField = StateField.define<DecorationSet>({
-  create: closeDecoration, update: (value, transaction) =>
-    transaction.startState.field(sourceRegion) !== transaction.state.field(sourceRegion) ? closeDecoration(transaction.state) : value,
-  provide: (field) => EditorView.decorations.from(field),
-});
-export const sourceControls = [compositionSelection, sourceRegion, forcedRenderedRegion, closeField,
+export const sourceControls = [compositionSelection, sourceRegion, forcedRenderedRegion,
   EditorView.domEventHandlers({ blur(event, view) {
     if (event.relatedTarget instanceof Node && view.dom.contains(event.relatedTarget)) return false;
     queueMicrotask(() => {
-      if (view.dom.isConnected && !view.hasFocus && view.state.field(sourceRegion)?.sourceKind)
+      if (view.dom.isConnected && !view.hasFocus && view.state.field(sourceRegion))
         view.dispatch({ effects: toggleSourceRegion.of(null) });
     });
     return false;

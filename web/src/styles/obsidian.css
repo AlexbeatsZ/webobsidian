@@ -627,7 +627,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-mermaid .edgeLabel p { background: var(--diagram-edge-surface) !important; }
 .cm-mermaid .node text, .cm-mermaid .edgeLabel text { fill: var(--document-pure) !important; }
 .cm-mermaid.mod-error { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-smaller); }
-/* ```html "Render HTML" toggle (block widget around the code fence) */
+/* Fenced HTML execution stays opt-in; editing uses the common source entry. */
 .cm-html-preview { white-space: normal; margin: 4px 0 8px; }
 /* When rendered, break out of the readable-line-width column to full editor width.
    Content is centred on the scroller, so left:50% + translateX(-50%) re-centres a
@@ -637,7 +637,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   padding: 5px 12px; border-radius: var(--radius-s); cursor: pointer; border: none;
   background: var(--interactive-accent); color: var(--text-on-accent); }
 .cm-html-render-btn:hover { background: var(--interactive-accent-hover); }
-.cm-html-preview.is-rendered .cm-html-render-btn { margin-left: 32px; }
 .cm-html-render-frame { display: block; width: 100%; height: 80vh; margin-top: 8px;
   border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s);
   background: #fff; resize: vertical; overflow: auto; }
@@ -665,10 +664,10 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-source-toggle:hover, .cm-source-toggle:focus-visible { color: var(--text-normal); background: var(--background-modifier-hover); }
 .cm-source-toggle:active { background: var(--bg-modifier-active); }
 .cm-table-frame:hover > .cm-source-toggle, .cm-properties:hover > .cm-source-toggle, .cm-html-block:hover > .cm-source-toggle,
+.cm-html-preview:hover > .cm-source-toggle, .plugin-code-block:hover > .cm-source-toggle, .native-block-effect:hover > .cm-source-toggle,
 .cm-source-toggle:focus-visible { opacity: 1; }
-.cm-source-close { font: 12px var(--font-ui); margin-right: 8px; cursor: pointer; }
 .is-reading-mode .cm-source-toggle { display: none; }
-.cm-properties, .cm-html-block { position: relative; }
+.cm-properties, .cm-html-block, .plugin-code-block { position: relative; }
 .is-reading-mode .cm-props-add,
 .is-reading-mode .prop-pill-x, .is-reading-mode .prop-pill-add, .is-reading-mode .prop-del { visibility: hidden; }
 .md-quote { border-left: 3px solid var(--text-normal); padding-left: 24px; }

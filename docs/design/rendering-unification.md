@@ -237,8 +237,8 @@ Earlier browser/build results did not cover this real-note workflow.
   caret; the former whole-callout `</>` entry has been removed. Original CM text
   and wrappers stay in place. Only `-` defaults to folded; `+` and an absent
   marker default to expanded and all three have a fold control. See callout-lists.md.
-  Other explicit source fallbacks retain their shared lifecycle. Inline HTML
-  responds to source-close effects even if the selection did not change.
+  All source entries use the same temporary lifecycle. Inline HTML responds to
+  source restoration even if the selection did not change.
 - Tables retain the full-column outer layout contract, but an intrinsic-width
   inner frame owns the table and all its controls. Vertical spacing is padding,
   included in the block widget's measured height. Table models are derived once
@@ -262,9 +262,9 @@ open/edit/scroll of a formula-heavy note with the user's enabled plugins.
 
 ## Table interaction revision (2026-10-22)
 
-Table source entry uses the shared transient `table` source region: leaving its
-selection or the editor restores the widget without a persistent Close source
-switch. Cell drafts still commit through the existing fragment editor. Cell
+Table source entry uses the shared temporary source region: leaving its selection
+or the editor restores the widget without a separate close switch. Cell drafts
+still commit through the existing fragment editor. Cell
 editor backgrounds are transparent so header cells have one continuous surface.
 
 Editable regular tables expose hover row/column grips. Pointer press highlights
@@ -332,3 +332,42 @@ divider, source patches, selection and document session remain unchanged.
 Only source and Git diff inspection were performed. No tests, typechecks,
 builds, probes, app/server/browser launches or UI/performance acceptance were
 performed; the change is unverified and has not entered a new package.
+
+## One temporary source entry for every renderer (2026-10-23)
+
+The 0.1.10 property screenshot exposed a failed split in the earlier source
+control design: formula/table entries opted into restoration, while properties,
+HTML, Mermaid and processor/effect entries still used a persistent branch with a
+close widget. Calling one button factory did not give those callers one behavior.
+
+That branch is removed from sourceControls. Every entry now stores only source
+coordinates, maps them through changes, and restores presentation after selection
+leaves its range, focus leaves the editor, or Escape. Nonempty selections retain
+source while they overlap; empty carets include both boundaries. The existing
+compositionSelection freezes reveal during IME, and forcedRenderedRegion handles
+Escape/blur when no outside caret position exists. No per-renderer source kind,
+close widget/decoration/style, replacement close button or additional state exists.
+The remaining `</>` sourceButton may request a selected body span for formulas;
+all other consumers use the same default entry.
+
+This covers editable and unsupported properties/tables, formula widgets, raw
+HTML, Mermaid, code processors (including native JS), and block-effect output.
+Unknown/unsupported structures still show real source where rendering cannot
+represent them. Returning to rendered script/effect output follows the existing
+disposal/remount rules; it does not copy document state or add another renderer.
+Mermaid/raw-HTML widget equality includes the source range so prefix edits cannot
+leave their source button pointing at old coordinates. Plugin/native processor
+caret checks use the same frozen IME selection as source controls.
+
+Fenced HTML keeps its separate explicit execution request and existing sandbox.
+Once execution is requested, the rendered frame has only the shared source entry;
+the old Hide HTML action is removed. Source editing temporarily suspends the
+frame, and leaving source restores it through the shared lifecycle. The initial
+Render HTML action remains an execution opt-in, not a source-lifecycle toggle.
+
+Only production source, caller/dead-code searches and Git diff inspection were
+performed. No new tests were added; existing browser cases that click the removed
+control were deliberately left unchanged under the user's test-maintenance stop.
+Tests, types, builds, probes, app/server/browser launches and acceptance did not
+run. Actual focus/selection/IME/script remount/UI behavior remains unverified;
+the already built 0.1.10 executable predates this correction.

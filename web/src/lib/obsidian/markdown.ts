@@ -16,6 +16,7 @@ import { blockModel } from '../syntaxModel';
 import { livePreviewState, livePreviewReadonly } from '../renderState';
 import { caretTouches, type SourceSpan } from '@webobsidian/markdown-core';
 import { forceRendered, sourceIsOpen, sourceButton } from '../sourceControls';
+import { compositionSelection } from '../editorSelection';
 import { contextOf, renderContext, type RenderContext } from '../renderContext';
 import { Component } from './events';
 import { decorationInputsChanged } from '../decorationDependencies';
@@ -163,7 +164,7 @@ function build(state: EditorState, previous?: DecorationSet, tr?: Transaction): 
       (processor.accepts && !processor.accepts(block.body)) ||
       sourceIsOpen(state, block) ||
       (!forceRendered(state, block) &&
-        caretTouches(block, state.selection.ranges, ro))
+        caretTouches(block, state.field(compositionSelection).selection.ranges, ro))
     )
       continue;
     const old = prior.get(`${block.from}:${block.to}`);

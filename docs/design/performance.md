@@ -136,14 +136,14 @@ latency and IME acceptance remain unmeasured under the static-only boundary.
 
 ## Source controls and editor derivations (2026-10-22 opinions)
 
-The single sourceControls field distinguishes formula/table entries from explicit
-fallbacks. Formula/table entries map their source range through edits and close
+The single sourceControls field gives every source entry the same temporary
+lifecycle. Properties, formulas, tables, HTML, Mermaid, code processors/native JS
+and block effects map their source range through edits and restore presentation
 when all selections leave it or focus leaves the view. Nonempty selections use
 actual overlap; empty carets include both source boundaries. The same frozen IME
 selection is owned by editorSelection and consumed by source controls and all
-renderers. Explicit HTML/Mermaid/unsupported-structure entries keep their existing
-Close source/Escape semantics. Closing an entry reuses forcedRenderedRegion when
-the caret has no outside position. Source buttons share transparent normal and
+renderers. Escape and blur reuse forcedRenderedRegion when the caret has no
+outside position. Source buttons share transparent normal and
 highlighted hover/focus styles; consumers can select a formula's body on entry.
 
 blockModel's existing WeakMap now also retains standalone-comment line membership,
@@ -170,11 +170,21 @@ their higher key priority. These extensions do not read workspace state or own
 another DocumentSession. Formula presentation policy remains in mathPresentation,
 and list geometry measurement remains in listLayout.
 
-The 0.1.9 packaging compile keeps transient source lifecycle metadata in
-`sourceKind`, separate from a block's existing domain-specific `kind`. Existing
-callers can still pass their source spans directly to the shared effect; only
-formula/table source buttons opt into automatic restoration. The button option
-remains `kind`, and dependency invalidation compares the lifecycle field.
+The first implementation kept an optional lifecycle kind, later renamed
+`sourceKind` to avoid collisions with a block's domain `kind`. This left properties
+and other fallback entries persistent even though they called the same button
+helper. That split failed the requested interaction: shared markup did not mean
+shared behavior. The 2026-10-23 correction removes the classifier, close widget,
+decoration field and CSS entirely. State stores only `{from,to}` and strips any
+domain metadata from direct source spans. Existing callers cannot opt back into
+a persistent mode; optional button configuration only controls entry selection.
+
+Executable fenced HTML retains its explicit sandbox execution request. Once
+rendered, its sole source entry uses the same field and temporary lifecycle;
+there is no separate HTML hide/source toggle. Leaving source remounts the already
+requested sandbox. Code processors also use the shared frozen IME selection.
+Unsupported YAML/tables still retain their real raw-source fallback rather than
+inventing a renderer for structures the app cannot edit.
 
 For this opinions batch the user's latest instruction explicitly forbids tests
 and acceptance, overriding the earlier runtime authorization. Only source and

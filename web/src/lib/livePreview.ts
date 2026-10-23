@@ -441,7 +441,7 @@ class MathWidget extends WidgetType {
     this.subscriptions.set(span, subscribeMathConfiguration(render)); render();
     if (this.display && this.range && !this.preview && !view.state.readOnly) {
       const formula = editorMathRegions(view.state).find(r => r.from === this.range!.from && r.to === this.range!.to);
-      span.appendChild(sourceButton(view, this.range, 'formula', { kind: 'formula',
+      span.appendChild(sourceButton(view, this.range, 'formula', {
         selection: formula ? { from: formula.bodyFrom, to: formula.bodyTo } : this.range }));
     }
     return span;
@@ -637,10 +637,8 @@ export const mermaidField = StateField.define<DecorationSet>({
 
 /* ---------------- ```html preview (Render HTML button) ---------------- */
 
-/** Toggle the rendered state of the ```html block whose opening fence starts at
- *  the given position. Tracked in editor state so we can BOTH show the iframe and
- *  hide the source code block while rendered. */
-export const toggleHtmlRender = StateEffect.define<number>();
+/** Explicitly opt a fenced HTML block into sandbox execution, independently of editing. */
+const requestHtmlRender = StateEffect.define<number>();
 
 /** Positions (opening-fence line starts) whose ```html block is rendered. */
 export const htmlRenderedState = StateField.define<readonly number[]>({
@@ -648,25 +646,21 @@ export const htmlRenderedState = StateField.define<readonly number[]>({
   update(value, tr) {
     let v = tr.docChanged ? value.map((p) => tr.changes.mapPos(p, 1)) : value;
     for (const e of tr.effects) {
-      if (e.is(toggleHtmlRender)) {
-        v = v.includes(e.value) ? v.filter((x) => x !== e.value) : [...v, e.value];
-      }
+      if (e.is(requestHtmlRender) && !v.includes(e.value)) v = [...v, e.value];
     }
     return v;
   },
 });
 
-/** "Render HTML" / "Hide HTML" toggle for a ```html fenced block. Collapsed it
- *  sits above the code (which stays visible); rendered it REPLACES the code block
- *  with a full-width sandboxed iframe (scripts run but isolated — no same-origin,
- *  so a saved page can't touch the vault/app). */
+/** Sandbox execution remains opt-in. Its source entry uses the shared temporary
+ *  region, so editing never needs a second HTML-specific close control. */
 class HtmlPreviewWidget extends WidgetType {
   private onResize: (() => void) | null = null;
-  constructor(readonly code: string, readonly key: number, readonly rendered: boolean) {
+  constructor(readonly code: string, readonly range: { from: number; to: number }, readonly rendered: boolean) {
     super();
   }
   eq(o: HtmlPreviewWidget) {
-    return o.key === this.key && o.rendered === this.rendered && o.code === this.code;
+    return o.range.from === this.range.from && o.range.to === this.range.to && o.rendered === this.rendered && o.code === this.code;
   }
   ignoreEvent() {
     return false;
@@ -674,17 +668,8 @@ class HtmlPreviewWidget extends WidgetType {
   toDOM(view: EditorView) {
     const wrap = document.createElement('div');
     wrap.className = 'cm-html-preview' + (this.rendered ? ' is-rendered' : '');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'cm-html-render-btn';
-    btn.textContent = this.rendered ? 'Hide HTML' : 'Render HTML';
-    btn.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      view.dispatch({ effects: toggleHtmlRender.of(this.key) });
-    });
-    wrap.appendChild(btn);
     if (this.rendered) {
+      if (!view.state.readOnly) wrap.appendChild(sourceButton(view, this.range, 'HTML'));
       const frame = document.createElement('iframe');
       frame.className = 'cm-html-render-frame';
       frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-forms allow-modals');
@@ -699,6 +684,16 @@ class HtmlPreviewWidget extends WidgetType {
       requestAnimationFrame(sync);
       this.onResize = sync;
       window.addEventListener('resize', sync);
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'cm-html-render-btn';
+      button.textContent = 'Render HTML';
+      button.addEventListener('mousedown', event => {
+        event.preventDefault(); event.stopPropagation();
+        view.dispatch({ effects: requestHtmlRender.of(this.range.from) });
+      });
+      wrap.appendChild(button);
     }
     return wrap;
   }
@@ -725,20 +720,21 @@ function buildHtmlPreview(state: EditorState): DecorationSet {
       }
     }
     if (end < 0) continue;
+    const range = { from: line.from, to: doc.line(end).to };
+    if (sourceIsOpen(state, range)) { n = end; continue; }
     const key = line.from;
     const rendered = renderedKeys.includes(key);
     if (rendered) {
       // Replace the whole block — hides the source code AND shows the iframe.
       const code = end > n + 1 ? doc.sliceString(doc.line(n + 1).from, doc.line(end - 1).to) : '';
-      const to = doc.line(end).to;
       ranges.push(
-        Decoration.replace({ widget: new HtmlPreviewWidget(code, key, true), block: true }).range(line.from, to),
+        Decoration.replace({ widget: new HtmlPreviewWidget(code, range, true), block: true }).range(range.from, range.to),
       );
     } else {
       // Button ABOVE the fence (side:-1) — html blocks can be huge (a whole saved
       // page), so a button after the block would sit off-screen and be unreachable.
       ranges.push(
-        Decoration.widget({ widget: new HtmlPreviewWidget('', key, false), block: true, side: -1 }).range(line.from),
+        Decoration.widget({ widget: new HtmlPreviewWidget('', range, false), block: true, side: -1 }).range(line.from),
       );
     }
     n = end;
@@ -750,7 +746,7 @@ export const htmlPreviewField = StateField.define<DecorationSet>({
   create: (state) => buildHtmlPreview(state),
   update(value, tr) {
     if (
-      decorationInputsChanged(tr, false) || tr.effects.some((e) => e.is(toggleHtmlRender))
+      decorationInputsChanged(tr, false) || tr.effects.some((e) => e.is(requestHtmlRender))
     ) {
       return buildHtmlPreview(tr.state);
     }
@@ -832,7 +828,7 @@ class TableWidget extends WidgetType {
     const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap'; wrap.dataset.tableFrom = String(b.from);
     const frame = document.createElement('div'); frame.className = 'cm-table-frame'; wrap.appendChild(frame);
     const cleanup: (() => void)[] = []; this.cleanup.set(wrap, cleanup);
-    if (!this.ro) frame.appendChild(sourceButton(view, b, 'table', { kind: 'table' }));
+    if (!this.ro) frame.appendChild(sourceButton(view, b, 'table'));
     const table = document.createElement('table'); table.className = 'cm-table'; frame.appendChild(table);
     const apply = (changes: SourceChange[]) => {
       if (view.state.readOnly || view.state.sliceDoc(b.from, b.to) !== b.key) return;
@@ -1013,7 +1009,7 @@ class HtmlBlockWidget extends WidgetType {
     super();
   }
   eq(o: HtmlBlockWidget) {
-    return o.html === this.html;
+    return o.html === this.html && o.range?.from === this.range?.from && o.range?.to === this.range?.to;
   }
   toDOM(view: EditorView) {
     const div = document.createElement('div');
@@ -2342,7 +2338,7 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
         return;
       }
       if (u.viewportChanged || u.transactions.some((tr) => decorationInputsChanged(tr) ||
-        tr.effects.some(effect => effect.is(toggleCalloutFold) || effect.is(toggleHtmlRender))) ||
+        tr.effects.some(effect => effect.is(toggleCalloutFold) || effect.is(requestHtmlRender))) ||
         foldedRanges(u.startState) !== foldedRanges(u.state)) {
         this.decorations = buildDecorations(u.view);
       }
