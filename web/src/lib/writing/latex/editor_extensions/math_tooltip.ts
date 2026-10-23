@@ -1,6 +1,6 @@
-import { type Tooltip, showTooltip, EditorView } from '@codemirror/view';
+import { type Tooltip, type ViewUpdate, showTooltip, EditorView } from '@codemirror/view';
 import { StateField, type EditorState } from '@codemirror/state';
-import { renderMath, mathDefinitionContext, subscribeMathConfiguration } from '../../../mathjax';
+import { renderMath, readMathMetrics, type MathMetrics, mathDefinitionContext, subscribeMathConfiguration } from '../../../mathjax';
 import { syntaxModel } from '../../../syntaxModel';
 import { contextOf, renderContext } from '../../../renderContext';
 import { decorationInputsChanged } from '../../../decorationDependencies';
@@ -40,20 +40,29 @@ function inlineTooltip(state: EditorState): MathTooltip | undefined {
       const body = document.createElement('div'); body.className = 'cm-math-tooltip-body';
       body.textContent = region.tex; dom.appendChild(body);
       let controller = new AbortController();
-      const render = () => {
-        controller.abort(); controller = new AbortController();
-        const signal = controller.signal;
+      let previous: MathMetrics | undefined, invalid = true, destroyed = false;
+      const render = (force = false) => {
+        invalid ||= force;
         view.requestMeasure({ key: dom, read: () => {
-          if (signal.aborted || !dom.isConnected) return;
+          if (destroyed || !dom.isConnected || !view.contentDOM.clientWidth) return;
+          const metrics = readMathMetrics(body, view.contentDOM);
+          if (!invalid && previous?.em === metrics.em && previous.containerWidth === metrics.containerWidth) return;
+          return metrics;
+        }, write: metrics => {
+          if (!metrics || destroyed || !dom.isConnected) return;
+          previous = metrics; invalid = false;
+          controller.abort(); controller = new AbortController();
+          const signal = controller.signal;
           // Keep the CM-owned arrow/positioning root intact when SVG is adopted.
           void renderMath(body, equation, false, signal, {
-            transient: true, sourcePath: contextOf(view).sourcePath, definitions, container: view.contentDOM,
+            transient: true, sourcePath: contextOf(view).sourcePath, definitions, metrics,
           }).catch(error => { if (!signal.aborted) { body.textContent = region.tex; dom.title = String(error); } });
         } });
       };
       let stop = () => {};
-      return { dom, mount() { stop = subscribeMathConfiguration(render); render(); },
-        destroy() { controller.abort(); stop(); } };
+      return { dom, mount() { stop = subscribeMathConfiguration(() => render(true)); render(); },
+        update(update: ViewUpdate) { if (update.geometryChanged) render(); },
+        destroy() { destroyed = true; controller.abort(); stop(); } };
     },
   } };
 }

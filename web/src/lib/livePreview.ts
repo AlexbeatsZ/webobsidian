@@ -21,7 +21,7 @@ import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePr
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
-import { renderMath, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
+import { renderMath, readMathMetrics, type MathMetrics, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
 import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } from './writing/latex/editor_context/mathPresentation';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
@@ -426,7 +426,26 @@ class CalloutMathSourcesWidget extends WidgetType {
 
 // CM can transfer equal widgets' DOM to a new WidgetType instance. Resources
 // belong to that DOM mount, so destroy must not depend on the creator instance.
-const mathMounts = new WeakMap<HTMLElement, { controller?: AbortController; stop: () => void }>();
+interface MathMount {
+  controller?: AbortController; stop: () => void;
+  measure(): MathMetrics | undefined;
+  render(metrics: MathMetrics): void;
+}
+const mathMounts = new WeakMap<HTMLElement, MathMount>();
+const mathMeasureKey = {};
+function scheduleMathMeasure(view: EditorView) {
+  view.requestMeasure({ key: mathMeasureKey, read: () => {
+    const changes: { dom: HTMLElement; mount: MathMount; metrics: MathMetrics }[] = [];
+    for (const dom of view.contentDOM.querySelectorAll<HTMLElement>('.cm-math-rendered')) {
+      if (dom.closest('.cm-content') !== view.contentDOM) continue;
+      const mount = mathMounts.get(dom), metrics = mount?.measure();
+      if (mount && metrics) changes.push({ dom, mount, metrics });
+    }
+    return changes;
+  }, write: changes => {
+    for (const { dom, mount, metrics } of changes) if (mathMounts.get(dom) === mount && dom.isConnected) mount.render(metrics);
+  } });
+}
 class MathWidget extends WidgetType {
   destroy(dom: HTMLElement) {
     const mount = mathMounts.get(dom); mathMounts.delete(dom);
@@ -452,21 +471,26 @@ class MathWidget extends WidgetType {
       span.appendChild(label);
     }
     span.dataset.renderPending = 'true';
-    const mount = { controller: undefined as AbortController | undefined, stop: () => {} };
-    mathMounts.set(span, mount);
-    const render = () => {
-      mount.controller?.abort();
-      const controller = new AbortController(); mount.controller = controller;
-      span.dataset.renderPending = 'true';
-      // toDOM runs before insertion. Read metrics only after CM mounts the widget,
-      // alongside its other layout reads, rather than caching detached fallbacks.
-      view.requestMeasure({ key: span, read: () => {
-        if (controller.signal.aborted || !span.isConnected) return;
+    let previous: MathMetrics | undefined, invalid = true;
+    const mount: MathMount = {
+      stop: () => {},
+      measure: () => {
+        const container = this.display ? body : view.contentDOM;
+        if (!span.isConnected || !container.clientWidth) return;
+        const metrics = readMathMetrics(body, container);
+        if (!invalid && previous?.em === metrics.em && previous.containerWidth === metrics.containerWidth) return;
+        return metrics;
+      },
+      render: metrics => {
+        previous = metrics; invalid = false;
+        mount.controller?.abort();
+        const controller = new AbortController(); mount.controller = controller;
+        span.dataset.renderPending = 'true';
         const context = contextOf(view), source = context.mathSource;
         const model = source?.model ?? view.state.field(syntaxModel);
         const from = (this.range?.from ?? 0) + (source?.from ?? 0);
         void renderMath(body, this.tex, this.display, controller.signal, { transient: this.preview,
-          sourcePath: context.sourcePath, definitions: mathDefinitionContext(model, from), container: this.display ? body : view.contentDOM })
+          sourcePath: context.sourcePath, definitions: mathDefinitionContext(model, from), metrics })
         .then(() => { if (!controller.signal.aborted) { span.classList.remove('mod-error'); span.removeAttribute('title'); } })
         .catch(error => {
           if (controller.signal.aborted) return;
@@ -474,9 +498,11 @@ class MathWidget extends WidgetType {
           span.title = `Formula rendering failed: ${error instanceof Error ? error.message : String(error)}`;
         })
         .finally(() => { if (!controller.signal.aborted) { delete span.dataset.renderPending; view.requestMeasure(); } });
-      } });
+      },
     };
-    mount.stop = subscribeMathConfiguration(render); render();
+    mathMounts.set(span, mount);
+    mount.stop = subscribeMathConfiguration(() => { invalid = true; scheduleMathMeasure(view); });
+    scheduleMathMeasure(view);
     if (this.display && this.range && !this.preview && !this.sourceInTitle && !view.state.readOnly) {
       const formula = editorMathRegions(view.state).find(r => r.from === this.range!.from && r.to === this.range!.to);
       span.appendChild(sourceButton(view, this.range, '公式', {
@@ -2386,6 +2412,7 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
       this.decorations = view.state.field(livePreviewState) ? buildDecorations(view) : Decoration.none;
     }
     update(u: ViewUpdate) {
+      if (u.geometryChanged) scheduleMathMeasure(u.view);
       if (!u.state.field(livePreviewState)) {
         this.decorations = Decoration.none;
         return;
@@ -2396,6 +2423,7 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
         this.decorations = buildDecorations(u.view);
       }
     }
+    docViewUpdate(view: EditorView) { scheduleMathMeasure(view); }
   },
   { decorations: (v) => v.decorations },
 );

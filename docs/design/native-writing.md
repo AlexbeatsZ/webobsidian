@@ -147,9 +147,10 @@ default; an explicitly stored false remains respected.
 `WidgetType.toDOM` runs before CodeMirror inserts the widget, so nothing there may
 convert a formula or read its metrics. `MathWidget` and the inline tooltip both
 start `renderMath` from `view.requestMeasure`, after the host is connected, and
-read the fallback width only from that attached container. Conversion results are
-keyed by the widget span so a pending render is not restarted by an unrelated
-measure.
+read metrics only from that attached container. `readMathMetrics` is the one
+metrics reader used by conversion and CM hosts; the hosts pass its snapshot to
+the existing conversion queue/cache, so starting conversion in the write phase
+does not read layout again.
 
 Width must not flow back into the editor's own width:
 
@@ -161,16 +162,28 @@ Width must not flow back into the editor's own width:
   subtracted once). The inline tooltip keeps CodeMirror's default fixed
   positioning, sizes to `max-content` with a bounded width, and scrolls inside its
   own body. Restoring absolute positioning or a shrink-to-fit root inside the
-  editable DOM reintroduces the width/position feedback that moved unselected
-  characters and the caret-entering formula.
-- Completion requests one further measure (scrollbar/height), and configuration
-  changes re-run the existing queue. There is no timer, ResizeObserver or
-  measure-triggered conversion loop.
+  editable DOM risks coupling width and position again. This is a source-supported
+  feedback risk, not a confirmed runtime explanation for either reported jitter.
+- `livePreviewPlugin` coalesces initial mounts, `docViewUpdate` and geometry
+  changes into one keyed `requestMeasure` per view. It reads only mounted formula
+  roots belonging to that view, excluding nested fragment editors. Each DOM-owned
+  mount compares effective container width and `em` against its last request.
+  Unchanged metrics reuse the current or pending SVG conversion. Changed metrics
+  abort the old subscriber and use the original queue/cache with the new snapshot;
+  configuration invalidation still forces conversion at the same dimensions.
+- Completion requests one further measure (scrollbar/height). That measure can
+  read metrics again but cannot restart conversion when they are unchanged. No
+  timer or per-formula ResizeObserver is added. Hidden zero-width hosts wait for
+  their next geometry update rather than converting at the fallback width.
+- The inline tooltip uses its existing mount/update hooks and keyed request to
+  compare the same metrics on geometry changes, keeping CM's root/arrow and the
+  existing transient conversion/disposal behavior.
 
-Resizing the window is not converted again until the formula is recreated, so
-width-sensitive TeX line breaking after a resize is not claimed as handled. The
-two reported oscillation cases are addressed by the shared chain above; no single
-runtime root cause has been confirmed.
+Window and split resizing now invalidate the mounted output when the effective
+conversion width changes, without recreating the widget or changing the note.
+This is source implementation only: no tests, typechecks, builds, probes or
+app/server/browser acceptance were performed. Actual TeX reflow, jitter behavior
+and performance remain unverified; no single runtime root cause is claimed.
 
 
 Syntax colors come from the existing formula-local Lezer tree, including control

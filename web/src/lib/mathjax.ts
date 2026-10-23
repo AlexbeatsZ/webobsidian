@@ -2,7 +2,8 @@ import { defaultMathConfiguration, mathRegions, resolveMathPackages, type Markdo
 import type { MathProfile } from './mathPreamble';
 
 const assetPath = `${import.meta.env.BASE_URL}assets/mathjax-${__MATHJAX_VERSION__}`;
-interface MathOptions { display: boolean; em: number; ex: number; containerWidth: number }
+export interface MathMetrics { em: number; ex: number; containerWidth: number }
+interface MathOptions extends MathMetrics { display: boolean }
 interface MathDocument {
   convertPromise(tex: string, options?: Record<string, unknown>): Promise<HTMLElement>;
   done(): Promise<void>;
@@ -28,7 +29,7 @@ interface Engine {
   stylesheet(): HTMLStyleElement;
   resetPackageState(): void;
 }
-export interface MathRenderOptions { transient?: boolean; sourcePath?: string; definitions?: readonly string[]; container?: HTMLElement }
+export interface MathRenderOptions { transient?: boolean; sourcePath?: string; definitions?: readonly string[]; container?: HTMLElement; metrics?: MathMetrics }
 let runtime: Promise<MathJaxRuntime> | undefined;
 let retryAfter = 0, revision = 0, svgInstance = 0, yieldAt = 0;
 let queue: Promise<unknown> = Promise.resolve();
@@ -258,16 +259,19 @@ function cloneOutput(template: HTMLElement, doc: Document): HTMLElement {
   }
   return output;
 }
+/** CM hosts call this in their layout-read phase and pass the snapshot to conversion. */
+export function readMathMetrics(body: HTMLElement, container = body.closest<HTMLElement>('.cm-content') ?? body.parentElement): MathMetrics {
+  const win = body.ownerDocument.defaultView!;
+  const em = parseFloat(win.getComputedStyle(body).fontSize) || 18;
+  const style = container && win.getComputedStyle(container);
+  const width = container && container.clientWidth - (parseFloat(style!.paddingLeft) || 0) - (parseFloat(style!.paddingRight) || 0);
+  return { em, ex: em / 2, containerWidth: width && width > 0 ? width : 720 };
+}
 export async function renderMath(body: HTMLElement, tex: string, display: boolean, signal: AbortSignal, options: MathRenderOptions = {}): Promise<void> {
   while (!signal.aborted) {
     const generation = revision, doc = body.ownerDocument;
-    const em = parseFloat(doc.defaultView!.getComputedStyle(body).fontSize) || 18;
-    const container = options.container ?? body.closest<HTMLElement>('.cm-content') ?? body.parentElement;
-    const style = container && doc.defaultView!.getComputedStyle(container);
-    const width = container && container.clientWidth - (parseFloat(style!.paddingLeft) || 0) - (parseFloat(style!.paddingRight) || 0);
-    const template = await convertFormula(tex, { display, em, ex: em / 2,
-      containerWidth: width && width > 0 ? width : 720,
-    }, signal, options);
+    const metrics = options.metrics ?? readMathMetrics(body, options.container);
+    const template = await convertFormula(tex, { display, ...metrics }, signal, options);
     if (signal.aborted) return;
     if (generation !== revision) continue;
     if (!template) return;
