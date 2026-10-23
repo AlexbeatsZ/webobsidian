@@ -9,12 +9,27 @@ import { broadcast } from '../services/realtime.js';
 import { withVaultMaintenance } from '../services/vaultMaintenance.js';
 import { drainFileUpdates } from '../services/fileupdates.js';
 import { selectVaultWorkspace } from '../services/uistate.js';
+import { z } from 'zod';
+import { readCssSnippets, readCssSnippet, setCssSnippetEnabled } from '../services/cssSnippets.js';
 
 let switchRuntime = async (_commit: () => Promise<void>): Promise<void> => { throw new Error('Vault switch runtime is not ready'); };
 /** The server owns its existing watcher and index lifecycle. */
 export function configureVaultSwitch(handler: typeof switchRuntime): void { switchRuntime = handler; }
 
 export const settingsRouter = Router();
+settingsRouter.get('/css-snippets', asyncHandler(async (_req, res) => { res.json(await readCssSnippets()); }));
+settingsRouter.put('/css-snippets', asyncHandler(async (req, res) => {
+  const input = z.object({ source: z.object({ path: z.literal('appearance.json'), content: z.string().max(1024 * 1024),
+    exists: z.boolean(), revision: z.string().optional(), vault: z.string() }).strict(), name: z.string(), enabled: z.boolean() }).strict().parse(req.body);
+  const value = await setCssSnippetEnabled(input.source, input.name, input.enabled);
+  broadcast({ type: 'vault-configuration-changed', path: '.obsidian/appearance.json', event: 'change' });
+  res.json(value);
+}));
+settingsRouter.get('/css-snippets/:name', asyncHandler(async (req, res) => {
+  const css = await readCssSnippet(req.params.name, String(req.query.vault ?? ''));
+  res.setHeader('Cache-Control', 'no-cache'); res.type('text/css').send(css);
+}));
+
 
 settingsRouter.get(
   '/',

@@ -2,48 +2,78 @@
 
 ## Visual contract (2026-10-23)
 
-Follow the user's Obsidian 1.14.5 references: a quiet title strip, compact search
-and grouped navigation on the left, and readable setting groups on the right.
-Groups use the existing secondary surface, rounded corners and fine separators;
-each setting has its name/description on the left and its control on the right.
-Use the current dark/light theme tokens and UI font, 13px main text, 12px help,
-16px catalog icons and approximately 30px controls. Do not inherit document
-typography or introduce a separate palette, decorative gradients or large cards.
+Follow the supplied Obsidian references: compact title strip, searchable left
+navigation grouped into options and native features, and ordinary rows with names
+and descriptions at left and controls at right. Search and Hotkeys are separate
+pages. About identifies AlexbeatsZ/webobsidian, AlexbeatsZ and the upstream fork.
+Account, API-key, public-sharing and plugin-install pages and their internal
+implementations are removed. Installed plugins retain the existing enable API;
+plugin-owned settings tabs retain their display/hide/container lifecycle.
 
-`Settings.tsx` still selects existing native and plugin pages. The only shared
-React primitives are `SettingRow` and `SettingGroup`: they own visual structure
-and label-to-control association, with no state, persistence or registry. Native
-Vault/Git/appearance/account/search/API/plugin/share pages and writing/math,
-tags, automation, userscripts and configured menus consume the same structure.
-Plugin pages retain their existing container/display/hide lifecycle and receive
-compatible `.setting-item-*` styles within the same content surface.
+SettingRow and SettingGroup own visual structure only; pages keep their existing
+state and saving services. Settings uses the existing theme tokens, UI typography,
+small catalog icons, quiet groups and dividers. The original CSS is updated in
+place. Formatter categories contain flat setting rows, including normal suboption
+rows; no nested rule details/cards or embedded JSON/code editors remain.
 
-The original settings CSS definitions are updated in place. The old rule that
-wrapped an entire page in one oversized card is removed. Source/configuration
-editors keep their existing drafts, explicit save/reload actions, monospace text
-and errors. Setting IDs, values, hot-reload services, import behavior and save
-handlers are retained; visible labels can be clarified within the same settings
-page. There is no new settings store or form engine.
+The backdrop centers Settings on every open. The title strip drags the existing
+modal with pointer capture and viewport bounds; no other modal drag mechanism was
+present. Closing drops its DOM/position; reopening centers it. Small windows keep
+the full-screen layout and horizontal navigation and disable title dragging.
+No editor selection/input subscriptions are added.
 
-Navigation preserves the existing search and feature pages, grouped as general,
-editing, extensions and services. Hover, selected and keyboard focus use the same
-tokens. The title strip includes the current Vault name and close action. Narrow
-windows keep the existing full-screen settings layout: navigation scrolls
-horizontally, content scrolls independently, row controls stack and folder-rule
-inputs wrap into two columns instead of clipping.
+## Configuration ownership
+
+Settings exposes ordinary toggles, file paths, external open, copy-path and reload.
+ConfigurationFile is the shared visual row, consuming desktop.openVaultPath. It
+owns no configuration store or editor. Browser clients can copy paths; desktop
+opens existing paths through the single main-process API. Missing files report
+an error. Explicit create actions use the existing feature save services and
+exclusive-create/revision semantics; opening never creates or replaces a file.
+
+- WritingSettings calls updateWriting/refreshWriting. Advanced LaTeX, snippets,
+  custom regexes and formatter arrays live in .obsidian/webobsidian/writing.jsonc.
+  Existing app writing settings remain a preserved migration source. Config-file
+  snippets/variables remain authoritative at their configured paths.
+- MathSettings keeps package toggles through updateWriting. Macros, preamble and
+  package options are edited externally in math.jsonc or its preamble file; the
+  MathJax candidate validation and queue/cache remain unchanged.
+- AutomationSettings lists command enable toggles and template folder/counts,
+  opens automation.jsonc, and uses the same automation.save/reload/import APIs.
+  Settings no longer holds JS or JSON drafts, add/remove/edit command code, or
+  a second template-rule editor.
+- ConfiguredMenuSettings lists root/include paths and reload diagnostics through
+  the existing MenuConfigurationController. Source drafts, inline example editing,
+  save/discard and settings-local export UI are removed. Existing export commands
+  and the menu engine remain available.
+- UserscriptSettings removes source/GM/import/pending-code editors. The desktop
+  store remains authoritative. External source copies are for review; edited
+  scripts re-enter existing file-import/prepare/approval. It displays the real
+  store path and uses the existing management boundary for open and settings.
+
+No new watcher, parser, settings registry or note-content path is introduced.
 
 ## Shortcuts
 
-Search settings and shortcut assignments keep their existing `updateSearch`
-semantics and shortcut grammar. The list shows each registered command's name
-and its ID, with a compact editable shortcut capsule on the right. Unknown saved
-IDs remain visible and editable. The command-palette jump still locates the
-same `data-command` input. No new filtering, binding capture, command registry or
-fake add-shortcut action is introduced.
+HotkeySettings is owned by the existing palette/command implementation. Settings
+only selects its independent page; SearchSettingsPanel retains search preferences
+and history selection keys and no longer reads or edits command bindings.
 
 ## Delivery boundary
 
-This follow-up is source-only at the user's request: source/Git diff inspection,
-no tests, typechecks, builds, probes, app/server/browser launches or acceptance.
-No new tests or portable package are created. Runtime appearance, accessibility,
-narrow-window layout, plugin pages and saving/hot reload remain unverified.
+Source/Git diff inspection only. No tests, typechecks, builds, probes, app/server/
+browser launches, acceptance or new tests/package. Runtime appearance, dragging,
+accessibility, saving/hot reload and desktop external open remain unverified.
+
+## Native categories and CSS snippets
+
+Options now select About, Appearance, Interface, Editor, Files and Links,
+Hotkeys and installed Plugins. Interface uses the existing sidebar/auto-reveal
+store actions; Editor uses the existing workspace view mode. Search remains its
+own native feature page. No placeholder page or parallel preference store exists.
+
+Appearance includes the actual Vault CSS list, filter, toggles, external folder
+open and refresh. It uses the one original enabledCssSnippets list in
+.obsidian/appearance.json, the existing Vault IO revision protection and the
+Plugins/runtime stylesheet lifetime. See css-snippets.md. Settings has no embedded
+CSS editor, and does not rewrite snippet source files.

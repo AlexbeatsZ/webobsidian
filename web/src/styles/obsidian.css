@@ -1117,11 +1117,11 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .context-menu.submenu { position: absolute; left: 100%; top: -5px; margin-left: 2px; }
 
 /* Settings */
-.settings-backdrop { padding: 24px; }
+.settings-backdrop { padding: 24px; place-items: center; }
 .settings-modal { width: 1080px; height: min(86vh, 860px); max-height: calc(100dvh - 48px); display: flex; flex-direction: column;
   font: 13px/1.5 var(--font-ui); color: var(--text-normal); background: var(--bg-primary); }
 .settings-header { position: relative; display: flex; align-items: center; justify-content: center; flex-shrink: 0; min-height: 34px;
-  padding: 0 42px; border-bottom: 1px solid var(--bg-modifier-border); background: var(--bg-secondary); color: var(--text-muted); font-size: 12px; font-weight: 600; }
+  padding: 0 42px; border-bottom: 1px solid var(--bg-modifier-border); background: var(--bg-secondary); color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: move; touch-action: none; user-select: none; }
 .settings-header > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-header button { position: absolute; right: 8px; top: 4px; width: 26px; height: 26px; display: grid; place-items: center;
   padding: 0; color: var(--text-muted); background: transparent; border: 0; border-radius: 5px; cursor: pointer; }
@@ -1153,7 +1153,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .setting-group-body > button, .setting-group-body > fieldset > button { margin-block: 12px; }
 .setting-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-block: 12px; }
 .setting-folder-rule { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto auto; gap: 8px; align-items: center; padding-block: 10px; border-bottom: 1px solid var(--bg-modifier-border); }
-.setting-share-actions { flex-wrap: wrap; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 14px 0; border-bottom: 1px solid var(--bg-modifier-border); }
 .setting-row .info .name { font-weight: 600; }
@@ -1187,8 +1186,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .settings-content .setting-item-description { color: var(--text-muted); font-size: 12px; }
 .settings-content .setting-item-control { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 .settings-header button:focus-visible, .settings-nav button:focus-visible, .settings-content button:focus-visible { outline: 1px solid var(--interactive-accent); outline-offset: 1px; }
-.setting-shortcut .control input { width: 150px; border-radius: 14px; text-align: center; font: 12px var(--font-ui); }
-.setting-shortcut .control input::placeholder { color: var(--text-muted); }
 .settings-content .setting-row:has(textarea) { flex-direction: column; align-items: stretch; gap: 8px; }
 .settings-content .setting-row:has(textarea) > .control { width: 100%; max-width: none; }
 .settings-content input[type="checkbox"], .setting-item-control input[type="checkbox"] { appearance: none; width: 36px; height: 20px; flex: 0 0 36px; border: 0; border-radius: 12px; background: var(--color-base-40); cursor: pointer; position: relative; vertical-align: middle; }

@@ -2,6 +2,7 @@ import { matchName } from '../search';
 import { nativeCommands, resolveNativeCommandId } from '../nativeCommands';
 import { CommandManager, type Command } from '../commands';
 import { Automation } from '../userCommands';
+import { initializeCssSnippets } from '../cssSnippets';
 import { adaptNativePlusModules, migratedPluginIds } from '../nativePluginPolicy';
 import * as cmState from '@codemirror/state';
 import * as cmView from '@codemirror/view';
@@ -638,7 +639,7 @@ export async function loadPlugin(id:string,manifest:any){
             href: `/api/plugins/${encodeURIComponent(id)}/styles.css`,
           },
         });
-        document.head.append(link);
+        document.head.insertBefore(link, document.head.querySelector('[data-css-snippet]'));
         instance.register(() => link.remove());
       }
       pluginStatuses.set(id, { id, state: 'loaded' });
@@ -800,10 +801,12 @@ export async function loadPlugins(): Promise<void> {
     window.addEventListener('keydown', keys, true);
     const stopJavascript = installJavascript(sharedApp);
     const stopBlocks = installBlockEffects(sharedApp);
+    const stopCssSnippets = initializeCssSnippets(error => useStore.getState().notify(error));
     stopHost = () => {
       sharedApp.automation.dispose();
       stopJavascript();
       stopBlocks();
+      stopCssSnippets();
       stopMenus();
       stopWebPages?.();
       unsub();

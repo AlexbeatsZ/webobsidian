@@ -17,6 +17,9 @@ import { UserscriptSettings } from './UserscriptSettings';
 import ConfiguredMenuSettings from './ConfiguredMenuSettings';
 import TagSettings from './TagSettings';
 import AutomationSettings from './AutomationSettings';
+import HotkeySettings from './HotkeySettings';
+import ConfigurationFile from './ConfigurationFile';
+import { readCssSnippets, setCssSnippetEnabled, type CssSnippets } from '../lib/cssSnippets';
 import { readNativeFeatures, saveNativeFeatures, type NativeFeaturePreferences } from '../lib/nativeFeatures';
 import { notifyIndexChanged } from '../lib/indexEvents';
 import { documents } from '../lib/documents';
@@ -24,18 +27,26 @@ import { workspaceMaintenanceBlockers } from '../lib/vaultMaintenance';
 import { SettingRow as Row, SettingGroup } from './SettingRow';
 
 type Section =
-  'search' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
+  'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
   const setOpen = useStore((s) => s.setSettings);
   const [section, setSection] = useState<Section>('vault');
-  const [shortcutFocus, setShortcutFocus] = useState('');
   const [settings, setSettings] = useState<any>(null);
   const [pluginTab, setPluginTab] = useState<string | null>(null);
   const [features, setFeatures] = useState<NativeFeaturePreferences | null>(null);
   const [featureError, setFeatureError] = useState('');
   const [navQuery, setNavQuery] = useState('');
+  const modal = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ id: number; x: number; y: number; left: number; top: number }>();
+  useEffect(() => {
+    if (!open) return;
+    const center = () => { modal.current?.style.removeProperty('transform'); drag.current = undefined; };
+    center();
+    window.addEventListener('resize', center);
+    return () => window.removeEventListener('resize', center);
+  }, [open]);
   const vaultName = useStore(s => s.tree?.name ?? 'Vault');
   useEffect(() => {
     if (!open) return;
@@ -78,19 +89,34 @@ export default function Settings() {
 
   useEffect(() => {
     const show = (event: Event) => {
-      setShortcutFocus((event as CustomEvent<string>).detail ?? '');
       setPluginTab(null);
-      setSection('search');
+      setSection(event.type === 'hotkeys-settings-open' || (event as CustomEvent<string>).detail ? 'hotkeys' : 'search');
     };
     window.addEventListener('search-settings-open', show);
-    return () => window.removeEventListener('search-settings-open', show);
+    window.addEventListener('hotkeys-settings-open', show);
+    return () => { window.removeEventListener('search-settings-open', show); window.removeEventListener('hotkeys-settings-open', show); };
   }, []);
   if (!open) return null;
 
   return (
     <div className="modal-bg settings-backdrop" onClick={() => setOpen(false)}>
-      <div className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-header"><span id="settings-title">设置 — {vaultName}</span>
+      <div ref={modal} className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(e) => e.stopPropagation()}>
+        <div className="settings-header" onPointerDown={event => {
+          if (event.button !== 0 || (event.target as HTMLElement).closest('button') || !modal.current || window.innerWidth <= 768) return;
+          const box = modal.current.getBoundingClientRect();
+          drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, left: box.left, top: box.top };
+          event.currentTarget.setPointerCapture(event.pointerId);
+          event.preventDefault();
+        }} onPointerMove={event => {
+          const start = drag.current, element = modal.current;
+          if (!start || start.id !== event.pointerId || !element) return;
+          const left = Math.max(8, Math.min(window.innerWidth - element.offsetWidth - 8, start.left + event.clientX - start.x));
+          const top = Math.max(8, Math.min(window.innerHeight - element.offsetHeight - 8, start.top + event.clientY - start.y));
+          const centeredLeft = (window.innerWidth - element.offsetWidth) / 2;
+          const centeredTop = (window.innerHeight - element.offsetHeight) / 2;
+          element.style.transform = `translate(${left - centeredLeft}px, ${top - centeredTop}px)`;
+        }} onPointerUp={() => { drag.current = undefined; }} onPointerCancel={() => { drag.current = undefined; }} onLostPointerCapture={() => { drag.current = undefined; }}>
+          <span id="settings-title">设置 — {vaultName}</span>
           <button type="button" title="关闭设置" aria-label="关闭设置" onClick={() => setOpen(false)}><Icon name="x" size={16} /></button></div>
         <div className="settings-layout">
           <div className="settings-nav">
@@ -120,7 +146,8 @@ export default function Settings() {
             ))}
           </div>
           <div className="settings-content" style={pluginTab ? { display: 'none' } : undefined}>
-            {section === 'search' && <SearchSettingsPanel focus={shortcutFocus} />}
+            {section === 'search' && <SearchSettingsPanel />}
+            {section === 'hotkeys' && <HotkeySettings />}
             {section === 'automation' && <AutomationSettings />}
             {section === 'writing' && <WritingSettings />}
             {section === 'formatting' && <WritingSettings formatting />}
@@ -136,13 +163,10 @@ export default function Settings() {
             {settings && section === 'git' && (
               <GitSettings s={settings} reload={() => api.getSettings().then(setSettings)} />
             )}
-            {section === 'api' && <ApiKeys />}
-            {section === 'sharing' && <Shares />}
             {section === 'plugins' && <Plugins />}
             {settings && section === 'appearance' && <Appearance s={settings} />}
-            {section === 'account' && (
-              <AccountSettings s={settings} reload={() => api.getSettings().then(setSettings)} />
-            )}
+            {section === 'interface' && <InterfaceSettings />}
+            {section === 'editor' && <EditorSettings />}
             {section === 'about' && <About />}
           </div>
           {pluginTab && <PluginSettingsTab id={pluginTab} />}
@@ -187,25 +211,23 @@ const labels: Record<Section, string> = {
   tags: '标签',
   writing: '公式与片段',
   formatting: '文档格式化',
-  search: '搜索与快捷键',
-  vault: '仓库与文件',
+  search: '搜索',
+  hotkeys: '快捷键',
+  vault: '文件与链接',
   git: 'GitHub 同步',
-  api: 'API 密钥',
-  sharing: '分享',
   plugins: '第三方插件',
   appearance: '外观',
-  account: '账户',
+  interface: '界面',
+  editor: '编辑器',
   about: '关于',
 };
 const sectionIcons: Record<Section, string> = {
-  search: 'search', automation: 'command', writing: 'code', formatting: 'pencil', userscripts: 'globe', menus: 'list',
-  tags: 'hash', vault: 'folder', git: 'refresh-cw', api: 'key', sharing: 'link', plugins: 'puzzle', appearance: 'palette', account: 'user', about: 'info',
+  search: 'search', hotkeys: 'command', automation: 'command', writing: 'code', formatting: 'pencil', userscripts: 'globe', menus: 'list',
+  tags: 'hash', vault: 'folder', git: 'refresh-cw', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'pencil', about: 'info',
 };
 const NAV_GROUPS: { title: string; sections: Section[] }[] = [
-  { title: '常规', sections: ['account', 'vault', 'appearance', 'search'] },
-  { title: '编辑', sections: ['writing', 'formatting', 'tags', 'automation'] },
-  { title: '扩展', sections: ['userscripts', 'menus', 'plugins'] },
-  { title: '服务', sections: ['git', 'api', 'sharing', 'about'] },
+  { title: '选项', sections: ['about', 'appearance', 'interface', 'editor', 'vault', 'hotkeys', 'plugins'] },
+  { title: '核心功能', sections: ['search', 'writing', 'formatting', 'tags', 'automation', 'userscripts', 'menus', 'git'] },
 ];
 
 function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
@@ -236,7 +258,7 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
     setBrowser(await api.browse(dir).catch((e) => ({ error: e.message })));
   return (
     <div>
-      <h2>仓库与文件</h2>
+      <h2>文件与链接</h2>
       <SettingGroup title="仓库位置">
       <Row name="仓库路径" desc="服务器上存放笔记的文件夹">
         <input
@@ -284,7 +306,7 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
                   setPath(f.path);
                 }}
               >
-                Select
+                选择
               </button>
             </div>
           ))}
@@ -294,8 +316,8 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
       </SettingGroup>
       <SettingGroup title="文件删除">
       <Row
-        name="When deleting a file"
-        desc="Move to .trash keeps a recoverable copy (Open trash to restore). Permanently delete removes it immediately."
+        name="删除文件时"
+        desc="移入回收站可恢复；永久删除会立即移除文件。"
       >
         <select
           className="text-input"
@@ -303,8 +325,8 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
           value={deleteMode}
           onChange={(e) => saveDeleteMode(e.target.value)}
         >
-          <option value="trash">Move to .trash (recoverable)</option>
-          <option value="permanent">Permanently delete</option>
+          <option value="trash">移入 .trash 回收站（可恢复）</option>
+          <option value="permanent">永久删除</option>
         </select>
       </Row>
       </SettingGroup>
@@ -330,7 +352,7 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
   const save = async () => {
     await api.putSettings({ git: g });
     await reload();
-    append(['Saved git settings']);
+    append(['已保存 Git 设置']);
   };
   const run = async (fn: () => Promise<any>, label: string) => {
     append([`${label}…`]);
@@ -343,17 +365,17 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
         : [String(r?.message ?? JSON.stringify(r))];
       append(lines.flatMap((l) => String(l).split('\n')));
     } catch (e: any) {
-      append([`Error: ${e.message}`]);
+      append([`错误: ${e.message}`]);
     }
   };
   return (
     <div>
-      <h2>GitHub Sync</h2>
+      <h2>GitHub 同步</h2>
       <SettingGroup title="连接与身份">
-      <Row name="Enable git sync">
+      <Row name="启用 Git 同步">
         <input type="checkbox" checked={g.enabled} onChange={(e) => set('enabled', e.target.checked)} />
       </Row>
-      <Row name="Remote URL" desc="https://github.com/owner/repo.git">
+      <Row name="远程 URL" desc="https://github.com/owner/repo.git">
         <input
           className="text-input"
           style={{ width: 260 }}
@@ -361,7 +383,7 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           onChange={(e) => set('remote', e.target.value)}
         />
       </Row>
-      <Row name="Branch">
+      <Row name="分支">
         <input
           className="text-input"
           style={{ width: 120 }}
@@ -369,7 +391,7 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           onChange={(e) => set('branch', e.target.value)}
         />
       </Row>
-      <Row name="Access token (PAT)" desc="Stored server-side; leave masked to keep current">
+      <Row name="访问令牌 (PAT)" desc="存储在服务端；保持掩码以保留当前值">
         <input
           className="text-input"
           type="password"
@@ -378,14 +400,14 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           onChange={(e) => set('token', e.target.value)}
         />
       </Row>
-      <Row name="Author name">
+      <Row name="作者名称">
         <input
           className="text-input"
           value={g.authorName}
           onChange={(e) => set('authorName', e.target.value)}
         />
       </Row>
-      <Row name="Author email">
+      <Row name="作者邮箱">
         <input
           className="text-input"
           value={g.authorEmail}
@@ -394,17 +416,17 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
       </Row>
       </SettingGroup>
       <SettingGroup title="同步方式">
-      <Row name="Auto-sync" desc="Periodic pull+commit+push on the interval below">
+      <Row name="自动同步" desc="按下方间隔定期执行 pull+commit+push">
         <input type="checkbox" checked={g.autoSync} onChange={(e) => set('autoSync', e.target.checked)} />
       </Row>
-      <Row name="Auto-commit on save" desc="Commit (+push) ~5s after each edit">
+      <Row name="保存时自动提交" desc="每次编辑约 5 秒后提交 (+push)">
         <input
           type="checkbox"
           checked={g.autoCommitOnSave}
           onChange={(e) => set('autoCommitOnSave', e.target.checked)}
         />
       </Row>
-      <Row name="Interval (sec)">
+      <Row name="间隔（秒）">
         <input
           className="text-input"
           type="number"
@@ -413,7 +435,7 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           onChange={(e) => set('intervalSec', Number(e.target.value))}
         />
       </Row>
-      <Row name="Git LFS patterns" desc="Space-separated globs tracked via LFS">
+      <Row name="Git LFS 规则" desc="通过 LFS 跟踪的空格分隔 glob 规则">
         <input
           className="text-input"
           style={{ width: 260 }}
@@ -424,35 +446,35 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
       </SettingGroup>
       <div className="setting-actions">
         <button className="btn" onClick={save}>
-          Save
+          保存
         </button>
-        <button className="btn secondary" onClick={() => run(api.gitInit, 'Init')}>
-          Init repo
+        <button className="btn secondary" onClick={() => run(api.gitInit, '初始化仓库')}>
+          初始化仓库
         </button>
-        <button className="btn secondary" onClick={() => run(api.gitClone, 'Clone')}>
-          Clone
+        <button className="btn secondary" onClick={() => run(api.gitClone, '克隆')}>
+          克隆
         </button>
-        <button className="btn secondary" onClick={() => run(api.gitPull, 'Pull')}>
-          Pull
+        <button className="btn secondary" onClick={() => run(api.gitPull, '拉取')}>
+          拉取
         </button>
-        <button className="btn secondary" onClick={() => run(() => api.gitCommit(), 'Commit')}>
-          Commit
+        <button className="btn secondary" onClick={() => run(() => api.gitCommit(), '提交')}>
+          提交
         </button>
-        <button className="btn secondary" onClick={() => run(api.gitPush, 'Push')}>
-          Push
+        <button className="btn secondary" onClick={() => run(api.gitPush, '推送')}>
+          推送
         </button>
-        <button className="btn" onClick={() => run(() => api.gitSync(), 'Sync')}>
-          Sync now
+        <button className="btn" onClick={() => run(() => api.gitSync(), '立即同步')}>
+          立即同步
         </button>
       </div>
       <div style={{ marginTop: 12 }}>
         <div
           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}
         >
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sync log</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>同步日志</span>
           {log.length > 0 && (
             <button className="btn secondary" style={{ padding: '2px 8px' }} onClick={() => setLog([])}>
-              Clear
+              清空
             </button>
           )}
         </div>
@@ -462,7 +484,7 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           value={
             log.length
               ? log.join('\n')
-              : 'No git activity yet. Click an action above (Sync now, Pull, Push…) to see logs here.'
+              : '暂无 Git 活动。点击上方操作（立即同步、拉取、推送…）在此查看日志。'
           }
           style={{
             width: '100%',
@@ -485,212 +507,9 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
   );
 }
 
-function ApiKeys() {
-  const [keys, setKeys] = useState<any[]>([]);
-  const [name, setName] = useState('my-agent');
-  const [scopes, setScopes] = useState<string[]>(['read', 'search']);
-  const [created, setCreated] = useState('');
-  const load = () =>
-    api
-      .listKeys()
-      .then((r) => setKeys(r.keys))
-      .catch(() => {});
-  useEffect(() => {
-    load();
-  }, []);
-  const toggle = (sc: string) => setScopes((p) => (p.includes(sc) ? p.filter((x) => x !== sc) : [...p, sc]));
-  const create = async () => {
-    const r = await api.createKey(name, scopes);
-    setCreated(r.key);
-    await load();
-  };
-  return (
-    <div>
-      <h2>API Keys</h2>
-      <p style={{ color: 'var(--text-muted)' }}>
-        Keys let AI agents call <code>/api/v1</code>. The raw key is shown once.
-      </p>
-      <SettingGroup title="创建密钥">
-      <Row name="Name">
-        <input className="text-input" value={name} onChange={(e) => setName(e.target.value)} />
-      </Row>
-      <Row name="Scopes">
-        <span>
-          {['read', 'write', 'search'].map((sc) => (
-            <label key={sc} style={{ marginRight: 10 }}>
-              <input type="checkbox" checked={scopes.includes(sc)} onChange={() => toggle(sc)} /> {sc}
-            </label>
-          ))}
-        </span>
-      </Row>
-      <button className="btn" onClick={create}>
-        Create key
-      </button>
-      {created && (
-        <pre
-          style={{
-            background: 'var(--bg-primary)',
-            padding: 10,
-            borderRadius: 6,
-            marginTop: 10,
-            wordBreak: 'break-all',
-            whiteSpace: 'pre-wrap',
-          }}
-        >
-          {created}
-          {'\n'}⚠ Copy now — it will not be shown again.
-        </pre>
-      )}
-      </SettingGroup>
-      <SettingGroup title="已有密钥">
-        {keys.map((k) => (
-          <div className="setting-row" key={k.id}>
-            <div className="info">
-              <div className="name">
-                {k.name} <span style={{ color: 'var(--text-faint)' }}>{k.prefix}…</span>
-              </div>
-              <div className="desc">
-                scopes: {k.scopes.join(', ')} · used: {k.lastUsed ?? 'never'}
-              </div>
-            </div>
-            <button
-              className="btn danger"
-              onClick={async () => {
-                await api.revokeKey(k.id);
-                load();
-              }}
-            >
-              Revoke
-            </button>
-          </div>
-        ))}
-      </SettingGroup>
-    </div>
-  );
-}
-
-function Shares() {
-  const notify = useStore((s) => s.notify);
-  const openFile = useStore((s) => s.openFile);
-  const setOpen = useStore((s) => s.setSettings);
-  // Shared with the store so the file tree's globe badges refresh on changes.
-  const shares = useStore((s) => s.shares);
-  const load = useStore((s) => s.loadShares);
-  const [query, setQuery] = useState('');
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const url = (id: string) => `${location.origin}/share/${id}`;
-  const copy = (id: string) => {
-    navigator.clipboard?.writeText(url(id)).catch(() => {});
-    notify('Public link copied');
-  };
-  const toggle = async (s: any) => {
-    await api.setShareEnabled(s.id, !s.enabled);
-    load();
-  };
-  const remove = async (s: any) => {
-    if (!confirm(`Delete the public link for "${s.path}"? The URL stops working permanently.`)) return;
-    await api.deleteShare(s.id);
-    load();
-  };
-  const setPassword = async (s: any) => {
-    const pw = prompt(
-      s.hasPassword
-        ? 'New password for this link (leave empty to REMOVE the password):'
-        : 'Password for this link:',
-    );
-    if (pw === null) return;
-    await api.setSharePassword(s.id, pw || null);
-    notify(pw ? 'Password set' : 'Password removed');
-    load();
-  };
-
-  const q = query.trim().toLowerCase();
-  const filtered = q ? shares.filter((s) => s.path.toLowerCase().includes(q)) : shares;
-
-  return (
-    <div>
-      <h2>Sharing</h2>
-      <p style={{ color: 'var(--text-muted)' }}>
-        Notes shared via a public link are readable by <b>anyone with the URL</b>, without login. Create a
-        link from a note's context menu ("Share…"). Disable keeps the URL for re-enabling later; delete
-        revokes it permanently.
-      </p>
-      <input
-        className="text-input"
-        style={{ width: '100%', margin: '6px 0 12px' }}
-        placeholder="Search shared notes…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-      {filtered.length === 0 && (
-        <div style={{ color: 'var(--text-faint)' }}>
-          {shares.length === 0 ? 'No notes are shared publicly.' : 'No shared note matches the search.'}
-        </div>
-      )}
-      <SettingGroup title="分享链接">
-      {filtered.map((s) => (
-        <div className="setting-row" key={s.id}>
-          <div className="info" style={{ minWidth: 0 }}>
-            <div
-              className="name"
-              style={{
-                cursor: 'pointer',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                opacity: s.enabled ? 1 : 0.55,
-              }}
-              title={`Open ${s.path}`}
-              onClick={() => {
-                openFile(s.path);
-                setOpen(false);
-              }}
-            >
-              {s.path}
-            </div>
-            <div className="desc">
-              {s.enabled ? 'active' : 'disabled'}
-              {s.hasPassword ? ' · password-protected' : ''} · created{' '}
-              {new Date(s.createdAt).toLocaleDateString()}
-            </div>
-          </div>
-          <div className="control setting-share-actions">
-            <button
-              className="btn secondary"
-              disabled={!s.enabled}
-              onClick={() => copy(s.id)}
-              title={url(s.id)}
-            >
-              <Icon name="link" size={14} /> Copy link
-            </button>
-            <button
-              className="btn secondary"
-              onClick={() => setPassword(s)}
-              title={s.hasPassword ? 'Change or remove password' : 'Require a password to open the link'}
-            >
-              {s.hasPassword ? 'Password ✓' : 'Password…'}
-            </button>
-            <button className={`btn ${s.enabled ? 'secondary' : ''}`} onClick={() => toggle(s)}>
-              {s.enabled ? 'Disable' : 'Enable'}
-            </button>
-            <button className="btn danger" onClick={() => remove(s)}>
-              Delete
-            </button>
-          </div>
-        </div>
-      ))}
-      </SettingGroup>
-    </div>
-  );
-}
-
 function Plugins() {
   useSyncExternalStore(subscribePlugins, pluginRevision);
   const [plugins, setPlugins] = useState<any[]>([]);
-  const [repo, setRepo] = useState('');
   const [msg, setMsg] = useState('');
   const load = () =>
     api
@@ -700,39 +519,13 @@ function Plugins() {
   useEffect(() => {
     load();
   }, []);
-  const install = async () => {
-    setMsg('Installing…');
-    try {
-      await api.installPlugin(repo);
-      setMsg('Installed ✓');
-      setRepo('');
-      await load();
-    } catch (e: any) {
-      setMsg(`Error: ${e.message}`);
-    }
-  };
   return (
     <div>
-      <h2>Community Plugins</h2>
-      <SettingGroup title="安装插件">
-      <Row name="Install from GitHub" desc="owner/repo — pulls manifest.json + main.js from latest release">
-        <span style={{ display: 'flex', gap: 8 }}>
-          <input
-            className="text-input"
-            placeholder="blacksmithgu/obsidian-dataview"
-            value={repo}
-            onChange={(e) => setRepo(e.target.value)}
-          />
-          <button className="btn" onClick={install}>
-            Install
-          </button>
-        </span>
-      </Row>
-      </SettingGroup>
+      <h2>第三方插件</h2>
       {msg && <div style={{ color: 'var(--text-muted)', margin: '6px 0' }}>{msg}</div>}
       <SettingGroup title="已安装插件">
         {plugins.length === 0 && (
-          <div style={{ color: 'var(--text-faint)' }}>No plugins installed in .obsidian/plugins</div>
+          <div style={{ color: 'var(--text-faint)' }}>尚未在 .obsidian/plugins 安装插件</div>
         )}
         {plugins.map((p) => (
           <div className="setting-row" key={p.id}>
@@ -746,7 +539,7 @@ function Plugins() {
                 {pluginStatuses.get(p.id)?.error ? `: ${pluginStatuses.get(p.id)!.error}` : ''}
               </div>
             </div>
-            <label>
+            <div className="control">
               <input
                 type="checkbox"
                 disabled={Boolean(nativePluginReplacements[p.id])}
@@ -759,15 +552,14 @@ function Plugins() {
                     setMsg(String(error));
                   }
                 }}
-              />{' '}
-              enabled
-            </label>
+                aria-label={`启用 ${p.name}`}
+              />
+            </div>
           </div>
         ))}
       </SettingGroup>
       <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 14 }}>
-        Plugin status reports loading separately from workflow compatibility. Native Node/Electron modules
-        require the desktop plugin host.
+        原生 Node/Electron 模块需要桌面插件宿主。加载状态与具体工作流兼容性分别显示。
       </p>
     </div>
   );
@@ -775,6 +567,19 @@ function Plugins() {
 
 function Appearance({ s }: { s: any }) {
   const [theme, setTheme] = useState(s.ui.theme);
+  const [snippets, setSnippets] = useState<CssSnippets>();
+  const [query, setQuery] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const reloadSnippets = () => {
+    setError(''); void readCssSnippets().then(value => {
+      setSnippets(value);
+      window.dispatchEvent(new CustomEvent('vault-configuration-changed', { detail: { path: '.obsidian/snippets' } }));
+    }).catch(cause => setError(String(cause)));
+  };
+  useEffect(() => {
+    let active = true;
+    void readCssSnippets().then(value => { if (active) setSnippets(value); }).catch(cause => { if (active) setError(String(cause)); });
+    return () => { active = false; };
+  }, []);
   const save = async (t: string) => {
     setTheme(t);
     await api.putSettings({ ui: { theme: t } });
@@ -786,150 +591,74 @@ function Appearance({ s }: { s: any }) {
       <SettingGroup title="主题">
       <Row name="基础颜色" desc="设置应用界面、编辑和阅读视图的配色">
         <select className="text-input" value={theme} onChange={(e) => save(e.target.value)}>
-          <option value="obsidian-dark">Obsidian Dark</option>
-          <option value="obsidian-light">Obsidian Light</option>
+          <option value="obsidian-dark">深色</option>
+          <option value="obsidian-light">浅色</option>
         </select>
       </Row>
       </SettingGroup>
+      <SettingGroup title="CSS 样式片段" desc="在外部编辑 .css 文件；开关沿用当前仓库的 appearance.json。">
+        <ConfigurationFile name="片段文件夹" path=".obsidian/snippets">
+          <button type="button" disabled={busy} onClick={reloadSnippets}>刷新</button>
+        </ConfigurationFile>
+        <Row name="搜索片段"><input type="search" placeholder="搜索片段…" value={query} onChange={event => setQuery(event.target.value)} /></Row>
+        {!snippets?.snippets.length && <p>暂无 CSS 片段。将 .css 文件放入此文件夹后刷新。</p>}
+        {snippets?.snippets.filter(snippet => snippet.name.toLowerCase().includes(query.toLowerCase())).map(snippet => <Row key={snippet.name} name={snippet.name}>
+          <input type="checkbox" disabled={busy} checked={snippet.enabled} onChange={event => {
+            setBusy(true); setError('');
+            void setCssSnippetEnabled(snippets.source, snippet.name, event.target.checked).then(setSnippets)
+              .catch(cause => setError(String(cause))).finally(() => setBusy(false));
+          }} />
+        </Row>)}
+      </SettingGroup>
+      {error && <p role="alert">{error}</p>}
     </div>
   );
 }
 
-function AccountSettings({ s, reload }: { s: any; reload: () => void }) {
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
-  const usingDefault = !s?.auth?.hasCustomPassword;
+function InterfaceSettings() {
+  const leftOpen = useStore(state => state.leftOpen), rightOpen = useStore(state => state.rightOpen);
+  const autoReveal = useStore(state => state.autoReveal);
+  return <div>
+    <h2>界面</h2>
+    <SettingGroup title="侧栏">
+      <Row name="显示左侧栏"><input type="checkbox" checked={leftOpen} onChange={() => useStore.getState().toggleLeft()} /></Row>
+      <Row name="显示右侧栏"><input type="checkbox" checked={rightOpen} onChange={() => useStore.getState().toggleRight()} /></Row>
+      <Row name="自动定位当前文件" desc="在文件列表中展开并显示当前笔记。"><input type="checkbox" checked={autoReveal} onChange={() => useStore.getState().toggleAutoReveal()} /></Row>
+    </SettingGroup>
+  </div>;
+}
 
-  const save = async () => {
-    setErr('');
-    setMsg('');
-    if (next.length < 6) {
-      setErr('Mật khẩu mới phải có ít nhất 6 ký tự');
-      return;
-    }
-    if (next !== confirm) {
-      setErr('Mật khẩu xác nhận không khớp');
-      return;
-    }
-    setBusy(true);
-    try {
-      await api.changePassword(current, next);
-      setMsg('Đã đổi mật khẩu ✓');
-      setCurrent('');
-      setNext('');
-      setConfirm('');
-      await reload();
-    } catch (e: any) {
-      setErr(e?.message ?? 'Đổi mật khẩu thất bại');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div>
-      <h2>Account</h2>
-      <p style={{ color: 'var(--text-muted)' }}>
-        Mật khẩu đăng nhập vào WebObsidian.
-        {usingDefault && (
-          <>
-            {' '}
-            Bạn đang dùng{' '}
-            <b>
-              mật khẩu mặc định <code>123456</code>
-            </b>{' '}
-            — hãy đổi mật khẩu để bảo mật vault.
-          </>
-        )}
-      </p>
-      <SettingGroup title="登录密码">
-      <Row name="Mật khẩu hiện tại" desc={usingDefault ? 'Mặc định là 123456' : undefined}>
-        <input
-          className="text-input"
-          type="password"
-          style={{ width: 240 }}
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-          autoComplete="current-password"
-        />
-      </Row>
-      <Row name="Mật khẩu mới" desc="Tối thiểu 6 ký tự">
-        <input
-          className="text-input"
-          type="password"
-          style={{ width: 240 }}
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-          autoComplete="new-password"
-        />
-      </Row>
-      <Row name="Xác nhận mật khẩu mới">
-        <input
-          className="text-input"
-          type="password"
-          style={{ width: 240 }}
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          autoComplete="new-password"
-        />
-      </Row>
-      </SettingGroup>
-      {err && <div style={{ color: '#e5534b', margin: '6px 0' }}>{err}</div>}
-      {msg && <div style={{ color: 'var(--text-accent, #4caf50)', margin: '6px 0' }}>{msg}</div>}
-      <button className="btn" onClick={save} disabled={busy || !current || !next}>
-        {busy ? 'Đang lưu…' : 'Đổi mật khẩu'}
-      </button>
-      <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 16 }}>
-        Quên mật khẩu? Đặt <code>auth.passwordHash</code> trong <code>data/settings.json</code> hoặc biến môi
-        trường <code>WEBOBSIDIAN_PASSWORD</code> làm mật khẩu khôi phục (override) rồi đăng nhập lại để đổi
-        mật khẩu mới.
-      </p>
-    </div>
-  );
+function EditorSettings() {
+  const viewMode = useStore(state => state.viewMode);
+  return <div>
+    <h2>编辑器</h2>
+    <SettingGroup title="文档视图">
+      <Row name="当前编辑视图" desc="工作区使用的视图模式，也可在文档右下角切换。"><select value={viewMode} onChange={event => useStore.getState().setViewMode(event.target.value as typeof viewMode)}>
+        <option value="live">实时预览</option><option value="source">源码模式</option><option value="reading">阅读视图</option>
+      </select></Row>
+    </SettingGroup>
+  </div>;
 }
 
 function About() {
-  const logout = async () => {
-    await api.logout();
-    location.reload();
-  };
-  return (
-    <div>
-      <h2>About WebObsidian</h2>
-      <p style={{ color: 'var(--text-muted)' }}>
-        A self-hosted, Obsidian-compatible web app. Vault, QMD search, GitHub sync (with LFS), agent API and
-        community plugins.
-      </p>
-      <button className="btn danger" onClick={logout}>
-        Log out
-      </button>
-    </div>
-  );
+  return <div>
+    <h2>关于 WebObsidian</h2>
+    <p>面向个人知识管理与写作的笔记应用，提供 Markdown 编辑、公式与片段、文档格式化、搜索、白板和可配置工作流。</p>
+    <SettingGroup title="项目">
+      <Row name="项目仓库" desc="个人维护与定制版本"><a href="https://github.com/AlexbeatsZ/webobsidian" target="_blank" rel="noreferrer">AlexbeatsZ/webobsidian</a></Row>
+      <Row name="GitHub"><a href="https://github.com/AlexbeatsZ" target="_blank" rel="noreferrer">AlexbeatsZ</a></Row>
+      <Row name="Fork 来源" desc="基于 xnohat/webobsidian 继续开发"><a href="https://github.com/xnohat/webobsidian" target="_blank" rel="noreferrer">xnohat/webobsidian</a></Row>
+    </SettingGroup>
+  </div>;
 }
-
-function SearchSettingsPanel({ focus }: { focus: string }) {
+function SearchSettingsPanel() {
   const { settings } = useSearch();
-  const panel = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (focus) {
-      const input = [...panel.current!.querySelectorAll<HTMLInputElement>('[data-command]')].find(
-        (el) => el.dataset.command === focus,
-      );
-      input?.focus();
-      input?.scrollIntoView({ block: 'center' });
-    }
-  }, [focus]);
   const [rules, setRules] = useState(settings.fuzzyRules.map((r) => r.join('=')).join(', '));
   const [error, setError] = useState('');
   const save = (patch: Parameters<typeof updateSearch>[0]) => {
     setError('');
     void updateSearch(patch).catch((e) => setError(String(e)));
   };
-  const commandNames = new Map(sharedApp.commands.listCommands().map(command => [command.id, command.name]));
   const toggles = [
     ['enabled', '中文拼音搜索'],
     ['traditional', '繁体字拼音'],
@@ -940,8 +669,8 @@ function SearchSettingsPanel({ focus }: { focus: string }) {
     ['headingIndent', '标题层级缩进'],
   ] as const;
   return (
-    <div ref={panel}>
-      <h2>搜索与快捷键</h2>
+    <div>
+      <h2>搜索</h2>
       <SettingGroup title="搜索" desc="文件与正文搜索共用 #标签、-#排除；多个标签以空格分隔。#父标签 同时包含子标签。">
       {toggles.map(([key, label]) => (
         <Row key={key} name={label}>
@@ -975,25 +704,6 @@ function SearchSettingsPanel({ focus }: { focus: string }) {
           onChange={(e) => save({ historyKeys: e.target.value })}
         />
       </Row>
-      </SettingGroup>
-      <SettingGroup title="快捷键" desc="直接编辑快捷键，例如 Mod+O、Alt+H；留空使用默认行为。应用已有快捷键优先。">
-      {[
-        ...new Set([
-          ...commandNames.keys(),
-          ...Object.keys(settings.shortcuts),
-        ]),
-      ].map((id) => (
-        <Row key={id} name={commandNames.get(id) ?? id} desc={commandNames.has(id) ? id : undefined} className="setting-shortcut">
-          <input
-            className="text-input"
-            aria-label={`${commandNames.get(id) ?? id} 快捷键`}
-            placeholder="未设置"
-            data-command={id}
-            value={settings.shortcuts[id] ?? ''}
-            onChange={(e) => save({ shortcuts: { ...settings.shortcuts, [id]: e.target.value } })}
-          />
-        </Row>
-      ))}
       </SettingGroup>
       <p>{settings.migration}</p>
       {error && <p role="alert">{error}</p>}
