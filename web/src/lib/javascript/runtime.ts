@@ -21,14 +21,9 @@ class JavascriptBlock extends Component {
   private run?: JavascriptRun;
   private execute?: (...args: any[]) => Promise<unknown>;
   private error?: HTMLElement;
-  private button: HTMLButtonElement;
   constructor(private app: App, private source: string, private host: HTMLElement, private ctx: CodeBlockContext) {
     super();
     host.classList.add('interactive-js-render');
-    const toolbar = host.ownerDocument.createElement('div'); toolbar.className = 'interactive-js-toolbar';
-    this.button = host.ownerDocument.createElement('button'); this.button.type = 'button'; this.button.textContent = '重新运行';
-    this.button.addEventListener('click', () => { void this.render(); });
-    toolbar.append(this.button); host.append(toolbar);
   }
   onload() { return this.render(); }
   onunload() { this.disposed = true; window.clearTimeout(this.timer); this.error?.remove(); }

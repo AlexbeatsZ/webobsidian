@@ -92,7 +92,5 @@
 
 .native-js-code-block { position: relative; padding-block: 8px; }
 .native-js-code-block:hover > .cm-source-toggle, .native-js-code-block:focus-within > .cm-source-toggle { opacity: 1; }
-.interactive-js-toolbar { display: flex; justify-content: flex-end; gap: 8px; padding: 4px 28px 8px 0; }
-.interactive-js-toolbar button { font: inherit; font-size: 12px; }
 .interactive-js-output { min-width: 0; overflow-wrap: anywhere; }
 .interactive-js-output canvas, .interactive-js-output svg { max-width: 100%; }

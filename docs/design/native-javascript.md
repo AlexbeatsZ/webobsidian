@@ -13,6 +13,21 @@ access, including Vault writes. Private reading views allow these interactive
 blocks: text readOnly does not sandbox trusted JS. Restricted contexts, public
 shares and print do not execute scripts. Keep HTML's iframe execution separate.
 
+## Chart presentation correction (2026-10-23)
+
+The user treats these blocks as automatically rendered charts and controls. The
+block supplies no run/retry/stop/status toolbar. Keep only the shared host's `</>`
+source entry; leaving source remounts the rendered output. Initial mounting and
+source changes execute automatically. Preserve mapped instance identity during
+ordinary cursor motion and unrelated edits, and keep declared watch dependencies
+responsive through the existing JavascriptRun. User-authored chart/control DOM
+is separate from application-provided block tools.
+
+This correction removes the former JavascriptBlock button/toolbar and its CSS,
+without changing the shared host, compiler, cache, source lifecycle or widgets.
+Only source/Git diff inspection is authorized for this follow-up: no tests,
+typecheck/build/probes, runtime/UI/performance acceptance or new test authoring.
+
 ## Ownership and dependency direction
 
 - The existing `obsidian/markdown.ts` code-block host owns selection, decoration,
@@ -28,7 +43,8 @@ shares and print do not execute scripts. Keep HTML's iframe execution separate.
   `JavascriptRun` from `javascript/lifetime.ts`, also used by Vault-defined block
   effects. This extraction preserves one implementation of abort, late cleanup,
   dependency subscriptions and non-executing Markdown mounts without bringing
-  widgets/chart installation into effects. Source, dependency changes and rerun replace a run.
+  widgets/chart installation into effects. Source and declared dependency changes
+  replace a run; returning from source creates a fresh mounted block.
   Disposal aborts helpers, detaches old output and releases owned resources.
 - `javascript/charts.ts` loads in a dynamic chunk before the first script runs.
   Share one loading promise and retain synchronous chart/echarts interfaces.
@@ -71,12 +87,12 @@ Vault, replace server/public or build a new portable package. Preserve the activ
 four-feature integration's changes in shared files; commit only this task's hunks.
 
 Checks must cover inert fences, directive placement, equal-source siblings, prefix
-position mapping, source controls, rerun/unmount during async work, late cleanup,
+position mapping, source controls, dependency refresh/unmount during async work, late cleanup,
 dependency create/delete/rename, unsaved target reads, target-relative Callouts,
 nested execution suppression and share/print capability denial. Actual UI,
 compatibility and performance acceptance remain unverified until user testing.
 
-## Implementation evidence
+## Historical implementation evidence (2026-10-22)
 
 Fresh core/search compilation, web/server/desktop types, prepared regression-source
 types, isolated production web and standalone server static guard/syntax checks
