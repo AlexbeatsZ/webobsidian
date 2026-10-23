@@ -179,13 +179,24 @@ and `ListMark` children into multiline inline nodes. Those children remain owned
 by the quote/list prefix path, so entering or leaving emphasis cannot remove the
 prefix box. The existing math-delimiter ownership guard remains in force.
 
+The line-level exclusion must also distinguish block code from inline code.
+Lezer's multiline InlineCode source range can cover an entire continuation line,
+including a structural QuoteMark injected inside that node. Block code, HTML and
+math still skip the whole line before structural layout. Inline code remains in
+the existing literal ranges, but its quote/list prefix and continuation indentation
+first go through the same native prefix path as ordinary text. The body passes
+then skip a fully covered literal line; inline HTML rendering also honors the
+existing literal-range guard. This preserves literal body text without exposing
+the structural marker or introducing a second parser/layout path.
+
 Document, viewport and geometry changes remain invalidations for font/layout
 changes. Queries exclude nested editor content. Native Callout spacing/frame
 width is fixed to the existing column, allowing formula metrics to depend on
 that column instead of intrinsic formula width feeding back into the frame.
 Original vertical measured padding and native caret text stay in place. No measured speedup is
-claimed. UI, keyboard, readonly, IME, selection, nested folding and performance
-remain unverified under the user's no-acceptance instruction.
+claimed. Earlier changes were source-only. The user's temporary testing
+authorization now permits focused regression and isolated native acceptance;
+results and remaining gaps belong to the current test/acceptance reports.
 
 ## Callout 第一行公式源码入口（2026-10-23）
 

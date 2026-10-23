@@ -1796,7 +1796,8 @@ function buildDecorations(view: EditorView): DecorationSet {
     const from = equation.anchor.from - equationInfo.from, to = equation.anchor.to - equationInfo.from;
     if (from >= 0 && to <= doc.length && !lineActive(from)) pushReplace(from, to, Decoration.replace({}));
   }
-  const codeRanges = [...model.literal, ...model.html, ...model.entities, ...view.state.field(blockModel).math];
+  const lineExcludedRanges = [...model.html, ...model.entities, ...view.state.field(blockModel).math];
+  const codeRanges = [...model.literal, ...lineExcludedRanges];
   const inCode = (from: number, to: number, ignoreMath = false) => {
     for (const r of codeRanges) if (from < r.to && to > r.from) return true;
     return !ignoreMath && mathRanges.some(r => r.kind === 'dollar' && from < r.to && to > r.from);
@@ -1813,9 +1814,10 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (blockEffectOwns(view.state, node) || sourceOwns(view.state, node) ||
           mathRanges.some(formula => formula.kind === 'dollar' && node.from >= formula.from && node.to <= formula.to)) return false;
 
-        // Record code spans/blocks so the regex passes below can skip them.
-        if (name === 'InlineCode' || name === 'FencedCode' || name === 'CodeBlock') {
-          codeRanges.push({ from: node.from, to: node.to });
+        // Only block code excludes whole lines before structural prefixes.
+        // InlineCode is already in model.literal and can contain QuoteMark.
+        if (name === 'FencedCode' || name === 'CodeBlock') {
+          lineExcludedRanges.push({ from: node.from, to: node.to });
         }
 
         // Don't decorate inside a rendered table/HTML block — their fields own it.
@@ -1943,8 +1945,8 @@ function buildDecorations(view: EditorView): DecorationSet {
       if (renderedTable(line.from, line.to) || renderedHtml(line.from, line.to)) continue;
       // Skip the frontmatter block (rendered by frontmatterField).
       if (line.to <= fmEnd) continue;
-      // Skip lines fully inside code (fences) — bullets/tags there are literal.
-      if (codeRanges.some((r) => r.from <= line.from && r.to >= line.to)) continue;
+      // Block code / HTML / math owns the entire line, including its prefix.
+      if (lineExcludedRanges.some((r) => r.from <= line.from && r.to >= line.to)) continue;
       // Whole-line %% block comment region → grey out, keep raw.
       if (commentLines.has(ln)) {
         all.push(Decoration.line({ class: 'cm-comment' }).range(line.from, line.from));
@@ -1953,7 +1955,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       // Inline-HTML paragraph line (e.g. `<u>…</u> và <mark>…`): Lezer only marks
       // block-level openers as HTMLBlock, so render whole-line inline HTML here.
-      if (/^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from) && !view.state.field(syntaxModel).html.some((tag) => tag.from >= line.from && tag.to <= line.to)) {
+      if (/^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from) && !inCode(line.from, line.to) && !view.state.field(syntaxModel).html.some((tag) => tag.from >= line.from && tag.to <= line.to)) {
         pushReplace(line.from, line.to, Decoration.replace({ widget: new HtmlBlockWidget(text, { from: line.from, to: line.to }) }));
         continue;
       }
@@ -2058,6 +2060,11 @@ function buildDecorations(view: EditorView): DecorationSet {
           }
         }
       }
+
+      // A multiline inline-code span can cover a whole continuation line.
+      // Its quote/list prefixes still belong to the structural layout above;
+      // only the remaining body passes must stay literal.
+      if (codeRanges.some((r) => r.from <= line.from && r.to >= line.to)) continue;
 
       // Inline tags → pill styling. Charset per §7; an editor tag must contain a
       // letter and a pure-number tag (#123) is not a tag.

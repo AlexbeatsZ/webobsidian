@@ -168,6 +168,28 @@ These are source-supported defects and corrections, not a reproduced UI trace or
 a measured performance improvement. No extra parser, fold state, observer or
 keyboard/selection pipeline was introduced.
 
+## Multiline inline-code continuation correction
+
+The authorized focused browser run reached editor assertions: five cases passed
+and the multiline inline-code case failed because only one quote prefix was
+decorated. The failure screenshot exposes `>` on the second line. Reading the
+installed Lezer parser for `> - ` followed by a backtick, `QuoteFirst`, newline,
+`>   QuoteSecond` and the closing backtick gives an InlineCode node with children
+CodeMark, QuoteMark, CodeMark, all within the original ListItem/Paragraph. The
+second marker is therefore structural; the fixture's two-prefix expectation is
+valid. Its full source line lies inside InlineCode's source extent, so the old
+whole-line `codeRanges` skip bypassed both quote and list prefix decorations.
+
+The existing decoration traversal now adds only block code to the pre-structure
+whole-line exclusions, retaining HTML/entity/math exclusions there. InlineCode
+already belongs to the immutable model's literal ranges, so the redundant code
+range registration was removed. A fully covered literal continuation passes
+through the existing quote/list/indent path before skipping body processing.
+The earlier whole-line inline-HTML branch now checks that same literal guard.
+There is no new parser, cached index, observer, prefix renderer or input pipeline.
+This correction requires the test owner's rerun; the earlier five passing cases
+do not establish that the revised source passes, and portable 0.1.15 predates it.
+
 ## Validation boundary
 
 The Callout Backspace report has a distinct source-supported path: the test-copy
@@ -184,7 +206,10 @@ event-level evidence proves whether that exact merge or a misplaced selection
 caused the user's reported operation; source disappearance and source deletion
 must remain distinguished. Shared owns the independent formula hit-testing work.
 
-Only archive/source/dependency reads, screenshot inspection and Git diff checks.
-No tests, typechecks, builds, probes, app/server/browser launches, interaction,
-IME/performance acceptance or new tests. Actual click/caret, multi-line quote,
-heading wrap and keyboard behavior remain unverified until user acceptance.
+The initial source batches used only archive/source/dependency reads, screenshot
+inspection and Git diff checks, with no executable acceptance. The user later
+temporarily authorized builds, focused tests and isolated native interaction for
+this prefix review. The multiline-code section records the pre-fix regression
+result; its post-fix rerun and remaining acceptance gaps belong to the current
+test/acceptance reports. No broad IME, performance or all-heading-wrap claim is
+implied by the targeted checks.
