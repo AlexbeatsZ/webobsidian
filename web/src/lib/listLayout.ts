@@ -1,7 +1,7 @@
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
-import type { EditorState, Line } from '@codemirror/state';
+import { countColumn, type EditorState, type Line } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
-import { stripQuotePrefix } from '@webobsidian/markdown-core';
+import { stripQuotePrefix, type MarkdownModel, type SourceSpan } from '@webobsidian/markdown-core';
 import { syntaxModel } from './syntaxModel';
 
 /** One source owner for list headers and marker-free paragraphs/continuations. */
@@ -22,6 +22,40 @@ export function markdownListLine(state: EditorState, line: Line) {
       header: state.doc.lineAt(node.from).from === line.from };
   }
   return null;
+}
+
+const foldBounds = new WeakMap<MarkdownModel, Map<number, { tabSize: number; range: SourceSpan | null }>>();
+
+/** UI folding requires explicit source indentation, even for grammar-lazy text. */
+export function markdownListFold(state: EditorState, line: Line): SourceSpan | null {
+  const context = markdownListLine(state, line);
+  if (!context?.header) return null;
+  const model = state.field(syntaxModel);
+  let cached = foldBounds.get(model);
+  if (!cached) { cached = new Map(); foldBounds.set(model, cached); }
+  const known = cached.get(line.from);
+  if (known?.tabSize === state.tabSize) return known.range;
+
+  const marker = context.item.getChild('ListMark');
+  let end = line.to;
+  if (marker) {
+    const afterMarker = marker.to - line.from;
+    const whitespace = line.text.slice(afterMarker).match(/^[ \t]*/)?.[0] ?? '';
+    const contentColumn = countColumn(line.text.slice(context.quoteTo, afterMarker + whitespace.length), state.tabSize);
+    const last = state.doc.lineAt(context.item.to).number;
+    for (let number = line.number + 1; number <= last; number++) {
+      const candidate = state.doc.line(number);
+      const body = stripQuotePrefix(candidate.text, context.quoteDepth);
+      if (!body.trim()) continue;
+      const quotes = candidate.text.match(/^(?: {0,3}> ?)+/)?.[0].match(/>/g)?.length ?? 0;
+      const indent = body.match(/^[ \t]*/)?.[0] ?? '';
+      if (quotes < context.quoteDepth || countColumn(indent, state.tabSize) < contentColumn) break;
+      end = Math.min(candidate.to, context.item.to);
+    }
+  }
+  const range = end > line.to ? { from: line.to, to: end } : null;
+  cached.set(line.from, { tabSize: state.tabSize, range });
+  return range;
 }
 
 /** Measure the actual rendered marker (font/widgets included), not a guessed ch width. */

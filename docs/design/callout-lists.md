@@ -18,6 +18,10 @@ The title caret does not force a folded body open. Closing with a caret/selectio
 inside the body moves the view selection to the end of the title in the same
 transaction. Fold controls are native buttons with an expanded state and work in
 readonly views without editing the document. Click handling yields during IME.
+The title fold button inherits the title's font and line-height, so its `1lh`
+button box centers the SVG on the text line instead of using native button font
+metrics. The SVG is a block inside the centered flex button. This does not change
+CodeMirror's text lines or mouse dispatch.
 
 The whole-Callout source button has been removed. Its title and body remain native
 CodeMirror text. Only a touched title prefix or quote prefix reveals source; the
@@ -59,11 +63,30 @@ Key ordering is: active suggester, native snippet/tabstop/math tabout, contextua
 list indentation, generic Tab. `markdownListKeymap` is installed by MarkdownView
 before `indentWithTab`; native `snippetStateField` is installed at high precedence.
 
-`listFolding` resolves multiline ListItem ranges from the immutable syntax tree
-at visible line ends and supplies them to CodeMirror's foldService. Its controls
+`listFolding` resolves ListItem ownership from the immutable syntax tree, then
+`markdownListFold` in the existing listLayout limits its fold extent to explicit
+source indentation. A nonblank continuation must reach the item's content column
+after its quote prefix. The first unindented/dedented paragraph ends the fold,
+even if Markdown's lazy-continuation grammar still includes it in the ListItem.
+Real indented paragraphs and child items remain eligible; whitespace before the
+next outside paragraph remains visible. Source is never rewritten. Bounds are
+cached by immutable model, header position and tab size, rather than rescanned on
+each selection update.
+
+The narrowed range is supplied to CodeMirror's foldService. Its controls
 call native foldEffect/unfoldEffect and use native foldedRanges. Parent and child
 folds share the same per-view state as keyboard folding. There is no second fold
-set. Hidden-body selections move to the parent line when closing. Readonly views
+set. A transaction extender normalizes native fold requests and mapped existing
+folds after document changes, because returning null from foldService still lets
+CodeMirror fall back to the grammar's full ListItem range. The extender appends
+native unfold/fold effects within the same transaction; it never dispatches a
+second transaction or introduces custom folded state. Smaller native/plugin folds
+remain smaller. With no active fold or fold request,
+the extender does not instantiate a new state on document edits. When a changed
+document needs correction, it reuses the existing `adoptSyntaxModel` effect so
+the final transaction retains the already analyzed immutable model.
+Hidden-body selections
+move to the parent line when closing. Readonly views
 may fold without changing source; source mode keeps the normal code-fold commands
 without the live list buttons. Explicit source/block-effect ownership hides list
 controls until the shared invalidation contract releases the region.
@@ -74,6 +97,20 @@ centers. Marker-free ListItem lines receive the same guide and hanging-layout
 measurement as headers, using their actual source whitespace. Marker-shaped text
 without a ListItem syntax owner stays literal. Chevron paths come from the existing
 icon catalog.
+
+The list fold button has a zero-width inline anchor whose inherited `1lh` height
+tracks the first line. Folded line decoration drives both chevron and bullet
+through the existing `--interactive-accent`. Native `.cm-foldPlaceholder` gets
+transparent/rest and theme-token hover/foreground styles instead of CodeMirror's
+hardcoded light background and border.
+
+List whitespace must not inherit the parent line's negative hanging
+`text-indent` inside `.cm-indent` inline blocks. The list-scoped indent span resets
+`text-indent: 0` and uses `white-space: pre`; its actual spaces/tabs retain their
+source width. Bullet and ordered-marker spacing is no longer collapsed to a
+single space. These changes preserve the four-column source step in rendered
+headers and marker-free continuations without inventing a CSS-only indent level
+or changing the existing hanging-layout measurement formula.
 
 ## List layout invalidation
 

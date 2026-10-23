@@ -1937,24 +1937,12 @@ function buildDecorations(view: EditorView): DecorationSet {
       } else {
         const bullet = prefix ? body.match(/^([ \t]*)([-*+])([ \t]+)/) : null;
         if (bullet) {
-          // Replace the `-`/`*`/`+` marker with a bullet and collapse its trailing
-          // whitespace to a single space, so `-   Item` reads `• Item` like Obsidian.
+          // Replace only the marker. Source whitespace keeps the same column
+          // widths in live and source mode, including tab-aligned list bodies.
           const start = bodyFrom + bullet[1].length;
           const markerEnd = start + 1;
-          const spaceEnd = markerEnd + bullet[3].length;
           if (!touches(start, markerEnd)) {
             pushReplace(start, markerEnd, Decoration.replace({ widget: new BulletWidget() }));
-            if (bullet[3].length > 1) pushReplace(markerEnd + 1, spaceEnd, hidden);
-          }
-        } else {
-          // Ordered list: keep the `1.` but collapse extra spaces after it.
-          const ol = prefix ? body.match(/^([ \t]*)(\d{1,9}[.)])([ \t]+)/) : null;
-          if (ol) {
-            if (ol[3].length > 1) {
-              const markerEnd = bodyFrom + ol[1].length + ol[2].length;
-              const spaceEnd = markerEnd + ol[3].length;
-              if (!touches(bodyFrom + ol[1].length, spaceEnd)) pushReplace(markerEnd + 1, spaceEnd, hidden);
-            }
           }
         }
       }

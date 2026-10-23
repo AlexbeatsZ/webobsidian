@@ -1,24 +1,27 @@
 import { codeFolding, foldEffect, foldedRanges, foldKeymap, foldService, unfoldEffect } from '@codemirror/language';
-import { type EditorState, type Range } from '@codemirror/state';
+import { EditorState, type Range, type StateEffect } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
-import { markdownListLine } from './listLayout';
+import { markdownListFold, markdownListLine } from './listLayout';
 import { livePreviewState } from './renderState';
 import { sourceOwns } from './sourceControls';
 import { blockEffectOwns } from './blocks/model';
 import { decorationInputsChanged } from './decorationDependencies';
 import { iconPaths } from './icons';
+import { adoptSyntaxModel, syntaxModel } from './syntaxModel';
 import '../styles/lists.css';
 
 /** Resolve the existing Markdown tree at one visible line, without rescanning notes. */
 function listRange(state: EditorState, from: number, to: number) {
-  const context = markdownListLine(state, state.doc.lineAt(from));
-  return context?.header && context.item.to > to ? { from: to, to: context.item.to } : null;
+  const range = markdownListFold(state, state.doc.lineAt(from));
+  return range && range.from === to ? range : null;
 }
 
 class ListFoldWidget extends WidgetType {
   constructor(readonly range: { from: number; to: number }, readonly folded: boolean) { super(); }
   eq(other: ListFoldWidget) { return this.range.from === other.range.from && this.range.to === other.range.to && this.folded === other.folded; }
   toDOM(view: EditorView) {
+    const anchor = document.createElement('span');
+    anchor.className = 'cm-list-fold-anchor';
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'cm-list-fold' + (this.folded ? ' is-folded' : '');
@@ -34,7 +37,8 @@ class ListFoldWidget extends WidgetType {
         ...(hidesCaret ? { selection: { anchor: this.range.from } } : {}),
       });
     });
-    return button;
+    anchor.appendChild(button);
+    return anchor;
   }
   ignoreEvent() { return true; }
 }
@@ -51,9 +55,13 @@ function build(view: EditorView): DecorationSet {
       const range = listRange(view.state, line.from, line.to);
       if (!range) continue;
       let collapsed = false;
-      folded.between(range.from, range.from, (from, to) => { if (from === range.from && to === range.to) collapsed = true; });
+      let controlRange = range;
+      folded.between(range.from, range.from, (from, to) => {
+        if (from === range.from && to <= range.to) { collapsed = true; controlRange = { from, to }; }
+      });
       const marker = line.text.match(/^(?: {0,3}> ?)*[ \t]*/)?.[0].length ?? 0;
-      decorations.push(Decoration.widget({ widget: new ListFoldWidget(range, collapsed), side: -1 }).range(line.from + marker));
+      if (collapsed) decorations.push(Decoration.line({ class: 'cm-list-folded' }).range(line.from));
+      decorations.push(Decoration.widget({ widget: new ListFoldWidget(controlRange, collapsed), side: -1 }).range(line.from + marker));
     }
   }
   return Decoration.set(decorations, true);
@@ -61,6 +69,26 @@ function build(view: EditorView): DecorationSet {
 
 export const listFolding = [
   codeFolding(), foldService.of(listRange), keymap.of(foldKeymap),
+  // A null fold service result falls back to Markdown's whole ListItem. Keep
+  // every native keyboard/plugin request inside the same explicit source bound.
+  EditorState.transactionExtender.of(transaction => {
+    const requestsFold = transaction.effects.some(effect => effect.is(foldEffect));
+    if (!requestsFold && (!transaction.docChanged || !foldedRanges(transaction.startState).size)) return null;
+    const state = transaction.state;
+    const effects: StateEffect<unknown>[] = [];
+    foldedRanges(state).between(0, state.doc.length, (from, to) => {
+      const line = state.doc.lineAt(from);
+      if (from !== line.to || !markdownListLine(state, line)?.header) return;
+      const range = markdownListFold(state, line);
+      if (range && to <= range.to) return;
+      effects.push(unfoldEffect.of({ from, to }));
+      if (range) effects.push(foldEffect.of(range));
+    });
+    // Extending reconstructs the transaction. Reuse the model already analyzed
+    // above rather than parsing the same document again for the added effects.
+    if (effects.length && transaction.docChanged) effects.push(adoptSyntaxModel.of(state.field(syntaxModel)));
+    return effects.length ? { effects } : null;
+  }),
   ViewPlugin.fromClass(class {
     decorations: DecorationSet;
     constructor(view: EditorView) { this.decorations = build(view); }
