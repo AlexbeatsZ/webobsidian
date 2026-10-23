@@ -1,14 +1,22 @@
 import { Prec, StateEffect, StateField, type EditorState } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from '@codemirror/view';
 import type { SourceSpan } from '@webobsidian/markdown-core';
+import { compositionSelection } from './editorSelection';
 
-export const toggleSourceRegion = StateEffect.define<SourceSpan | null>();
-export const sourceRegion = StateField.define<SourceSpan | null>({
+/** Omitted kind keeps an explicit fallback open until Close source/Escape. */
+interface SourceRegion extends SourceSpan { kind?: 'formula' | 'table' }
+export const toggleSourceRegion = StateEffect.define<SourceRegion | null>();
+export const sourceRegion = StateField.define<SourceRegion | null>({
   create: () => null,
   update(value, transaction) {
     if (transaction.state.readOnly) return null;
     for (const effect of transaction.effects) if (effect.is(toggleSourceRegion)) return effect.value;
-    return value ? { from: transaction.changes.mapPos(value.from, -1), to: transaction.changes.mapPos(value.to, 1) } : null;
+    if (!value) return null;
+    const mapped = transaction.docChanged ? { ...value,
+      from: transaction.changes.mapPos(value.from, -1), to: transaction.changes.mapPos(value.to, 1) } : value;
+    if (mapped.kind && !transaction.state.field(compositionSelection).selection.ranges.some(range =>
+      range.empty ? range.from >= mapped.from && range.from <= mapped.to : range.from < mapped.to && range.to > mapped.from)) return null;
+    return mapped;
   },
 });
 
@@ -37,7 +45,8 @@ export function sourceOwns(state: EditorState, range: SourceSpan): boolean {
   return Boolean(source && range.from >= source.from && range.to <= source.to);
 }
 
-export function sourceButton(view: EditorView, range: SourceSpan | (() => SourceSpan), label: string): HTMLButtonElement {
+export function sourceButton(view: EditorView, range: SourceSpan | (() => SourceSpan), label: string,
+  options: { kind?: SourceRegion['kind']; selection?: SourceSpan } = {}): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'cm-source-toggle';
@@ -51,7 +60,9 @@ export function sourceButton(view: EditorView, range: SourceSpan | (() => Source
     event.preventDefault(); event.stopPropagation();
     if (view.state.readOnly) return;
     const current = typeof range === 'function' ? range() : range;
-    view.dispatch({ effects: toggleSourceRegion.of(current), selection: { anchor: current.from }, scrollIntoView: true });
+    const selection = options.selection;
+    view.dispatch({ effects: toggleSourceRegion.of({ ...current, kind: options.kind }),
+      selection: { anchor: selection?.from ?? current.from, head: selection?.to ?? current.from }, scrollIntoView: true });
     view.focus();
   });
   return button;
@@ -76,13 +87,22 @@ class CloseSourceWidget extends WidgetType {
 }
 function closeDecoration(state: EditorState): DecorationSet {
   const source = state.field(sourceRegion);
-  return source ? Decoration.set([Decoration.widget({ widget: new CloseSourceWidget(), side: -1 }).range(source.from)]) : Decoration.none;
+  return source && !source.kind ? Decoration.set([Decoration.widget({ widget: new CloseSourceWidget(), side: -1 }).range(source.from)]) : Decoration.none;
 }
 const closeField = StateField.define<DecorationSet>({
-  create: closeDecoration, update: (_value, transaction) => closeDecoration(transaction.state),
+  create: closeDecoration, update: (value, transaction) =>
+    transaction.startState.field(sourceRegion) !== transaction.state.field(sourceRegion) ? closeDecoration(transaction.state) : value,
   provide: (field) => EditorView.decorations.from(field),
 });
-export const sourceControls = [sourceRegion, forcedRenderedRegion, closeField, Prec.highest(keymap.of([{ key: 'Escape', run(view) {
+export const sourceControls = [compositionSelection, sourceRegion, forcedRenderedRegion, closeField,
+  EditorView.domEventHandlers({ blur(event, view) {
+    if (event.relatedTarget instanceof Node && view.dom.contains(event.relatedTarget)) return false;
+    queueMicrotask(() => {
+      if (view.dom.isConnected && !view.hasFocus && view.state.field(sourceRegion)?.kind)
+        view.dispatch({ effects: toggleSourceRegion.of(null) });
+    });
+    return false;
+  } }), Prec.highest(keymap.of([{ key: 'Escape', run(view) {
   if (!view.state.field(sourceRegion)) return false;
   view.dispatch({ effects: toggleSourceRegion.of(null) }); return true;
 } }]))];

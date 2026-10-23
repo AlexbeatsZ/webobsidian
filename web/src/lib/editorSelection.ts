@@ -1,5 +1,23 @@
-import { EditorSelection, StateField, type EditorState } from '@codemirror/state';
+import { EditorSelection, StateEffect, StateField, type EditorState } from '@codemirror/state';
 import { Decoration, EditorView, RectangleMarker, layer, type DecorationSet } from '@codemirror/view';
+
+const composition = StateEffect.define<boolean>();
+/** All source reveal decisions use the same selection while IME owns the text. */
+export const compositionSelection = StateField.define<{ active: boolean; selection: EditorSelection }>({
+  create: (state) => ({ active: false, selection: state.selection }),
+  update(value, transaction) {
+    const change = transaction.effects.find((effect) => effect.is(composition));
+    const active = change ? change.value : value.active;
+    return { active, selection: active ? value.selection.map(transaction.changes) : transaction.newSelection };
+  },
+});
+export const compositionEvents = EditorView.domEventHandlers({
+  compositionstart(_event, view) { view.dispatch({ effects: composition.of(true) }); return false; },
+  compositionend(_event, view) {
+    queueMicrotask(() => { if (view.dom.isConnected) view.dispatch({ effects: composition.of(false) }); });
+    return false;
+  },
+});
 
 // The main selection belongs to the actual text DOM, including wrapped callout
 // lines. A rectangular background layer would sit behind opaque block frames

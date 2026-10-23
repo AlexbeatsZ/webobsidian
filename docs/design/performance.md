@@ -134,6 +134,48 @@ autosave. It commits source patches through the shared session history.
 These are architectural reductions in repeated work. Runtime throughput, typing
 latency and IME acceptance remain unmeasured under the static-only boundary.
 
+## Source controls and editor derivations (2026-10-22 opinions)
+
+The single sourceControls field distinguishes formula/table entries from explicit
+fallbacks. Formula/table entries map their source range through edits and close
+when all selections leave it or focus leaves the view. Nonempty selections use
+actual overlap; empty carets include both source boundaries. The same frozen IME
+selection is owned by editorSelection and consumed by source controls and all
+renderers. Explicit HTML/Mermaid/unsupported-structure entries keep their existing
+Close source/Escape semantics. Closing an entry reuses forcedRenderedRegion when
+the caret has no outside position. Source buttons share transparent normal and
+highlighted hover/focus styles; consumers can select a formula's body on entry.
+
+blockModel's existing WeakMap now also retains standalone-comment line membership,
+the existing formula-region array and closed single-line dollar formulas grouped
+by line. Multiline dollar formulas use block decorations even when their opening
+delimiter shares a line with text. Markdown tree/regex decorations exclude TeX
+regions; the formula renderer bypasses only that exclusion for its own range.
+These facts are derived once
+per immutable MarkdownModel, shared across views adopting that model, and reused
+for selection/viewport updates. The former buildDecorations scans are removed;
+there is no new parser, background job or Vault-wide index.
+
+livePreviewPlugin uses decorationInputsChanged rather than the presence of any
+effect. It additionally observes native folds, Callout folds and fenced-HTML
+render toggles. Shared dependencies cover document/render context, LaTeX visual
+configuration, readOnly/live modes, mapped source/forced-render ranges, block
+definitions and the frozen selection. Inline HTML, raw HTML and Mermaid consume
+that contract too; table/YAML fields remain independent of ordinary selection
+but still react when a source entry closes. Full-document wrappers remain intact.
+
+MarkdownView is the sole installation point for native math visuals, list folds
+and contextual list indentation; private writing extensions keep snippets and
+their higher key priority. These extensions do not read workspace state or own
+another DocumentSession. Formula presentation policy remains in mathPresentation,
+and list geometry measurement remains in listLayout.
+
+For this opinions batch the user's latest instruction explicitly forbids tests
+and acceptance, overriding the earlier runtime authorization. Only source and
+Git diff review were performed for this shared change. No type/build/unit/browser
+or app/server checks were run, no test cases were added, and no performance
+counts, timings or speedup are claimed. Runtime/UI/IME behavior remains unverified.
+
 ## Static evidence (2026-10-19)
 
 - Core compiled to an isolated temporary output; server/web/desktop type checks

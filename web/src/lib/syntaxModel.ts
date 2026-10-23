@@ -1,6 +1,6 @@
 import { StateEffect, StateField } from '@codemirror/state';
-import { analyzeMarkdown, updateMarkdown, extractMetadata, blockContainers, mathBlocks, tableModels, equationContext, type MarkdownModel, type Metadata } from '@webobsidian/markdown-core';
-import type { EditorState } from '@codemirror/state';
+import { analyzeMarkdown, updateMarkdown, extractMetadata, blockContainers, mathRegions, tableModels, equationContext, type MarkdownModel, type Metadata, type MathRegion, type MathBlock } from '@webobsidian/markdown-core';
+import type { EditorState, Text } from '@codemirror/state';
 import { renderContext } from './renderContext';
 
 export const equationsOf = (state: EditorState) => {
@@ -31,14 +31,40 @@ export const documentMetadata = StateField.define<Metadata>({
   update: (value, transaction) => transaction.docChanged ? extractMetadata(transaction.state.field(syntaxModel)) : value,
 });
 
-type Blocks = { containers: ReturnType<typeof blockContainers>; math: ReturnType<typeof mathBlocks>; tables: ReturnType<typeof tableModels> };
+type Blocks = {
+  containers: ReturnType<typeof blockContainers>; math: MathBlock[]; tables: ReturnType<typeof tableModels>;
+  mathRanges: readonly MathRegion[];
+  commentLines: ReadonlySet<number>; inlineMathByLine: ReadonlyMap<number, readonly MathRegion[]>;
+};
 const blockCache = new WeakMap<MarkdownModel, Blocks>();
-function blocks(model: MarkdownModel): Blocks {
+function blocks(model: MarkdownModel, doc: Text): Blocks {
   let value = blockCache.get(model);
-  if (!value) { value = { containers: blockContainers(model), math: mathBlocks(model), tables: tableModels(model) }; blockCache.set(model, value); }
+  if (!value) {
+    // These source facts do not change with selection or viewport. Derive them
+    // alongside the existing per-model blocks instead of rescanning on reveal.
+    const commentLines = new Set<number>();
+    let open = -1;
+    for (let n = 1; n <= doc.lines; n++) {
+      if (doc.line(n).text.trim() !== '%%') continue;
+      if (open < 0) open = n;
+      else { for (let k = open; k <= n; k++) commentLines.add(k); open = -1; }
+    }
+    const inlineMathByLine = new Map<number, MathRegion[]>();
+    const mathRanges = mathRegions(model);
+    for (const formula of mathRanges) {
+      if (!formula.closed || formula.block || formula.kind !== 'dollar' || formula.tex.includes('\n')) continue;
+      const number = doc.lineAt(formula.from).number;
+      const list = inlineMathByLine.get(number) ?? [];
+      list.push(formula); inlineMathByLine.set(number, list);
+    }
+    const math = mathRanges.filter(formula => formula.closed && formula.kind === 'dollar' &&
+      (formula.block || formula.tex.includes('\n'))).map(formula => ({ from: formula.from, to: formula.to, tex: formula.tex.trim() }));
+    value = { containers: blockContainers(model), math, tables: tableModels(model), mathRanges, commentLines, inlineMathByLine };
+    blockCache.set(model, value);
+  }
   return value;
 }
 export const blockModel = StateField.define<ReturnType<typeof blocks>>({
-  create: (state) => blocks(state.field(syntaxModel)),
-  update: (value, transaction) => transaction.docChanged ? blocks(transaction.state.field(syntaxModel)) : value,
+  create: (state) => blocks(state.field(syntaxModel), state.doc),
+  update: (value, transaction) => transaction.docChanged ? blocks(transaction.state.field(syntaxModel), transaction.newDoc) : value,
 });

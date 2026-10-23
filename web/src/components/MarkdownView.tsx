@@ -7,6 +7,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { editorSelection } from '../lib/editorSelection';
 import { bindFragmentNavigation } from '../lib/fragmentNavigation';
 import { nativeWritingExtensions } from '../lib/writing/extensions';
+import { mathEditingExtensions } from '../lib/writing/latex/editor_extensions/math_tooltip';
 import { captureWritingState, restoreWritingState, snippetChangeEffects, writingOperation, snippetGroup, type WritingViewState } from '../lib/writing/editing';
 import { formatPaste } from '../lib/writing/format';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
@@ -16,13 +17,14 @@ import { languages } from '@codemirror/language-data';
 import { syntaxHighlighting } from '@codemirror/language';
 import { analyzeMarkdown, bodyHeadingSyntax, changesBetween, type DocumentSnapshot, type SourceChange, type MarkdownModel, type EditHistoryState } from '@webobsidian/markdown-core';
 import { obsidianHighlightStyle } from '../lib/highlight';
-import { obsidianKeymap } from '../lib/editorCommands';
+import { obsidianKeymap, markdownListKeymap } from '../lib/editorCommands';
 import { suggesterPlugin } from '../lib/suggest';
 import { syntaxModel, adoptSyntaxModel, documentMetadata, blockModel } from '../lib/syntaxModel';
 import { inlineHtml } from '../lib/inlineHtml';
 import { sourceControls } from '../lib/sourceControls';
 import { semanticDecorations } from '../lib/semanticDecorations';
 import { listLayout } from '../lib/listLayout';
+import { listFolding } from '../lib/listFolding';
 import { blockLayout } from '../lib/blockLayout';
 import { blockEffects } from '../lib/blocks/view';
 import { blockEffectSyntax } from '@webobsidian/markdown-core';
@@ -268,9 +270,10 @@ export default function MarkdownView(props: MarkdownViewProps) {
           }),
         ])),
         search({ top: true }),
-        keymap.of([...defaultKeymap, ...searchKeymap, indentWithTab]),
+        keymap.of([...defaultKeymap, ...searchKeymap, ...markdownListKeymap, indentWithTab]),
         markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax, blockEffectSyntax] }),
         suggesterPlugin,
+        mathEditingExtensions,
         ...(p.context.allowPlugins ? [nativeWritingExtensions()] : []),
         syntaxHighlighting(obsidianHighlightStyle),
         EditorView.lineWrapping,
@@ -281,7 +284,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         codeBlocks,
         ...(p.context.allowPlugins ? [pluginPostProcessing] : []),
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,
-        inlineHtml, semanticDecorations, mathBlockField, blockLayout, livePreviewPlugin, livePreviewTheme, listLayout,
+        inlineHtml, semanticDecorations, mathBlockField, blockLayout, listFolding, livePreviewPlugin, livePreviewTheme, listLayout,
         EditorView.updateListener.of((u) => {
           if (!u.docChanged || u.transactions.every((tr) => tr.annotation(externalUpdate))) return;
           const changes: SourceChange[] = [];

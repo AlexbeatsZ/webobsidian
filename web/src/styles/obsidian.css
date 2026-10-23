@@ -663,9 +663,11 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .md-html-mark { background: var(--text-highlight-bg); color: inherit; }
 .md-html-kbd { font-family: var(--font-mono); background: var(--background-primary-alt); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); padding: 0 3px; }
 .cm-html-break { display: inline; }
-.cm-source-toggle { position: absolute; right: 4px; top: 2px; z-index: 2; font: 12px var(--font-mono); color: var(--text-muted); background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 4px; cursor: pointer; opacity: 0; }
+.cm-source-toggle { position: absolute; right: 4px; top: 2px; z-index: 2; font: 12px var(--font-mono); color: var(--text-muted); background: transparent; border: 0; border-radius: 4px; padding: 3px 5px; cursor: pointer; opacity: 0; }
+.cm-source-toggle:hover, .cm-source-toggle:focus-visible { color: var(--text-normal); background: var(--background-modifier-hover); }
+.cm-source-toggle:active { background: var(--background-modifier-active-hover); }
 .cm-table-frame:hover > .cm-source-toggle, .cm-properties:hover > .cm-source-toggle, .cm-html-block:hover > .cm-source-toggle,
-.md-callout-title:hover .cm-callout-source, .md-callout-title:focus-within .cm-callout-source, .cm-source-toggle:focus-visible { opacity: 1; }
+.cm-source-toggle:focus-visible { opacity: 1; }
 .cm-source-close { font: 12px var(--font-ui); margin-right: 8px; cursor: pointer; }
 .is-reading-mode .cm-source-toggle { display: none; }
 .cm-properties, .cm-html-block { position: relative; }

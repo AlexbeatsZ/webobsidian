@@ -6,8 +6,8 @@ import {
   ViewUpdate,
   WidgetType,
 } from '@codemirror/view';
-import { StateField, StateEffect, type EditorState, type Range, type Text } from '@codemirror/state';
-import { getIndentUnit, syntaxTree } from '@codemirror/language';
+import { StateField, StateEffect, type EditorState, type Range } from '@codemirror/state';
+import { getIndentUnit, foldedRanges } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { iconPaths } from './icons';
 import { openLightbox } from './imageLightbox';
@@ -15,15 +15,15 @@ import { applyImagePresentation, presentHtmlImages } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
 import { syntaxModel, blockModel, equationsOf } from './syntaxModel';
 import { compositionSelection } from './inlineHtml';
-import { sourceButton, sourceIsOpen, sourceOwns, forceRendered, toggleSourceRegion } from './sourceControls';
+import { sourceButton, sourceIsOpen, sourceOwns, forceRendered } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, mathRegions, type MathRegion, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
+import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { renderMath, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
 import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } from './writing/latex/editor_context/mathPresentation';
 import { decorationInputsChanged } from './decorationDependencies';
-import { blockEffectOwns, refreshBlockEffects } from './blocks/model';
+import { blockEffectOwns } from './blocks/model';
 import { equationLabel, equationTarget, equationAt, fragmentRange, parseLinkTarget, type Equation } from '@webobsidian/markdown-core';
 
 /**
@@ -626,7 +626,7 @@ export const mathBlockField = StateField.define<DecorationSet>({
 export const mermaidField = StateField.define<DecorationSet>({
   create: (state) => buildMermaid(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(refreshBlockEffects))) {
+    if (decorationInputsChanged(tr)) {
       return buildMermaid(tr.state);
     }
     return value.map(tr.changes);
@@ -645,7 +645,7 @@ export const toggleHtmlRender = StateEffect.define<number>();
 export const htmlRenderedState = StateField.define<readonly number[]>({
   create: () => [],
   update(value, tr) {
-    let v = tr.docChanged ? value.map((p) => tr.changes.mapPos(p, 1)) : [...value];
+    let v = tr.docChanged ? value.map((p) => tr.changes.mapPos(p, 1)) : value;
     for (const e of tr.effects) {
       if (e.is(toggleHtmlRender)) {
         v = v.includes(e.value) ? v.filter((x) => x !== e.value) : [...v, e.value];
@@ -749,8 +749,7 @@ export const htmlPreviewField = StateField.define<DecorationSet>({
   create: (state) => buildHtmlPreview(state),
   update(value, tr) {
     if (
-      tr.docChanged ||
-      tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(refreshBlockEffects) || e.is(toggleHtmlRender))
+      decorationInputsChanged(tr, false) || tr.effects.some((e) => e.is(toggleHtmlRender))
     ) {
       return buildHtmlPreview(tr.state);
     }
@@ -1594,22 +1593,7 @@ function buildDecorations(view: EditorView): DecorationSet {
     return touches(line.from, line.to);
   };
 
-  const total = doc.lines;
-  // Block comments: standalone `%%` fence lines toggle a commented region (§7).
-  const commentLines = new Set<number>();
-  {
-    let open = -1;
-    for (let n = 1; n <= total; n++) {
-      if (doc.line(n).text.trim() === '%%') {
-        if (open < 0) {
-          open = n;
-        } else {
-          for (let k = open; k <= n; k++) commentLines.add(k);
-          open = -1;
-        }
-      }
-    }
-  }
+  const { commentLines, inlineMathByLine, mathRanges } = view.state.field(blockModel);
   // Frontmatter range (rendered by frontmatterField) — the regex passes skip it.
   const fmEnd = view.state.field(syntaxModel).frontmatter?.to ?? 0;
 
@@ -1637,26 +1621,21 @@ function buildDecorations(view: EditorView): DecorationSet {
     if (from >= 0 && to <= doc.length && !lineActive(from)) pushReplace(from, to, Decoration.replace({}));
   }
   const codeRanges = [...model.literal, ...model.html, ...model.entities, ...view.state.field(blockModel).math];
-  const inCode = (from: number, to: number) => {
+  const inCode = (from: number, to: number, ignoreMath = false) => {
     for (const r of codeRanges) if (from < r.to && to > r.from) return true;
-    return false;
+    return !ignoreMath && mathRanges.some(r => r.kind === 'dollar' && from < r.to && to > r.from);
   };
 
   const tree = view.state.field(syntaxModel).tree;
 
-  const inlineMathByLine = new Map<number,MathRegion[]>();
-  for(const formula of mathRegions(view.state.field(syntaxModel))) {
-    if(!formula.closed||formula.block||formula.kind!=='dollar')continue;
-    const number=doc.lineAt(formula.from).number;
-    const list=inlineMathByLine.get(number)??[];list.push(formula);inlineMathByLine.set(number,list);
-  }
   for (const { from, to } of view.visibleRanges) {
     tree.iterate({
       from,
       to,
       enter: (node) => {
         const name = node.name;
-        if (blockEffectOwns(view.state, node) || sourceOwns(view.state, node) || view.state.field(blockModel).math.some((block) => node.from >= block.from && node.to <= block.to)) return false;
+        if (blockEffectOwns(view.state, node) || sourceOwns(view.state, node) ||
+          mathRanges.some(formula => formula.kind === 'dollar' && node.from >= formula.from && node.to <= formula.to)) return false;
 
         // Record code spans/blocks so the regex passes below can skip them.
         if (name === 'InlineCode' || name === 'FencedCode' || name === 'CodeBlock') {
@@ -2230,7 +2209,7 @@ function buildHtmlBlocks(state: EditorState): DecorationSet {
     if (sourceIsOpen(state, b) || blockEffectOwns(state, b)) continue;
     let touched = false;
     if (!ro && !forceRendered(state, b))
-      for (const r of state.selection.ranges) {
+      for (const r of state.field(compositionSelection).selection.ranges) {
         if (r.empty && r.from <= b.to && r.to >= b.from) {
           touched = true;
           break;
@@ -2246,7 +2225,7 @@ function buildHtmlBlocks(state: EditorState): DecorationSet {
 export const htmlBlockField = StateField.define<DecorationSet>({
   create: (state) => buildHtmlBlocks(state),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled) || e.is(setLivePreviewReadonly) || e.is(toggleSourceRegion) || e.is(refreshBlockEffects))) {
+    if (decorationInputsChanged(tr)) {
       return buildHtmlBlocks(tr.state);
     }
     return value.map(tr.changes);
@@ -2265,7 +2244,9 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
         this.decorations = Decoration.none;
         return;
       }
-      if (u.docChanged || u.selectionSet || u.viewportChanged || u.transactions.some((t) => t.effects.length)) {
+      if (u.viewportChanged || u.transactions.some((tr) => decorationInputsChanged(tr) ||
+        tr.effects.some(effect => effect.is(toggleCalloutFold) || effect.is(toggleHtmlRender))) ||
+        foldedRanges(u.startState) !== foldedRanges(u.state)) {
         this.decorations = buildDecorations(u.view);
       }
     }

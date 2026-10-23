@@ -1,20 +1,13 @@
-import { EditorSelection, StateEffect, StateField, type EditorState, type Range } from '@codemirror/state';
+import { StateField, type EditorState, type Range } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import { caretTouches, decodeHtmlEntity, simpleHtmlTags, type HtmlToken, type SourceSpan } from '@webobsidian/markdown-core';
 import { syntaxModel, blockModel } from './syntaxModel';
-import { sourceIsOpen, forceRendered, toggleSourceRegion } from './sourceControls';
-import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { blockEffectOwns, refreshBlockEffects } from './blocks/model';
-
-const composition = StateEffect.define<boolean>();
-export const compositionSelection = StateField.define<{ active: boolean; selection: EditorSelection }>({
-  create: (state) => ({ active: false, selection: state.selection }),
-  update(value, transaction) {
-    const change = transaction.effects.find((effect) => effect.is(composition));
-    const active = change ? change.value : value.active;
-    return { active, selection: active ? value.selection.map(transaction.changes) : transaction.newSelection };
-  },
-});
+import { sourceIsOpen, forceRendered } from './sourceControls';
+import { livePreviewState, livePreviewReadonly } from './renderState';
+import { blockEffectOwns } from './blocks/model';
+import { compositionSelection, compositionEvents } from './editorSelection';
+import { decorationInputsChanged } from './decorationDependencies';
+export { compositionSelection } from './editorSelection';
 
 class BreakWidget extends WidgetType {
   constructor(readonly from: number, readonly to: number) { super(); }
@@ -80,17 +73,9 @@ function build(state: EditorState): DecorationSet {
 const htmlField = StateField.define<DecorationSet>({
   create: build,
   update(value, transaction) {
-    return transaction.docChanged || transaction.selection || transaction.effects.some((effect) =>
-        effect.is(composition) || effect.is(refreshBlockEffects) || effect.is(setLivePreviewEnabled) || effect.is(setLivePreviewReadonly) || effect.is(toggleSourceRegion))
-      ? build(transaction.state) : value;
+    return decorationInputsChanged(transaction) ? build(transaction.state) : value;
   },
   provide: (field) => EditorView.decorations.from(field),
 });
 
-export const inlineHtml = [compositionSelection, htmlField, EditorView.domEventHandlers({
-  compositionstart(_event, view) { view.dispatch({ effects: composition.of(true) }); return false; },
-  compositionend(_event, view) {
-    queueMicrotask(() => { if (view.dom.isConnected) view.dispatch({ effects: composition.of(false) }); });
-    return false;
-  },
-})];
+export const inlineHtml = [compositionSelection, htmlField, compositionEvents];
