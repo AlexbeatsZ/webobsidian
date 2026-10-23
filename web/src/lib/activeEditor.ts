@@ -2,7 +2,7 @@ import { contextOf } from './renderContext';
 import type { EditorView } from '@codemirror/view';
 import { indentMore, indentLess } from '@codemirror/commands';
 import { openSearchPanel } from '@codemirror/search';
-import { toggleInline, toggleChecklist, insertLink } from './editorCommands';
+import { toggleInline, toggleChecklist, insertLink, indentMarkdown } from './editorCommands';
 
 interface EditorCommands {
   undo: () => boolean;
@@ -82,15 +82,15 @@ export function fmtLink() {
 }
 export function fmtIndent() {
   const v = editable();
-  if (v) {
-    indentMore(v);
+  if (v && !v.composing) {
+    if (!indentMarkdown(v, false)) indentMore(v);
     v.focus();
   }
 }
 export function fmtOutdent() {
   const v = editable();
-  if (v) {
-    indentLess(v);
+  if (v && !v.composing) {
+    if (!indentMarkdown(v, true)) indentLess(v);
     v.focus();
   }
 }

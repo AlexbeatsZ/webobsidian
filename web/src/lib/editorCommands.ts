@@ -4,10 +4,10 @@ import { insertNewlineContinueMarkup, deleteMarkupBackward } from '@codemirror/l
 import { getIndentUnit, indentString, indentUnit } from '@codemirror/language';
 import { syntaxModel } from './syntaxModel';
 import { mathRegions } from '@webobsidian/markdown-core';
-import { markdownListLine } from './listLayout';
+import { markdownListFold, markdownListLine } from './listLayout';
 
 /** Source indentation for list items and plain continuation lines, never bullets. */
-function indentMarkdown(view: EditorView, outdent: boolean): boolean {
+export function indentMarkdown(view: EditorView, outdent: boolean): boolean {
   const { state } = view;
   if (state.readOnly || view.composing) return false;
   const model = state.field(syntaxModel);
@@ -25,7 +25,8 @@ function indentMarkdown(view: EditorView, outdent: boolean): boolean {
       }
       const context = markdownListLine(state, line);
       const quoteDepth = context?.quoteDepth ?? line.text.match(/^(?: {0,3}>[ \t]?)+/)?.[0].match(/>/g)?.length ?? 0;
-      const end = context?.header ? state.doc.lineAt(context.item.to).number : number;
+      const descendants = context?.header ? markdownListFold(state, line) : null;
+      const end = descendants ? state.doc.lineAt(descendants.to).number : number;
       for (let child = number; child <= end; child++) lines.set(child, Math.min(lines.get(child) ?? quoteDepth, quoteDepth));
     }
   }

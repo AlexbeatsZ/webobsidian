@@ -1926,6 +1926,13 @@ function buildDecorations(view: EditorView): DecorationSet {
           if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
           bodyStart = header.prefixTo - line.from;
         } else if (!touches(line.from, line.from + bodyStart)) pushReplace(line.from, line.from + bodyStart, hidden);
+        if (touches(line.from, header?.prefixTo ?? line.from + bodyStart)) {
+          // Shift only visible quote glyphs; preserve prefix advance, body text
+          // and native source selection without changing the measured wrappers.
+          for (let i = 0; i < prefix.length; i++) if (prefix[i] === '>') {
+            all.push(Decoration.mark({ class: 'cm-quote-source-marker' }).range(line.from + i, line.from + i + 1));
+          }
+        }
       }
 
       // Task checkbox + bullet — applied to the line body (works in quotes /

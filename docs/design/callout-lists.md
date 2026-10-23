@@ -29,6 +29,13 @@ rest keeps its normal decoration. Source mode remains available for arbitrary
 Markdown edits. Existing padding-only wrappers retain CodeMirror measurement and
 mouse coordinate ownership, including tables/formulas inside the Callout.
 
+When live editing reveals quote prefixes, only each visible `>` receives the
+`cm-quote-source-marker` mark and a relative `left: -1ch` offset. Its original
+inline advance and following whitespace remain intact, so body text and wrapper
+padding do not move. Nested prefixes use the same mark; hidden/readonly prefixes
+and full source mode retain their existing behavior. There is no replacement
+text, extra selection dispatch, measurement loop or persisted state.
+
 `calloutFoldState` keeps its identity for unrelated transactions. Fold decorations
 depend on document/source/mode/block-effect changes and actual fold toggles,
 instead of rebuilding when the caret moves around ordinary text.
@@ -50,7 +57,16 @@ Tab and Shift-Tab inspect the existing model's ListItem ancestors through
 `markdownListLine` in listLayout; folding and visible line presentation consume
 the same source owner instead of maintaining their own ancestor search.
 They change indentation at the list's quote depth, moving
-descendants together when their parent item is selected. Original markers,
+descendants together when their parent item is selected.
+The descendant extent comes from the same cached `markdownListFold` boundary
+used by folding, rather than grammar-lazy `ListItem.to`. Thus Tab/Shift-Tab on a
+header cannot move unindented following prose; explicitly selected prose still
+uses ordinary indentation.
+`fmtIndent`/`fmtOutdent` call the same exported `indentMarkdown` as Tab/Shift-Tab,
+so command-palette and hotkey invocation retain child ownership and quote
+prefixes. Non-Markdown contexts rejected by this function keep the existing
+native indentMore/indentLess fallback; composition does not invoke either path.
+Original markers,
 checkboxes, numbering and quote tokens remain untouched. Selection maps with
 forward association so a caret at the indentation boundary follows inserted
 indentation. Ordinary paragraph and quote continuation lines also accept Tab and
