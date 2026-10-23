@@ -55,6 +55,7 @@ export interface MarkdownViewProps {
   autoFocus?: boolean;
   showTitle?: boolean;
   layout?: 'page' | 'embedded';
+  extensions?: import('@codemirror/state').Extension;
 }
 const externalUpdate = Annotation.define<boolean>();
 const readonlyExt = (reading: boolean) => reading
@@ -74,6 +75,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
   const version = useRef(snapshot.version);
   const readonlyComp = useRef(new Compartment()).current;
   const contextComp = useRef(new Compartment()).current;
+  const extraComp = useRef(new Compartment()).current;
   const openContextMenu = context.openMenu;
   const setLeftPanel = (_panel: string) => props.onSearch?.();
 
@@ -259,6 +261,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         indentUnit.of('    '), EditorState.tabSize.of(4), editorPhrases,
         editorSelection, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
+        extraComp.of(p.extensions ?? []),
         readonlyComp.of(readonlyExt(p.mode === 'reading')),
         EditorState.transactionFilter.of((tr) =>
           tr.docChanged && tr.startState.readOnly && !tr.annotation(externalUpdate) ? [] : tr),
@@ -318,6 +321,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
   }, [snapshot.id]);
 
   useEffect(() => { sync(snapshot); }, [snapshot]);
+  useEffect(() => { view.current?.dispatch({ effects: extraComp.reconfigure(props.extensions ?? []) }); }, [props.extensions]);
   useEffect(() => {
     const isMd = /\.(md|markdown)$/i.test(snapshot.id) || layout === 'embedded';
     view.current?.dispatch({ effects: [

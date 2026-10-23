@@ -26,6 +26,8 @@ import { initializeNativeMenus, attachmentDialogHost, readNativeFeatures } from 
 import { notifyMenuConfigurationFileChanged } from './lib/configuredMenus/controller';
 import AttachmentCleanupDialog from './components/AttachmentCleanupDialog';
 import TagOperationsHost from './components/TagOperationsHost';
+import ReviewHost from './components/ReviewHost';
+import { bindOperationWorkspace } from './lib/review/client';
 import { clearNativeFeaturePreferences } from './lib/nativeFeaturePreferences';
 
 export default function App() {
@@ -82,6 +84,7 @@ export default function App() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
     const stopMaintenance = bindVaultMaintenance(ws);
+    const stopOperations = bindOperationWorkspace(ws);
     let treeTimer: number | undefined;
     let indexTimer: number | undefined;
     ws.onmessage = (ev) => {
@@ -137,6 +140,7 @@ export default function App() {
       window.clearTimeout(indexTimer);
       ws.close();
       stopMaintenance();
+      stopOperations();
       stopUserscripts();
       stopMenus();
       clearNativeFeaturePreferences();
@@ -234,6 +238,7 @@ export default function App() {
       <TrashView />
       <AttachmentCleanupDialog host={attachmentDialogHost} />
       <TagOperationsHost />
+      <ReviewHost />
       <ContextMenu />
       <FolderPicker />
       {toast && <div className="toast">{toast}</div>}

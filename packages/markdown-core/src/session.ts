@@ -129,7 +129,9 @@ export class DocumentSession {
     return true;
   }
 
-  save(): Promise<void> {
+  save(expectedRaw?: string): Promise<void> {
+    if (expectedRaw !== undefined && this.source.raw !== expectedRaw)
+      return Promise.reject(new Error('Reviewed content changed before save; edits were preserved'));
     if (this.conflict) return Promise.reject(new Error('External changes conflict with local edits; save stopped'));
     this.requested = true;
     if (!this.pending) this.pending = this.persist().finally(() => { this.pending = undefined; });

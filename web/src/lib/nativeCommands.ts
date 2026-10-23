@@ -1,4 +1,5 @@
 import { useStore } from './store';
+import { showReviews } from './review/client';
 import { api } from './api';
 import { writingCommands } from './writing/commands';
 import { hotkeyCommandId } from '@webobsidian/search-core';
@@ -20,6 +21,7 @@ function setMode(mode: 'live' | 'reading' | 'source' | 'toggle-preview' | 'toggl
     : mode === 'toggle-source' ? (state.viewMode === 'source' ? 'live' : 'source') : mode);
 }
 export const nativeCommands: NativeCommand[] = [
+  { id: 'review-changes', title: '审阅候选修改', run: showReviews },
   ...nativeEditorCommands,
   ...nativeWorkspaceCommands,
   ...writingCommands,

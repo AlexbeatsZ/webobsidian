@@ -6,6 +6,7 @@ import { getSettings } from './settings.js';
 import { readTextFile, writeTextFile } from './textFile.js';
 import { planFolderTags } from './tags/folderRules.js';
 import { fileTitleError } from '@webobsidian/search-core';
+import { scheduleAutoCommitOnSave } from './git.js';
 
 function assertFileTitle(rel: string): void {
   const error = fileTitleError(rel);
@@ -165,6 +166,19 @@ export async function readFileBuffer(rel: string): Promise<Buffer> {
   return fs.readFile(abs);
 }
 
+/** Same planner for initial writes and reviewed candidates; never writes itself. */
+export async function prepareNoteSave(rel: string, content: string): Promise<string> {
+  if (!/\.(md|markdown)$/i.test(rel)) return content;
+  const settings = await getSettings();
+  const root = path.resolve(settings.vault.path), key = process.platform === 'win32' ? root.toLowerCase() : root;
+  const rules = settings.nativeFeatures[key]?.tags.folderTags;
+  if (rules?.enabled) {
+    try { return planFolderTags(content, rel, rules).raw; }
+    catch (error) { console.warn('[folder tags] source preserved:', rel, error); }
+  }
+  return content;
+}
+
 export async function writeFileText(rel: string, content: string, baseRevision?: string, createOnly = false): Promise<{ revision: string }> {
   const abs = await resolveInVault(rel);
   const creating = createOnly || (baseRevision === undefined && !await exists(rel));
@@ -172,16 +186,11 @@ export async function writeFileText(rel: string, content: string, baseRevision?:
   // New notes have no existing document session. Apply the same native rules
   // before their initial bytes are written; established sessions prepare saves.
   if (/\.(md|markdown)$/i.test(rel) && baseRevision === undefined && creating) {
-    const settings = await getSettings();
-    const root = path.resolve(settings.vault.path), key = process.platform === 'win32' ? root.toLowerCase() : root;
-    const rules = settings.nativeFeatures[key]?.tags.folderTags;
-    if (rules?.enabled) {
-      try { content = planFolderTags(content, rel, rules).raw; }
-      catch (error) { console.warn('[folder tags] initial note preserved:', rel, error); }
-    }
+    content = await prepareNoteSave(rel, content);
   }
   const result = await writeTextFile(abs, content, baseRevision, createOnly);
   void queueFileUpdate(rel);
+  scheduleAutoCommitOnSave();
   return result;
 }
 

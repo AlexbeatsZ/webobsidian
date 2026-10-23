@@ -47,6 +47,21 @@ which is off by default. See the [tested plugin versions, setup and remaining
 acceptance boundaries](docs/design/plugin-compatibility.md). Final interactive
 acceptance is reserved for the owner; API presence alone is not full compatibility.
 
+## Local AI tools and reviewed edits
+
+The native local operation entry provides context, saved-file listing, indexed
+search, ranged reads, edit proposals and review status. CLI and stdio MCP use
+the same dispatcher. There is no model API key, chat backend or remote approval
+tool. Existing Markdown edits are reviewed in the note with per-block Accept /
+Reject; accepted changes use its normal session history and save path.
+
+Use the **审阅候选修改** command or pending-review badge to open the review inbox.
+For source development, run `npm run cli -- --url http://127.0.0.1:8787 list`;
+an MCP client can launch `node --import tsx server/src/mcp.ts` with
+`WEBOBSIDIAN_URL` set to the chosen local instance. Desktop instances publish
+their actual address in `DATA_DIR/operations-endpoint.json`.
+See [native MCP contracts, examples and limits](docs/design/native-mcp.md).
+
 ## Rendering and source preservation
 
 Live editing, Reading, split panes, embedded notes, table cells and Canvas Markdown

@@ -16,6 +16,8 @@
     "dev:web": "npm --workspace web run dev",
     "build": "npm run build:core && npm --workspace web run build && npm --workspace server run build",
     "start": "npm --workspace server run start",
+    "cli": "npm --workspace server run cli --",
+    "mcp": "npm --silent --workspace server run mcp",
     "typecheck": "npm run build:core && npm --workspace server run typecheck && npm --workspace web run typecheck",
     "desktop": "npm run build && npm --workspace desktop run dev",
     "desktop:dist": "npm run build && npm --workspace desktop run dist",

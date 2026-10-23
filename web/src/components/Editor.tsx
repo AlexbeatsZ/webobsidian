@@ -8,6 +8,7 @@ import { bindPluginEditor } from '../lib/plugins';
 import { manualSave, bindTimestampUpdates } from '../lib/writing/format';
 import MarkdownView from './MarkdownView';
 import { analyzeMarkdown, fragmentRange, equationContext } from '@webobsidian/markdown-core';
+import { nativeReviewExtension } from '../lib/review/view';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
 export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment, sidebar = false, onOpenLink, onReady }: {
@@ -34,6 +35,7 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     return () => { current = false; };
   }, []);
   const { session, snapshot, error } = useDocumentSession(path);
+  const reviewExtensions = useMemo(() => path && !embedded && !fragment ? nativeReviewExtension(path) : [], [path, embedded, fragment]);
   useEffect(() => session && !reading ? bindTimestampUpdates(session, notify) : undefined, [session, reading, notify]);
   const unregister = useRef<(() => void) | undefined>(undefined);
   const context = useMemo(() => createVaultRenderContext(path ?? '', {
@@ -58,6 +60,7 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   if (fragment && !range) return <div className="editor-error">未找到章节或块</div>;
   const displayed = range ? { ...snapshot, text: snapshot.text.slice(range.from, range.to), raw: snapshot.text.slice(range.from, range.to) } : snapshot;
   return <MarkdownView snapshot={displayed} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={numberedContext}
+    extensions={reviewExtensions}
     autoFocus={!reading} showTitle={!embedded} layout={embedded ? 'embedded' : 'page'}
     onChange={(changes, version, origin, model, history) => { session.edit(version, changes, origin, history); session.acceptAnalysis(model); return session.snapshot; }}
     onUndo={() => { session.undo(); return session.snapshot; }}

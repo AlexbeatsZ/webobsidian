@@ -15,6 +15,8 @@ import { loadSettings, getSettings } from './services/settings.js';
 import { errorHandler } from './middleware/error.js';
 import { requireLocal, isLocalRequest } from './middleware/localAccess.js';
 import { filesRouter } from './routes/files.js';
+import { operationsRouter } from './routes/operations.js';
+import { bindOperationClient, operationWorkspaceMessage } from './services/operationWorkspace.js';
 import { searchRouter } from './routes/search.js';
 import { settingsRouter, configureVaultSwitch } from './routes/settings.js';
 import { gitRouter } from './routes/git.js';
@@ -93,6 +95,7 @@ async function main() {
 
   // Specific routes precede the shared search router. Access is checked once above.
   app.use('/api/files', filesRouter);
+  app.use('/api/operations', operationsRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/writing', writingRouter);
   app.use('/api/git', gitRouter);
@@ -148,6 +151,11 @@ async function main() {
   startAutoSync();
 
   server.listen(config.port, config.host, () => {
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : config.port;
+    void fs.writeFile(path.join(config.dataDir, 'operations-endpoint.json'), JSON.stringify({
+      protocol: 1, pid: process.pid, url: `http://127.0.0.1:${port}`,
+    }), { mode: 0o600 }).catch(error => console.warn('[operations endpoint]', error));
     console.log(`\n  WebObsidian server → http://${config.host}:${config.port}`);
     console.log(`  Vault: ${config.defaultVaultPath}`);
     console.log(`  Data:  ${config.dataDir}\n`);
@@ -181,9 +189,14 @@ function setupWebsocket(server: http.Server) {
 
   wss.on('connection', (ws) => {
     maintenanceClientConnected();
+    bindOperationClient(ws);
     ws.on('message', data => {
-      if (!Buffer.isBuffer(data) || data.length > 16384) return;
-      try { maintenanceClientMessage(ws, JSON.parse(data.toString())); } catch { /* unrelated client message */ }
+      if (!Buffer.isBuffer(data) || data.length > 8 * 1024 * 1024) return;
+      try {
+        const message = JSON.parse(data.toString());
+        if (data.length <= 16384) maintenanceClientMessage(ws, message);
+        operationWorkspaceMessage(ws, message);
+      } catch { /* invalid or unrelated client message */ }
     });
     ws.send(JSON.stringify({ type: 'hello' }));
   });

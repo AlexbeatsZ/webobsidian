@@ -190,7 +190,6 @@ export class NativeTagService {
       const result = await vault.writeFileText(path, plan.raw, snapshot.revision);
       file.applied = true;
       for (const tag of file.generated) item.generated.add(tag);
-      scheduleAutoCommitOnSave();
       return { path, status: 'written', revision: result.revision };
     } finally { item.applying = false; }
   }

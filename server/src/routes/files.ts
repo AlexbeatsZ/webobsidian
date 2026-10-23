@@ -60,7 +60,6 @@ filesRouter.put(
       res.status(400).json({ error: 'createOnly must be a boolean without baseRevision' }); return;
     }
     const snapshot = await vault.writeFileText(rel, content, baseRevision, createOnly === true);
-    scheduleAutoCommitOnSave();
     res.json({ ok: true, path: rel, ...snapshot });
   }),
 );
