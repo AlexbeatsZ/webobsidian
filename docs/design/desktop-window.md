@@ -3,20 +3,27 @@
 ## Required layout
 
 Windows/Linux use one 32px top row containing the left-sidebar toggle, compact
-file tabs, new-note button, a draggable empty area and the right-sidebar toggle.
+file/Homepage tabs, a new-Homepage button, a draggable empty area and the right-sidebar toggle.
 Native minimize/maximize/close controls occupy the right end of that same row.
 Do not display File / Edit / View / Window / Help, an app icon/name, an extra note
 header or a formatting toolbar. Tabs use 12px UI text, compact gaps, a maximum
-width of 180px and horizontal scrolling; sidebar/new-note controls remain pinned.
+width of 180px and horizontal scrolling; sidebar/Homepage controls remain pinned.
 The row height matches the existing native overlay height; native button widths
 remain controlled by the OS.
 
 Both vertical ribbons share their sidebar's visibility. The two SidebarDock hosts
 float over the workspace below the titlebar without reserving document columns;
 the top-row toggles remain available to restore them. Left contains Files/Search;
-right contains the four existing fixed panels, a + entry and independent note,
+right contains the four existing fixed panels. Both have a + entry and independent note,
 browser or plugin-view tabs. Mobile keeps device-local drawer visibility.
 See workspace-sidebars.md for ownership, persistence and lifecycle contracts.
+
+The three + buttons open the same Homepage actions without creating files. The
+top tabs use rounded upper corners and curved lower joins for the active tab,
+quiet inactive hover, and visible close controls on the active/hovered tab. The
+32px native row, caption insets and draggable empty region stay in place.
+Settings and the Vault switch menu live in the left footer; the utility group
+formerly at the bottom of the right ribbon is removed.
 
 The Markdown view selector is a single icon in the bottom-right status bar. It
 opens an upward menu containing 阅读视图, 源码模式 and 实时预览 with a check beside
@@ -61,6 +68,11 @@ workspace layout without native caption insets or draggable regions.
   instead of the mobile browser's 48px row.
 
 ## Verification and delivery
+
+The 2026-10-22 opinion changes above are source-only and unverified. The user
+explicitly declined acceptance, tests, typechecks and builds for this batch. No
+application, server or browser was launched, and no package was created. The
+following evidence belongs to the earlier compact-chrome implementation.
 
 2026-10-22: isolated current-core declarations, web/desktop type checks, production
 SPA and main/preload bundles, generated JS syntax and all 186 manifest resources

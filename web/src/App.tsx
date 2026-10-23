@@ -310,10 +310,10 @@ export default function App() {
       <div className={appCls}>
         <WorkspaceTabs />
         <SidebarDock side="left" open={showLeft} rail={<Ribbon />}>
-          {showLeft && <Sidebar />}
+          <Sidebar open={showLeft} />
         </SidebarDock>
         <Workspace />
-        <RightSidebar open={showRight} onTheme={() => setTheme((t) => (t === 'theme-dark' ? 'theme-light' : 'theme-dark'))} />
+        <RightSidebar open={showRight} />
         {isMobile && mobileDrawer && (
           <div className="drawer-backdrop" onClick={() => setMobileDrawer(null)} />
         )}

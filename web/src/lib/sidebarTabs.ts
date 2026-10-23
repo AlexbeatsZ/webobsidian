@@ -5,6 +5,7 @@ export interface SidebarTab {
   state: Record<string, any>;
   title: string;
   icon: string;
+  side?: 'left' | 'right';
 }
 
 export function sidebarTab(type: string, state: Record<string, any> = {}, id: string = crypto.randomUUID()): SidebarTab {
@@ -12,8 +13,8 @@ export function sidebarTab(type: string, state: Record<string, any> = {}, id: st
   const url = typeof state.url === 'string' ? state.url : '';
   return { id, type, state,
     title: type === 'markdown' ? path.split('/').pop()?.replace(/\.(md|markdown)$/i, '') || '笔记'
-      : type === 'webviewer' ? url || '浏览器' : type === 'bookmarks' ? '书签与最近文件' : type === 'empty' ? '新标签页' : type,
-    icon: type === 'webviewer' ? 'globe' : type === 'bookmarks' ? 'bookmark' : type === 'empty' ? 'plus' : 'file-text' };
+      : type === 'webviewer' ? url || '浏览器' : type === 'bookmarks' ? '书签与最近文件' : type === 'empty' ? 'Homepage' : type,
+    icon: type === 'webviewer' ? 'globe' : type === 'bookmarks' ? 'bookmark' : type === 'empty' ? 'home' : 'file-text' };
 }
 
 export function restoreSidebarTabs(value: unknown): SidebarTab[] {
@@ -27,7 +28,8 @@ export function restoreSidebarTabs(value: unknown): SidebarTab[] {
     }
     seen.add(item.id);
     const tab = sidebarTab(item.type, item.state, item.id);
-    return [{ ...tab, title: typeof item.title === 'string' ? item.title.slice(0, 512) : tab.title,
-      icon: typeof item.icon === 'string' ? item.icon.slice(0, 100) : tab.icon }];
+    return [{ ...tab, ...(item.side === 'left' || item.side === 'right' ? { side: item.side as 'left' | 'right' } : {}),
+      title: item.type === 'empty' ? tab.title : typeof item.title === 'string' ? item.title.slice(0, 512) : tab.title,
+      icon: item.type === 'empty' ? tab.icon : typeof item.icon === 'string' ? item.icon.slice(0, 100) : tab.icon }];
   });
 }

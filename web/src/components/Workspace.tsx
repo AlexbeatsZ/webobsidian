@@ -1,4 +1,4 @@
-import { useStore, GRAPH_PATH } from '../lib/store';
+import { useStore, GRAPH_PATH, isHomepagePath } from '../lib/store';
 import { api } from '../lib/api';
 import { isFolderPath } from '../lib/tree';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from '../lib/media';
@@ -65,7 +65,8 @@ export default function Workspace() {
   const notify = useStore((s) => s.notify);
   const splitDirection = useStore((s) => s.splitDirection);
   const tree = useStore((s) => s.tree);
-  const activeIsFolder = isFolderPath(tree, activePath);
+  const activeIsHome = isHomepagePath(activePath);
+  const activeIsFolder = !activeIsHome && isFolderPath(tree, activePath);
 
   // Paste / drop image → upload to attachments and insert an embed.
   const handleFiles = async (files: FileList | File[]) => {
@@ -96,9 +97,9 @@ export default function Workspace() {
   return (
     <div className="workspace" onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
       <div className={`editor-area ${splitDirection === 'down' ? 'split-down' : ''}`}>
-        {!activePath && (
+        {(!activePath || activeIsHome) && (
           <div className="empty-state">
-            <WorkspaceLauncher />
+            <WorkspaceLauncher key={activePath} />
           </div>
         )}
         {activePath === GRAPH_PATH && (
@@ -106,12 +107,12 @@ export default function Workspace() {
             <GraphView />
           </div>
         )}
-        {activePath && activePath !== GRAPH_PATH && activeIsFolder && (
+        {activePath && !activeIsHome && activePath !== GRAPH_PATH && activeIsFolder && (
           <div className="pane main-pane">
             <FolderView path={activePath} />
           </div>
         )}
-        {activePath && activePath !== GRAPH_PATH && !activeIsFolder && (
+        {activePath && !activeIsHome && activePath !== GRAPH_PATH && !activeIsFolder && (
           <div className="pane main-pane">
             <EditorPane />
           </div>

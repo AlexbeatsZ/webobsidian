@@ -7,6 +7,13 @@ import { requireAuth } from '../middleware/auth.js';
 import { getSettings, updateSettings, redactSettings, ensureVaultBrowsable } from '../services/settings.js';
 import { config } from '../config.js';
 import { broadcast } from '../services/realtime.js';
+import { withVaultMaintenance } from '../services/vaultMaintenance.js';
+import { drainFileUpdates } from '../services/fileupdates.js';
+import { selectVaultWorkspace } from '../services/uistate.js';
+
+let switchRuntime = async (_commit: () => Promise<void>): Promise<void> => { throw new Error('Vault switch runtime is not ready'); };
+/** The server owns its existing watcher and index lifecycle. */
+export function configureVaultSwitch(handler: typeof switchRuntime): void { switchRuntime = handler; }
 
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
@@ -23,14 +30,17 @@ settingsRouter.put(
   '/',
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
-    const previousRoot = (await getSettings()).vault.path;
+    let previous = await getSettings();
+    let previousRoot = previous.vault.path;
     // A changed vault.path turns the whole files API into read/write over that
     // tree, so constrain it to the allowed roots (same gate as Browse…) and
     // require it to be an existing directory before persisting.
-    if (body.vault && typeof body.vault.path === 'string' && body.vault.path) {
+    if (body.vault && typeof body.vault.path === 'string') {
+      if (!body.vault.path.trim()) throw Object.assign(new Error('Vault path is required'), { status: 400 });
       await assertVaultPathAllowed(body.vault);
     }
-    const updated = await updateSettings((d) => {
+    let updated = previous;
+    const commit = async () => { updated = await updateSettings((d) => {
       if (body.vault) {
         Object.assign(d.vault, sanitizeVault(body.vault));
         ensureVaultBrowsable(d);
@@ -52,8 +62,26 @@ settingsRouter.put(
       if (body.api && typeof body.api.rateLimitPerMin === 'number') {
         d.api.rateLimitPerMin = body.api.rateLimitPerMin;
       }
-    });
-    if (updated.vault.path !== previousRoot) broadcast({ type: 'vault-changed' });
+    }); };
+    if (typeof body.vault?.path === 'string') {
+      await withVaultMaintenance(drainFileUpdates, async () => {
+        // Existing settings requests may have completed while the lease drained.
+        previous = await getSettings(); previousRoot = previous.vault.path;
+        if (path.resolve(body.vault.path) === path.resolve(previousRoot)) { await commit(); return; }
+        try {
+          await switchRuntime(commit);
+          await selectVaultWorkspace(previousRoot, updated.vault.path);
+        } catch (error) {
+          // Restore the same persisted settings and runtime before releasing
+          // the editor lease if a new folder cannot be indexed or watched.
+          await switchRuntime(async () => {
+            await updateSettings(draft => { Object.assign(draft, previous); });
+          });
+          throw error;
+        }
+        broadcast({ type: 'vault-changed' });
+      });
+    } else await commit();
     res.json(redactSettings(updated));
   }),
 );

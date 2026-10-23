@@ -302,7 +302,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .ribbon button.active { color: var(--text-accent); }
 .ribbon .spacer { flex: 1; }
 .ribbon-right { order: 1; border-right: 0; border-left: 1px solid var(--bg-modifier-border); }
-.ribbon-fixed, .ribbon-utilities { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+.ribbon-fixed { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
 .ribbon-tabs { flex: 1; min-height: 30px; overflow-y: auto; overflow-x: hidden; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .ribbon-divider { width: 22px; height: 1px; background: var(--bg-modifier-border); margin: 5px 0; flex-shrink: 0; }
 .ribbon-tabs button { position: relative; flex-shrink: 0; }
@@ -327,7 +327,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .webviewer-controls button { border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text-muted); width: 24px; height: 26px; display: grid; place-items: center; cursor: pointer; }
 .webviewer-controls button:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
 .webviewer-status { padding: 0 10px 6px; font-size: 11px; color: var(--text-muted); max-height: 52px; overflow: auto; }
-.workspace-launcher { margin: auto; width: min(300px, 100%); padding: 24px; display: flex; flex-direction: column; gap: 8px; }
+.workspace-launcher { margin: auto; width: min(260px, 100%); box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 8px; }
 .workspace-launcher h3 { font-size: 13px; color: var(--text-muted); font-weight: 500; margin: 0 0 8px; }
 .workspace-launcher form { display: flex; flex-direction: column; gap: 8px; }
 .launch-action > span { flex: 1; }
@@ -381,11 +381,13 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   display: flex; align-items: center; gap: 6px; padding: 8px 10px;
   border-top: 1px solid var(--bg-modifier-border); flex-shrink: 0; font-size: 13px; color: var(--text-muted);
 }
-.vault-footer .vault-name { font-weight: 600; color: var(--text-normal); display: flex; align-items: center; gap: 6px; }
-.vault-footer .grow { flex: 1; }
 .vault-footer button { border: 0; background: transparent; color: var(--text-faint); cursor: pointer;
   width: 26px; height: 26px; border-radius: var(--radius-s); display: grid; place-items: center; }
 .vault-footer button:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
+.vault-footer .vault-switcher { flex: 1; min-width: 0; width: auto; display: flex; justify-content: flex-start; gap: 7px; padding: 0 5px; color: var(--text-muted); font: inherit; }
+.vault-switcher > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-switcher > svg { flex-shrink: 0; }
+.vault-footer button:focus-visible { outline: 1px solid var(--text-accent); outline-offset: -1px; }
 
 /* File tree */
 .tree-item { user-select: none; }
@@ -416,7 +418,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   background: var(--bg-primary); margin: 0; border-radius: 0; }
 .tab-bar {
   height: var(--tabbar-height); display: flex; align-items: stretch; background: var(--tab-bg);
-  border-bottom: 1px solid var(--bg-modifier-border); overflow: hidden; min-width: 0; user-select: none;
+  overflow: hidden; min-width: 0; user-select: none;
 }
 /* Only desktop windows reserve the native caption area; browser tabs use all of the row. */
 html[data-desktop-titlebar] .tab-bar {
@@ -431,20 +433,24 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 /* Only the tabs scroll; the toggle/new-note controls stay pinned and never get
    hidden behind a scrollbar. The scrollbar is hidden so it can't eat the row height. */
 .tab-bar .tab-ctl { flex-shrink: 0; }
-.tab-scroll { display: flex; align-items: stretch; min-width: 0; flex: 0 1 auto;
+.tab-scroll { display: flex; align-items: stretch; gap: 2px; padding-top: 5px; min-width: 0; flex: 0 1 auto;
   overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .tab-scroll::-webkit-scrollbar { display: none; }
 .tab {
   display: flex; align-items: center; gap: 5px; padding: 0 6px 0 9px; cursor: pointer;
   color: var(--text-faint); font-size: 12px; min-width: 64px; max-width: 180px; flex: 0 0 auto; white-space: nowrap;
-  border-right: 1px solid var(--bg-modifier-border);
+  position: relative; border-radius: 8px 8px 0 0;
 }
+.tab:not(.active):hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
 .tab.active { background: var(--tab-active-bg); color: var(--text-normal); }
+.tab.active::before, .tab.active::after { content: ''; pointer-events: none; position: absolute; bottom: 0; width: 8px; height: 8px; }
+.tab.active::before { right: 100%; border-radius: 0 0 8px 0; box-shadow: 4px 0 0 var(--tab-active-bg); }
+.tab.active::after { left: 100%; border-radius: 0 0 0 8px; box-shadow: -4px 0 0 var(--tab-active-bg); }
 .tab .title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tab > svg { flex-shrink: 0; }
 .tab .close { opacity: 0; border-radius: var(--radius-s); width: 18px; height: 18px; flex-shrink: 0;
   display: grid; place-items: center; color: var(--text-faint); padding: 0; border: 0; background: transparent; cursor: pointer; }
-.tab:hover .close, .tab:focus-within .close { opacity: 1; }
+.tab.active .close, .tab:hover .close, .tab:focus-within .close { opacity: 1; }
 .tab .close:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
 .tab .dot { color: var(--text-muted); font-size: 9px; }
 .tab-new { width: 32px; display: grid; place-items: center; color: var(--text-faint); cursor: pointer;

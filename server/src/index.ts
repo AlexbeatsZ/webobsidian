@@ -20,7 +20,7 @@ import { verifyToken } from './services/auth.js';
 import { authRouter } from './routes/auth.js';
 import { filesRouter } from './routes/files.js';
 import { searchRouter } from './routes/search.js';
-import { settingsRouter } from './routes/settings.js';
+import { settingsRouter, configureVaultSwitch } from './routes/settings.js';
 import { gitRouter } from './routes/git.js';
 import { keysRouter } from './routes/keys.js';
 import { pluginsRouter } from './routes/plugins.js';
@@ -42,8 +42,8 @@ import { guardVaultMutations, bindMaintenanceClients, maintenanceClientConnected
 import { initSearch } from './services/search.js';
 import { setBroadcaster, broadcast } from './services/realtime.js';
 import { isVaultConfigurationPath } from './services/vaultConfiguration.js';
-import { getVaultRoot, ensureVault } from './services/vault.js';
-import { enableFileUpdates, queueFileUpdate, drainFileUpdates } from './services/fileupdates.js';
+import { getVaultRoot, ensureVault, clearVaultStats } from './services/vault.js';
+import { enableFileUpdates, queueFileUpdate, drainFileUpdates, rebuildFileIndexes } from './services/fileupdates.js';
 import { startAutoSync } from './services/autosync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -176,6 +176,16 @@ async function main() {
   setupWebsocket(server);
   enableFileUpdates();
   await setupWatcher();
+  configureVaultSwitch(async commit => {
+    const previousWatcher = vaultWatcher;
+    vaultWatcher = undefined;
+    await previousWatcher?.close();
+    await drainFileUpdates();
+    await commit();
+    clearVaultStats();
+    await rebuildFileIndexes(() => initSearch());
+    await setupWatcher();
+  });
   startAutoSync();
 
   server.listen(config.port, config.host, () => {
@@ -246,6 +256,7 @@ function bearerToken(header: string | undefined): string | undefined {
 }
 
 // --- chokidar watcher: reflect external changes (git pull, direct edits) ---
+let vaultWatcher: ReturnType<typeof chokidar.watch> | undefined;
 async function setupWatcher() {
   const root = await getVaultRoot();
   // WEBOBSIDIAN_WATCH: 'auto' (default) = native inotify with automatic polling
@@ -271,6 +282,7 @@ function startWatcher(root: string, usePolling: boolean) {
     binaryInterval: 3000,
     awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
   });
+  vaultWatcher = watcher;
 
   // On a fresh VPS the kernel's `fs.inotify.max_user_watches` is often far below
   // the file count of a large vault, so native watching fails with ENOSPC/EMFILE.
@@ -287,13 +299,14 @@ function startWatcher(root: string, usePolling: boolean) {
           `sudo sysctl -w fs.inotify.max_user_watches=524288`,
       );
       watcher.close().catch(() => {});
-      startWatcher(root, true);
+      if (vaultWatcher === watcher) startWatcher(root, true);
       return;
     }
     console.error('[watcher] error:', err);
   });
 
   const onChange = async (absPath: string, type: string) => {
+    if (vaultWatcher !== watcher) return;
     const rel = path.relative(root, absPath).split(path.sep).join('/');
     if (isVaultConfigurationPath(rel)) {
       noteVaultMutation();

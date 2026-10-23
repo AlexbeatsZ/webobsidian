@@ -48,7 +48,7 @@ export function bindVaultMaintenance(socket: WebSocket): () => void {
       token = msg.token;
       banner = document.createElement('div');
       banner.setAttribute('role', 'status');
-      banner.textContent = '正在复查和清理附件，编辑已暂时暂停…';
+      banner.textContent = '正在维护仓库，编辑已暂时暂停…';
       Object.assign(banner.style, { position: 'fixed', top: '42px', left: '50%', transform: 'translateX(-50%)',
         zIndex: '100000', padding: '12px 20px', background: 'var(--background-primary, white)',
         color: 'var(--text-normal, black)', border: '1px solid var(--background-modifier-border, #bbb)', borderRadius: '8px' });

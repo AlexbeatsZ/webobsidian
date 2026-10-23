@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { config } from '../config.js';
 
 /**
@@ -25,4 +25,26 @@ export async function writeUiState(state: Record<string, unknown>): Promise<void
   const tmp = `${FILE}.tmp-${randomBytes(4).toString('hex')}`;
   await fs.writeFile(tmp, JSON.stringify(state, null, 2));
   await fs.rename(tmp, FILE);
+}
+
+/** Save the old layout before selecting the next Vault's own workspace. The
+ * existing endpoint still owns the active layout; old note paths never migrate
+ * into a different Vault after its client reloads. Called under maintenance. */
+export async function selectVaultWorkspace(previous: string, next: string): Promise<void> {
+  const directory = path.join(config.dataDir, 'workspaces');
+  const fileFor = (root: string) => {
+    const resolved = path.resolve(root);
+    const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    return path.join(directory, createHash('sha256').update(key).digest('hex') + '.json');
+  };
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(fileFor(previous), JSON.stringify(await readUiState(), null, 2));
+  let target: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(await fs.readFile(fileFor(next), 'utf8'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) target = parsed;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  await writeUiState(target);
 }

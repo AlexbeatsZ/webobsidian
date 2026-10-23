@@ -2,14 +2,17 @@ import { useStore } from '../lib/store';
 import FileTree, { collectFolderPaths } from './FileTree';
 import SearchPanel from './SearchPanel';
 import Icon from './Icon';
+import SidebarTabPanels from './SidebarTabPanels';
 
 const TITLES: Record<string, string> = {
   files: 'Files',
   search: 'Search',
 };
 
-export default function Sidebar() {
+export default function Sidebar({ open }: { open: boolean }) {
   const leftPanel = useStore((s) => s.leftPanel);
+  const activeId = useStore(s => s.leftActiveId);
+  const setSettings = useStore(s => s.setSettings);
   const newNote = useStore((s) => s.newNote);
   const newCanvas = useStore((s) => s.newCanvas);
   const newFolder = useStore((s) => s.newFolder);
@@ -47,7 +50,7 @@ export default function Sidebar() {
 
   return (
     <div className="sidebar">
-      <div className="nav-header">
+      {open && !activeId && <div className="nav-header">
         <span className="nav-title">{TITLES[leftPanel]}</span>
         {leftPanel === 'files' && (
           <>
@@ -82,16 +85,22 @@ export default function Sidebar() {
             </button>
           </>
         )}
-      </div>
-      <div className="sidebar-body">
+      </div>}
+      {open && !activeId && <div className="sidebar-body">
         {leftPanel === 'files' && <FileTree />}
         {leftPanel === 'search' && <SearchPanel />}
-      </div>
+      </div>}
+      <SidebarTabPanels side="left" open={open} />
       <div className="vault-footer">
-        <span className="vault-name">
-          <Icon name="gem" size={15} /> {vaultName}
-        </span>
-        <span className="grow" />
+        <button className="vault-switcher" title="切换仓库" aria-label="切换仓库" aria-haspopup="menu" onClick={event => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          openContextMenu({ x: rect.left, y: rect.top, items: [
+            { label: vaultName, checked: true, onClick: () => {} },
+            { label: '', separator: true },
+            { label: '切换仓库…', icon: 'folder-open', onClick: () => { setSettings(true); window.dispatchEvent(new Event('vault-settings-open')); } },
+          ] });
+        }}><Icon name="chevrons-up-down" size={15} /><span>{vaultName}</span></button>
+        <button title="Settings" aria-label="设置" onClick={() => setSettings(true)}><Icon name="settings" size={16} /></button>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useStore, GRAPH_PATH, type ContextMenuItem } from '../lib/store';
+import { useStore, GRAPH_PATH, isHomepagePath, type ContextMenuItem } from '../lib/store';
 import { api } from '../lib/api';
 import { documents } from '../lib/documents';
 import { printDocument } from '../lib/printDocument';
@@ -30,7 +30,7 @@ export default function WorkspaceTabs() {
   const rightOpen = useStore((s) => s.rightOpen);
   const mobileDrawer = useStore((s) => s.mobileDrawer);
   const setMobileDrawer = useStore((s) => s.setMobileDrawer);
-  const newNote = useStore((s) => s.newNote);
+  const openHomepage = useStore((s) => s.openHomepage);
   const openContextMenu = useStore((s) => s.openContextMenu);
   const setMovePath = useStore((s) => s.setMovePath);
   const setRightPanel = useStore((s) => s.setRightPanel);
@@ -89,7 +89,9 @@ export default function WorkspaceTabs() {
       { id: 'tab:close-others', label: 'Close other tabs', onClick: closeOthers },
     ];
     let items: ContextMenuItem[];
-    if (path === GRAPH_PATH) {
+    if (isHomepagePath(path)) {
+      items = tabItems;
+    } else if (path === GRAPH_PATH) {
       items = [
         // GraphView owns the Pixi renderer — it listens for this event and
         // extracts the stage to a PNG (a plain canvas read would be blank).
@@ -245,7 +247,7 @@ export default function WorkspaceTabs() {
               }
             }}
             title={tab.path}>
-            {tab.path === GRAPH_PATH && <Icon name="graph" size={13} />}
+            {(tab.path === GRAPH_PATH || isHomepagePath(tab.path)) && <Icon name={tab.path === GRAPH_PATH ? 'graph' : 'home'} size={13} />}
             <span className="title">{tab.title.replace(/\.(md|markdown)$/, '')}</span>
             {dirty && activePath === tab.path && <span className="dot" aria-label="Unsaved changes">●</span>}
             <button type="button" className="close" title="Close tab" aria-label={`Close ${tab.title}`}
@@ -255,8 +257,8 @@ export default function WorkspaceTabs() {
           </div>
         ))}
       </div>
-      <button type="button" className="tab-new tab-ctl" title="New note (Ctrl/⌘N)" aria-label="New note"
-        onClick={() => void newNote()}>
+      <button type="button" className="tab-new tab-ctl" title="Homepage" aria-label="新建中央标签页"
+        onClick={() => void openHomepage().catch(error => notify(String(error)))}>
         <Icon name="plus" size={16} />
       </button>
       <div className="titlebar-drag-space" />

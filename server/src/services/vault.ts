@@ -34,6 +34,7 @@ const statCache = new Map<string, { m: number; c: number; size: number }>();
 export function invalidateStat(rel: string): void {
   statCache.delete(rel);
 }
+export function clearVaultStats(): void { statCache.clear(); }
 
 async function fileStat(abs: string, rel: string): Promise<{ m: number; c: number; size: number }> {
   const hit = statCache.get(rel);

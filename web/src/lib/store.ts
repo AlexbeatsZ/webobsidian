@@ -33,6 +33,7 @@ const TREE_SORTS: TreeSort[] = ['name-asc', 'name-desc', 'mtime-desc', 'mtime-as
 
 /** Sentinel tab path for the Graph view (it lives in a tab, like Obsidian). */
 export const GRAPH_PATH = 'graph://view';
+export const isHomepagePath = (path: string | null): boolean => /^home:\/\/[\w-]+$/.test(path ?? '');
 
 export interface Tab {
   path: string;
@@ -175,6 +176,8 @@ interface AppState {
   setRightPanel: (p: 'backlinks' | 'outgoing' | 'tags' | 'outline') => void;
   rightTabs: SidebarTab[];
   rightActiveId: string | null;
+  leftActiveId: string | null;
+  openSidebarTab: (side: 'left' | 'right', type: string, state?: Record<string, any>, id?: string) => Promise<string | null>;
   openRightTab: (type: string, state?: Record<string, any>, id?: string) => Promise<string | null>;
   updateRightTab: (id: string, patch: Partial<Omit<SidebarTab, 'id'>>) => void;
   selectRightTab: (id: string) => void;
@@ -228,6 +231,7 @@ interface AppState {
   notify: (msg: string, ms?: number) => void;
 
   openFile: (path: string) => Promise<void>;
+  openHomepage: () => Promise<void>;
   openWikilink: (target: string, sourcePath?: string) => Promise<void>;
   closeTab: (path: string) => void;
   setContent: (c: string) => void;
@@ -257,7 +261,7 @@ const PERSIST_KEYS = [
   'tabs', 'activePath', 'viewMode', 'expanded', 'splitPath', 'splitDirection',
   'recent', 'bookmarks', 'leftPanel', 'rightPanel', 'leftOpen', 'rightOpen', 'graphSettings',
   'treeSort', 'autoReveal',
-  'rightTabs', 'rightActiveId',
+  'rightTabs', 'rightActiveId', 'leftActiveId',
 ] as const;
 
 function pickPersisted(s: any): Record<string, unknown> {
@@ -303,8 +307,9 @@ function applyPersisted(s: any, set: (p: any) => void): void {
     leftPanel: s.leftPanel === 'search' ? 'search' : 'files',
     rightPanel: s.leftPanel === 'tags' ? 'tags' : ['backlinks', 'outgoing', 'tags', 'outline'].includes(s.rightPanel) ? s.rightPanel : 'backlinks',
     rightTabs,
+    leftActiveId: rightTabs.some(tab => tab.side === 'left' && tab.id === s.leftActiveId) ? s.leftActiveId : null,
     rightActiveId: s.leftPanel === 'bookmarks' ? rightTabs.find(tab => tab.type === 'bookmarks')!.id
-      : rightTabs.some(tab => tab.id === s.rightActiveId) ? s.rightActiveId : null,
+      : rightTabs.some(tab => tab.side !== 'left' && tab.id === s.rightActiveId) ? s.rightActiveId : null,
     leftOpen: s.leftOpen !== false,
     rightOpen: s.rightOpen !== false,
     graphSettings: migrateGraphSettings(s.graphSettings),
@@ -447,13 +452,15 @@ export const useStore = create<AppState>()(
         })),
 
       leftPanel: 'files',
-      setLeftPanel: (p) => set({ leftPanel: p, leftOpen: true }),
+      setLeftPanel: (p) => set({ leftPanel: p, leftActiveId: null, leftOpen: true }),
       rightPanel: 'backlinks',
       setRightPanel: (p) => set({ rightPanel: p, rightActiveId: null, rightOpen: true }),
       rightTabs: [],
       rightActiveId: null,
-      openRightTab: async (type, state = {}, id) => {
-        const tab = sidebarTab(type, state, id);
+      leftActiveId: null,
+      openRightTab: (type, state = {}, id) => get().openSidebarTab(get().rightTabs.find(tab => tab.id === id)?.side ?? 'right', type, state, id),
+      openSidebarTab: async (side, type, state = {}, id) => {
+        const tab = { ...sidebarTab(type, state, id), side };
         const generation = ++rightGeneration;
         rightGenerations.set(tab.id, generation);
         const previous = get().rightTabs.find(item => item.id === tab.id);
@@ -465,12 +472,16 @@ export const useStore = create<AppState>()(
         }
         if (rightGenerations.get(tab.id) !== generation) return null;
         set(s => ({ rightTabs: s.rightTabs.some(item => item.id === tab.id)
-          ? s.rightTabs.map(item => item.id === tab.id ? tab : item) : [...s.rightTabs, tab], rightActiveId: tab.id, rightOpen: true }));
+          ? s.rightTabs.map(item => item.id === tab.id ? tab : item) : [...s.rightTabs, tab],
+          ...(side === 'left' ? { leftActiveId: tab.id, leftOpen: true } : { rightActiveId: tab.id, rightOpen: true }) }));
         rightGenerations.delete(tab.id);
         return tab.id;
       },
       updateRightTab: (id, patch) => set(s => ({ rightTabs: s.rightTabs.map(tab => tab.id === id ? { ...tab, ...patch } : tab) })),
-      selectRightTab: (id) => set(s => s.rightTabs.some(tab => tab.id === id) ? { rightActiveId: id, rightOpen: true } : {}),
+      selectRightTab: (id) => set(s => {
+        const tab = s.rightTabs.find(tab => tab.id === id);
+        return !tab ? {} : tab.side === 'left' ? { leftActiveId: id, leftOpen: true } : { rightActiveId: id, rightOpen: true };
+      }),
       closeRightTab: async (id) => {
         const generation = ++rightGeneration;
         rightGenerations.set(id, generation);
@@ -484,14 +495,18 @@ export const useStore = create<AppState>()(
         set(s => {
           const current = s.rightTabs.find(tab => tab.id === id);
           if (current?.type !== tab?.type || current?.state.file !== tab?.state.file) return {};
-          const index = s.rightTabs.findIndex(tab => tab.id === id);
+          const siblings = s.rightTabs.filter(item => (item.side ?? 'right') === (tab?.side ?? 'right'));
+          const index = siblings.findIndex(tab => tab.id === id);
           const rightTabs = s.rightTabs.filter(tab => tab.id !== id);
-          return { rightTabs, rightActiveId: s.rightActiveId === id ? rightTabs[Math.min(index, rightTabs.length - 1)]?.id ?? null : s.rightActiveId };
+          const remaining = siblings.filter(tab => tab.id !== id);
+          const next = remaining[Math.min(index, remaining.length - 1)]?.id ?? null;
+          return { rightTabs, rightActiveId: s.rightActiveId === id ? next : s.rightActiveId,
+            leftActiveId: s.leftActiveId === id ? next : s.leftActiveId };
         });
         rightGenerations.delete(id);
       },
       searchQuery: '',
-      searchFor: (q) => set({ searchQuery: q, leftPanel: 'search', leftOpen: true }),
+      searchFor: (q) => set({ searchQuery: q, leftPanel: 'search', leftActiveId: null, leftOpen: true }),
       leftOpen: true,
       rightOpen: true,
       toggleLeft: () => set((s) => ({ leftOpen: !s.leftOpen })),
@@ -560,6 +575,7 @@ export const useStore = create<AppState>()(
         set((st) => ({
           expanded: Array.from(new Set([...st.expanded, ...ancestors])),
           leftPanel: 'files',
+          leftActiveId: null,
           leftOpen: true,
         }));
         window.setTimeout(() => {
@@ -575,23 +591,25 @@ export const useStore = create<AppState>()(
         }
       },
 
+      openHomepage: () => get().openFile(`home://${crypto.randomUUID()}`),
       openFile: async (path) => {
         const generation = ++openGeneration;
         if (path === GRAPH_PATH) return get().openGraph();
         if (get().dirty) await get().save('background');
+        const home = isHomepagePath(path);
         // A folder path (e.g. deep-link /note/<folder>) opens a folder content
         // view — never read it as a note nor pollute Recent with it.
-        const isFolder = findNode(get().tree, path)?.type === 'folder';
+        const isFolder = !home && findNode(get().tree, path)?.type === 'folder';
         let content = '';
         if (!isFolder && TEXT_RE.test(path)) {
           const doc = await documents.open(path);
           content = doc.snapshot.raw;
         }
         if (generation !== openGeneration) return;
-        const title = path.split('/').pop() ?? path;
+        const title = home ? 'Homepage' : path.split('/').pop() ?? path;
         set((s) => {
           const tabs = s.tabs.find((t) => t.path === path) ? s.tabs : [...s.tabs, { path, title }];
-          const recent = isFolder ? s.recent : [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
+          const recent = isFolder || home ? s.recent : [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
           return { tabs, activePath: path, content, dirty: documents.get(path)?.snapshot.dirty ?? false, recent, ...pushHistory(s, path) };
         });
       },
@@ -696,7 +714,7 @@ export const useStore = create<AppState>()(
           for (const s of segs) { acc = acc ? `${acc}/${s}` : s; ancestors.push(acc); }
           set((st) => ({ expanded: Array.from(new Set([...st.expanded, ...ancestors])) }));
         }
-        set({ leftPanel: 'files', leftOpen: true, renamingPath: path });
+        set({ leftPanel: 'files', leftActiveId: null, leftOpen: true, renamingPath: path });
       },
 
       hydrate: async () => {

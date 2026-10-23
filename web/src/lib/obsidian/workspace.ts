@@ -75,6 +75,7 @@ export class MarkdownView extends ItemView {
 }
 export class WorkspaceLeaf extends Events {
   id: string = crypto.randomUUID();
+  sidebarSide: 'left' | 'right' = 'right';
   pinned = false;
   view: View;
   parent: any;
@@ -114,7 +115,7 @@ export class WorkspaceLeaf extends Events {
     if (this.slot === 'right') {
       const retained = this.workspace.custom.has(this);
       this.workspace.custom.add(this);
-      if (!await useStore.getState().openRightTab(state.type, state.state ?? {}, this.id) && !retained) this.workspace.custom.delete(this);
+      if (!await useStore.getState().openSidebarTab(this.sidebarSide, state.type, state.state ?? {}, this.id) && !retained) this.workspace.custom.delete(this);
       return;
     }
     if (state.type === 'markdown') {
@@ -295,6 +296,7 @@ export class Workspace extends Events {
   rightLeaf(tab: SidebarTab): WorkspaceLeaf {
     let leaf = [...this.custom].find(leaf => leaf.id === tab.id && leaf.slot === 'right');
     if (!leaf) { leaf = new WorkspaceLeaf(this, 'right'); leaf.id = tab.id; this.custom.add(leaf); }
+    leaf.sidebarSide = tab.side ?? 'right';
     return leaf;
   }
   updateRightLeaf(leaf: WorkspaceLeaf) {
@@ -370,7 +372,12 @@ export class Workspace extends Events {
         : this.activeLeaf;
   }
   getLeftLeaf(_split?: boolean) {
-    return new WorkspaceLeaf(this, 'custom');
+    const state = useStore.getState();
+    const tab = !_split && state.rightTabs.find(tab => tab.id === state.leftActiveId);
+    if (tab) return this.rightLeaf(tab);
+    const leaf = new WorkspaceLeaf(this, 'right');
+    leaf.sidebarSide = 'left';
+    return leaf;
   }
   getRightLeaf(_split?: boolean) {
     const state = useStore.getState();

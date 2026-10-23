@@ -32,6 +32,11 @@ export const guardVaultMutations: RequestHandler = (req, res, next) => {
     next(); return;
   }
   if (lease) { res.status(409).json({ error: '正在复查和清理附件，请稍后保存' }); return; }
+  // This request acquires the same lease in settingsRouter. Do not wait on
+  // its own response before it can confirm the connected editors are safe.
+  if (req.method === 'PUT' && /^\/api\/settings\/?$/.test(req.path) && typeof req.body?.vault?.path === 'string') {
+    next(); return;
+  }
   activeWrites++;
   noteVaultMutation();
   let released = false;

@@ -19,6 +19,8 @@ import TagSettings from './TagSettings';
 import AutomationSettings from './AutomationSettings';
 import { readNativeFeatures, saveNativeFeatures, type NativeFeaturePreferences } from '../lib/nativeFeatures';
 import { notifyIndexChanged } from '../lib/indexEvents';
+import { documents } from '../lib/documents';
+import { workspaceMaintenanceBlockers } from '../lib/vaultMaintenance';
 
 type Section =
   'search' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
@@ -44,10 +46,12 @@ export default function Settings() {
     const scripts = () => { setPluginTab(null); setSection('userscripts'); };
     const menus = () => { setPluginTab(null); setSection('menus'); };
     const automation = () => { setPluginTab(null); setSection('automation'); };
+    const vault = () => { setPluginTab(null); setSection('vault'); };
     window.addEventListener('userscripts:open-settings', scripts);
     window.addEventListener('menus:open-settings', menus);
     window.addEventListener('automation:open-settings', automation);
-    return () => { window.removeEventListener('userscripts:open-settings', scripts); window.removeEventListener('menus:open-settings', menus); window.removeEventListener('automation:open-settings', automation); };
+    window.addEventListener('vault-settings-open', vault);
+    return () => { window.removeEventListener('userscripts:open-settings', scripts); window.removeEventListener('menus:open-settings', menus); window.removeEventListener('automation:open-settings', automation); window.removeEventListener('vault-settings-open', vault); };
   }, []);
   useSyncExternalStore(subscribePlugins, pluginRevision);
   useEffect(() => {
@@ -218,10 +222,20 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
   const [path, setPath] = useState(s.vault.path);
   const [deleteMode, setDeleteMode] = useState(s.vault.deleteMode ?? 'trash');
   const [browser, setBrowser] = useState<any>(null);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState('');
   const save = async () => {
-    await api.putSettings({ vault: { path } });
-    await reload();
-    alert('Vault path saved. Reindex from the command palette if needed.');
+    if (switching) return;
+    setSwitching(true); setSwitchError('');
+    try {
+      for (const snapshot of documents.snapshots()) if (snapshot.dirty) await documents.get(snapshot.id)?.save();
+      const blockers = workspaceMaintenanceBlockers();
+      if (blockers.length) throw new Error(blockers.join('；'));
+      await api.putSettings({ vault: { path } });
+      // The server has switched its watcher/index and saved each Vault's layout.
+      // Only clean sessions passed the lease; a fresh page opens the new layout.
+      window.location.reload();
+    } catch (error) { setSwitchError(String(error)); setSwitching(false); }
   };
   const saveDeleteMode = async (mode: string) => {
     setDeleteMode(mode);
@@ -245,10 +259,11 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
         <button className="btn secondary" onClick={() => browse()}>
           Browse…
         </button>
-        <button className="btn" onClick={save}>
-          Save vault path
+        <button className="btn" onClick={save} disabled={switching}>
+          {switching ? '正在切换…' : '切换仓库'}
         </button>
       </div>
+      {switchError && <p className="editor-error" role="alert">{switchError}</p>}
       {browser && !browser.error && (
         <div
           style={{ border: '1px solid var(--bg-modifier-border)', borderRadius: 6, padding: 8, marginTop: 8 }}

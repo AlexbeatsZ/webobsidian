@@ -75,7 +75,13 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
     !url.startsWith('/api/settings') && !url.startsWith('/auth/')) {
     throw new ApiError('Vault 已切换，请重新加载应用；旧文档会话保留', 409);
   }
-  const mutation = !['GET', 'HEAD', 'OPTIONS'].includes((opts.method ?? 'GET').toUpperCase()) &&
+  // The settings switch owns the server maintenance lease. Counting its own
+  // request as a document writer would prevent that lease from ever starting.
+  let vaultSwitch = false;
+  if (url.startsWith('/api/settings') && opts.method === 'PUT' && typeof opts.body === 'string') {
+    try { vaultSwitch = typeof JSON.parse(opts.body)?.vault?.path === 'string'; } catch { /* Invalid JSON is rejected by the server. */ }
+  }
+  const mutation = !vaultSwitch && !['GET', 'HEAD', 'OPTIONS'].includes((opts.method ?? 'GET').toUpperCase()) &&
     !['/api/attachments/execute', '/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(url.split('?')[0]);
   if (mutation) { mutations++; mutationChanged(); }
   try {
