@@ -3,8 +3,8 @@ import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from '
 import type { SourceSpan } from '@webobsidian/markdown-core';
 import { compositionSelection } from './editorSelection';
 
-/** Omitted kind keeps an explicit fallback open until Close source/Escape. */
-interface SourceRegion extends SourceSpan { kind?: 'formula' | 'table' }
+/** Keep lifecycle metadata separate from a source object's domain-specific kind. */
+interface SourceRegion extends SourceSpan { sourceKind?: 'formula' | 'table' }
 export const toggleSourceRegion = StateEffect.define<SourceRegion | null>();
 export const sourceRegion = StateField.define<SourceRegion | null>({
   create: () => null,
@@ -14,7 +14,7 @@ export const sourceRegion = StateField.define<SourceRegion | null>({
     if (!value) return null;
     const mapped = transaction.docChanged ? { ...value,
       from: transaction.changes.mapPos(value.from, -1), to: transaction.changes.mapPos(value.to, 1) } : value;
-    if (mapped.kind && !transaction.state.field(compositionSelection).selection.ranges.some(range =>
+    if (mapped.sourceKind && !transaction.state.field(compositionSelection).selection.ranges.some(range =>
       range.empty ? range.from >= mapped.from && range.from <= mapped.to : range.from < mapped.to && range.to > mapped.from)) return null;
     return mapped;
   },
@@ -46,7 +46,7 @@ export function sourceOwns(state: EditorState, range: SourceSpan): boolean {
 }
 
 export function sourceButton(view: EditorView, range: SourceSpan | (() => SourceSpan), label: string,
-  options: { kind?: SourceRegion['kind']; selection?: SourceSpan } = {}): HTMLButtonElement {
+  options: { kind?: SourceRegion['sourceKind']; selection?: SourceSpan } = {}): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'cm-source-toggle';
@@ -61,7 +61,7 @@ export function sourceButton(view: EditorView, range: SourceSpan | (() => Source
     if (view.state.readOnly) return;
     const current = typeof range === 'function' ? range() : range;
     const selection = options.selection;
-    view.dispatch({ effects: toggleSourceRegion.of({ ...current, kind: options.kind }),
+    view.dispatch({ effects: toggleSourceRegion.of({ ...current, sourceKind: options.kind }),
       selection: { anchor: selection?.from ?? current.from, head: selection?.to ?? current.from }, scrollIntoView: true });
     view.focus();
   });
@@ -87,7 +87,7 @@ class CloseSourceWidget extends WidgetType {
 }
 function closeDecoration(state: EditorState): DecorationSet {
   const source = state.field(sourceRegion);
-  return source && !source.kind ? Decoration.set([Decoration.widget({ widget: new CloseSourceWidget(), side: -1 }).range(source.from)]) : Decoration.none;
+  return source && !source.sourceKind ? Decoration.set([Decoration.widget({ widget: new CloseSourceWidget(), side: -1 }).range(source.from)]) : Decoration.none;
 }
 const closeField = StateField.define<DecorationSet>({
   create: closeDecoration, update: (value, transaction) =>
@@ -98,7 +98,7 @@ export const sourceControls = [compositionSelection, sourceRegion, forcedRendere
   EditorView.domEventHandlers({ blur(event, view) {
     if (event.relatedTarget instanceof Node && view.dom.contains(event.relatedTarget)) return false;
     queueMicrotask(() => {
-      if (view.dom.isConnected && !view.hasFocus && view.state.field(sourceRegion)?.kind)
+      if (view.dom.isConnected && !view.hasFocus && view.state.field(sourceRegion)?.sourceKind)
         view.dispatch({ effects: toggleSourceRegion.of(null) });
     });
     return false;

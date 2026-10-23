@@ -62,7 +62,7 @@ export function mathPreviewTex(state: EditorState, region: MathRegion): string {
   const pos = selection.head;
   if (pos <= region.bodyFrom || pos >= region.bodyTo || !region.segments.some(s => pos >= s.from && pos <= s.to)) return region.tex;
   const tree = formulaTree(state, region.bodyFrom, region.bodyTo);
-  for (const bias of [-1, 1]) {
+  for (const bias of [-1, 1] as const) {
     const node = tree.resolveInner(pos, bias);
     if (!/^(MathChar|Number|MathSpecialChar|Whitespace)$/.test(node.name)) return region.tex;
     let math = false;

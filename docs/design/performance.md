@@ -170,6 +170,12 @@ their higher key priority. These extensions do not read workspace state or own
 another DocumentSession. Formula presentation policy remains in mathPresentation,
 and list geometry measurement remains in listLayout.
 
+The 0.1.9 packaging compile keeps transient source lifecycle metadata in
+`sourceKind`, separate from a block's existing domain-specific `kind`. Existing
+callers can still pass their source spans directly to the shared effect; only
+formula/table source buttons opt into automatic restoration. The button option
+remains `kind`, and dependency invalidation compares the lifecycle field.
+
 For this opinions batch the user's latest instruction explicitly forbids tests
 and acceptance, overriding the earlier runtime authorization. Only source and
 Git diff review were performed for this shared change. No type/build/unit/browser
