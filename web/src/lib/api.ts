@@ -123,11 +123,11 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ path, content, baseRevision }),
     }),
+  createFolder: (path: string) =>
+    req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
   createText: (path: string, content: string) => req<{ ok: true; revision: string }>('/api/files/content', {
     method: 'PUT', body: JSON.stringify({ path, content, createOnly: true }),
   }),
-  createFolder: (path: string) =>
-    req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
   rename: (from: string, to: string) =>
     req<{ ok: true }>('/api/files/rename', { method: 'PATCH', body: JSON.stringify({ from, to }) }),
   copy: (from: string, to: string) =>

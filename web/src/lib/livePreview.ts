@@ -19,7 +19,7 @@ import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
+import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { renderMath, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
 import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } from './writing/latex/editor_context/mathPresentation';
@@ -397,23 +397,42 @@ class CalloutFoldWidget extends WidgetType {
   ignoreEvent() { return true; }
 }
 
+/** The same formula source buttons, hosted in the containing Callout's first line. */
+class CalloutMathSourcesWidget extends WidgetType {
+  constructor(readonly formulas: readonly MathRegion[]) { super(); }
+  eq(other: CalloutMathSourcesWidget) {
+    return other.formulas.length === this.formulas.length && this.formulas.every((formula, i) => {
+      const next = other.formulas[i];
+      return formula.from === next.from && formula.to === next.to && formula.bodyFrom === next.bodyFrom && formula.bodyTo === next.bodyTo;
+    });
+  }
+  toDOM(view: EditorView) {
+    const controls = document.createElement('span'); controls.className = 'cm-callout-math-sources';
+    this.formulas.forEach((formula, i) => controls.appendChild(sourceButton(view, formula,
+      this.formulas.length > 1 ? `formula ${i + 1}` : 'formula', { selection: { from: formula.bodyFrom, to: formula.bodyTo } })));
+    return controls;
+  }
+  ignoreEvent() { return true; }
+}
+
 /* ---------------- math (locally bundled MathJax, loaded on demand) ---------------- */
 
 class MathWidget extends WidgetType {
   private controllers = new WeakMap<HTMLElement, AbortController>();
   private subscriptions = new WeakMap<HTMLElement, () => void>();
   destroy(dom: HTMLElement) { this.controllers.get(dom)?.abort(); this.subscriptions.get(dom)?.(); }
-  constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }, readonly number?: string, readonly anchor?: string, readonly definitions: readonly string[] = [], readonly preview = false) {
+  constructor(readonly tex: string, readonly display: boolean, readonly range?: { from: number; to: number }, readonly number?: string, readonly anchor?: string, readonly definitions: readonly string[] = [], readonly preview = false, readonly sourceInTitle = false) {
     super();
   }
   eq(o: MathWidget) {
-    return o.tex === this.tex && o.display === this.display && o.range?.from === this.range?.from && o.range?.to === this.range?.to && o.number === this.number && o.anchor === this.anchor && o.preview === this.preview && o.definitions.length === this.definitions.length && o.definitions.every((d,i) => d === this.definitions[i]);
+    return o.tex === this.tex && o.display === this.display && o.range?.from === this.range?.from && o.range?.to === this.range?.to && o.number === this.number && o.anchor === this.anchor && o.preview === this.preview && o.sourceInTitle === this.sourceInTitle && o.definitions.length === this.definitions.length && o.definitions.every((d,i) => d === this.definitions[i]);
   }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
     span.className = 'cm-math-rendered' + (this.display ? ' math-block' : ' math-inline') + (this.preview ? ' cm-math-edit-preview' : '');
     if (this.number) span.classList.add('cm-numbered-equation');
     const body = document.createElement('span');
+    body.className = 'cm-math-body';
     body.textContent = this.tex;
     span.appendChild(body); // shown until MathJax finishes, or if loading fails
     if (this.anchor) span.dataset.equationId = this.anchor;
@@ -425,11 +444,16 @@ class MathWidget extends WidgetType {
     const render = () => {
       this.controllers.get(span)?.abort();
       const controller = new AbortController(); this.controllers.set(span, controller);
-      const context = contextOf(view), source = context.mathSource;
-      const model = source?.model ?? view.state.field(syntaxModel);
-      const from = (this.range?.from ?? 0) + (source?.from ?? 0);
       span.dataset.renderPending = 'true';
-      void renderMath(body, this.tex, this.display, controller.signal, { transient: this.preview, sourcePath: context.sourcePath, definitions: mathDefinitionContext(model, from) })
+      // toDOM runs before insertion. Read metrics only after CM mounts the widget,
+      // alongside its other layout reads, rather than caching detached fallbacks.
+      view.requestMeasure({ key: span, read: () => {
+        if (controller.signal.aborted || !span.isConnected) return;
+        const context = contextOf(view), source = context.mathSource;
+        const model = source?.model ?? view.state.field(syntaxModel);
+        const from = (this.range?.from ?? 0) + (source?.from ?? 0);
+        void renderMath(body, this.tex, this.display, controller.signal, { transient: this.preview,
+          sourcePath: context.sourcePath, definitions: mathDefinitionContext(model, from), container: this.display ? body : view.contentDOM })
         .then(() => { if (!controller.signal.aborted) { span.classList.remove('mod-error'); span.removeAttribute('title'); } })
         .catch(error => {
           if (controller.signal.aborted) return;
@@ -437,9 +461,10 @@ class MathWidget extends WidgetType {
           span.title = `Formula rendering failed: ${error instanceof Error ? error.message : String(error)}`;
         })
         .finally(() => { if (!controller.signal.aborted) { delete span.dataset.renderPending; view.requestMeasure(); } });
+      } });
     };
     this.subscriptions.set(span, subscribeMathConfiguration(render)); render();
-    if (this.display && this.range && !this.preview && !view.state.readOnly) {
+    if (this.display && this.range && !this.preview && !this.sourceInTitle && !view.state.readOnly) {
       const formula = editorMathRegions(view.state).find(r => r.from === this.range!.from && r.to === this.range!.to);
       span.appendChild(sourceButton(view, this.range, 'formula', {
         selection: formula ? { from: formula.bodyFrom, to: formula.bodyTo } : this.range }));
@@ -617,7 +642,7 @@ function numberedMath(state: EditorState, tex: string, display: boolean, range: 
   const source = state.facet(renderContext).mathSource;
   const definitions = mathDefinitionContext(source?.model ?? state.field(syntaxModel), range.from + (source?.from ?? 0));
   return new MathWidget(tex, display, range, equation && !equation.tag ? equationLabel(equation, context) ?? undefined : undefined,
-    preview || equation?.ambiguous ? undefined : equation?.id, definitions, preview);
+    preview || equation?.ambiguous ? undefined : equation?.id, definitions, preview, state.field(blockModel).mathCallout.has(range.from));
 }
 export const mathBlockField = StateField.define<DecorationSet>({
   create: buildMathBlocks, update: (value, transaction) => decorationInputsChanged(transaction) ? buildMathBlocks(transaction.state) : value,
@@ -1892,6 +1917,12 @@ function buildDecorations(view: EditorView): DecorationSet {
           all.push(Decoration.widget({
             widget: new CalloutFoldWidget(folded, header.from), side: -1,
           }).range(line.to));
+          const formulas = !readonly && !view.state.readOnly && !folded ? (view.state.field(blockModel).calloutMath.get(header.from) ?? []).filter(formula =>
+            !blockEffectOwns(view.state, formula) && !mathSourceVisible(view.state, formula)) : [];
+          if (formulas.length) {
+            all.push(Decoration.line({ attributes: { style: `--callout-formula-controls:${formulas.length}` } }).range(line.from));
+            all.push(Decoration.widget({ widget: new CalloutMathSourcesWidget(formulas), side: 1 }).range(line.to));
+          }
           if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
           bodyStart = header.prefixTo - line.from;
         } else if (!touches(line.from, line.from + bodyStart)) pushReplace(line.from, line.from + bodyStart, hidden);

@@ -28,7 +28,7 @@ interface Engine {
   stylesheet(): HTMLStyleElement;
   resetPackageState(): void;
 }
-export interface MathRenderOptions { transient?: boolean; sourcePath?: string; definitions?: readonly string[] }
+export interface MathRenderOptions { transient?: boolean; sourcePath?: string; definitions?: readonly string[]; container?: HTMLElement }
 let runtime: Promise<MathJaxRuntime> | undefined;
 let retryAfter = 0, revision = 0, svgInstance = 0, yieldAt = 0;
 let queue: Promise<unknown> = Promise.resolve();
@@ -262,8 +262,11 @@ export async function renderMath(body: HTMLElement, tex: string, display: boolea
   while (!signal.aborted) {
     const generation = revision, doc = body.ownerDocument;
     const em = parseFloat(doc.defaultView!.getComputedStyle(body).fontSize) || 18;
+    const container = options.container ?? body.closest<HTMLElement>('.cm-content') ?? body.parentElement;
+    const style = container && doc.defaultView!.getComputedStyle(container);
+    const width = container && container.clientWidth - (parseFloat(style!.paddingLeft) || 0) - (parseFloat(style!.paddingRight) || 0);
     const template = await convertFormula(tex, { display, em, ex: em / 2,
-      containerWidth: body.closest('.cm-content')?.clientWidth || body.parentElement?.clientWidth || 720,
+      containerWidth: width && width > 0 ? width : 720,
     }, signal, options);
     if (signal.aborted) return;
     if (generation !== revision) continue;

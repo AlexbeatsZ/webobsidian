@@ -46,14 +46,14 @@ export default function VersionHistory() {
 
   const restore = async () => {
     if (!selected) return;
-    if (!confirm('Restore this version? The current content will be overwritten.')) return;
+    if (!confirm("还原此版本？当前内容将被覆盖。")) return;
     try {
       await api.write(path, preview);
       if (path === activePath) await openFile(path);
-      notify('Restored earlier version');
+      notify("已还原早期版本");
       close(null);
     } catch (e: any) {
-      notify(e.message || 'Restore failed');
+      notify(e.message || "恢复失败");
     }
   };
 
@@ -67,18 +67,18 @@ export default function VersionHistory() {
       <div className="modal version-history" onClick={(e) => e.stopPropagation()}>
         <div className="vh-head">
           <Icon name="clock" size={16} />
-          <div className="vh-title">Version history</div>
+          <div className="vh-title">版本历史</div>
           <div className="vh-path">{path}</div>
-          <button className="tool-btn" title="Close" onClick={() => close(null)}>
+          <button className="tool-btn" title="关闭" onClick={() => close(null)}>
             <Icon name="x" size={16} />
           </button>
         </div>
         <div className="vh-body">
           <div className="vh-list">
-            {loading && <div className="vh-empty">Loading…</div>}
+            {loading && <div className="vh-empty">加载中…</div>}
             {error && <div className="vh-empty">{error}</div>}
             {!loading && !error && commits.length === 0 && (
-              <div className="vh-empty">No history. Enable Git Sync to track versions.</div>
+              <div className="vh-empty">暂无历史记录。启用 Git Sync 以跟踪版本。</div>
             )}
             {commits.map((c, i) => (
               <div
@@ -87,7 +87,7 @@ export default function VersionHistory() {
                 onClick={() => setSelected(c.hash)}
               >
                 <div className="vh-item-msg">
-                  {i === 0 ? 'Latest' : c.message || '(no message)'}
+                  {i === 0 ? "最新" : c.message || "(无说明)"}
                 </div>
                 <div className="vh-item-meta">
                   {fmtDate(c.date)} · {c.author}
@@ -101,10 +101,10 @@ export default function VersionHistory() {
         </div>
         <div className="vh-foot">
           <button className="btn secondary" onClick={() => close(null)}>
-            Close
+            关闭
           </button>
           <button className="btn" onClick={restore} disabled={!selected || commits.length === 0}>
-            Restore this version
+            还原此版本
           </button>
         </div>
       </div>

@@ -20,7 +20,7 @@ export default function TrashView() {
     api
       .listTrash()
       .then((r) => setItems(r.items))
-      .catch((e) => notify(e.message || 'Failed to load trash'))
+      .catch((e) => notify(e.message || "加载回收站失败"))
       .finally(() => setLoading(false));
   }, [notify]);
 
@@ -35,11 +35,11 @@ export default function TrashView() {
     setBusy(true);
     try {
       const r = await api.restoreTrash(it.path);
-      notify(`Restored ${r.restored}`);
+      notify(`已恢复 ${r.restored}`);
       await loadTree();
       refresh();
     } catch (e: any) {
-      notify(e.message || 'Restore failed');
+      notify(e.message || "恢复失败");
     } finally {
       setBusy(false);
     }
@@ -47,14 +47,14 @@ export default function TrashView() {
 
   const remove = async (it: TrashItem) => {
     if (busy) return;
-    if (!confirm(`Permanently delete "${it.name}"? This cannot be undone.`)) return;
+    if (!confirm(`永久删除 "${it.name}"？此操作无法撤销。`)) return;
     setBusy(true);
     try {
       await api.deleteTrashItem(it.path);
-      notify('Deleted permanently');
+      notify("已永久删除");
       refresh();
     } catch (e: any) {
-      notify(e.message || 'Delete failed');
+      notify(e.message || "删除失败");
     } finally {
       setBusy(false);
     }
@@ -62,14 +62,14 @@ export default function TrashView() {
 
   const empty = async () => {
     if (busy || items.length === 0) return;
-    if (!confirm(`Empty trash? ${items.length} item(s) will be permanently deleted.`)) return;
+    if (!confirm(`清空回收站？将永久删除 ${items.length} 项。`)) return;
     setBusy(true);
     try {
       await api.emptyTrash();
-      notify('Trash emptied');
+      notify("回收站已清空");
       refresh();
     } catch (e: any) {
-      notify(e.message || 'Empty trash failed');
+      notify(e.message || "清空回收站失败");
     } finally {
       setBusy(false);
     }
@@ -91,19 +91,19 @@ export default function TrashView() {
       <div className="modal trash-view" onClick={(e) => e.stopPropagation()}>
         <div className="vh-head">
           <Icon name="trash" size={16} />
-          <div className="vh-title">Trash</div>
-          <div className="vh-path">{items.length} item(s)</div>
-          <button className="tool-btn" title="Refresh" onClick={refresh}>
+          <div className="vh-title">回收站</div>
+          <div className="vh-path">{items.length} 项</div>
+          <button className="tool-btn" title="刷新" onClick={refresh}>
             <Icon name="refresh-cw" size={16} />
           </button>
-          <button className="tool-btn" title="Close" onClick={() => close(false)}>
+          <button className="tool-btn" title="关闭" onClick={() => close(false)}>
             <Icon name="x" size={16} />
           </button>
         </div>
         <div className="trash-body">
-          {loading && <div className="vh-empty">Loading…</div>}
+          {loading && <div className="vh-empty">加载中…</div>}
           {!loading && items.length === 0 && (
-            <div className="vh-empty">Trash is empty.</div>
+            <div className="vh-empty">回收站为空。</div>
           )}
           {!loading &&
             items.map((it) => (
@@ -119,15 +119,15 @@ export default function TrashView() {
                 </div>
                 <button
                   className="btn secondary trash-act"
-                  title="Restore to original location"
+                  title="恢复至原始位置"
                   disabled={busy}
                   onClick={() => restore(it)}
                 >
-                  Restore
+                  恢复
                 </button>
                 <button
                   className="tool-btn trash-del"
-                  title="Delete permanently"
+                  title="永久删除"
                   disabled={busy}
                   onClick={() => remove(it)}
                 >
@@ -138,10 +138,10 @@ export default function TrashView() {
         </div>
         <div className="vh-foot">
           <button className="btn secondary" onClick={() => close(false)}>
-            Close
+            关闭
           </button>
           <button className="btn danger" onClick={empty} disabled={busy || items.length === 0}>
-            Empty trash
+            清空回收站
           </button>
         </div>
       </div>

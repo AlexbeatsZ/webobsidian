@@ -10,7 +10,7 @@ export default function SidebarTabRail({ side }: { side: 'left' | 'right' }) {
   const close = useStore(s => s.closeRightTab);
   return <>
     <div className="ribbon-divider" />
-    <button title="Homepage" aria-label={`新建${label}标签页`} onClick={() => void useStore.getState().openSidebarTab(side, 'empty')}><Icon name="plus" size={18} /></button>
+    <button title="主页" aria-label={`新建${label}标签页`} onClick={() => void useStore.getState().openSidebarTab(side, 'empty')}><Icon name="plus" size={18} /></button>
     <div className="ribbon-tabs" role="tablist" aria-label={`${label}标签页`} aria-orientation="vertical">
       {tabs.map((tab, index) => <button key={tab.id} role="tab" aria-selected={activeId === tab.id} title={tab.title}
         aria-label={tab.title} className={activeId === tab.id ? 'active' : ''} onClick={() => select(tab.id)}

@@ -87,7 +87,7 @@ export default function FolderPicker() {
         if (activePath === src) reopen = to;
         moved++;
       } catch (e: any) {
-        notify(e?.message ?? 'Move failed');
+        notify(e?.message ?? "移动失败");
       }
     }
     await loadTree();
@@ -95,7 +95,7 @@ export default function FolderPicker() {
     if (reopen) await openFile(reopen);
     if (moved) {
       const dest = folder || 'vault root';
-      notify(moved > 1 ? `Moved ${moved} items to ${dest}` : `Moved to ${dest}`);
+      notify(moved > 1 ? `已移动 ${moved} 项至 ${dest}` : `已移动至 ${dest}`);
     }
   };
 
@@ -126,7 +126,7 @@ export default function FolderPicker() {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <input
           className="palette-input"
-          placeholder={froms.length > 1 ? `Move ${froms.length} items to which folder?` : 'Type a folder'}
+          placeholder={froms.length > 1 ? `移动 ${froms.length} 项至哪个文件夹？` : "输入文件夹名称"}
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -147,24 +147,24 @@ export default function FolderPicker() {
           ))}
           {canCreate && (
             <div className="palette-item" onMouseEnter={() => setSel(-1)} onClick={() => move(typed)}>
-              <span>Create “{typed}”</span>
+              <span>创建 “{typed}”</span>
               <span className="kbd">⇧↵</span>
             </div>
           )}
-          {matches.length === 0 && !canCreate && <div className="palette-item">No folders</div>}
+          {matches.length === 0 && !canCreate && <div className="palette-item">无文件夹</div>}
         </div>
         <div className="palette-footer">
           <span>
-            <span className="kbd">↑↓</span> to navigate
+            <span className="kbd">↑↓</span> 导航
           </span>
           <span>
-            <span className="kbd">↵</span> to move
+            <span className="kbd">↵</span> 移动
           </span>
           <span>
-            <span className="kbd">⇧↵</span> to create
+            <span className="kbd">⇧↵</span> 创建
           </span>
           <span>
-            <span className="kbd">esc</span> to dismiss
+            <span className="kbd">esc</span> 关闭
           </span>
         </div>
       </div>

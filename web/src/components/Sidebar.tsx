@@ -36,14 +36,14 @@ export default function Sidebar({ open }: { open: boolean }) {
       x: r.left,
       y: r.bottom + 4,
       items: [
-        { label: 'File name (A to Z)', icon: treeSort === 'name-asc' ? 'check' : undefined, onClick: () => setTreeSort('name-asc') },
-        { label: 'File name (Z to A)', icon: treeSort === 'name-desc' ? 'check' : undefined, onClick: () => setTreeSort('name-desc') },
+        { label: "文件名 (A 到 Z)", icon: treeSort === 'name-asc' ? 'check' : undefined, onClick: () => setTreeSort('name-asc') },
+        { label: "文件名 (Z 到 A)", icon: treeSort === 'name-desc' ? 'check' : undefined, onClick: () => setTreeSort('name-desc') },
         { label: '', separator: true },
-        { label: 'Modified time (new to old)', icon: treeSort === 'mtime-desc' ? 'check' : undefined, onClick: () => setTreeSort('mtime-desc') },
-        { label: 'Modified time (old to new)', icon: treeSort === 'mtime-asc' ? 'check' : undefined, onClick: () => setTreeSort('mtime-asc') },
+        { label: "修改时间 (从新到旧)", icon: treeSort === 'mtime-desc' ? 'check' : undefined, onClick: () => setTreeSort('mtime-desc') },
+        { label: "修改时间 (从旧到新)", icon: treeSort === 'mtime-asc' ? 'check' : undefined, onClick: () => setTreeSort('mtime-asc') },
         { label: '', separator: true },
-        { label: 'Created time (new to old)', icon: treeSort === 'ctime-desc' ? 'check' : undefined, onClick: () => setTreeSort('ctime-desc') },
-        { label: 'Created time (old to new)', icon: treeSort === 'ctime-asc' ? 'check' : undefined, onClick: () => setTreeSort('ctime-asc') },
+        { label: "创建时间 (从新到旧)", icon: treeSort === 'ctime-desc' ? 'check' : undefined, onClick: () => setTreeSort('ctime-desc') },
+        { label: "创建时间 (从旧到新)", icon: treeSort === 'ctime-asc' ? 'check' : undefined, onClick: () => setTreeSort('ctime-asc') },
       ],
     });
   };
@@ -54,33 +54,33 @@ export default function Sidebar({ open }: { open: boolean }) {
         <span className="nav-title">{TITLES[leftPanel]}</span>
         {leftPanel === 'files' && (
           <>
-            <button className="nav-action" title="New note" onClick={() => newNote()}>
+            <button className="nav-action" title="新建笔记" onClick={() => newNote()}>
               <Icon name="square-pen" size={16} />
             </button>
-            <button className="nav-action" title="New canvas" onClick={() => newCanvas()}>
+            <button className="nav-action" title="新建白板" onClick={() => newCanvas()}>
               <Icon name="layout-dashboard" size={16} />
             </button>
-            <button className="nav-action" title="New folder" onClick={() => newFolder()}>
+            <button className="nav-action" title="新建文件夹" onClick={() => newFolder()}>
               <Icon name="folder-plus" size={16} />
             </button>
-            <button className="nav-action" title="Change sort order" onClick={openSortMenu}>
+            <button className="nav-action" title="更改排序方式" onClick={openSortMenu}>
               <Icon name="arrow-up-narrow-wide" size={16} />
             </button>
             <button
               className={`nav-action ${autoReveal ? 'active' : ''}`}
-              title="Auto reveal current file"
+              title="自动定位当前文件"
               onClick={() => toggleAutoReveal()}
             >
               <Icon name="crosshair" size={16} />
             </button>
             <button
               className="nav-action"
-              title={allCollapsed ? 'Expand all' : 'Collapse all'}
+              title={allCollapsed ? "全部展开" : "全部折叠"}
               onClick={toggleCollapseAll}
             >
               <Icon name={allCollapsed ? 'chevrons-up-down' : 'chevrons-down-up'} size={16} />
             </button>
-            <button className="nav-action" title="Trash" onClick={() => setTrash(true)}>
+            <button className="nav-action" title="回收站" onClick={() => setTrash(true)}>
               <Icon name="trash" size={16} />
             </button>
           </>
@@ -100,7 +100,7 @@ export default function Sidebar({ open }: { open: boolean }) {
             { label: '切换仓库…', icon: 'folder-open', onClick: () => { setSettings(true); window.dispatchEvent(new Event('vault-settings-open')); } },
           ] });
         }}><Icon name="chevrons-up-down" size={15} /><span>{vaultName}</span></button>
-        <button title="Settings" aria-label="设置" onClick={() => setSettings(true)}><Icon name="settings" size={16} /></button>
+        <button title="设置" aria-label="设置" onClick={() => setSettings(true)}><Icon name="settings" size={16} /></button>
       </div>
     </div>
   );

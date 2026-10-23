@@ -105,28 +105,28 @@ function BacklinksPanel() {
     <>
       <div className="nav-header">
         <span className="nav-title">
-          {activePath && MD_RE.test(activePath) ? `Backlinks for ${name(activePath)}` : 'Backlinks'}
+          {activePath && MD_RE.test(activePath) ? `${name(activePath)} 的反向链接` : "反向链接"}
         </span>
       </div>
       <div className="sidebar-body">
-        <Section title="Linked mentions" count={linked.length} open={openLinked} onToggle={() => setOpenLinked(!openLinked)}>
-          {linked.length === 0 && <div className="panel-item">No backlinks found.</div>}
+        <Section title="已链接提及" count={linked.length} open={openLinked} onToggle={() => setOpenLinked(!openLinked)}>
+          {linked.length === 0 && <div className="panel-item">未发现反向链接。</div>}
           {linked.map((b) => (
             <div key={b} className="mention-box">
               <div className="mention-src" onClick={() => openFile(b)}>
                 {name(b)}
               </div>
-              <div style={{ color: 'var(--text-faint)' }}>links to {name(activePath ?? '')}</div>
+              <div style={{ color: 'var(--text-faint)' }}>链接到 {name(activePath ?? '')}</div>
             </div>
           ))}
         </Section>
         <Section
-          title="Unlinked mentions"
+          title="未链接提及"
           count={unlinked.length}
           open={openUnlinked}
           onToggle={() => setOpenUnlinked(!openUnlinked)}
         >
-          {unlinked.length === 0 && <div className="panel-item">No unlinked mentions found.</div>}
+          {unlinked.length === 0 && <div className="panel-item">未发现未链接提及。</div>}
           {unlinked.map((m) => (
             <div key={m.path} className="mention-box">
               <div className="mention-src" onClick={() => openFile(m.path)}>
@@ -180,15 +180,15 @@ function OutgoingPanel() {
     <>
       <div className="nav-header">
         <span className="nav-title">
-          {activePath && MD_RE.test(activePath) ? `Outgoing links from ${name(activePath)}` : 'Outgoing links'}
+          {activePath && MD_RE.test(activePath) ? `${name(activePath)} 的出链` : "出链"}
         </span>
       </div>
       <div className="sidebar-body">
         <div className="section-head" style={{ cursor: 'default' }}>
-          <span>Links</span>
+          <span>链接</span>
           <span className="count">{links.length}</span>
         </div>
-        {links.length === 0 && <div className="panel-item">No outgoing links.</div>}
+        {links.length === 0 && <div className="panel-item">无出链。</div>}
         {links.map((t) => (
           <div key={t} className="outgoing-item" onClick={() => openWikilink(t)} title={resolved[t] ?? t}>
             <Icon name="file-text" size={14} />
@@ -197,12 +197,12 @@ function OutgoingPanel() {
         ))}
         {unresolved.length > 0 && (
           <div className="section-head" style={{ cursor: 'default' }}>
-            <span>Unresolved</span>
+            <span>未解析</span>
             <span className="count">{unresolved.length}</span>
           </div>
         )}
         {unresolved.map((t) => (
-          <div key={t} className="outgoing-item unresolved" onClick={() => openWikilink(t)} title="Not created yet — click to create">
+          <div key={t} className="outgoing-item unresolved" onClick={() => openWikilink(t)} title="尚未创建 — 点击以创建">
             <Icon name="file-plus" size={14} />
             <span>{t}</span>
           </div>
@@ -217,10 +217,10 @@ function OutlinePanel() {
   return (
     <>
       <div className="nav-header">
-        <span className="nav-title">Outline</span>
+        <span className="nav-title">大纲</span>
       </div>
       <div className="sidebar-body">
-        {heads.length === 0 && <div className="panel-item">No headings</div>}
+        {heads.length === 0 && <div className="panel-item">无标题</div>}
         {heads.map((h, i) => (
           <div key={i} className="outline-item" style={{ paddingLeft: 10 + (h.level - 1) * 12 }}>
             {h.text}
@@ -253,7 +253,7 @@ export default function RightSidebar({ open }: { open: boolean; onTheme?: () => 
       {presented && !activeId && rightPanel === 'tags' && (
         <>
           <div className="nav-header">
-            <span className="nav-title">Tags</span>
+            <span className="nav-title">标签</span>
           </div>
           <div className="sidebar-body">
             <TagsPanel />

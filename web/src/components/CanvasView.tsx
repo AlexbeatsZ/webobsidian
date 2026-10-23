@@ -511,33 +511,33 @@ export default function CanvasView() {
     const multi = selNodes.size > 1;
     const colorNames: Record<string, string> = { '1': 'Red', '2': 'Orange', '3': 'Yellow', '4': 'Green', '5': 'Cyan', '6': 'Purple' };
     const colorSub: ContextMenuItem[] = [
-      { label: 'Default', onClick: () => setColor(undefined) },
-      ...Object.keys(PRESET_COLORS).map((k) => ({ label: colorNames[k] ?? `Color ${k}`, onClick: () => setColor(k) })),
+      { label: "默认", onClick: () => setColor(undefined) },
+      ...Object.keys(PRESET_COLORS).map((k) => ({ label: colorNames[k] ?? `颜色 ${k}`, onClick: () => setColor(k) })),
     ];
     const items: ContextMenuItem[] = [
-      ...(node.type === 'text' ? [{ label: 'Edit', icon: 'pencil', onClick: () => setEditingNode(node.id) }] : []),
-      ...(node.type === 'file' ? [{ label: 'Open', icon: 'arrow-up-right', onClick: () => openFile((node as any).file) }] : []),
-      ...(node.type === 'link' ? [{ label: 'Open link', icon: 'globe', onClick: () => window.open((node as any).url, '_blank', 'noopener') }] : []),
-      { label: 'Set color', icon: 'palette', submenu: colorSub },
-      { label: 'Duplicate', icon: 'file-plus', onClick: duplicateSelection },
-      { label: 'Zoom to selection', icon: 'zoom-in', onClick: zoomToSelection },
+      ...(node.type === 'text' ? [{ label: "编辑", icon: 'pencil', onClick: () => setEditingNode(node.id) }] : []),
+      ...(node.type === 'file' ? [{ label: "打开", icon: 'arrow-up-right', onClick: () => openFile((node as any).file) }] : []),
+      ...(node.type === 'link' ? [{ label: "打开链接", icon: 'globe', onClick: () => window.open((node as any).url, '_blank', 'noopener') }] : []),
+      { label: "设置颜色", icon: 'palette', submenu: colorSub },
+      { label: "创建副本", icon: 'file-plus', onClick: duplicateSelection },
+      { label: "缩放至所选项", icon: 'zoom-in', onClick: zoomToSelection },
       { label: '', separator: true },
-      { label: 'Bring to front', onClick: bringToFront },
-      { label: 'Send to back', onClick: sendToBack },
+      { label: "置于顶层", onClick: bringToFront },
+      { label: "置于底层", onClick: sendToBack },
       ...(multi
         ? [{
-            label: 'Align', icon: 'columns', submenu: [
-              { label: 'Align left', onClick: () => alignSelection('left') },
-              { label: 'Align center horizontally', onClick: () => alignSelection('hcenter') },
-              { label: 'Align right', onClick: () => alignSelection('right') },
-              { label: 'Align top', onClick: () => alignSelection('top') },
-              { label: 'Align center vertically', onClick: () => alignSelection('vcenter') },
-              { label: 'Align bottom', onClick: () => alignSelection('bottom') },
+            label: "对齐", icon: 'columns', submenu: [
+              { label: "左对齐", onClick: () => alignSelection('left') },
+              { label: "水平居中对齐", onClick: () => alignSelection('hcenter') },
+              { label: "右对齐", onClick: () => alignSelection('right') },
+              { label: "顶端对齐", onClick: () => alignSelection('top') },
+              { label: "垂直居中对齐", onClick: () => alignSelection('vcenter') },
+              { label: "底端对齐", onClick: () => alignSelection('bottom') },
             ],
           }]
         : []),
       { label: '', separator: true },
-      { label: 'Remove', icon: 'trash', danger: true, onClick: deleteSelection },
+      { label: "移除", icon: 'trash', danger: true, onClick: deleteSelection },
     ];
     openContextMenu({ x: e.clientX, y: e.clientY, items });
   };
@@ -674,48 +674,48 @@ export default function CanvasView() {
 
   // Obsidian editor context-menu structure (mined from obsidian.asar i18n).
   const textMenuItems = (): FmtItem[] => [
-    { label: 'Add link', act: openLinkPicker },
-    { label: 'Add external link', act: () => applyFormat('[', '](https://)') },
+    { label: "添加链接", act: openLinkPicker },
+    { label: "添加外部链接", act: () => applyFormat('[', '](https://)') },
     { sep: true },
-    { label: 'Format', sub: [
-      { label: 'Bold', act: () => toggleWrap('**') },
-      { label: 'Italic', act: () => toggleWrap('*') },
-      { label: 'Strikethrough', act: () => toggleWrap('~~') },
-      { label: 'Highlight', act: () => toggleWrap('==') },
-      { label: 'Code', act: () => toggleWrap('`') },
-      { label: 'Math', act: () => toggleWrap('$') },
-      { label: 'Comment', act: () => toggleWrap('%%') },
+    { label: "格式", sub: [
+      { label: "粗体", act: () => toggleWrap('**') },
+      { label: "斜体", act: () => toggleWrap('*') },
+      { label: "删除线", act: () => toggleWrap('~~') },
+      { label: "高亮", act: () => toggleWrap('==') },
+      { label: "代码", act: () => toggleWrap('`') },
+      { label: "公式", act: () => toggleWrap('$') },
+      { label: "注释", act: () => toggleWrap('%%') },
       { sep: true },
-      { label: 'Clear formatting', act: clearFormatting },
+      { label: "清除格式", act: clearFormatting },
     ] },
-    { label: 'Paragraph', sub: [
-      { label: 'Bullet list', act: () => setLinePrefix('- ') },
-      { label: 'Numbered list', act: () => setLinePrefix('1. ') },
-      { label: 'Task list', act: () => setLinePrefix('- [ ] ') },
+    { label: "段落", sub: [
+      { label: "无序列表", act: () => setLinePrefix('- ') },
+      { label: "有序列表", act: () => setLinePrefix('1. ') },
+      { label: "任务列表", act: () => setLinePrefix('- [ ] ') },
       { sep: true },
-      ...[1, 2, 3, 4, 5, 6].map((l) => ({ label: `Heading ${l}`, act: () => setLinePrefix('#'.repeat(l) + ' ') })),
-      { label: 'Body', act: () => setLinePrefix('') },
+      ...[1, 2, 3, 4, 5, 6].map((l) => ({ label: `标题 ${l}`, act: () => setLinePrefix('#'.repeat(l) + ' ') })),
+      { label: "正文", act: () => setLinePrefix('') },
       { sep: true },
-      { label: 'Quote', act: () => setLinePrefix('> ') },
+      { label: "引用", act: () => setLinePrefix('> ') },
     ] },
-    { label: 'Align', sub: [
-      { label: 'Align left', act: () => setTextAlign('left') },
-      { label: 'Align center', act: () => setTextAlign('center') },
-      { label: 'Align right', act: () => setTextAlign('right') },
+    { label: "对齐", sub: [
+      { label: "左对齐", act: () => setTextAlign('left') },
+      { label: "居中对齐", act: () => setTextAlign('center') },
+      { label: "右对齐", act: () => setTextAlign('right') },
     ] },
-    { label: 'Insert', sub: [
-      { label: 'Table', act: () => insertAtCaret('\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n') },
-      { label: 'Callout', act: () => insertAtCaret('> [!note]\n> ') },
-      { label: 'Code block', act: () => applyFormat('```\n', '\n```') },
-      { label: 'Math block', act: () => applyFormat('$$\n', '\n$$') },
-      { label: 'Horizontal rule', act: () => insertAtCaret('\n\n---\n\n') },
-      { label: 'Footnote', act: () => insertAtCaret('[^1]') },
+    { label: "插入", sub: [
+      { label: "表格", act: () => insertAtCaret('\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n') },
+      { label: "标注", act: () => insertAtCaret('> [!note]\n> ') },
+      { label: "代码块", act: () => applyFormat('```\n', '\n```') },
+      { label: "公式块", act: () => applyFormat('$$\n', '\n$$') },
+      { label: "水平分割线", act: () => insertAtCaret('\n\n---\n\n') },
+      { label: "脚注", act: () => insertAtCaret('[^1]') },
     ] },
     { sep: true },
-    { label: 'Cut', act: () => doClipboard('cut') },
-    { label: 'Copy', act: () => doClipboard('copy') },
-    { label: 'Paste', act: () => { void doPaste(); } },
-    { label: 'Select all', act: () => editTaRef.current?.select() },
+    { label: "剪切", act: () => doClipboard('cut') },
+    { label: "复制", act: () => doClipboard('copy') },
+    { label: "粘贴", act: () => { void doPaste(); } },
+    { label: "全选", act: () => editTaRef.current?.select() },
   ];
 
   const addTextNode = (cx: number, cy: number) => {
@@ -811,9 +811,9 @@ export default function CanvasView() {
       const { path } = await api.upload(f);
       const c = viewCenter();
       addFileNode(path, c.x, c.y);
-      notify(`Inserted ${path}`);
+      notify(`已插入 ${path}`);
     } catch (err: any) {
-      notify(err?.message ?? 'Upload failed');
+      notify(err?.message ?? "上传失败");
     }
   };
 
@@ -1279,7 +1279,7 @@ export default function CanvasView() {
               onPointerLeave={() => setHoverNode((h) => (h === n.id ? null : h))}
               onContextMenu={(e) => openNodeMenu(e, n)}
             >
-              <div className="canvas-group-label">{(n as any).label ?? 'Group'}</div>
+              <div className="canvas-group-label">{(n as any).label ?? "分组"}</div>
               {renderHandlesAndPorts(n, sel.nodes.has(n.id), hoverNode === n.id || sel.nodes.has(n.id))}
             </div>
           );
@@ -1451,7 +1451,7 @@ export default function CanvasView() {
                   </div>
                 ) : (
                   <div className="canvas-text-body markdown-preview" style={{ textAlign: (n as TextNode).textAlign ?? 'left' }}>
-                    <CanvasVisible>{(n as TextNode).text.trim() ? <CanvasMarkdown key={n.id} id={(activePath ?? '') + ':' + n.id} source={(n as TextNode).text} path={activePath ?? ''} /> : <span className="canvas-placeholder">Empty card — double-click to edit</span>}</CanvasVisible>
+                    <CanvasVisible>{(n as TextNode).text.trim() ? <CanvasMarkdown key={n.id} id={(activePath ?? '') + ':' + n.id} source={(n as TextNode).text} path={activePath ?? ''} /> : <span className="canvas-placeholder">空卡片 — 双击以编辑</span>}</CanvasVisible>
                   </div>
                 )
               )}
@@ -1490,13 +1490,13 @@ export default function CanvasView() {
           onPointerDown={(e) => e.stopPropagation()}
         >
           <div className="canvas-menu-row">
-            <button className="canvas-menu-btn" title="Remove" onClick={deleteSelection}>
+            <button className="canvas-menu-btn" title="移除" onClick={deleteSelection}>
               <Icon name="trash" size={16} />
             </button>
-            <button className={`canvas-menu-btn ${showColors ? 'active' : ''}`} title="Set color" onClick={() => setShowColors((v) => !v)}>
+            <button className={`canvas-menu-btn ${showColors ? 'active' : ''}`} title="设置颜色" onClick={() => setShowColors((v) => !v)}>
               <Icon name="palette" size={16} />
             </button>
-            <button className="canvas-menu-btn" title="Zoom to selection" onClick={zoomToSelection}>
+            <button className="canvas-menu-btn" title="缩放至所选项" onClick={zoomToSelection}>
               <Icon name="zoom-in" size={16} />
             </button>
             {selHasText && (
@@ -1506,7 +1506,7 @@ export default function CanvasView() {
                   <button
                     key={a}
                     className={`canvas-menu-btn ${curAlign === a ? 'active' : ''}`}
-                    title={`Align ${a}`}
+                    title={`对齐 ${a}`}
                     onClick={() => setTextAlign(a)}
                   >
                     <Icon name={`align-${a}`} size={16} />
@@ -1517,7 +1517,7 @@ export default function CanvasView() {
             {onlyEdges && (
               <>
                 <span className="canvas-dir-wrap">
-                  <button className={`canvas-menu-btn ${showDir ? 'active' : ''}`} title="Arrow direction" onClick={() => setShowDir((v) => !v)}>
+                  <button className={`canvas-menu-btn ${showDir ? 'active' : ''}`} title="箭头方向" onClick={() => setShowDir((v) => !v)}>
                     <Icon name={curDir === 'non' ? 'minus' : curDir === 'bi' ? 'arrow-left-right' : 'arrow-right'} size={16} />
                   </button>
                   {showDir && (
@@ -1533,13 +1533,13 @@ export default function CanvasView() {
                   )}
                 </span>
                 {selEdgeHasLabel && (
-                  <button className="canvas-menu-btn" title="Remove label" onClick={removeEdgeLabel}>
+                  <button className="canvas-menu-btn" title="移除标签" onClick={removeEdgeLabel}>
                     <Icon name="x" size={16} />
                   </button>
                 )}
                 <button
                   className="canvas-menu-btn"
-                  title="Edit label"
+                  title="编辑标签"
                   onClick={() => { const id = Array.from(sel.edges)[0]; if (id) setEditingEdge(id); }}
                 >
                   <Icon name="pencil" size={16} />
@@ -1551,7 +1551,7 @@ export default function CanvasView() {
             <div className="canvas-menu-colors">
               <button
                 className={`canvas-swatch canvas-swatch-default ${!selColor ? 'selected' : ''}`}
-                title="Default color"
+                title="默认颜色"
                 onClick={() => setColor(undefined)}
               />
               {Object.entries(PRESET_COLORS).map(([k, hex]) => (
@@ -1559,11 +1559,11 @@ export default function CanvasView() {
                   key={k}
                   className={`canvas-swatch ${selColor === k ? 'selected' : ''}`}
                   style={{ background: hex }}
-                  title={`Color ${k}`}
+                  title={`颜色 ${k}`}
                   onClick={() => setColor(k)}
                 />
               ))}
-              <label className={`canvas-swatch canvas-swatch-custom ${isCustomColor ? 'selected' : ''}`} title="Custom color…">
+              <label className={`canvas-swatch canvas-swatch-custom ${isCustomColor ? 'selected' : ''}`} title="自定义颜色…">
                 <input
                   type="color"
                   value={isCustomColor ? (selColor as string) : '#e93147'}
@@ -1578,26 +1578,26 @@ export default function CanvasView() {
 
       {/* Zoom / control toolbar (bottom-left) */}
       <div className="canvas-toolbar canvas-toolbar-zoom" onPointerDown={(e) => e.stopPropagation()}>
-        <button title="Zoom out" onClick={() => zoomBy(1 / 1.2)}><Icon name="indent-decrease" size={16} /></button>
-        <button title="Reset zoom (100%)" className="canvas-zoom-pct" onClick={resetZoom}>{Math.round(view.scale * 100)}%</button>
-        <button title="Zoom in" onClick={() => zoomBy(1.2)}><Icon name="indent-increase" size={16} /></button>
+        <button title="缩小" onClick={() => zoomBy(1 / 1.2)}><Icon name="indent-decrease" size={16} /></button>
+        <button title="重置缩放 (100%)" className="canvas-zoom-pct" onClick={resetZoom}>{Math.round(view.scale * 100)}%</button>
+        <button title="放大" onClick={() => zoomBy(1.2)}><Icon name="indent-increase" size={16} /></button>
         <span className="canvas-tb-sep" />
-        <button title="Zoom to fit" onClick={zoomFit}><Icon name="graph" size={16} /></button>
+        <button title="缩放以适应" onClick={zoomFit}><Icon name="graph" size={16} /></button>
         <span className="canvas-tb-sep" />
-        <button title="Undo (⌘Z)" disabled={undoStack.current.length === 0} onClick={undo}><Icon name="undo" size={16} /></button>
-        <button title="Redo (⌘⇧Z)" disabled={redoStack.current.length === 0} onClick={redo}><Icon name="redo" size={16} /></button>
+        <button title="撤销 (⌘Z)" disabled={undoStack.current.length === 0} onClick={undo}><Icon name="undo" size={16} /></button>
+        <button title="重做 (⌘⇧Z)" disabled={redoStack.current.length === 0} onClick={redo}><Icon name="redo" size={16} /></button>
         <span style={{ display: 'none' }}>{histV}</span>
       </div>
 
       {/* Add toolbar (bottom-center) — card / note / image, like Obsidian */}
       <div className="canvas-toolbar canvas-toolbar-add" onPointerDown={(e) => e.stopPropagation()}>
-        <button title="Add card (or double-click canvas)" onClick={() => { const c = viewCenter(); addTextNode(c.x, c.y); }}>
+        <button title="添加卡片（或双击白板）" onClick={() => { const c = viewCenter(); addTextNode(c.x, c.y); }}>
           <Icon name="file-plus" size={18} />
         </button>
-        <button title="Add card from note" onClick={() => { setNoteFilter(''); setNotePicker((v) => !v); }}>
+        <button title="从笔记添加卡片" onClick={() => { setNoteFilter(''); setNotePicker((v) => !v); }}>
           <Icon name="file-text" size={18} />
         </button>
-        <button title="Add image" onClick={() => fileInputRef.current?.click()}>
+        <button title="添加图片" onClick={() => fileInputRef.current?.click()}>
           <Icon name="image" size={18} />
         </button>
       </div>
@@ -1608,13 +1608,13 @@ export default function CanvasView() {
           <input
             className="canvas-notepicker-input"
             autoFocus
-            placeholder="Search notes…"
+            placeholder="搜索笔记…"
             value={noteFilter}
             onChange={(e) => setNoteFilter(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && setNotePicker(false)}
           />
           <div className="canvas-notepicker-list">
-            {filteredNotes.length === 0 && <div className="canvas-notepicker-empty">No files</div>}
+            {filteredNotes.length === 0 && <div className="canvas-notepicker-empty">无文件</div>}
             {filteredNotes.map((f) => (
               <button
                 key={f.path}
@@ -1651,7 +1651,7 @@ export default function CanvasView() {
             className="canvas-dropmenu-item"
             onClick={() => { addConnectedTextNode(edgeDrop.cx, edgeDrop.cy, edgeDrop.edgeId, edgeDrop.end); setEdgeDrop(null); }}
           >
-            <Icon name="file-plus" size={15} /> Add card
+            <Icon name="file-plus" size={15} /> 添加卡片
           </button>
           <button
             className="canvas-dropmenu-item"
@@ -1662,7 +1662,7 @@ export default function CanvasView() {
               setEdgeDrop(null);
             }}
           >
-            <Icon name="file-text" size={15} /> Add note from vault
+            <Icon name="file-text" size={15} /> 从仓库添加笔记
           </button>
         </div>
       )}
@@ -1682,7 +1682,7 @@ export default function CanvasView() {
           <input
             className="canvas-notepicker-input"
             autoFocus
-            placeholder="Link to note…"
+            placeholder="链接到笔记…"
             value={linkFilter}
             onChange={(e) => setLinkFilter(e.target.value)}
             onKeyDown={(e) => {
@@ -1691,7 +1691,7 @@ export default function CanvasView() {
             }}
           />
           <div className="canvas-notepicker-list">
-            {filteredLinks.length === 0 && <div className="canvas-notepicker-empty">No files</div>}
+            {filteredLinks.length === 0 && <div className="canvas-notepicker-empty">无文件</div>}
             {filteredLinks.map((f) => (
               <button
                 key={f.path}
@@ -1719,7 +1719,7 @@ export default function CanvasView() {
         {showGrip && (
           <div
             className="canvas-node-grip"
-            title="Drag to move"
+            title="拖动以移动"
             onPointerDown={(e) => beginNodeDrag(e, n.id)}
             onDoubleClick={(e) => e.stopPropagation()}
           >

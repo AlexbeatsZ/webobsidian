@@ -8,6 +8,8 @@ import { getActiveEditor, getEditorForPath } from './activeEditor';
 import { contextOf } from './renderContext';
 import { documents } from './documents';
 import { useStore } from './store';
+import { eventHotkey, hotkeySignature, type Hotkey } from '@webobsidian/search-core';
+import { hotkeySettings } from './search';
 
 export interface CommandContext {
   source: 'user' | 'template' | 'script';
@@ -51,8 +53,9 @@ export type Command = {
   editorCheckCallback?: (checking: boolean, editor: Editor, view: MarkdownView) => unknown;
   run?: (args: unknown, context: CommandContext) => unknown;
   available?: (context: CommandContext) => boolean;
+  hotkeyScope?: 'editor';
 };
-type NativeCommand = { id: string; title: string; run: () => unknown };
+export type NativeCommand = { id: string; title: string; run: () => unknown; hotkeys?: Hotkey[]; hotkeyScope?: 'editor'; available?: (context: CommandContext) => boolean };
 
 /** One invocation contract for native contributions, Obsidian adapters and user JS. */
 export class CommandManager extends Events {
@@ -60,12 +63,12 @@ export class CommandManager extends Events {
   private native = new Map<string, Command>();
   constructor(private app: App, private getNative: () => readonly NativeCommand[],
     readonly registered: Map<string, Command>, readonly changed: () => void,
-    private resolveId: (id: string) => string = id => id) { super(); }
+    private resolveId: (id: string) => string = id => id, private getRevision = () => 0) { super(); }
   private nativeCommands() {
     const source = this.getNative();
     if (source !== this.nativeSource) {
       this.nativeSource = source;
-      this.native = new Map(source.map(c => [c.id, { id: c.id, name: c.title, callback: c.run }]));
+      this.native = new Map(source.map(c => [c.id, { id: c.id, name: c.title, callback: c.run, hotkeys: c.hotkeys, available: c.available, hotkeyScope: c.hotkeyScope }]));
     }
     return this.native;
   }
@@ -75,6 +78,54 @@ export class CommandManager extends Events {
     return [...native.values(), ...[...this.registered.values()].filter(c => !native.has(c.id))];
   }
   findCommand(id: string) { id = this.resolveId(id); return this.nativeCommands().get(id) ?? this.registered.get(id); }
+  getDefaultHotkeys(id: string): Hotkey[] { return this.findCommand(id)?.hotkeys ?? []; }
+  getHotkeys(id: string): Hotkey[] {
+    id = this.resolveId(id);
+    return hotkeySettings().bindings[id] ?? this.getDefaultHotkeys(id);
+  }
+  /** Settings also keeps imported commands whose plugin/capability is absent. */
+  hotkeyCatalog() {
+    const commands = this.listCommands(), known = new Set(commands.map(command => command.id));
+    return [...commands.map(command => ({ ...command, installed: true })),
+      ...Object.keys(hotkeySettings().bindings).filter(id => !known.has(id)).map(id => ({ id, name: id, installed: false }))];
+  }
+  private keyCache?: { config: ReturnType<typeof hotkeySettings>; revision: number; native: readonly NativeCommand[];
+    bindings: Map<string, { command: Command; custom: boolean }[]>; blocked: Set<string> };
+  private keyIndex() {
+    const config = hotkeySettings(), revision = this.getRevision(), native = this.getNative();
+    if (this.keyCache?.config === config && this.keyCache.revision === revision && this.keyCache.native === native) return this.keyCache;
+    const bindings = new Map<string, { command: Command; custom: boolean }[]>(), blocked = new Set<string>();
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+    for (const command of this.listCommands()) {
+      const custom = Object.hasOwn(config.bindings, command.id);
+      for (const binding of this.getHotkeys(command.id)) {
+        const signature = hotkeySignature(binding, mac);
+        bindings.set(signature, [...bindings.get(signature) ?? [], { command, custom }]);
+      }
+      if (custom) for (const binding of command.hotkeys ?? []) blocked.add(hotkeySignature(binding, mac));
+    }
+    return this.keyCache = { config, revision, native, bindings, blocked };
+  }
+  dispatchHotkey(event: KeyboardEvent): boolean {
+    if (event.defaultPrevented || event.isComposing || event.getModifierState('AltGraph')) return false;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('[data-hotkey-recorder], [role="dialog"], .modal-container, .settings-overlay, .palette-backdrop')) return false;
+    const binding = eventHotkey(event);
+    if (!binding) return false;
+    const index = this.keyIndex(), signature = hotkeySignature(binding, /Mac|iPhone|iPad/.test(navigator.platform));
+    const inEditor = !!target?.closest('.cm-editor'), typing = !!target?.closest('input, textarea, [contenteditable="true"]');
+    let candidates = (index.bindings.get(signature) ?? []).filter(({ command }) => !command.hotkeyScope || inEditor);
+    if (typing && !inEditor && !event.ctrlKey && !event.metaKey && !event.altKey) return false;
+    // User bindings replace defaults. Equal-priority collisions are never resolved
+    // by registration order; the settings page exposes both affected commands.
+    if (candidates.some(candidate => candidate.custom)) candidates = candidates.filter(candidate => candidate.custom);
+    if (candidates.length > 1) {
+      if (!event.repeat) useStore.getState().notify(`快捷键冲突：${candidates.map(({ command }) => command.name).join('、')}。请在快捷键设置中调整。`);
+      return true;
+    }
+    if (candidates.length === 1) { this.executeCommandById(candidates[0].command.id); return true; }
+    return inEditor && index.blocked.has(signature);
+  }
   register(command: Command): () => void {
     if (!command.id || this.findCommand(command.id)) throw new Error(`指令 ID 已存在：${command.id}`);
     this.registered.set(command.id, command); this.changed();

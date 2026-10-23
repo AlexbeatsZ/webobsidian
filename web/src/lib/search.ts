@@ -8,13 +8,24 @@ import {
   type TextMatch,
   parseSearchQuery,
   matchesTagFilters,
+  emptyHotkeys,
+  type VaultHotkeys,
+  type Hotkey,
 } from '@webobsidian/search-core';
-import { api } from './api';
+import { api, request } from './api';
 export { matchText, matchPath };
 let entries: CatalogEntry[] = [],
   settings: SearchSettings = { ...searchDefaults };
 let revision = 0,
   generation = 0;
+let hotkeys: VaultHotkeys = { ...emptyHotkeys(), vault: '' };
+let pendingHotkeyCommand = '';
+export function requestHotkeySettings(command = '') {
+  pendingHotkeyCommand = command;
+  window.dispatchEvent(new CustomEvent('hotkeys-settings-open', { detail: command }));
+}
+export function consumeHotkeySettingsRequest() { const command = pendingHotkeyCommand; pendingHotkeyCommand = ''; return command; }
+export const hotkeySettings = () => hotkeys;
 const listeners = new Set<() => void>();
 export const subscribeSearch = (fn: () => void) => {
   listeners.add(fn);
@@ -28,7 +39,7 @@ const changed = () => {
 };
 export function useSearch() {
   useSyncExternalStore(subscribeSearch, () => revision);
-  return { entries, settings };
+  return { entries, settings, hotkeys };
 }
 export const searchSettings = () => settings;
 export const searchEntries = () => entries;
@@ -43,11 +54,24 @@ export function searchTags(): string[] {
 }
 export async function refreshSearch() {
   const current = ++generation;
-  const [result, config] = await Promise.all([api.catalog(), api.getSettings()]);
+  const [result, config, keys] = await Promise.all([api.catalog(), api.getSettings(), request<VaultHotkeys>('/api/settings/hotkeys')]);
   if (current !== generation) return;
   entries = result.entries;
   settings = { ...searchDefaults, ...config.search.chinese };
+  hotkeys = keys;
   changed();
+}
+let hotkeyWrites: Promise<unknown> = Promise.resolve();
+/** Server serializes patches; no optimistic reset or loss of another command's bindings. */
+export function updateHotkeys(command: string, bindings: Hotkey[] | null) {
+  const vault = hotkeys.vault;
+  const operation = hotkeyWrites.catch(() => {}).then(async () => {
+    const next = await request<VaultHotkeys>('/api/settings/hotkeys', { method: 'PUT', body: JSON.stringify({ vault, command, bindings }) });
+    if (hotkeys.vault !== vault) return;
+    hotkeys = next; changed();
+  });
+  hotkeyWrites = operation;
+  return operation;
 }
 let writes: Promise<unknown> = Promise.resolve();
 export function updateSearch(patch: Partial<SearchSettings>) {

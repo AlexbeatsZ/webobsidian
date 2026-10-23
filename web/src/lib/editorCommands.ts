@@ -3,6 +3,7 @@ import { countColumn, EditorSelection, type ChangeSpec } from '@codemirror/state
 import { insertNewlineContinueMarkup, deleteMarkupBackward } from '@codemirror/lang-markdown';
 import { getIndentUnit, indentString, indentUnit } from '@codemirror/language';
 import { syntaxModel } from './syntaxModel';
+import { mathRegions } from '@webobsidian/markdown-core';
 import { markdownListLine } from './listLayout';
 
 /** Source indentation for list items and plain continuation lines, never bullets. */
@@ -227,32 +228,46 @@ export interface ObsidianKeymapHandlers {
   save?: () => void;
 }
 
-/** Default Obsidian editor hotkeys (§4). `Mod` = Cmd on macOS / Ctrl elsewhere. */
-export function obsidianKeymap(h: ObsidianKeymapHandlers): KeyBinding[] {
+/** Named commands belong to CommandManager; only structural editing stays here. */
+export function obsidianKeymap(_h: ObsidianKeymapHandlers): KeyBinding[] {
   return [
-    { key: 'Mod-b', run: (v) => toggleInline(v, '**') },
-    { key: 'Mod-i', run: (v) => toggleInline(v, '*') },
-    { key: 'Mod-l', run: toggleChecklist },
-    { key: 'Mod-d', run: deleteParagraph },
-    { key: 'Mod-k', run: insertLink },
-    { key: 'Mod-/', run: (v) => toggleInline(v, '%%') },
-    { key: 'Alt-Enter', run: (v) => followLink(v, h.openLink) },
-    {
-      key: 'Mod-e',
-      run: () => {
-        h.togglePreview?.();
-        return !!h.togglePreview;
-      },
-    },
-    {
-      key: 'Mod-s',
-      run: () => {
-        h.save?.();
-        return true; // swallow the browser save dialog regardless
-      },
-    },
     // Native marker continuation plus exact indentation for unmarked list text.
     { key: 'Enter', run: continueMarkdown },
     { key: 'Backspace', run: deleteMarkupBackward },
   ];
+}
+
+/** Local source patches over the shared syntax snapshot; no serialization. */
+export function toggleLineStyle(view: EditorView, style: 'bullet' | 'ordered' | 'quote' | number): boolean {
+  const state = view.state;
+  if (state.readOnly) return false;
+  const model = state.field(syntaxModel), formulas = mathRegions(model);
+  const lines = new Map<number, ReturnType<typeof state.doc.line>>();
+  for (const range of state.selection.ranges) {
+    const first = state.doc.lineAt(range.from).number, last = state.doc.lineAt(range.to > range.from ? range.to - 1 : range.to).number;
+    for (let n = first; n <= last; n++) {
+      const line = state.doc.line(n);
+      if (model.frontmatter && line.from < model.frontmatter.to || formulas.some(region => line.from < region.to && line.to >= region.from)) continue;
+      let excluded = false;
+      for (let node = model.tree.resolveInner(line.from + (line.text.match(/^[ \t]*/)?.[0].length ?? 0), 1); node; node = node.parent!) {
+        if (['FencedCode', 'CodeBlock', 'BodyHeading'].includes(node.name)) { excluded = true; break; }
+      }
+      if (!excluded && !/^[ \t]*>\s*\[!/.test(line.text)) lines.set(n, line);
+    }
+  }
+  const marker = style === 'bullet' ? /^(?:[-+*])[ \t]+/ : style === 'ordered' ? /^\d+[.)][ \t]+/ : style === 'quote' ? /^>[ \t]?/ : /^#{1,6}(?:[ \t]+|$)/;
+  const rows = [...lines.values()].map(line => {
+    const indent = line.text.match(/^[ \t]*/)?.[0].length ?? 0;
+    return { line, indent, mark: marker.exec(line.text.slice(indent))?.[0] ?? '' };
+  });
+  const remove = typeof style !== 'number' && rows.every(row => !!row.mark);
+  const changes = rows.map(({ line, indent, mark }, index) => {
+    let length = mark.length;
+    if (style === 'bullet' || style === 'ordered') length = /^(?:[-+*]|\d+[.)])[ \t]+/.exec(line.text.slice(indent))?.[0].length ?? 0;
+    const insert = remove || style === 0 ? '' : typeof style === 'number' ? '#'.repeat(style) + ' ' : style === 'bullet' ? '- ' : style === 'ordered' ? `${index + 1}. ` : '> ';
+    return { from: line.from + indent, to: line.from + indent + length, insert };
+  }).filter(change => state.sliceDoc(change.from, change.to) !== change.insert);
+  if (!changes.length) return false;
+  const changeSet = state.changes(changes);
+  view.dispatch({ changes: changeSet, selection: state.selection.map(changeSet, 1), userEvent: 'input.format' }); view.focus(); return true;
 }

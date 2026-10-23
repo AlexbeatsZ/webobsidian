@@ -211,7 +211,7 @@ async function ensureVault(cfg: DesktopConfig): Promise<DesktopConfig> {
 // default so the user can get going with one click.
 async function pickVaultDialog(firstRun: boolean): Promise<string> {
   const result = await dialog.showOpenDialog({
-    title: 'Choose your vault folder',
+    title: "选择仓库文件夹",
     message: 'Select a folder to use as your WebObsidian vault',
     properties: ['openDirectory', 'createDirectory'],
     buttonLabel: 'Use this folder',
@@ -324,28 +324,28 @@ function buildMenu(): void {
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: 'appMenu' as const }] : []),
     {
-      label: 'File',
+      label: "文件",
       submenu: [
-        { label: 'Trust native plugins (next launch)', type: 'checkbox', checked: !!desktopConfig?.trustedPlugins,
+        { label: "信任原生插件 (下次启动生效)", type: 'checkbox', checked: !!desktopConfig?.trustedPlugins,
           click: async (item) => { const cfg = await readConfig(); cfg.trustedPlugins = item.checked; await writeConfig(cfg); } },
-        { label: 'Switch Vault…', click: () => void switchVault() },
+        { label: "切换仓库…", click: () => void switchVault() },
         {
-          label: 'Open Vault Folder',
+          label: "打开仓库文件夹",
           click: async () => {
             try { await openExistingPath(await effectiveVaultPath(DATA_DIR(), desktopConfig?.vaultPath)); }
             catch (error) { dialog.showErrorBox('无法打开笔记库', String(error)); }
           },
         },
         { type: 'separator' },
-        { label: 'Open Data Folder', click: () => shell.openPath(DATA_DIR()) },
-        { label: 'Open Logs', click: () => shell.openPath(LOG_FILE()) },
+        { label: "打开数据文件夹", click: () => shell.openPath(DATA_DIR()) },
+        { label: "打开日志", click: () => shell.openPath(LOG_FILE()) },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' },
       ],
     },
     { role: 'editMenu' },
     {
-      label: 'View',
+      label: "视图",
       submenu: [
         { role: 'reload' },
         { role: 'forceReload' },
@@ -363,7 +363,7 @@ function buildMenu(): void {
       role: 'help',
       submenu: [
         {
-          label: 'WebObsidian on GitHub',
+          label: "GitHub 上的 WebObsidian",
           click: () => shell.openExternal('https://github.com/xnohat/webobsidian'),
         },
       ],

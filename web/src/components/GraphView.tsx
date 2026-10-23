@@ -659,17 +659,17 @@ export default function GraphView() {
         if (!blob) throw new Error('toBlob failed');
         if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-          useStore.getState().notify('Graph screenshot copied');
+          useStore.getState().notify("关系图截图已复制");
         } else {
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
           a.download = 'graph.png';
           a.click();
           URL.revokeObjectURL(a.href);
-          useStore.getState().notify('Graph screenshot downloaded');
+          useStore.getState().notify("关系图截图已下载");
         }
       } catch {
-        useStore.getState().notify('Screenshot failed');
+        useStore.getState().notify("截图失败");
       }
     };
     window.addEventListener('wo-graph-screenshot', onShot);
@@ -996,7 +996,7 @@ export default function GraphView() {
           <Icon name="search" size={14} />
           <input
             value={jumpQ}
-            placeholder="Find node…"
+            placeholder="查找节点…"
             spellCheck={false}
             onChange={(e) => setJumpQ(e.target.value)}
             onKeyDown={(e) => {
@@ -1010,7 +1010,7 @@ export default function GraphView() {
           />
           {jumpQ.trim() !== '' && (
             <div className="graph-node-results">
-              {jumpResults.length === 0 && <div className="graph-node-empty">No matching nodes</div>}
+              {jumpResults.length === 0 && <div className="graph-node-empty">未找到匹配节点</div>}
               {jumpResults.map((n) => (
                 <button
                   key={n.id}
@@ -1029,20 +1029,20 @@ export default function GraphView() {
         </div>
 
         <div className="graph-hint">
-          {stats.shown} / {stats.total} notes · {stats.orphans} orphans · scroll to zoom · drag to pan · click a tag to search
+          {stats.shown} / {stats.total} 篇笔记 · {stats.orphans} 个孤立节点 · 滚动以缩放 · 拖拽以平移 · 点击标签以搜索
         </div>
 
         {buildError && (
           <div className="graph-error">
             <span>{buildError}</span>
             <button className="btn secondary" onClick={reset}>
-              Reset filters
+              重置筛选器
             </button>
           </div>
         )}
 
         {!panelOpen && (
-          <button className="graph-panel-open" title="Show filters" onClick={() => setPanelOpen(true)}>
+          <button className="graph-panel-open" title="显示筛选器" onClick={() => setPanelOpen(true)}>
             <Icon name="settings" size={16} />
           </button>
         )}
@@ -1091,13 +1091,13 @@ function FilterPanel({
   return (
     <div className="graph-panel">
       <Section
-        title="Filters"
+        title="筛选器"
         actions={
           <>
-            <button className="nav-action" title="Reset to defaults" onClick={reset}>
+            <button className="nav-action" title="恢复默认设置" onClick={reset}>
               <Icon name="refresh-cw" size={14} />
             </button>
-            <button className="nav-action" title="Close" onClick={onClose}>
+            <button className="nav-action" title="关闭" onClick={onClose}>
               <Icon name="x" size={14} />
             </button>
           </>
@@ -1105,7 +1105,7 @@ function FilterPanel({
       >
         <input
           className="text-input"
-          placeholder="Search files..."
+          placeholder="搜索文件..."
           value={s.search}
           onChange={(e) => patch({ search: e.target.value })}
         />
@@ -1115,9 +1115,9 @@ function FilterPanel({
         <Toggle label="Orphans" checked={s.orphans} onChange={(v) => patch({ orphans: v })} />
       </Section>
 
-      <Section title="Groups">
+      <Section title="分组">
         <button className="btn" style={{ width: '100%' }} onClick={addGroup}>
-          New group
+          新建分组
         </button>
         {s.groups.map((g, i) => (
           <div className="graph-group-row" key={i}>
@@ -1129,28 +1129,28 @@ function FilterPanel({
             />
             <input
               className="text-input"
-              placeholder="Search query"
+              placeholder="搜索查询"
               value={g.query}
               onChange={(e) => setGroup(i, { query: e.target.value })}
             />
-            <button className="nav-action" title="Remove group" onClick={() => delGroup(i)}>
+            <button className="nav-action" title="移除分组" onClick={() => delGroup(i)}>
               <Icon name="x" size={14} />
             </button>
           </div>
         ))}
       </Section>
 
-      <Section title="Display">
+      <Section title="显示">
         <Toggle label="Arrows" checked={s.arrows} onChange={(v) => patch({ arrows: v })} />
         <Slider label="Text fade threshold" min={-3} max={3} step={0.1} value={s.textFade} onChange={(v) => patch({ textFade: v })} />
         <Slider label="Node size" min={0.1} max={5} step={0.1} value={s.nodeSize} onChange={(v) => patch({ nodeSize: v })} />
         <Slider label="Link thickness" min={0.1} max={5} step={0.1} value={s.linkThickness} onChange={(v) => patch({ linkThickness: v })} />
         <button className="btn" style={{ width: '100%', marginTop: 6 }} onClick={onAnimate}>
-          Animate
+          动画
         </button>
       </Section>
 
-      <Section title="Forces">
+      <Section title="作用力">
         <Slider label="Center force" min={0} max={1} step={0.01} value={s.centerForce} onChange={(v) => patch({ centerForce: v })} />
         <Slider label="Repel force" min={0} max={20} step={0.1} value={s.repelForce} onChange={(v) => patch({ repelForce: v })} />
         <Slider label="Link force" min={0} max={1} step={0.01} value={s.linkForce} onChange={(v) => patch({ linkForce: v })} />

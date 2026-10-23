@@ -197,19 +197,19 @@ export default function SearchPanel() {
           />
           <button
             className={`search-icon-btn ${matchCase ? 'active' : ''}`}
-            title="Match case"
+            title="区分大小写"
             onClick={() => setMatchCase((v) => !v)}
           >
             Aa
           </button>
           {q && (
-            <button className="search-icon-btn" title="Clear" onClick={() => setQ('')}>
+            <button className="search-icon-btn" title="清除" onClick={() => setQ('')}>
               <Icon name="x" size={15} />
             </button>
           )}
           <button
             className={`search-icon-btn ${showOptions ? 'active' : ''}`}
-            title="Search options"
+            title="搜索选项"
             onClick={() => setShowOptions((v) => !v)}
           >
             <Icon name="sliders" size={15} />
@@ -219,11 +219,11 @@ export default function SearchPanel() {
         {showOptions && (
           <div className="search-options">
             <label className="search-opt">
-              <span>Collapse results</span>
+              <span>折叠搜索结果</span>
               <input type="checkbox" checked={collapsed} onChange={(e) => setCollapsed(e.target.checked)} />
             </label>
             <label className="search-opt">
-              <span>Show more context</span>
+              <span>显示更多上下文</span>
               <input
                 type="checkbox"
                 checked={moreContext}
@@ -237,7 +237,7 @@ export default function SearchPanel() {
           <div className="search-meta">
             <span>
               {shown.length} note{shown.length === 1 ? '' : 's'}
-              {totalMatches > 0 && ` · ${totalMatches}${visible < shown.length ? '+' : ''} matches`}
+              {totalMatches > 0 && `· ${totalMatches}${visible < shown.length ? '+' : ''} 处匹配`}
             </span>
             <span className="grow" />
             <div className="search-sort">
@@ -317,7 +317,7 @@ export default function SearchPanel() {
         <div ref={sentinel} />
         {visible < shown.length && (
           <div className="search-more">
-            Showing {visible} of {shown.length}…
+            正在显示 {visible} of {shown.length}…
           </div>
         )}
       </div>

@@ -174,9 +174,9 @@ export default function MarkdownView(props: MarkdownViewProps) {
       context: menuContext, items: attachMenuContext(protect(menu.items), menuContext) });
     if (latest.current.mode === 'reading') {
       showMenu({ x: e.clientX, y: e.clientY, items: [
-        ...(link ? [{ id: 'link:open', label: 'Open link', onClick: () => context.openLink(link) },
-          { id: 'link:copy', label: 'Copy link', onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
-        { id: 'editor:copy', label: 'Copy', onClick: copy }, { id: 'editor:select-all', label: 'Select all', onClick: selectAll },
+        ...(link ? [{ id: 'link:open', label: "打开链接", onClick: () => context.openLink(link) },
+          { id: 'link:copy', label: "复制链接", onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
+        { id: 'editor:copy', label: "复制", onClick: copy }, { id: 'editor:select-all', label: "全选", onClick: selectAll },
       ] });
       return;
     }
@@ -185,50 +185,50 @@ export default function MarkdownView(props: MarkdownViewProps) {
       x: e.clientX,
       y: e.clientY,
       items: [
-        ...(link ? [{ id: 'link:open', label: 'Open link', onClick: () => context.openLink(link) },
-          { id: 'link:copy', label: 'Copy link', onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
+        ...(link ? [{ id: 'link:open', label: "打开链接", onClick: () => context.openLink(link) },
+          { id: 'link:copy', label: "复制链接", onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
         {
-          id: 'editor:format', label: 'Format', icon: 'pencil', submenu: [
-            { id: 'editor:format:bold', label: 'Bold', onClick: () => wrap('**') },
-            { id: 'editor:format:italic', label: 'Italic', onClick: () => wrap('*') },
-            { id: 'editor:format:strike', label: 'Strikethrough', onClick: () => wrap('~~') },
-            { id: 'editor:format:highlight', label: 'Highlight', onClick: () => wrap('==') },
-            { id: 'editor:format:code', label: 'Inline code', onClick: () => wrap('`') },
+          id: 'editor:format', label: "格式", icon: 'pencil', submenu: [
+            { id: 'editor:format:bold', label: "粗体", onClick: () => wrap('**') },
+            { id: 'editor:format:italic', label: "斜体", onClick: () => wrap('*') },
+            { id: 'editor:format:strike', label: "删除线", onClick: () => wrap('~~') },
+            { id: 'editor:format:highlight', label: "高亮", onClick: () => wrap('==') },
+            { id: 'editor:format:code', label: "行内代码", onClick: () => wrap('`') },
           ],
         },
         {
-          id: 'editor:paragraph', label: 'Paragraph', icon: 'file-text', submenu: [
-            { id: 'editor:heading:1', label: 'Heading 1', onClick: () => prefixLines('# ') },
-            { id: 'editor:heading:2', label: 'Heading 2', onClick: () => prefixLines('## ') },
-            { id: 'editor:heading:3', label: 'Heading 3', onClick: () => prefixLines('### ') },
+          id: 'editor:paragraph', label: "段落", icon: 'file-text', submenu: [
+            { id: 'editor:heading:1', label: "标题 1", onClick: () => prefixLines('# ') },
+            { id: 'editor:heading:2', label: "标题 2", onClick: () => prefixLines('## ') },
+            { id: 'editor:heading:3', label: "标题 3", onClick: () => prefixLines('### ') },
             { id: 'editor:body-heading', label: '正文内小标题', onClick: () => prefixLines('####### ') },
-            { id: 'editor:list:bullet', label: 'Bullet list', onClick: () => prefixLines('- ') },
-            { id: 'editor:list:ordered', label: 'Numbered list', onClick: () => prefixLines('1. ') },
-            { id: 'editor:list:task', label: 'Task list', onClick: () => prefixLines('- [ ] ') },
-            { id: 'editor:quote', label: 'Quote', onClick: () => prefixLines('> ') },
-            { id: 'editor:code-block', label: 'Code block', onClick: () => wrap('```\n', '\n```') },
+            { id: 'editor:list:bullet', label: "无序列表", onClick: () => prefixLines('- ') },
+            { id: 'editor:list:ordered', label: "有序列表", onClick: () => prefixLines('1. ') },
+            { id: 'editor:list:task', label: "任务列表", onClick: () => prefixLines('- [ ] ') },
+            { id: 'editor:quote', label: "引用", onClick: () => prefixLines('> ') },
+            { id: 'editor:code-block', label: "代码块", onClick: () => wrap('```\n', '\n```') },
           ],
         },
         {
-          id: 'editor:insert', label: 'Insert', icon: 'plus', submenu: [
-            { id: 'editor:insert:wiki', label: 'Internal link', onClick: () => insert('[[]]', 2) },
-            { id: 'editor:insert:link', label: 'External link', onClick: () => wrap('[', '](url)') },
-            { id: 'editor:insert:embed', label: 'Embed file', onClick: () => insert('![[]]', 3) },
-            { id: 'editor:insert:callout', label: 'Callout', onClick: () => insert('> [!note] Title\n> ', 18) },
-            { id: 'editor:insert:table', label: 'Table', onClick: () => insert('\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n') },
-            { id: 'editor:insert:rule', label: 'Horizontal rule', onClick: () => insert('\n---\n') },
-            { id: 'editor:insert:tag', label: 'Tag', onClick: () => insert('#') },
+          id: 'editor:insert', label: "插入", icon: 'plus', submenu: [
+            { id: 'editor:insert:wiki', label: "内部链接", onClick: () => insert('[[]]', 2) },
+            { id: 'editor:insert:link', label: "外部链接", onClick: () => wrap('[', '](url)') },
+            { id: 'editor:insert:embed', label: "嵌入文件", onClick: () => insert('![[]]', 3) },
+            { id: 'editor:insert:callout', label: "标注", onClick: () => insert('> [!note] Title\n> ', 18) },
+            { id: 'editor:insert:table', label: "表格", onClick: () => insert('\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n') },
+            { id: 'editor:insert:rule', label: "水平分割线", onClick: () => insert('\n---\n') },
+            { id: 'editor:insert:tag', label: "标签", onClick: () => insert('#') },
           ],
         },
         { label: '', separator: true },
-        { id: 'editor:cut', label: 'Cut', onClick: cut },
-        { id: 'editor:copy', label: 'Copy', onClick: copy },
-        { id: 'editor:paste', label: 'Paste', onClick: paste },
-        { id: 'editor:select-all', label: 'Select all', onClick: selectAll },
+        { id: 'editor:cut', label: "剪切", onClick: cut },
+        { id: 'editor:copy', label: "复制", onClick: copy },
+        { id: 'editor:paste', label: "粘贴", onClick: paste },
+        { id: 'editor:select-all', label: "全选", onClick: selectAll },
         ...(sel
           ? [
               { label: '', separator: true },
-              { label: `Search for “${sel.slice(0, 24)}”`, icon: 'search', onClick: () => setLeftPanel('search') },
+              { label: `搜索 “${sel.slice(0, 24)}”`, icon: 'search', onClick: () => setLeftPanel('search') },
             ]
           : []),
       ],

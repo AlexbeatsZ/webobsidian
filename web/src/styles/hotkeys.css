@@ -1,0 +1,27 @@
+.hotkey-toolbar { display: flex; gap: 12px; align-items: center; margin: 20px 0 8px; }
+.hotkey-search { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 0 10px; background: var(--background-modifier-form-field); border: 1px solid var(--background-modifier-border); border-radius: 6px; }
+.hotkey-search input { width: 100%; min-width: 0; border: 0; box-shadow: none; background: transparent; }
+.hotkey-summary, .hotkey-migration { color: var(--text-muted); font-size: 12px; }
+.hotkey-list .setting-row { align-items: flex-start; }
+.hotkey-list .info { min-width: 0; }
+.hotkey-list .desc code { font-size: 11px; overflow-wrap: anywhere; color: var(--text-muted); background: transparent; padding: 0; }
+.hotkey-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; max-width: 340px; }
+.hotkey-bindings { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.hotkey-binding { display: inline-flex; align-items: center; border: 1px solid var(--background-modifier-border); border-radius: 5px; background: var(--background-secondary); }
+.hotkey-binding kbd { padding: 3px 7px; font: 12px var(--font-monospace); white-space: nowrap; }
+.hotkey-binding button { padding: 1px 5px; min-height: 24px; border: 0; background: transparent; box-shadow: none; color: var(--text-muted); }
+.hotkey-conflict { color: var(--text-error); border-color: var(--text-error); }
+.hotkey-actions { display: inline-flex; gap: 4px; }
+.hotkey-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 27px; height: 27px; padding: 0; }
+.hotkey-status { display: inline-block; color: var(--text-muted); margin-left: 8px; font-size: 11px; font-weight: normal; }
+.hotkey-unavailable .name { color: var(--text-muted); }
+.hotkey-empty { color: var(--text-faint); font-size: 12px; }
+.hotkey-error { color: var(--text-error); }
+.hotkey-recorder { width: 100%; min-width: 180px; border-color: var(--interactive-accent); }
+@media (max-width: 640px) {
+  .hotkey-toolbar { flex-wrap: wrap; }
+  .hotkey-search { flex-basis: 100%; }
+  .hotkey-list .setting-row { flex-wrap: wrap; gap: 10px; }
+  .hotkey-controls { justify-content: flex-start; max-width: 100%; }
+  .hotkey-bindings { justify-content: flex-start; }
+}

@@ -7,6 +7,8 @@ export * from './links.js';
 export * from './metadata.js';
 export * from './blocks.js';
 export * from './math.js';
+export * from './mathPackages.js';
+export * from './mathSource.js';
 export * from './properties.js';
 export * from './tables.js';
 export * from './canvasSource.js';
@@ -15,8 +17,6 @@ export * from './replacement.js';
 export * from './legacyReplacement.js';
 export * from './legacySubheadings.js';
 export * from './blockEffects.js';
-export * from './mathPackages.js';
-export * from './mathSource.js';
 
 export * from './equations.js';
 export * from './fragments.js';

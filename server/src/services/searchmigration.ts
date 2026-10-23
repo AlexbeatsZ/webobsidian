@@ -19,7 +19,6 @@ export async function migrateSearchSettings() {
   };
   const legacy = await read('plugins/fuzzy-chinese-pinyin/data.json');
   const templates = await read('templates.json');
-  const hotkeys = await read('hotkeys.json');
   await updateSettings((d) => {
     const next = d.search.chinese;
     if (legacy) {
@@ -48,19 +47,6 @@ export async function migrateSearchSettings() {
           .slice(0, 16);
     }
     if (typeof templates?.folder === 'string' && !next.templateFolder) next.templateFolder = templates.folder;
-    const mapping: Record<string, string> = {
-      'open-search': 'files',
-      'execute-command': 'commands',
-      'move-file': 'move',
-      'search-heading': 'headings',
-      'insert-templates': 'templates',
-      'rebuild-index': 'reindex',
-    };
-    for (const [old, id] of Object.entries(mapping)) {
-      const keys = hotkeys?.['fuzzy-chinese-pinyin:' + old]?.[0];
-      if (!next.shortcuts[id] && keys && Array.isArray(keys.modifiers) && typeof keys.key === 'string')
-        next.shortcuts[id] = [...keys.modifiers, keys.key].join('+');
-    }
     next.migration = legacy
       ? 'Imported supported Fuzzy Chinese Pinyin settings; original files preserved.'
       : 'Built-in defaults';

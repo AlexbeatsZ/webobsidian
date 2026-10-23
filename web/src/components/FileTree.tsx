@@ -38,7 +38,7 @@ function RenameInput({ node, onDone }: { node: TreeNode; onDone: () => void }) {
       await api.rename(node.path, to);
       closeTab(node.path);
     } catch (e: any) {
-      notify(e?.message ?? 'Rename failed');
+      notify(e?.message ?? "重命名失败");
     }
     await loadTree();
   };
@@ -101,12 +101,12 @@ async function moveItemsTo(paths: string[], targetDir: string): Promise<void> {
       closeTab(from);
       moved++;
     } catch (err: any) {
-      notify(err?.message ?? 'Move failed');
+      notify(err?.message ?? "移动失败");
     }
   }
   setSelected([]);
   await loadTree();
-  if (moved > 1) notify(`Moved ${moved} items`);
+  if (moved > 1) notify(`已移动 ${moved} 项`);
 }
 
 /** Visible tree rows in display order — used to resolve a Shift-click range. */
@@ -193,7 +193,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
 
   const doDeleteMany = async (captured: string[]) => {
     const paths = pruneDescendants(captured);
-    if (!paths.length || !confirm(`Delete ${paths.length} item${paths.length > 1 ? 's' : ''}?`)) return;
+    if (!paths.length || !confirm(`删除 ${paths.length} 项${paths.length > 1 ? 's' : ''}？`)) return;
     let n = 0;
     for (const p of paths) {
       const r = await api.remove(p).catch(() => null);
@@ -201,16 +201,16 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     }
     setSelected([]);
     await loadTree();
-    notify(`Deleted ${n} item${n > 1 ? 's' : ''}`);
+    notify(`已删除 ${n} 项${n > 1 ? 's' : ''}`);
   };
 
   const doRename = () => setRenamingPath(node.path);
   const doDelete = async () => {
-    if (confirm(`Delete "${node.name}"?`)) {
+    if (confirm(`删除 "${node.name}"？`)) {
       const r = await api.remove(node.path);
       closeTab(node.path);
       await loadTree();
-      notify(r.deleted ? 'Deleted permanently' : 'Moved to trash');
+      notify(r.deleted ? "已永久删除" : "已移至回收站");
     }
   };
 
@@ -222,13 +222,13 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     const copyPath = dot > 0 ? `${node.path.slice(0, dot)} copy${node.path.slice(dot)}` : `${node.path} copy`;
     await api.write(copyPath, content);
     await loadTree();
-    notify('Made a copy');
+    notify("已创建副本");
   };
   const doMove = () => setMovePath(node.path);
 
   const doClipboard = (mode: 'copy' | 'cut') => () => {
     setClipboard({ path: node.path, mode });
-    notify(mode === 'cut' ? 'Cut' : 'Copied');
+    notify(mode === 'cut' ? "剪切" : "已复制");
   };
   const doPaste = async () => {
     const clip = useStore.getState().clipboard;
@@ -236,7 +236,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     const targetDir = isFolder ? node.path : parentDir(node.path);
     // Never paste a folder into itself or one of its own descendants.
     if (clip.path === targetDir || targetDir === clip.path || targetDir.startsWith(`${clip.path}/`)) {
-      notify('Cannot paste into itself');
+      notify("无法粘贴至其自身");
       return;
     }
     const base = clip.path.split('/').pop()!;
@@ -249,9 +249,9 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
         closeTab(clip.path);
         setClipboard(null);
         await loadTree();
-        notify('Moved');
+        notify("已移动");
       } catch (e: any) {
-        notify(e?.message ?? 'Paste failed');
+        notify(e?.message ?? "粘贴失败");
       }
       return;
     }
@@ -261,19 +261,19 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     try {
       await api.copy(clip.path, to);
       await loadTree();
-      notify('Pasted');
+      notify("已粘贴");
     } catch (e: any) {
-      notify(e?.message ?? 'Paste failed');
+      notify(e?.message ?? "粘贴失败");
     }
   };
 
   const copyPath = () => {
     navigator.clipboard?.writeText(node.path).catch(() => {});
-    notify('Path copied');
+    notify("路径已复制");
   };
   const copyUrl = () => {
     navigator.clipboard?.writeText(`${location.origin}${pathToUrl(node.path)}`).catch(() => {});
-    notify('URL copied');
+    notify("URL 已复制");
   };
 
   const onContext = (e: React.MouseEvent) => {
@@ -289,10 +289,10 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
         x: e.clientX,
         y: e.clientY,
         items: extendFileMenu([
-          { id: 'file:move-selected', label: `Move ${sel.length} items to…`, onClick: () => setMovePath(sel) },
+          { id: 'file:move-selected', label: `移动 ${sel.length} 项至…`, onClick: () => setMovePath(sel) },
           ...nativeBatchTagMenuItems({ kind: 'files', paths: useStore.getState().filePaths.filter(path => sel.some(parent => path === parent || path.startsWith(parent + '/'))) }),
           { label: '', separator: true },
-          { id: 'file:delete-selected', label: `Delete ${sel.length} items`, danger: true, onClick: () => { void doDeleteMany(sel); } },
+          { id: 'file:delete-selected', label: `删除 ${sel.length} 项`, danger: true, onClick: () => { void doDeleteMany(sel); } },
         ], sel, menuContext(sel)),
       });
       return;
@@ -301,37 +301,37 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     if (!sel.includes(node.path)) { setSelected([node.path]); setSelectAnchor(node.path); }
     const items: ContextMenuItem[] = isFolder
       ? [
-          { id: 'file:new-note', label: 'New note', onClick: () => newNote(node.path) },
-          { id: 'file:new-canvas', label: 'New canvas', onClick: () => newCanvas(node.path) },
-          { id: 'file:new-folder', label: 'New folder', onClick: () => newFolder(node.path) },
+          { id: 'file:new-note', label: "新建笔记", onClick: () => newNote(node.path) },
+          { id: 'file:new-canvas', label: "新建白板", onClick: () => newCanvas(node.path) },
+          { id: 'file:new-folder', label: "新建文件夹", onClick: () => newFolder(node.path) },
           { label: '', separator: true },
-          { id: 'file:copy', label: 'Copy', onClick: doClipboard('copy') },
-          { id: 'file:cut', label: 'Cut', onClick: doClipboard('cut') },
-          ...(clipboard ? [{ id: 'file:paste', label: 'Paste', onClick: doPaste }] : []),
+          { id: 'file:copy', label: "复制", onClick: doClipboard('copy') },
+          { id: 'file:cut', label: "剪切", onClick: doClipboard('cut') },
+          ...(clipboard ? [{ id: 'file:paste', label: "粘贴", onClick: doPaste }] : []),
           { label: '', separator: true },
-          { id: 'file:rename', label: 'Rename…', onClick: doRename },
-          { id: 'file:move', label: 'Move folder to…', onClick: doMove },
-          { id: 'file:copy-path', label: 'Copy path', onClick: copyPath },
-          { id: 'file:copy-url', label: 'Copy URL path', onClick: copyUrl },
+          { id: 'file:rename', label: "重命名…", onClick: doRename },
+          { id: 'file:move', label: "移动文件夹至…", onClick: doMove },
+          { id: 'file:copy-path', label: "复制路径", onClick: copyPath },
+          { id: 'file:copy-url', label: "复制 URL 路径", onClick: copyUrl },
           { label: '', separator: true },
-          { id: 'file:delete', label: 'Delete', danger: true, onClick: doDelete },
+          { id: 'file:delete', label: "删除", danger: true, onClick: doDelete },
         ]
       : [
-          { id: 'file:open', label: 'Open', onClick: () => openFile(node.path) },
-          { id: 'file:open-to-side', label: 'Open to the right', onClick: () => openToSide(node.path) },
+          { id: 'file:open', label: "打开", onClick: () => openFile(node.path) },
+          { id: 'file:open-to-side', label: "在右侧打开", onClick: () => openToSide(node.path) },
           { label: '', separator: true },
-          { id: 'file:bookmark', label: bookmarks.includes(node.path) ? 'Remove bookmark' : 'Bookmark', onClick: () => toggleBookmark(node.path) },
-          { id: 'file:duplicate', label: 'Make a copy', onClick: doCopy },
+          { id: 'file:bookmark', label: bookmarks.includes(node.path) ? "移除书签" : "添加书签", onClick: () => toggleBookmark(node.path) },
+          { id: 'file:duplicate', label: "创建副本", onClick: doCopy },
           { label: '', separator: true },
-          { id: 'file:copy', label: 'Copy', onClick: doClipboard('copy') },
-          { id: 'file:cut', label: 'Cut', onClick: doClipboard('cut') },
-          ...(clipboard ? [{ id: 'file:paste', label: 'Paste', onClick: doPaste }] : []),
+          { id: 'file:copy', label: "复制", onClick: doClipboard('copy') },
+          { id: 'file:cut', label: "剪切", onClick: doClipboard('cut') },
+          ...(clipboard ? [{ id: 'file:paste', label: "粘贴", onClick: doPaste }] : []),
           { label: '', separator: true },
-          { id: 'file:rename', label: 'Rename…', onClick: doRename },
-          { id: 'file:move', label: 'Move file to…', onClick: doMove },
-          { id: 'file:copy-url', label: 'Copy URL path', onClick: copyUrl },
+          { id: 'file:rename', label: "重命名…", onClick: doRename },
+          { id: 'file:move', label: "移动文件至…", onClick: doMove },
+          { id: 'file:copy-url', label: "复制 URL 路径", onClick: copyUrl },
           { label: '', separator: true },
-          { id: 'file:delete', label: 'Delete', danger: true, onClick: doDelete },
+          { id: 'file:delete', label: "删除", danger: true, onClick: doDelete },
         ];
     items.push(...nativeBatchTagMenuItems(isFolder ? { kind: 'folder', path: node.path } : { kind: 'files', paths: [node.path] }));
     openContextMenu({ x: e.clientX, y: e.clientY, items: extendFileMenu(items,[node.path], menuContext([node.path])) });
@@ -533,9 +533,9 @@ export default function FileTree() {
         closeTab(clip.path);
         setClipboard(null);
         await loadTree();
-        notify('Moved');
+        notify("已移动");
       } catch (e: any) {
-        notify(e?.message ?? 'Paste failed');
+        notify(e?.message ?? "粘贴失败");
       }
       return;
     }
@@ -543,9 +543,9 @@ export default function FileTree() {
     try {
       await api.copy(clip.path, name);
       await loadTree();
-      notify('Pasted');
+      notify("已粘贴");
     } catch (e: any) {
-      notify(e?.message ?? 'Paste failed');
+      notify(e?.message ?? "粘贴失败");
     }
   };
 
@@ -555,24 +555,24 @@ export default function FileTree() {
       x: e.clientX,
       y: e.clientY,
       items: [
-        { id: 'file:new-note', label: 'New note', onClick: () => newNote('') },
-        { id: 'file:new-canvas', label: 'New canvas', onClick: () => newCanvas('') },
-        { id: 'file:new-folder', label: 'New folder', onClick: () => newFolder('') },
+        { id: 'file:new-note', label: "新建笔记", onClick: () => newNote('') },
+        { id: 'file:new-canvas', label: "新建白板", onClick: () => newCanvas('') },
+        { id: 'file:new-folder', label: "新建文件夹", onClick: () => newFolder('') },
         ...(clipboard
-          ? [{ label: '', separator: true }, { id: 'file:paste', label: 'Paste', onClick: pasteToRoot }]
+          ? [{ label: '', separator: true }, { id: 'file:paste', label: "粘贴", onClick: pasteToRoot }]
           : []),
       ],
     });
   };
 
-  if (!tree) return <div style={{ padding: 12, color: 'var(--text-faint)' }}>Loading…</div>;
+  if (!tree) return <div style={{ padding: 12, color: 'var(--text-faint)' }}>加载中…</div>;
   if (!tree.children?.length)
     return (
       <div
         onContextMenu={onRootContext}
         style={{ padding: 12, color: 'var(--text-faint)', minHeight: '100%' }}
       >
-        Vault is empty.
+        仓库为空。
       </div>
     );
   return (

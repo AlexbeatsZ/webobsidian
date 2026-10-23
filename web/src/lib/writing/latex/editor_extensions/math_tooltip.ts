@@ -1,4 +1,4 @@
-import { type Tooltip, showTooltip, EditorView, tooltips } from '@codemirror/view';
+import { type Tooltip, showTooltip, EditorView } from '@codemirror/view';
 import { StateField, type EditorState } from '@codemirror/state';
 import { renderMath, mathDefinitionContext, subscribeMathConfiguration } from '../../../mathjax';
 import { syntaxModel } from '../../../syntaxModel';
@@ -37,16 +37,23 @@ function inlineTooltip(state: EditorState): MathTooltip | undefined {
     create(view) {
       const dom = document.createElement('div');
       dom.className = 'cm-tooltip-cursor ' + (above ? 'cm-tooltip-above' : 'cm-tooltip-below');
+      const body = document.createElement('div'); body.className = 'cm-math-tooltip-body';
+      body.textContent = region.tex; dom.appendChild(body);
       let controller = new AbortController();
       const render = () => {
         controller.abort(); controller = new AbortController();
         const signal = controller.signal;
-        void renderMath(dom, equation, false, controller.signal, {
-          transient: true, sourcePath: contextOf(view).sourcePath, definitions,
-        }).catch(error => { if (!signal.aborted) { dom.textContent = region.tex; dom.title = String(error); } });
+        view.requestMeasure({ key: dom, read: () => {
+          if (signal.aborted || !dom.isConnected) return;
+          // Keep the CM-owned arrow/positioning root intact when SVG is adopted.
+          void renderMath(body, equation, false, signal, {
+            transient: true, sourcePath: contextOf(view).sourcePath, definitions, container: view.contentDOM,
+          }).catch(error => { if (!signal.aborted) { body.textContent = region.tex; dom.title = String(error); } });
+        } });
       };
-      const stop = subscribeMathConfiguration(render); render();
-      return { dom, destroy() { controller.abort(); stop(); } };
+      let stop = () => {};
+      return { dom, mount() { stop = subscribeMathConfiguration(render); render(); },
+        destroy() { controller.abort(); stop(); } };
     },
   } };
 }
@@ -58,6 +65,15 @@ export const cursorTooltipBaseTheme = EditorView.baseTheme({
 		border: "1px solid var(--background-modifier-border-hover)",
 		padding: "4px 6px",
 		borderRadius: "6px",
+		fontFamily: "var(--font-text)",
+		fontSize: "var(--font-text-size)",
+		lineHeight: "var(--line-height-normal)",
+		textIndent: "0",
+		display: "flex",
+		flexDirection: "column",
+		width: "max-content",
+		maxWidth: "min(32em, calc(100vw - 16px))",
+		minWidth: "0",
 		"& .cm-tooltip-arrow:before": {
 			borderTopColor: "var(--background-modifier-border-hover)",
 			borderBottomColor: "var(--background-modifier-border-hover)",
@@ -69,25 +85,14 @@ export const cursorTooltipBaseTheme = EditorView.baseTheme({
 		"& p": {
 			margin: "0px",
 		},
-		"& mjx-container": {
+		"& mjx-container[jax=SVG]": {
 			padding: "2px !important",
 		},
-
-		// CM6 puts the top of the tooltip higher than what's viewable (negative top value),
-		// so to compensate for this, we align the content to the bottom of the tooltip container,
-		// and limit the height.
-		"&.cm-tooltip-above": {
-			display: "flex",
-		},
-		"&.cm-tooltip-above > .MathJax": {
-			overflowY: "auto",
-			maxHeight: "80%",
-			display: "inline-block",
-			alignSelf: "flex-end",
-		},
-		"&.cm-tooltip-below > .MathJax": {
-			overflowY: "auto",
-			maxHeight: "90%",
+		"& > .cm-math-tooltip-body": {
+			minWidth: "0",
+			minHeight: "0",
+			maxHeight: "min(20em, 50vh)",
+			overflow: "auto",
 		},
 	},
 	[`.${HIGHLIGHT_CLASS}`]: {
@@ -105,7 +110,6 @@ export const cursorTooltipBaseTheme = EditorView.baseTheme({
 export const mathTooltipExtension = [
   cursorTooltipField,
   cursorTooltipBaseTheme,
-  tooltips({ position: 'absolute', tooltipSpace: view => view.dom.getBoundingClientRect() }),
 ];
 
 /** Safe native visuals; this does not install snippets, user code or plugin processors. */

@@ -379,7 +379,7 @@ export class SearchComponent extends TextComponent {
     this.inputEl.type = 'search';
     this.clearButtonEl = createEl('button', {
       text: '×',
-      title: 'Clear search',
+      title: "清除搜索",
       parent: wrapper,
     });
     this.clearButtonEl.onclick = () => {

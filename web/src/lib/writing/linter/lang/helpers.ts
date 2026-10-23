@@ -1,7 +1,7 @@
 import en from './locale/en';
 import zh from './locale/zh-cn';
 export type LanguageStringKey = string;
-let locale = 'en';
+let locale = 'zh-CN';
 export function setLanguage(value: string) {
   locale = value;
 }

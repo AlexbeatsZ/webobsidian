@@ -7,6 +7,8 @@ import { config, SETTINGS_FILE } from '../config.js';
 /** ---- Schema (PRD §6) ---------------------------------------------------- */
 
 const SettingsSchema = z.object({
+  hotkeys: z.record(z.object({ version: z.literal(1), bindings: z.record(z.array(z.object({ modifiers: z.array(z.string()), key: z.string() }))),
+    imported: z.array(z.string()).default([]), migration: z.string().default('') })).default({}),
   nativeFeatures: z.record(z.object({
     // Retained for explicit migration; active definitions belong to Vault files.
     automation: z.record(z.unknown()).optional(),
@@ -184,7 +186,7 @@ export function updateSettings(mutator: (draft: Settings) => void | Promise<void
 /** Redact secrets for sending to the client. */
 export function redactSettings(s: Settings) {
   // Writing rules have a dedicated Vault-scoped endpoint, not every settings payload.
-  const {writing,nativeFeatures,...publicSettings}=s;
+  const {writing,nativeFeatures,hotkeys,...publicSettings}=s;
   return {
     ...publicSettings,
     git: { ...s.git, token: s.git.token ? '••••••••' : '' },

@@ -1,5 +1,5 @@
 import { ensureWriting, writingFileChanged, watchExternalWritingSources } from './lib/writing/config';
-import { runWritingHotkey, bindWritingNavigation } from './lib/writing/commands';
+import { bindWritingNavigation } from './lib/writing/commands';
 import { refreshSearch, searchSettings } from './lib/search';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { api, invalidateVaultRequests } from './lib/api';
@@ -147,64 +147,12 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing) return;
-      const state = useStore.getState();
-      const reserved =
-        (e.ctrlKey || e.metaKey) &&
-        !e.altKey &&
-        ['p', 'o', 's', 'n', 'e', 'f', '\\'].includes(e.key.toLowerCase());
-      if (!reserved)
-        for (const [id, binding] of Object.entries(searchSettings().shortcuts)) {
-          if (!binding) continue;
-          const parts = binding.toLowerCase().split('+');
-          const key = parts.pop();
-          const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-          const ctrl = parts.includes('ctrl') || (parts.includes('mod') && !mac),
-            meta = parts.includes('meta') || (parts.includes('mod') && mac);
-          if (
-            key === e.key.toLowerCase() &&
-            ctrl === e.ctrlKey &&
-            meta === e.metaKey &&
-            parts.includes('alt') === e.altKey &&
-            parts.includes('shift') === e.shiftKey
-          ) {
-            if (sharedApp.commands.executeCommandById(id)) {
-              e.preventDefault();
-              return;
-            }
-          }
-        }
-      if (!reserved && runWritingHotkey(e, id => sharedApp.commands.executeCommandById(id))) { e.preventDefault(); return; }
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const k = e.key.toLowerCase();
-      const s = useStore.getState();
-      if (k === 'p') {
-        e.preventDefault();
-        setPalette(true, e.shiftKey ? 'commands' : 'commands');
-      } else if (k === 'o') {
-        e.preventDefault();
-        setPalette(true, 'files');
-      } else if (k === 's') {
-        e.preventDefault();
-        sharedApp.commands.executeCommandById('editor:save-file');
-      } else if (k === 'n') {
-        e.preventDefault();
-        s.newNote();
-      } else if (k === 'e') {
-        e.preventDefault();
-        s.setViewMode(s.viewMode === 'reading' ? 'live' : 'reading');
-      } else if (k === 'f' && e.shiftKey) {
-        e.preventDefault();
-        s.setLeftPanel('search');
-      } else if (k === '\\') {
-        e.preventDefault();
-        s.toggleLeft();
-      }
+      if (!sharedApp.commands.dispatchHotkey(e)) return;
+      e.preventDefault(); e.stopImmediatePropagation();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [setPalette, save]);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
 
   // Mobile: close the overlay drawer once a note is opened (tap note → read it).
   useEffect(() => {

@@ -11,6 +11,7 @@ import { drainFileUpdates } from '../services/fileupdates.js';
 import { selectVaultWorkspace } from '../services/uistate.js';
 import { z } from 'zod';
 import { readCssSnippets, readCssSnippet, setCssSnippetEnabled } from '../services/cssSnippets.js';
+import { readHotkeys, patchHotkeys } from '../services/hotkeySettings.js';
 
 let switchRuntime = async (_commit: () => Promise<void>): Promise<void> => { throw new Error('Vault switch runtime is not ready'); };
 /** The server owns its existing watcher and index lifecycle. */
@@ -30,6 +31,8 @@ settingsRouter.get('/css-snippets/:name', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache'); res.type('text/css').send(css);
 }));
 
+settingsRouter.get('/hotkeys', asyncHandler(async (_req, res) => { res.json(await readHotkeys()); }));
+settingsRouter.put('/hotkeys', asyncHandler(async (req, res) => { res.json(await patchHotkeys(req.body)); }));
 
 settingsRouter.get(
   '/',

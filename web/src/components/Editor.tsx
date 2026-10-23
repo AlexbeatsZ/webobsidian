@@ -40,22 +40,22 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     bindEditor: registerEditor, openLink: (target, sourcePath) => { void openLink(target, sourcePath ?? path ?? undefined); }, openMenu, reportError: notify, initialPropertyTypes: propertyTypes,
     files: () => [...files],
   }), [path, openLink, openMenu, files, propertyTypes, notify]);
-  useEffect(() => {
-    if (!session || reading || !snapshot.dirty || snapshot.conflict) return;
-    const timer = window.setTimeout(() => { void session.save().catch((cause) => notify(cause.message)); }, 900);
-    return () => window.clearTimeout(timer);
-  }, [session, reading, snapshot.version, snapshot.dirty, snapshot.conflict, notify]);
   const numberedContext = useMemo(() => {
     const model = session?.analysis;
     if (!model) return context;
     const from = fragment ? fragmentRange(model, fragment)?.from ?? 0 : 0;
     return { ...context, equations: equationContext(model, from), mathSource: { model, from } };
   }, [context, session, snapshot.version, fragment]);
+  useEffect(() => {
+    if (!session || reading || !snapshot.dirty || snapshot.conflict) return;
+    const timer = window.setTimeout(() => { void session.save().catch((cause) => notify(cause.message)); }, 900);
+    return () => window.clearTimeout(timer);
+  }, [session, reading, snapshot.version, snapshot.dirty, snapshot.conflict, notify]);
   if (error) return <div className="editor-error" role="alert">{error.message}</div>;
-  if (!session) return <div className="editor-loading">Loading…</div>;
+  if (!session) return <div className="editor-loading">加载中…</div>;
   const analysis = session.analysis;
   const range = fragment ? fragmentRange(analysis, fragment) : null;
-  if (fragment && !range) return <div className="editor-error">Section or block could not be found</div>;
+  if (fragment && !range) return <div className="editor-error">未找到章节或块</div>;
   const displayed = range ? { ...snapshot, text: snapshot.text.slice(range.from, range.to), raw: snapshot.text.slice(range.from, range.to) } : snapshot;
   return <MarkdownView snapshot={displayed} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={numberedContext}
     autoFocus={!reading} showTitle={!embedded} layout={embedded ? 'embedded' : 'page'}

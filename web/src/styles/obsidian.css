@@ -474,7 +474,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-editor { height: 100%; background: var(--background-primary) !important; color: var(--text-normal); }
 .cm-editor.cm-focused { outline: none !important; }
 .cm-editor .cm-content { font-family: var(--font-text); font-size: var(--font-text-size); line-height: var(--line-height-normal);
-  margin: 0 auto; padding: 28px var(--file-margins) 40vh; caret-color: var(--text-normal); }
+  min-width: 0; margin: 0 auto; padding: 28px var(--file-margins) 40vh; caret-color: var(--text-normal); }
 .markdown-source-view.is-readable-line-width .cm-content { max-width: var(--file-line-width); }
 .cm-editor .cm-line { padding: 0; }
 .cm-gutters { background: var(--background-primary) !important; border: 0 !important; color: var(--text-faint) !important; }
@@ -566,7 +566,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   border: solid var(--text-on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 /* Math (MathJax SVG; one spacing owner for display formulas) */
-.cm-math-rendered.math-block { display: block; text-align: center; padding: 0.5em 0; width: fit-content; min-width: 100%; max-width: none; }
+.cm-math-rendered.math-block { display: block; text-align: center; text-indent: 0; padding: 0.5em 0; width: 100%; min-width: 0; max-width: 100%; }
+.cm-math-rendered.math-block > .cm-math-body { display: block; min-width: 0; overflow-x: auto; }
 .cm-highlight .math-inline, .cm-highlight + .cm-widgetBuffer + .math-inline { background-color: var(--text-highlight-bg); }
 .cm-math-rendered mjx-container[jax="SVG"][display="true"] { margin: 0; }
 .cm-math-rendered mjx-container[jax="SVG"] { max-width: 100%; }
@@ -597,7 +598,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   background-repeat: no-repeat; background-size: 2px 100%, 2px 100%; background-position: 22px 0, 46px 0;
 }
 /* List indentation guides (one per indent unit) — same mechanism as Obsidian:
-   absolutely positioned 1px rule spanning the full line height, at a bullet's center. */
+   absolutely positioned 1px rule spanning the full line height at a bullet's center. */
 .cm-s-obsidian .cm-line { position: relative; }
 .cm-s-obsidian .cm-indent { display: inline-block; }
 .cm-s-obsidian .cm-indent::before {
@@ -698,9 +699,12 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 }
 /* Keep CM's inline text/caret layout intact. Reserve one icon column for all
    wrapped lines and center the SVG on the complete title container. */
-.md-callout-title > .cm-line { flex: 1; min-width: 0; position: static; padding: 0 8px 0 22px; }
+.md-callout-title > .cm-line { flex: 1; min-width: 0; position: static; padding: 0 min(50%, calc(8px + var(--callout-formula-controls, 0) * 30px)) 0 22px; }
 .md-callout-title { margin-bottom: 0; }
 .md-callout-title .cm-callout-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); }
+.cm-callout-math-sources { position: absolute; inset-inline-end: 8px; top: 0; height: 1lh; max-width: calc(50% - 8px); display: inline-flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.cm-callout-math-sources > .cm-source-toggle { position: static; flex: 0 0 28px; padding: 3px 0; }
+.md-callout:hover .cm-callout-math-sources > .cm-source-toggle { opacity: 1; }
 .md-callout .md-code, .md-callout .cm-code { background: var(--document-nested-surface); }
 
 .md-code { background: var(--document-surface); border-radius: var(--radius-s); padding: 8px 16px; }

@@ -18,7 +18,7 @@ export default function BookmarksPanel() {
 
   const copyUrl = (p: string) => {
     navigator.clipboard?.writeText(`${location.origin}${pathToUrl(p)}`).catch(() => {});
-    notify('URL copied');
+    notify("URL 已复制");
   };
 
   // Drag a row onto a folder in the file tree to move the underlying file
@@ -33,16 +33,16 @@ export default function BookmarksPanel() {
     e.stopPropagation();
     const isBookmarked = bookmarks.includes(path);
     const items: ContextMenuItem[] = [
-      { label: 'Open', icon: 'file-text', onClick: () => openFile(path) },
-      { label: 'Open to the right', icon: 'columns', onClick: () => openToSide(path) },
+      { label: "打开", icon: 'file-text', onClick: () => openFile(path) },
+      { label: "在右侧打开", icon: 'columns', onClick: () => openToSide(path) },
       { label: '', separator: true },
-      { label: 'Reveal file in navigation', icon: 'folder', onClick: () => revealInTree(path) },
-      { label: 'Move file to…', icon: 'folder', onClick: () => setMovePath(path) },
-      { label: isBookmarked ? 'Remove bookmark' : 'Bookmark', icon: 'bookmark', onClick: () => toggleBookmark(path) },
+      { label: "在文件列表中显示", icon: 'folder', onClick: () => revealInTree(path) },
+      { label: "移动文件至…", icon: 'folder', onClick: () => setMovePath(path) },
+      { label: isBookmarked ? "移除书签" : "添加书签", icon: 'bookmark', onClick: () => toggleBookmark(path) },
       ...(kind === 'recent'
-        ? [{ label: 'Remove from recent', icon: 'x', onClick: () => removeRecent(path) } as ContextMenuItem]
+        ? [{ label: "从最近列表中移除", icon: 'x', onClick: () => removeRecent(path) } as ContextMenuItem]
         : []),
-      { label: 'Copy URL path', onClick: () => copyUrl(path) },
+      { label: "复制 URL 路径", onClick: () => copyUrl(path) },
     ];
     openContextMenu({ x: e.clientX, y: e.clientY, items });
   };
@@ -54,8 +54,8 @@ export default function BookmarksPanel() {
 
   return (
     <div>
-      <div className="panel-title">Bookmarks</div>
-      {bookmarks.length === 0 && <div className="panel-item">No bookmarks yet</div>}
+      <div className="panel-title">书签</div>
+      {bookmarks.length === 0 && <div className="panel-item">暂无书签</div>}
       {bookmarks.map((b) => (
         <div
           key={b}
@@ -68,17 +68,17 @@ export default function BookmarksPanel() {
         >
           <Icon name="bookmark" size={14} /> <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(b)}</span>
           <span className="panel-item-actions">
-            <span title="Move file to…" onClick={(e) => actionBtn(e, () => setMovePath(b))}>
+            <span title="移动文件至…" onClick={(e) => actionBtn(e, () => setMovePath(b))}>
               <Icon name="folder" size={13} />
             </span>
-            <span title="Remove bookmark" onClick={(e) => actionBtn(e, () => toggleBookmark(b))}>
+            <span title="移除书签" onClick={(e) => actionBtn(e, () => toggleBookmark(b))}>
               <Icon name="x" size={13} />
             </span>
           </span>
         </div>
       ))}
-      <div className="panel-title" style={{ marginTop: 8 }}>Recent</div>
-      {recent.length === 0 && <div className="panel-item">No recent files</div>}
+      <div className="panel-title" style={{ marginTop: 8 }}>最近</div>
+      {recent.length === 0 && <div className="panel-item">暂无最近文件</div>}
       {recent.map((r) => (
         <div
           key={r}
@@ -91,10 +91,10 @@ export default function BookmarksPanel() {
         >
           <Icon name="clock" size={14} /> <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(r)}</span>
           <span className="panel-item-actions">
-            <span title="Move file to…" onClick={(e) => actionBtn(e, () => setMovePath(r))}>
+            <span title="移动文件至…" onClick={(e) => actionBtn(e, () => setMovePath(r))}>
               <Icon name="folder" size={13} />
             </span>
-            <span title="Remove from recent" onClick={(e) => actionBtn(e, () => removeRecent(r))}>
+            <span title="从最近列表中移除" onClick={(e) => actionBtn(e, () => removeRecent(r))}>
               <Icon name="x" size={13} />
             </span>
           </span>

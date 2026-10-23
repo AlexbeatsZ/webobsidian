@@ -1,4 +1,4 @@
-import { matchName } from '../search';
+import { matchName, hotkeySettings } from '../search';
 import { nativeCommands, resolveNativeCommandId } from '../nativeCommands';
 import { CommandManager, type Command } from '../commands';
 import { Automation } from '../userCommands';
@@ -270,7 +270,7 @@ export class App {
   vault = new files.Vault((path, content) => this.automation.prepareNewNote(path, content));
   metadataCache = new files.MetadataCache(this.vault);
   workspace = new workspace.Workspace(this);
-  commands = new CommandManager(this, () => nativeCommands, pluginCommands, changed, resolveNativeCommandId);
+  commands = new CommandManager(this, () => nativeCommands, pluginCommands, changed, resolveNativeCommandId, pluginRevision);
   automation = new Automation(this);
   scope = new ui.Scope();
   protocolHandlers = new Map<string, Function>();
@@ -319,9 +319,9 @@ export class App {
     getEnabledPluginById: (id: string): any => this.internalPlugins.plugins[id]?.instance ?? null,
   };
   hotkeyManager = {
-    customKeys: {} as Record<string, any>,
-    getHotkeys: (id: string) => pluginCommands.get(id)?.hotkeys ?? [],
-    getDefaultHotkeys: (id: string) => pluginCommands.get(id)?.hotkeys ?? [],
+    get customKeys() { return hotkeySettings().bindings; },
+    getHotkeys: (id: string) => this.commands.getHotkeys(id),
+    getDefaultHotkeys: (id: string) => this.commands.getDefaultHotkeys(id),
   };
   fileManager = {
     renameFile: (file: files.TAbstractFile, path: string) => this.vault.rename(file, path),
@@ -785,20 +785,6 @@ export async function loadPlugins(): Promise<void> {
         queueMetadata(file, true, oldPath),
       ),
     ];
-    const keys = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return;
-      for (const command of pluginCommands.values())
-        if (
-          command.hotkeys?.some(
-            (h) => h.key.toLowerCase() === event.key.toLowerCase() && ui.matchesModifiers(event, h.modifiers),
-          ) &&
-          runPluginCommand(command.id)
-        ) {
-          event.preventDefault();
-          return;
-        }
-    };
-    window.addEventListener('keydown', keys, true);
     const stopJavascript = installJavascript(sharedApp);
     const stopBlocks = installBlockEffects(sharedApp);
     const stopCssSnippets = initializeCssSnippets(error => useStore.getState().notify(error));
@@ -813,7 +799,6 @@ export async function loadPlugins(): Promise<void> {
       metadataStopped = true;
       window.clearTimeout(metadataTimer);
       for (const ref of metadataEvents) sharedApp.vault.offref(ref);
-      window.removeEventListener('keydown', keys, true);
       sharedApp.workspace.reset();
     };
     await sharedApp.metadataCache.initialize();

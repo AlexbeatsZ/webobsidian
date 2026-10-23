@@ -34,6 +34,8 @@ export const documentMetadata = StateField.define<Metadata>({
 type Blocks = {
   containers: ReturnType<typeof blockContainers>; math: MathBlock[]; tables: ReturnType<typeof tableModels>;
   mathRanges: readonly MathRegion[];
+  mathCallout: ReadonlyMap<number, number>;
+  calloutMath: ReadonlyMap<number, readonly MathRegion[]>;
   commentLines: ReadonlySet<number>; inlineMathByLine: ReadonlyMap<number, readonly MathRegion[]>;
 };
 const blockCache = new WeakMap<MarkdownModel, Blocks>();
@@ -57,9 +59,22 @@ function blocks(model: MarkdownModel, doc: Text): Blocks {
       const list = inlineMathByLine.get(number) ?? [];
       list.push(formula); inlineMathByLine.set(number, list);
     }
-    const math = mathRanges.filter(formula => formula.closed && formula.kind === 'dollar' &&
-      (formula.block || formula.tex.includes('\n'))).map(formula => ({ from: formula.from, to: formula.to, tex: formula.tex.trim() }));
-    value = { containers: blockContainers(model), math, tables: tableModels(model), mathRanges, commentLines, inlineMathByLine };
+    const displayMath = mathRanges.filter(formula => formula.closed && formula.kind === 'dollar' &&
+      (formula.block || formula.tex.includes('\n')));
+    const math = displayMath.map(formula => ({ from: formula.from, to: formula.to, tex: formula.tex.trim() }));
+    const containers = blockContainers(model), callouts = containers.filter(block => block.kind === 'callout');
+    const mathCallout = new Map<number, number>(), calloutMath = new Map<number, MathRegion[]>();
+    for (const formula of displayMath) {
+      let owner: typeof containers[number] | undefined;
+      for (const callout of callouts) if (formula.from >= callout.bodyFrom && formula.to <= callout.to &&
+        (!owner || callout.depth > owner.depth)) owner = callout;
+      if (owner) {
+        mathCallout.set(formula.from, owner.from);
+        const formulas = calloutMath.get(owner.from) ?? [];
+        formulas.push(formula); calloutMath.set(owner.from, formulas);
+      }
+    }
+    value = { containers, math, tables: tableModels(model), mathRanges, mathCallout, calloutMath, commentLines, inlineMathByLine };
     blockCache.set(model, value);
   }
   return value;

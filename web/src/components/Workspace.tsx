@@ -75,7 +75,7 @@ export default function Workspace() {
       try {
         const { path } = await api.upload(file);
         setContent(`${content}\n![[${path}]]\n`);
-        notify(`Inserted ${path}`);
+        notify(`已插入 ${path}`);
       } catch (e: any) {
         notify(e.message);
       }
@@ -122,7 +122,7 @@ export default function Workspace() {
             <div className="split-head">
               <span className="crumbs">{splitPath}</span>
               <span className="grow" />
-              <button className="tool-btn" onClick={closeSplit} title="Close split">
+              <button className="tool-btn" onClick={closeSplit} title="关闭分屏">
                 <Icon name="x" size={16} />
               </button>
             </div>
