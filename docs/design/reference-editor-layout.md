@@ -88,6 +88,39 @@ the source/preview visibility of the following emphasis. CM attribute resets
 restore only missing width properties through the existing observer; no stored
 padding, class-based restore cycle or duplicate measurement channel remains.
 
+## Post-0.1.13 click-jitter correction
+
+User acceptance of 0.1.13 still saw quote titles and Callout body text jumping
+left-right on every random click. Static source tracing closed the loop: the
+width variables were written as external inline styles during the CM measure
+phase (outside `observer.ignore`). CM 6.43's own DOMObserver watches all
+attribute records without a filter, flushes attribute-only records
+synchronously, and `readMutation` marks the line tile attrs-dirty. The next
+view update — every click, because selection changes rebuild the decorations —
+runs `tile.sync()` → `setAttrs()`, which removes any DOM attribute absent from
+CM's own line attributes, including that inline style. The variables vanished,
+`text-indent` collapsed, and the transparent `> ` reoccupied its advance for
+one painted frame until listLayout's observer restored it; each restore armed
+the next wipe, so "variables present" and "tile synced" could never hold at the
+same time.
+
+Widths now live in the `prefixWidths` StateField and reach the DOM only as a
+line-decoration `style` attribute (`--cm-quote-prefix-width` /
+`--cm-list-prefix-width`). CodeMirror merges multiple line styles with `;`,
+re-applies its own attributes on every sync inside `observer.ignore`, and
+compares them by value, so measurement updates flow state → decorations →
+CM-owned DOM writes with no external mutations left to wipe. The measurement
+itself (isolated prefix boxes, scaleX, 1/64px rounding) and the
+doc/viewport/geometry scheduling are unchanged. The observer's style-restore
+branch and the destroy inline-style cleanup are removed with the external write
+path; its remaining job is structural (`data-prefix-layout` attribute and
+prefix/line insertion/removal records). Dispatching from the measure write is
+forbidden (update guard), so changed widths dispatch from a microtask guarded
+by doc identity and plugin lifetime. First appearance of a prefix line can
+still shift once when measurement lands, same as before; the click-driven
+wipe/restore oscillation is gone. No runtime trace was captured; the user
+accepts the built package.
+
 Native Callout frame/spacing now has a definite column width, preserving its
 vertical padding, title/body wrappers and plain-text editing. The earlier
 fit-content/min100% native wrapper and 100%-wide formula shell had opposing

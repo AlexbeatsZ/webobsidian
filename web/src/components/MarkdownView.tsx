@@ -25,7 +25,7 @@ import { syntaxModel, adoptSyntaxModel, documentMetadata, blockModel } from '../
 import { inlineHtml } from '../lib/inlineHtml';
 import { sourceControls } from '../lib/sourceControls';
 import { semanticDecorations } from '../lib/semanticDecorations';
-import { listLayout } from '../lib/listLayout';
+import { listLayout, prefixWidths } from '../lib/listLayout';
 import { listFolding } from '../lib/listFolding';
 import { blockLayout } from '../lib/blockLayout';
 import { blockEffects } from '../lib/blocks/view';
@@ -287,7 +287,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         codeBlocks,
         ...(p.context.allowPlugins ? [pluginPostProcessing] : []),
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,
-        inlineHtml, semanticDecorations, mathBlockField, blockLayout, listFolding, livePreviewPlugin, livePreviewTheme, listLayout,
+        inlineHtml, semanticDecorations, mathBlockField, blockLayout, listFolding, livePreviewPlugin, livePreviewTheme, prefixWidths, listLayout,
         EditorView.updateListener.of((u) => {
           if (!u.docChanged || u.transactions.every((tr) => tr.annotation(externalUpdate))) return;
           const changes: SourceChange[] = [];

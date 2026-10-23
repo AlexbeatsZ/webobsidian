@@ -1,5 +1,5 @@
-import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
-import { countColumn, type EditorState, type Line } from '@codemirror/state';
+import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view';
+import { StateEffect, StateField, countColumn, type EditorState, type Line, type Range } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
 import { stripQuotePrefix, type MarkdownModel, type SourceSpan } from '@webobsidian/markdown-core';
 import { syntaxModel } from './syntaxModel';
@@ -58,24 +58,50 @@ export function markdownListFold(state: EditorState, line: Line): SourceSpan | n
   return range;
 }
 
+/**
+ * Measured prefix advances, keyed by line start. They reach the DOM only as
+ * line-decoration style attributes, which CodeMirror applies and re-applies on
+ * its own tile syncs. Writing the variables as external inline styles made CM's
+ * attribute synchronization treat them as foreign DOM edits: each restore armed
+ * the next sync to clear them again, so every selection update shifted the
+ * text by the prefix advance and back.
+ */
+interface PrefixWidths { quote: string; list: string }
+
+const setPrefixWidths = StateEffect.define<ReadonlyMap<number, PrefixWidths>>();
+
+export const prefixWidths = StateField.define<{ widths: ReadonlyMap<number, PrefixWidths>; deco: DecorationSet }>({
+  create: () => ({ widths: new Map(), deco: Decoration.none }),
+  update(value, tr) {
+    let widths = value.widths;
+    for (const effect of tr.effects) if (effect.is(setPrefixWidths)) widths = effect.value;
+    if (tr.docChanged && widths === value.widths) {
+      // Keep line keys valid across edits unless a fresh measurement replaced them.
+      const mapped = new Map<number, PrefixWidths>();
+      for (const [from, w] of widths) mapped.set(tr.state.doc.lineAt(tr.changes.mapPos(from, 1)).from, w);
+      widths = mapped;
+    }
+    if (widths === value.widths) return value;
+    const ranges: Range<Decoration>[] = [];
+    for (const [from, w] of widths) ranges.push(Decoration.line({ attributes: {
+      style: `--cm-quote-prefix-width:${w.quote};--cm-list-prefix-width:${w.list}`,
+    } }).range(from));
+    return { widths, deco: ranges.length ? Decoration.set(ranges, true) : Decoration.none };
+  },
+  provide: (field) => EditorView.decorations.from(field, (value) => value.deco),
+});
+
 /** Measure only native prefix boxes, independent of the line's applied indent. */
 class ListLayout {
   private selector = '.cm-line[data-prefix-layout]';
   private observer: MutationObserver;
-  private previous = new Set<HTMLElement>();
+  private destroyed = false;
   constructor(private view: EditorView) {
     this.observer = new MutationObserver(records => {
       if (records.some(record => {
         const target = record.target instanceof Element ? record.target : record.target.parentElement;
         if (target?.closest('.cm-content') !== view.contentDOM) return false;
-        if (record.type === 'attributes') {
-          if (record.attributeName === 'data-prefix-layout') return true;
-          // CM may clear external inline properties when it reuses a line.
-          // Ignore our own writes once both values are present.
-          return target?.matches(this.selector) && record.attributeName === 'style' &&
-            (!(target as HTMLElement).style.getPropertyValue('--cm-quote-prefix-width') ||
-             !(target as HTMLElement).style.getPropertyValue('--cm-list-prefix-width'));
-        }
+        if (record.type === 'attributes') return record.attributeName === 'data-prefix-layout';
         // Formula/body changes cannot alter the isolated prefix advance. Only
         // prefix/line insertion, removal or actual prefix content needs a read.
         return target?.closest('.cm-quote-prefix, .cm-list-prefix') ||
@@ -85,29 +111,25 @@ class ListLayout {
       })) this.schedule();
     });
     this.observer.observe(view.contentDOM, { childList: true, characterData: true, subtree: true,
-      attributes: true, attributeFilter: ['data-prefix-layout', 'style'] });
+      attributes: true, attributeFilter: ['data-prefix-layout'] });
     this.schedule();
   }
   destroy() {
     this.observer.disconnect();
-    for (const line of this.previous) {
-      line.style.removeProperty('--cm-quote-prefix-width');
-      line.style.removeProperty('--cm-list-prefix-width');
-    }
+    this.destroyed = true;
   }
   update(update: ViewUpdate) {
     // Font/geometry changes still invalidate widths; selection-only color
-    // changes do not. All reads/writes stay in the existing coalesced measure.
+    // changes do not. Widths reach the DOM through the state field above.
     if (update.docChanged || update.viewportChanged || update.geometryChanged) this.schedule();
   }
   private schedule() {
     this.view.requestMeasure({
       key: this,
       read: (view) => {
-        const current = new Set([...view.contentDOM.querySelectorAll<HTMLElement>(this.selector)]
-          .filter(line => line.closest('.cm-content') === view.contentDOM));
-        const reset = [...this.previous].filter(line => !current.has(line));
-        const metrics = [...current].map(line => {
+        const widths = new Map<number, PrefixWidths>();
+        for (const line of view.contentDOM.querySelectorAll<HTMLElement>(this.selector)) {
+          if (line.closest('.cm-content') !== view.contentDOM) continue;
           let quoteWidth = 0, listWidth = 0;
           for (const prefix of line.querySelectorAll<HTMLElement>('.cm-quote-prefix, .cm-list-prefix')) {
             if (prefix.closest('.cm-line') !== line) continue;
@@ -115,21 +137,24 @@ class ListLayout {
             if (prefix.classList.contains('cm-quote-prefix')) quoteWidth += width;
             else listWidth += width;
           }
-          // Stable subpixel values avoid writes caused only by float noise.
-          return { line, quote: `${Math.round(quoteWidth * 64) / 64}px`, list: `${Math.round(listWidth * 64) / 64}px` };
-        });
-        return { current, reset, metrics };
+          // Stable subpixel values avoid dispatches caused only by float noise.
+          widths.set(view.state.doc.lineAt(view.posAtDOM(line)).from, {
+            quote: `${Math.round(quoteWidth * 64) / 64}px`,
+            list: `${Math.round(listWidth * 64) / 64}px`,
+          });
+        }
+        return widths;
       },
-      write: ({ current, reset, metrics }) => {
-        for (const line of reset) {
-          line.style.removeProperty('--cm-quote-prefix-width');
-          line.style.removeProperty('--cm-list-prefix-width');
-        }
-        for (const { line, quote, list } of metrics) {
-          if (line.style.getPropertyValue('--cm-quote-prefix-width') !== quote) line.style.setProperty('--cm-quote-prefix-width', quote);
-          if (line.style.getPropertyValue('--cm-list-prefix-width') !== list) line.style.setProperty('--cm-list-prefix-width', list);
-        }
-        this.previous = current;
+      write: (widths, view) => {
+        const current = view.state.field(prefixWidths).widths;
+        if (current.size === widths.size && [...widths].every(([from, w]) =>
+          current.get(from)?.quote === w.quote && current.get(from)?.list === w.list)) return;
+        // Dispatching runs a view update, which is not allowed inside a
+        // measure write; the microtask still lands before the next paint.
+        const doc = view.state.doc;
+        queueMicrotask(() => {
+          if (!this.destroyed && view.state.doc === doc) view.dispatch({ effects: setPrefixWidths.of(widths) });
+        });
       },
     });
   }
