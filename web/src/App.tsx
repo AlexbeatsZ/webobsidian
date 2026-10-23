@@ -310,7 +310,7 @@ export default function App() {
       <div className={appCls}>
         <WorkspaceTabs />
         <SidebarDock side="left" open={showLeft} rail={<Ribbon />}>
-          <Sidebar open={showLeft} />
+          {presented => <Sidebar open={presented} />}
         </SidebarDock>
         <Workspace />
         <RightSidebar open={showRight} />

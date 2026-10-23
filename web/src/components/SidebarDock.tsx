@@ -1,10 +1,18 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 /** One floating shell and resize lifecycle for both sides. Width stays device-local. */
 export default function SidebarDock({ side, open, rail, children }: {
-  side: 'left' | 'right'; open: boolean; rail: ReactNode; children: ReactNode;
+  side: 'left' | 'right'; open: boolean; rail: ReactNode; children: (presented: boolean) => ReactNode;
 }) {
   const stopDrag = useRef<(() => void) | undefined>();
+  // Keep mounted content until the one shell finishes closing, so its rail and
+  // panel move together. The caller's open prop remains the expansion state.
+  const [retained, setRetained] = useState(open);
+  useEffect(() => {
+    if (open) { setRetained(true); return; }
+    const timer = window.setTimeout(() => setRetained(false), 180);
+    return () => window.clearTimeout(timer);
+  }, [open]);
   const property = side === 'left' ? '--sidebar-width' : '--right-width';
   const storage = side === 'left' ? 'wo-sidebar-width' : 'wo-right-sidebar-width';
   useEffect(() => {
@@ -17,7 +25,7 @@ export default function SidebarDock({ side, open, rail, children }: {
   useEffect(() => { if (!open) stopDrag.current?.(); }, [open]);
   return <aside className={`sidebar-dock dock-${side}${open ? ' is-open' : ''}`} aria-label={side === 'left' ? '左侧栏' : '右侧栏'} aria-hidden={!open}>
     {rail}
-    <div className="dock-panel">{children}</div>
+    <div className="dock-panel">{children(open || retained)}</div>
     <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" tabIndex={open ? 0 : -1}
       onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;

@@ -282,9 +282,7 @@ svg { flex-shrink: 0; }
 /* Sidebars float over the document, following STEM's active Hider.css rules. */
 .app > .tab-bar { grid-column: 1 / -1; grid-row: 1; }
 .app > .workspace { grid-column: 1; grid-row: 2; min-width: 0; }
-/* No element-width transition while dragging the splitter (keeps the drag 1:1). */
 body.wo-col-resizing { cursor: col-resize; user-select: none; }
-body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition: none; }
 
 /* Ribbon */
 .ribbon {
@@ -310,10 +308,11 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .ribbon button:focus-visible, .launch-action:focus-visible { outline: 1px solid var(--text-accent); outline-offset: -1px; }
 .ribbon button.active { background: var(--bg-modifier-hover); color: var(--text-normal); }
 .sidebar-dock { position: absolute; top: var(--tabbar-height); bottom: 0; z-index: 25; display: flex; max-width: calc(100% - 36px);
-  background: var(--background-secondary); box-shadow: var(--shadow); visibility: hidden; pointer-events: none; }
-.sidebar-dock.is-open { visibility: visible; pointer-events: auto; }
-.dock-left { left: 0; width: calc(var(--sidebar-width) + var(--ribbon-width)); border-right: 1px solid var(--bg-modifier-border); }
-.dock-right { right: 0; width: calc(var(--right-width) + var(--ribbon-width)); border-left: 1px solid var(--bg-modifier-border); opacity: .95; }
+  background: var(--background-secondary); box-shadow: var(--shadow); visibility: hidden; pointer-events: none;
+  transition: transform 160ms ease-out, visibility 0s linear 160ms; }
+.sidebar-dock.is-open { visibility: visible; pointer-events: auto; transform: translateX(0); transition-delay: 0s; }
+.dock-left { left: 0; width: calc(var(--sidebar-width) + var(--ribbon-width)); border-right: 1px solid var(--bg-modifier-border); transform: translateX(-100%); }
+.dock-right { right: 0; width: calc(var(--right-width) + var(--ribbon-width)); border-left: 1px solid var(--bg-modifier-border); opacity: .95; transform: translateX(100%); }
 .dock-panel { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .sidebar-tab-header { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 14px; min-height: 38px; border-bottom: 1px solid var(--bg-modifier-border); color: var(--text-muted); }
 .sidebar-tab-header > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -328,7 +327,6 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .webviewer-controls button:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
 .webviewer-status { padding: 0 10px 6px; font-size: 11px; color: var(--text-muted); max-height: 52px; overflow: auto; }
 .workspace-launcher { margin: auto; width: min(260px, 100%); box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 8px; }
-.workspace-launcher h3 { font-size: 13px; color: var(--text-muted); font-weight: 500; margin: 0 0 8px; }
 .workspace-launcher form { display: flex; flex-direction: column; gap: 8px; }
 .launch-action > span { flex: 1; }
 .launch-action kbd { font: 11px var(--font-ui); border-radius: 8px; background: var(--background-modifier-hover); color: var(--text-muted); padding: 2px 5px; }
@@ -341,7 +339,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 /* Sidebars */
 .sidebar, .right-sidebar {
   background: var(--bg-secondary); display: flex; flex-direction: column; overflow: hidden;
-  transition: width var(--transition); position: relative;
+  position: relative;
 }
 .sidebar, .right-sidebar { flex: 1; min-height: 0; width: 100%; }
 

@@ -109,3 +109,16 @@ standalone server bundle 与相对 require/生成代码语法检查均通过。�
 浏览器兼容和大 chunk 提示。实际悬浮几何、
 触摸/键盘、输入/保存、恢复、站点登录、新页面和长时间性能仍待用户验收。
 不启动浏览器、Electron 或服务器，不改真实 Vault，不覆盖 server/public/release，不打包。
+
+## 2026-10-23 settings and transition follow-up
+
+Only the visible Homepage content heading was removed; launcher actions, central/
+left/right + behavior and tab state remain. Both dock sides now use one shared
+shell transform/visibility transition. Ribbon and content are children of that
+shell; the old sidebar/right-sidebar width transition was removed. SidebarDock
+retains content for the closing transition before releasing inactive fixed panels,
+so the panel does not disappear while the rail moves. The caller's open flag is
+still the sole expansion state; the short retention is presentation lifetime only.
+The same shell works for floating desktop and narrow overlay layouts. Existing
+retained note/guest views keep their previous close lifecycle. Source/diff review
+only; no animation/UI/runtime acceptance or performance measurement.

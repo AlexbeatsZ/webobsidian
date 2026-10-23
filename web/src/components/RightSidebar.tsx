@@ -247,10 +247,10 @@ export default function RightSidebar({ open }: { open: boolean; onTheme?: () => 
 
   return (
     <SidebarDock side="right" open={open} rail={rail}>
-    <div className="right-sidebar">
-      {open && !activeId && rightPanel === 'backlinks' && <BacklinksPanel />}
-      {open && !activeId && rightPanel === 'outgoing' && <OutgoingPanel />}
-      {open && !activeId && rightPanel === 'tags' && (
+    {presented => <div className="right-sidebar">
+      {presented && !activeId && rightPanel === 'backlinks' && <BacklinksPanel />}
+      {presented && !activeId && rightPanel === 'outgoing' && <OutgoingPanel />}
+      {presented && !activeId && rightPanel === 'tags' && (
         <>
           <div className="nav-header">
             <span className="nav-title">Tags</span>
@@ -260,9 +260,9 @@ export default function RightSidebar({ open }: { open: boolean; onTheme?: () => 
           </div>
         </>
       )}
-      {open && !activeId && rightPanel === 'outline' && <OutlinePanel />}
-      <SidebarTabPanels side="right" open={open} />
-    </div>
+      {presented && !activeId && rightPanel === 'outline' && <OutlinePanel />}
+      <SidebarTabPanels side="right" open={presented} />
+    </div>}
     </SidebarDock>
   );
 }
