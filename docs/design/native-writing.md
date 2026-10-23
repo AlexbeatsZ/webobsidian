@@ -124,6 +124,15 @@ remaining inline groups from the same mathRegions result. Markdown tree/regex
 decoration skips formula content so TeX underscores, links or highlight-like text
 cannot claim a partial replacement before the formula renderer.
 
+For emphasis/strong/strikethrough, ownership is also checked on the node's own
+Markdown delimiter tokens. A node can cross several formulas (for example, the
+two `^*` markers in `$\boldsymbol{\alpha}^*$` and a later inline formula), so
+checking only whether the whole node lies inside one formula is insufficient.
+If any of its delimiters belong to dollar math, skip that node's styling and
+concealment while still visiting children. Delimiters outside formulas continue
+to support legitimate Markdown emphasis around formulas. This uses the existing
+cached math ranges and leaves math parsing, source visibility and MathJax intact.
+
 The inline tooltip is derived directly in its StateField. No extra update effect,
 microtask dispatch or second preview state machine is needed. Native safe visuals
 are installed once by MarkdownView independently of user snippets/plugin execution.

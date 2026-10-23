@@ -1815,15 +1815,21 @@ function buildDecorations(view: EditorView): DecorationSet {
         // Inline emphasis / code / strikethrough: always style; conceal marks
         // only when the caret is outside the span.
         if (EMPHASIS_CLASS[name]) {
+          const marks: { from: number; to: number }[] = [];
+          for (let child = node.node.firstChild; child; child = child.nextSibling) {
+            if (/Mark$/.test(child.name)) marks.push(child);
+          }
+          // Markdown may pair TeX's ^* markers across two different formulas.
+          // Their delimiter tokens belong to math even when this node spans both.
+          // Skip this node's decoration, but still visit unrelated child syntax.
+          if (marks.some(mark => mathRanges.some(formula => formula.kind === 'dollar' &&
+            mark.from < formula.to && mark.to > formula.from))) return;
           all.push(Decoration.mark({ class: EMPHASIS_CLASS[name] }).range(node.from, node.to));
           const ownsCaret = touches(node.from, node.to) && !model.nodes.some((child) =>
             EMPHASIS_CLASS[child.name] && child.from >= node.from && child.to <= node.to &&
             (child.from !== node.from || child.to !== node.to) && touches(child.from, child.to));
           if (!ownsCaret) {
-            const sn = node.node;
-            for (let c = sn.firstChild; c; c = c.nextSibling) {
-              if (/Mark$/.test(c.name)) pushReplace(c.from, c.to, hidden);
-            }
+            for (const mark of marks) pushReplace(mark.from, mark.to, hidden);
           }
           return;
         }
