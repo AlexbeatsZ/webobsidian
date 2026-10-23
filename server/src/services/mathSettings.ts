@@ -44,12 +44,3 @@ export async function saveMathConfiguration(source: VaultConfigurationSource, in
     content = applyEdits(content, modify(content, [key], value, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } }));
   return { source: await writeVaultConfiguration({ ...source, content }), configuration };
 }
-/** Only named macro content is sent with a share; no private file access capability. */
-export async function sharedMathProfile() {
-  const { configuration } = await readMathConfiguration();
-  const segments: { source: string; tex: string }[] = [];
-  if (configuration.preambleFile) segments.push({ source: '共享导言区', tex: await fs.readFile(await resolveInVault(configuration.preambleFile), 'utf8') });
-  if (configuration.preamble.trim()) segments.push({ source: '附加宏', tex: configuration.preamble });
-  const shared = { ...configuration, preambleFile: '', preamble: '', migration: '' };
-  return { configuration: shared, segments, key: JSON.stringify([shared.packages.slice().sort(), shared.packageOptions, segments]) };
-}

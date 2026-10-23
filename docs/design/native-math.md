@@ -120,10 +120,10 @@ again. `forceMathLanguages` remains an editor-input option: it does not silently
 turn full `latex`/`tex` local-compilation blocks into MathJax formulas.
 
 SVG glyph IDs are rewritten per clone, including print documents. Styles travel
-with the selected output document. Public render payloads carry only the enabled
-package options and macro definitions needed by the shared formulas; no private
-preamble path or unrestricted Vault file-reading capability is exposed. Public
-clients import no authenticated settings/Vault module through this path.
+with the selected output document. Public sharing has been removed from the
+personal local-only runtime, including the unused server-side shared math profile
+projection. Local configuration, read-only rendering and print continue to use
+the existing MathJax profile lifecycle.
 
 ## Packages and extension work
 
