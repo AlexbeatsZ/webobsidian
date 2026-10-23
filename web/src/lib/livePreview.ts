@@ -828,14 +828,14 @@ class TableWidget extends WidgetType {
   destroy(dom: HTMLElement) { this.cleanup.get(dom)?.forEach(stop => stop()); }
   toDOM(view: EditorView) {
     const b = this.block, context = contextOf(view);
-    const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap';
+    const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap'; wrap.dataset.tableFrom = String(b.from);
     const frame = document.createElement('div'); frame.className = 'cm-table-frame'; wrap.appendChild(frame);
     const cleanup: (() => void)[] = []; this.cleanup.set(wrap, cleanup);
-    if (!this.ro) frame.appendChild(sourceButton(view, b, 'table'));
+    if (!this.ro) frame.appendChild(sourceButton(view, b, 'table', { kind: 'table' }));
     const table = document.createElement('table'); table.className = 'cm-table'; frame.appendChild(table);
     const apply = (changes: SourceChange[]) => {
       if (view.state.readOnly || view.state.sliceDoc(b.from, b.to) !== b.key) return;
-      view.dispatch({ changes });
+      if (changes.length) view.dispatch({ changes, userEvent: 'input.table' });
     };
     const structural = (operation: TableOperation) => apply(changeTable(b, operation));
     b.rows.forEach((row, ri) => {
@@ -844,13 +844,14 @@ class TableWidget extends WidgetType {
       for (let col = 0; col < b.align.length; col++) {
         const cell = document.createElement(ri === 0 ? 'th' : 'td');
         cell.className = 'cm-cell-edit'; cell.style.textAlign = b.align[col] ?? '';
+        const content = document.createElement('div'); content.className = 'cm-table-cell-content'; cell.appendChild(content);
         const token = row.cells[col];
         const raw = token?.text ?? '';
         let stop: (() => void) | undefined;
         let editing = false;
         const mount = (mode: 'live' | 'reading') => {
-          stop?.(); cell.replaceChildren();
-          const host = document.createElement('div'); cell.appendChild(host);
+          stop?.(); content.replaceChildren();
+          const host = document.createElement('div'); content.appendChild(host);
           stop = context.mountFragment?.(host, raw, {
             id: context.sourcePath + ':cell:' + ri + ':' + col, sourceFrom: token?.from ?? row.to,
             equations: { ...equationsOf(view.state), from: equationsOf(view.state).from + (token?.from ?? row.to) },
@@ -863,11 +864,24 @@ class TableWidget extends WidgetType {
         };
         cleanup.push(() => stop?.()); mount('reading');
         if (!this.ro && b.editable) {
+          if (ri === 0 || col === 0) {
+            const handle = document.createElement('button'); handle.type = 'button';
+            handle.className = ri === 0 ? 'cm-col-handle' : 'cm-row-handle';
+            handle.dataset.axis = ri === 0 ? 'column' : 'row';
+            handle.dataset.index = String(ri === 0 ? col : ri - 1);
+            handle.textContent = '⠿';
+            handle.title = ri === 0 ? `Move column ${col + 1}` : `Move row ${ri}`;
+            handle.setAttribute('aria-label', handle.title);
+            handle.setAttribute('aria-keyshortcuts', ri === 0 ? 'ArrowLeft ArrowRight' : 'ArrowUp ArrowDown');
+            handle.setAttribute('aria-pressed', 'false');
+            cell.appendChild(handle);
+          }
           cell.addEventListener('click', (e) => {
             if (editing || (e.target as HTMLElement).closest('a,button,input')) return;
             editing = true; mount('live');
           });
           cell.addEventListener('keydown', (e) => {
+            if ((e.target as HTMLElement).closest('.cm-col-handle,.cm-row-handle')) return;
             if ((e.key === 'Enter' && !e.shiftKey || e.key === 'Escape') && !e.isComposing) {
               e.preventDefault(); e.stopPropagation();
               if (e.key === 'Escape') { editing = false; mount('reading'); } else (document.activeElement as HTMLElement)?.blur();
@@ -897,6 +911,73 @@ class TableWidget extends WidgetType {
       section.appendChild(tr); if (!section.parentNode) table.appendChild(section);
     });
     if (!this.ro && b.editable) {
+      // A gesture only changes DOM feedback. The existing core operations supply
+      // all source patches together on drop, preserving one shared undo step.
+      let drag: { pointer: number; axis: 'row' | 'column'; from: number; to: number;
+        handle: HTMLButtonElement; items: HTMLElement[]; bounds: DOMRect[];
+        startX: number; startY: number; moved: boolean } | undefined;
+      const feedback = () => {
+        frame.querySelectorAll('.cm-cell-dragging,.cm-table-drop-before,.cm-table-drop-after').forEach(element =>
+          element.classList.remove('cm-cell-dragging', 'cm-table-drop-before', 'cm-table-drop-after'));
+        if (!drag) return;
+        const { axis, from, to, items } = drag;
+        const cells = axis === 'row' ? [...items[from].children] : [...table.rows].map(row => row.cells[from]);
+        cells.forEach(cell => cell.classList.add('cm-cell-dragging'));
+        if (to !== from && to >= 0) items[to].classList.add(to < from ? 'cm-table-drop-before' : 'cm-table-drop-after');
+      };
+      const finish = (commit: boolean) => {
+        const current = drag; if (!current) return;
+        drag = undefined; feedback(); frame.classList.remove('is-dragging-row', 'is-dragging-column');
+        window.removeEventListener('scroll', cancelDrag, true); window.removeEventListener('keydown', cancelKey);
+        current.handle.setAttribute('aria-pressed', 'false');
+        if (frame.hasPointerCapture(current.pointer)) frame.releasePointerCapture(current.pointer);
+        if (commit && current.moved && current.to >= 0 && current.from !== current.to) structural(current.axis === 'row'
+          ? { kind: 'moveRow', row: current.from, to: current.to }
+          : { kind: 'moveColumn', column: current.from, to: current.to });
+      };
+      frame.addEventListener('pointerdown', event => {
+        const handle = (event.target as Element).closest<HTMLButtonElement>('.cm-col-handle,.cm-row-handle');
+        if (!handle || event.button !== 0 || drag) return;
+        event.preventDefault(); event.stopPropagation();
+        // Do not reorder a stale table while a cell owns an uncommitted draft.
+        if (wrap.querySelector('[contenteditable="true"]')) { (document.activeElement as HTMLElement)?.blur(); return; }
+        const axis = handle.dataset.axis as 'row' | 'column';
+        const items = axis === 'row' ? [...(table.tBodies[0]?.rows ?? [])] : [...table.tHead!.rows[0].cells];
+        const index = Number(handle.dataset.index);
+        drag = { pointer: event.pointerId, axis, from: index, to: index, handle, items,
+          bounds: items.map(item => item.getBoundingClientRect()), startX: event.clientX, startY: event.clientY, moved: false };
+        handle.setAttribute('aria-pressed', 'true'); frame.classList.add('is-dragging-' + axis);
+        frame.setPointerCapture(event.pointerId); feedback();
+        window.addEventListener('scroll', cancelDrag, true); window.addEventListener('keydown', cancelKey);
+      });
+      frame.addEventListener('pointermove', event => {
+        if (!drag || drag.pointer !== event.pointerId) return;
+        event.preventDefault();
+        drag.moved ||= Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 4;
+        const box = table.getBoundingClientRect();
+        const inside = event.clientX >= box.left - 24 && event.clientX <= box.right + 24 && event.clientY >= box.top - 24 && event.clientY <= box.bottom + 24;
+        let to = inside ? drag.bounds.findIndex(rect => drag!.axis === 'row' ? event.clientY < rect.bottom : event.clientX < rect.right) : -1;
+        if (inside && to < 0) to = drag.items.length - 1;
+        if (to !== drag.to) { drag.to = to; feedback(); }
+      });
+      frame.addEventListener('pointerup', event => { if (drag?.pointer === event.pointerId) finish(true); });
+      frame.addEventListener('pointercancel', () => finish(false));
+      frame.addEventListener('lostpointercapture', () => finish(false));
+      const cancelDrag = () => finish(false);
+      const cancelKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && drag) { event.preventDefault(); finish(false); } };
+      cleanup.push(() => finish(false));
+      frame.addEventListener('keydown', event => {
+        const handle = (event.target as Element).closest<HTMLButtonElement>('.cm-col-handle,.cm-row-handle');
+        if (!handle || wrap.querySelector('[contenteditable="true"]')) return;
+        const axis = handle.dataset.axis, from = Number(handle.dataset.index);
+        const step = axis === 'row' ? event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0
+          : event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+        if (!step) return;
+        event.preventDefault(); event.stopPropagation();
+        const to = from + step;
+        structural(axis === 'row' ? { kind: 'moveRow', row: from, to } : { kind: 'moveColumn', column: from, to });
+        view.dom.querySelector<HTMLButtonElement>(`.cm-table-wrap[data-table-from="${b.from}"] button[data-axis="${axis}"][data-index="${to}"]`)?.focus();
+      });
       for (const [className, title, action] of [
         ['cm-table-addrow', 'Add row', () => structural({ kind: 'insertRow', row: b.rows.length - 1 })],
         ['cm-table-addcol', 'Add column', () => structural({ kind: 'insertColumn', column: b.align.length })],
@@ -2330,7 +2411,7 @@ export const livePreviewTheme = EditorView.baseTheme({
   '.cm-table th': { fontWeight: '600', background: 'var(--bg-secondary)' },
   // Interactive table editor (Obsidian-style): click-to-edit cells + hover controls.
   '.cm-cell-edit': { outline: 'none', cursor: 'text', minWidth: '1em' },
-  '.cm-cell-edit:focus': { boxShadow: 'inset 0 0 0 2px var(--interactive-accent)', background: 'var(--bg-primary)' },
+  '.cm-cell-edit:focus-within': { boxShadow: 'inset 0 0 0 2px var(--interactive-accent)' },
   '.cm-table-addcol, .cm-table-addrow': {
     position: 'absolute',
     display: 'flex',
@@ -2350,11 +2431,6 @@ export const livePreviewTheme = EditorView.baseTheme({
   '.cm-table-addcol': { top: '0', right: '-16px', width: '14px', height: '100%' },
   '.cm-table-addrow': { left: '0', bottom: '-16px', height: '14px', width: '100%' },
   '.cm-table-wrap:hover .cm-table-addcol, .cm-table-wrap:hover .cm-table-addrow': { opacity: '1' },
-  // Column handle (top strip of each header cell) + row handle (left strip of first cell).
-  '.cm-col-handle': { position: 'absolute', top: '0', left: '0', right: '0', height: '5px', cursor: 'pointer' },
-  '.cm-row-handle': { position: 'absolute', top: '0', bottom: '0', left: '0', width: '5px', cursor: 'pointer' },
-  '.cm-col-handle:hover, .cm-row-handle:hover': { background: 'var(--interactive-accent)' },
-  '.cm-cell-hl': { background: 'var(--tag-bg)' },
   '.cm-table-addcol:hover, .cm-table-addrow:hover': {
     color: 'var(--text-accent)',
     background: 'var(--bg-modifier-hover)',

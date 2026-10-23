@@ -259,3 +259,22 @@ of this pass. User acceptance must cover dark-mode typing, clicking the second
 wrapped body line, drag/Shift selection within/across callouts, nested/folded
 source entry and return, narrow/wide table control alignment, and repeated
 open/edit/scroll of a formula-heavy note with the user's enabled plugins.
+
+## Table interaction revision (2026-10-22)
+
+Table source entry uses the shared transient `table` source region: leaving its
+selection or the editor restores the widget without a persistent Close source
+switch. Cell drafts still commit through the existing fragment editor. Cell
+editor backgrounds are transparent so header cells have one continuous surface.
+
+Editable regular tables expose hover row/column grips. Pointer press highlights
+the complete row/column; movement marks a destination without touching source.
+Release calls the existing `changeTable(moveRow/moveColumn)` once, dispatching
+its local token patches together. Escape, pointer cancellation, scroll, an outside
+drop and widget destruction cancel the gesture. Focused grips also accept the
+corresponding arrow keys. Readonly/irregular tables have no grips. An active cell
+draft must leave editing before reordering, preventing stale-table edits.
+
+The table changes were inspected as source only after the user revoked testing
+and acceptance. No post-change type/build/browser/UI/performance result is
+claimed; nested Callout geometry, actual pointer input and undo remain unverified.
