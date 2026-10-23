@@ -34,7 +34,7 @@ function entries(yaml: string): Entry[] {
     const list = isSeq(node);
     const editable = node === null || simpleScalar(node) ||
       (list && !node.anchor && !node.tag && node.items.every(simpleScalar));
-    const values = node === null ? [''] : simpleScalar(node) ? [scalarText(node)] :
+    const values = node === null || (simpleScalar(node) && node.value === null) ? [] : simpleScalar(node) ? [scalarText(node)] :
       list && editable ? node.items.map((item) => scalarText(item as Scalar)) :
       [node.range ? yaml.slice(node.range[0], node.range[1]) : 'Complex value'];
     return { key, keyNode: pair.key, node, row: { key, values, list: Boolean(list && editable), editable } };
@@ -65,9 +65,23 @@ const lineEnd = (text: string, offset: number) => text[offset - 1] === '\n' ? of
 function patchSequence(yaml: string, node: YAMLSeq, next: string[]): SourceChange[] {
   const items = node.items as Scalar[];
   const old = items.map(scalarText);
-  if (!next.length && items.length && !node.flow) {
-    const from = node.range![0], to = node.range![1];
-    return [{ from, to, insert: '[]' + (yaml[to - 1] === '\n' ? '\n' : '') }];
+  if (!next.length && items.length) {
+    const token = node.srcToken;
+    if (token?.type === 'flow-collection') {
+      // Remove values/separators, retaining brackets, whitespace and comments.
+      return [...items.map(item => ({ from: item.range![0], to: item.range![1], insert: '' })),
+        ...[...token.items.flatMap(item => item.start), ...token.end].filter(part => part.type === 'comma')
+          .map(part => ({ from: part.offset, to: part.offset + part.source.length, insert: '' }))];
+    }
+    if (token?.type !== 'block-seq') throw new Error('缺少列表源码标记，请使用源码编辑');
+    return items.map((item, index) => {
+      const marker = token.items[index].start.find(part => part.type === 'seq-item-ind');
+      if (!marker) throw new Error('缺少列表项源码标记，请使用源码编辑');
+      // An indentless block sequence needs indentation when replaced by a flow
+      // value. Patch syntax only; comments/newlines and the next key stay intact.
+      return { from: marker.offset, to: Math.max(marker.offset + marker.source.length, item.range![1]),
+        insert: index ? '' : (marker.offset === lineStart(yaml, marker.offset) ? ' ' : '') + '[]' };
+    });
   }
   if (old.length === next.length) return items.flatMap((item, index) => old[index] === next[index] ? [] : [{
     from: item.range![0], to: item.range![1], insert: valueText(next[index], item),
@@ -125,7 +139,10 @@ export function patchPropertyRows(yaml: string, desired: readonly PropertyRow[])
     }
     const list = row.forceList ? row.list : row.list && (entry.row.list || row.values.length !== 1);
     const insert = list ? '[' + row.values.map((value) => valueText(value)).join(', ') + ']' : valueText(row.values[0] ?? '', entry.node, row.scalarType);
-    if (entry.node?.range) changes.push({ from: entry.node.range[0], to: entry.node.range[1], insert });
+    if (entry.node?.range) {
+      const from = entry.node.range[0];
+      changes.push({ from, to: entry.node.range[1], insert: (yaml[from - 1] === ':' ? ' ' : '') + insert });
+    }
     else {
       const colon = yaml.indexOf(':', entry.keyNode.range![1]);
       changes.push({ from: colon + 1, to: colon + 1, insert: ' ' + insert });

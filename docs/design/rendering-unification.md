@@ -437,3 +437,41 @@ tests/types/build/probes/app/server/browser/EXE/UI/IME/performance acceptance or
 new cases ran. The contract gap is source-supported; actual before/after click
 placement, long-formula wrapping and the screenshot's runtime root cause remain
 unverified. No note, profile, server/public or release artifact was changed.
+
+## Empty property values and list patches (2026-10-23)
+
+Property rows retain the existing YAML parser and source-token patch ownership.
+A missing key has no row. A mapping value that is absent or resolves to YAML null
+(`aliases:`, `aliases: null`, `aliases: ~`) has zero values; an empty sequence
+also has zero values but retains `list: true`. A quoted empty scalar is one actual
+empty string, and a sequence containing empty strings/null items still contains
+real source items. Those items remain visible/removable. No aliases-specific
+filter or CSS hiding is involved; tags, cssclasses and registry-selected lists
+use the same rows. The scalar UI preserves a zero-value source row when its blank
+control is untouched, so edits elsewhere do not convert null into `""`.
+
+Previously, an entire null mapping value was projected as `['']`; coercing that
+property to a list in the UI generated a phantom empty chip. YAML's empty scalar
+can have a zero-length range directly after the colon. Replacing that range with
+`[]` without separation could produce `aliases:[]`, which is not the intended
+mapping entry and can conflict with later mapping keys. Scalar range writes now
+insert the required separation if the preceding source byte is `:`. The read-only
+test copy of the reported biochemistry note already contains `aliases:[]`; this
+supports the malformed spelling but does not establish the screenshot's prior
+source or reproduce its deletion event.
+
+Deleting every item uses the existing sequence CST. A flow sequence loses only
+value tokens and commas (including a trailing comma), keeping brackets, comments
+and whitespace. A block sequence replaces its first marker/value with `[]` and
+removes only the remaining marker/value tokens, preserving comments and newlines.
+An indentless sequence needs one leading space when replaced with a flow value;
+the old whole-sequence replacement could put `[]` at the top mapping indentation
+and discarded intervening comments. It is removed. Subsequent keys, frontmatter
+delimiters and Markdown body are outside these patches. Writes still dispatch one
+`input.properties` source transaction into the existing DocumentSession/history.
+
+No notes were changed and no malformed existing source is silently repaired.
+Only source/CST implementation and Git differences were inspected; no tests,
+typechecks, builds, fixtures, probes, app/server/browser launches or acceptance
+were run or added. Actual chip interaction and YAML round-trip behavior remain
+unverified. Date controls and other settings are outside this change.

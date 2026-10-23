@@ -1237,15 +1237,19 @@ class FrontmatterWidget extends WidgetType {
         view.focus();
       } catch (error) { contextOf(view).reportError?.((error as Error).message); }
     };
+    // Rows keep source order until this widget is replaced by the transaction.
+    // A blank control for a null scalar must not turn it into a quoted string
+    // when a different property is edited; explicit empty strings stay strings.
     const readProps = (): Prop[] =>
-      ([...box.querySelectorAll('.prop-row:not(.prop-newrow)')] as HTMLElement[]).map((row) => ({
+      ([...box.querySelectorAll('.prop-row:not(.prop-newrow)')] as HTMLElement[]).map((row, index) => ({
         key: (row.querySelector('.prop-key') as HTMLElement).innerText,
         list: row.dataset.list === '1',
         scalarType: (row.querySelector('.prop-val-field') as HTMLElement | null)?.dataset.propertyType,
         values:
           row.dataset.list === '1'
             ? ([...row.querySelectorAll('.prop-pill')] as HTMLElement[]).map((p) => p.dataset.val ?? '')
-            : [(row.querySelector('.prop-val-field') as HTMLElement)?.dataset.raw ?? ''],
+            : (props[index]?.values.length === 0 && !(row.querySelector('.prop-val-field') as HTMLElement)?.dataset.raw
+              ? [] : [(row.querySelector('.prop-val-field') as HTMLElement)?.dataset.raw ?? '']),
       }));
     // Flush an in-progress inline edit (pill text or scalar text) into its data
     // attribute so a concurrent structural change never drops it.
