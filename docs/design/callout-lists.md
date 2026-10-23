@@ -154,13 +154,30 @@ or changing the existing hanging-layout measurement formula.
 
 `listLayout` uses its one requestMeasure and one scoped MutationObserver. Native
 prefix boxes use `white-space: pre; text-indent: 0`, so changing the line's
-indent cannot change their measured width. The two measured CSS width properties
-are the only DOM writes, rounded to CSS subpixels and skipped when unchanged.
-There is no cached computed base padding, saved inline-style restoration,
-class-change reset pass or self-rescheduling write branch. CM may clear external
-style attributes when reusing DOM; the existing observer restores missing width
-properties but ignores completed own writes. Prefix/line insertions or prefix text
-changes invalidate; quote reveal color and formula/body mutations do not.
+indent cannot change their measured width. Measurements are rounded to CSS
+subpixels and changed values enter the existing `prefixWidths` StateField through
+an effect. Its line decorations own the two CSS width properties; CodeMirror
+applies the resulting style attribute. There are no external inline-style writes,
+style-restoration observer, cached computed base padding or reset/re-measure pass.
+The measure write queues the effect in a microtask, guarded by document identity
+and plugin lifetime. Prefix/line insertions, removals, source-position attribute
+changes or prefix text changes invalidate; quote reveal color and formula/body
+mutations do not.
+
+The existing `data-prefix-layout` line attribute carries the absolute source line
+start for both quote and list producers. Measurement reads that position directly
+instead of recovering it with `posAtDOM` for every line. On document edits, cached
+keys use `MapMode.TrackAfter` and survive only if the following source character
+survives and the mapped position is still exactly a line start. Deleted prefixes
+or merged-away line starts must not transfer their widths to a neighboring line;
+the normal measurement supplies new widths after the edit.
+
+Inline concealment follows the same syntax ownership boundary: Emphasis and
+StrongEmphasis hide only `EmphasisMark`, InlineCode only `CodeMark`, and
+Strikethrough only `StrikethroughMark`. Lezer can inject structural `QuoteMark`
+and `ListMark` children into multiline inline nodes. Those children remain owned
+by the quote/list prefix path, so entering or leaving emphasis cannot remove the
+prefix box. The existing math-delimiter ownership guard remains in force.
 
 Document, viewport and geometry changes remain invalidations for font/layout
 changes. Queries exclude nested editor content. Native Callout spacing/frame

@@ -1,5 +1,5 @@
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view';
-import { StateEffect, StateField, countColumn, type EditorState, type Line, type Range } from '@codemirror/state';
+import { MapMode, StateEffect, StateField, countColumn, type EditorState, type Line, type Range } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
 import { stripQuotePrefix, type MarkdownModel, type SourceSpan } from '@webobsidian/markdown-core';
 import { syntaxModel } from './syntaxModel';
@@ -76,9 +76,12 @@ export const prefixWidths = StateField.define<{ widths: ReadonlyMap<number, Pref
     let widths = value.widths;
     for (const effect of tr.effects) if (effect.is(setPrefixWidths)) widths = effect.value;
     if (tr.docChanged && widths === value.widths) {
-      // Keep line keys valid across edits unless a fresh measurement replaced them.
+      // Follow surviving prefix content, not a deleted line or its preceding newline.
       const mapped = new Map<number, PrefixWidths>();
-      for (const [from, w] of widths) mapped.set(tr.state.doc.lineAt(tr.changes.mapPos(from, 1)).from, w);
+      for (const [from, w] of widths) {
+        const pos = tr.changes.mapPos(from, 1, MapMode.TrackAfter);
+        if (pos !== null && tr.newDoc.lineAt(pos).from === pos) mapped.set(pos, w);
+      }
       widths = mapped;
     }
     if (widths === value.widths) return value;
@@ -138,7 +141,7 @@ class ListLayout {
             else listWidth += width;
           }
           // Stable subpixel values avoid dispatches caused only by float noise.
-          widths.set(view.state.doc.lineAt(view.posAtDOM(line)).from, {
+          widths.set(Number(line.dataset.prefixLayout), {
             quote: `${Math.round(quoteWidth * 64) / 64}px`,
             list: `${Math.round(listWidth * 64) / 64}px`,
           });

@@ -1906,8 +1906,11 @@ function buildDecorations(view: EditorView): DecorationSet {
         // only when the caret is outside the span.
         if (EMPHASIS_CLASS[name]) {
           const marks: { from: number; to: number }[] = [];
+          const markName = name === "InlineCode" ? "CodeMark" :
+            name === "Strikethrough" ? "StrikethroughMark" : "EmphasisMark";
           for (let child = node.node.firstChild; child; child = child.nextSibling) {
-            if (/Mark$/.test(child.name)) marks.push(child);
+            // Multiline inline nodes can also contain structural QuoteMark/ListMark.
+            if (child.name === markName) marks.push(child);
           }
           // Markdown may pair TeX's ^* markers across two different formulas.
           // Their delimiter tokens belong to math even when this node spans both.
@@ -1995,7 +1998,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         } else {
           // Keep native prefix text and advance in both states. The existing
           // hanging-layout measure places it in the wrapper's quote gutter.
-          all.push(Decoration.line({ attributes: { 'data-prefix-layout': 'true' } }).range(line.from));
+          all.push(Decoration.line({ attributes: { 'data-prefix-layout': String(line.from) } }).range(line.from));
           all.push(Decoration.mark({ class: 'cm-quote-prefix' +
             (touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
         }
@@ -2011,7 +2014,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       const list = header ? null : markdownListLine(view.state, line);
       const prefix = list?.header ? body.match(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[.\][ \t]+)?/) : null;
       if (list) {
-        all.push(Decoration.line({ class: 'HyperMD-list-line', attributes: { 'data-prefix-layout': 'true' } }).range(line.from));
+        all.push(Decoration.line({ class: 'HyperMD-list-line', attributes: { 'data-prefix-layout': String(line.from) } }).range(line.from));
         const from = line.from + list.quoteTo;
         const to = prefix ? bodyFrom + prefix[0].length : line.from + list.indentTo;
         if (to > from) all.push(Decoration.mark({ class: 'cm-list-prefix' }).range(from, to));

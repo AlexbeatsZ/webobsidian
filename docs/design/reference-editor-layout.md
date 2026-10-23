@@ -84,25 +84,26 @@ CSS layout subpixels. The stylesheet owns line padding `base + L` and indent
 `-(Q + L)`. Thus first-line body and wrapped lines both begin at base + L;
 ordinary quote L=0 adds no second wrapper gap. Reading a prefix width cannot
 depend on either written property, the frame width, formula text, caret side or
-the source/preview visibility of the following emphasis. CM attribute resets
-restore only missing width properties through the existing observer; no stored
-padding, class-based restore cycle or duplicate measurement channel remains.
+the source/preview visibility of the following emphasis. This correction initially
+still wrote width properties outside CodeMirror and restored missing properties
+through its observer. That remaining ownership conflict is superseded by the
+StateField correction below; it is not part of the current implementation.
 
 ## Post-0.1.13 click-jitter correction
 
-User acceptance of 0.1.13 still saw quote titles and Callout body text jumping
-left-right on every random click. Static source tracing closed the loop: the
+User feedback on 0.1.13 still reported quote titles and Callout body text jumping
+left-right on random clicks. Static source tracing identified an ownership conflict: the
 width variables were written as external inline styles during the CM measure
 phase (outside `observer.ignore`). CM 6.43's own DOMObserver watches all
 attribute records without a filter, flushes attribute-only records
 synchronously, and `readMutation` marks the line tile attrs-dirty. The next
 view update — every click, because selection changes rebuild the decorations —
 runs `tile.sync()` → `setAttrs()`, which removes any DOM attribute absent from
-CM's own line attributes, including that inline style. The variables vanished,
-`text-indent` collapsed, and the transparent `> ` reoccupied its advance for
-one painted frame until listLayout's observer restored it; each restore armed
-the next wipe, so "variables present" and "tile synced" could never hold at the
-same time.
+CM's own line attributes, including that inline style. Removing these variables
+changes `text-indent` until listLayout's observer restores them, and that external
+restore can trigger another synchronization. This source path explains a possible
+alternation in prefix advance; the user's event sequence and painted frames were
+not captured.
 
 Widths now live in the `prefixWidths` StateField and reach the DOM only as a
 line-decoration `style` attribute (`--cm-quote-prefix-width` /
@@ -117,9 +118,10 @@ path; its remaining job is structural (`data-prefix-layout` attribute and
 prefix/line insertion/removal records). Dispatching from the measure write is
 forbidden (update guard), so changed widths dispatch from a microtask guarded
 by doc identity and plugin lifetime. First appearance of a prefix line can
-still shift once when measurement lands, same as before; the click-driven
-wipe/restore oscillation is gone. No runtime trace was captured; the user
-accepts the built package.
+still shift once when measurement lands, same as before. The source no longer
+contains the external wipe/restore path; actual click stability remains unverified.
+Desktop version 0.1.14 was reserved, but packaging stopped during Electron
+download and no completed 0.1.14 portable was found during this review.
 
 Native Callout frame/spacing now has a definite column width, preserving its
 vertical padding, title/body wrappers and plain-text editing. The earlier
@@ -145,6 +147,26 @@ The last pair supports the user's instability report, not an exact pixel delta:
 crop/scroll/viewport state and actual event trace were not observed. Matching
 test-copy notes were read only. Emphasis source markers may legitimately be
 visible at an active caret; no blanket concealment rule was added.
+
+## Prefix cache and inline delimiter review
+
+The follow-up preserves the `prefixWidths` StateField, existing measurement pass
+and structural observer. Cache keys now map with `MapMode.TrackAfter`, which the
+installed CodeMirror state package defines as dropping a position when its next
+character is deleted. A mapped key must also remain exactly a source line start.
+This prevents deleted lines or merged-away line starts from donating stale widths
+to the surviving neighbor. The existing quote/list `data-prefix-layout` attribute
+now carries that source start directly, removing per-line `posAtDOM` traversal
+from measurement without adding a second source-position index.
+
+The installed Lezer Markdown parser's `injectMarks` can place structural quote/list
+markers within multiline inline nodes. Matching every child name ending in `Mark`
+therefore lets emphasis conceal quote/list prefixes. Concealment now selects only
+the owning syntax's delimiter: `EmphasisMark`, `CodeMark` or `StrikethroughMark`.
+The quote/list prefix boxes and math-delimiter guard retain their existing owners.
+These are source-supported defects and corrections, not a reproduced UI trace or
+a measured performance improvement. No extra parser, fold state, observer or
+keyboard/selection pipeline was introduced.
 
 ## Validation boundary
 
