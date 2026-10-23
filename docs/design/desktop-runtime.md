@@ -124,6 +124,11 @@ for existing snippet configuration outside the Vault. Invalid/malformed settings
 escaping relative paths, missing targets and OS-open failures propagate to the
 setting row. Opening never creates a missing configuration file or directory.
 
+The shared desktop IPC expands a leading `~/` against the OS home directory
+before absolute/Vault-relative classification, matching the existing writing
+snippet loader. Settings rows pass the configured path unchanged and need no
+separate expansion helper.
+
 `desktop/src/paths.ts` is shared by this IPC, the existing Open Vault Folder menu
 and UserscriptService's Vault refresh. It owns effective-Vault precedence and the
 existing-file/system-open check, replacing the former userscript-only copy.
@@ -155,6 +160,12 @@ and server in `Temp/.agents/` when the existing app and `server/public` must be
 preserved; cleaning release outputs does not authorize replacing a live runtime.
 
 ## Verification boundary
+
+Container health checks in both Compose and the Dockerfile read the container's
+`PORT`, matching the server environment (default 8787). Compose uses `CMD-SHELL`
+and `$$PORT` so expansion occurs inside the container rather than on the host;
+both target IPv4 loopback to match the listener. This source correction was not
+tested with Docker, builds, probes or a running application.
 
 Use type checks, production builds and the static bundle check when the user
 requests static verification only. Do not launch Electron, the server, the

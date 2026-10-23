@@ -430,11 +430,12 @@ function registerDesktopRequests(): void {
   ipcMain.handle('desktop:open-vault-path', async (event, requested: unknown) => {
     if (!desktopWindow(event)) throw new Error('Local application frame required');
     if (typeof requested !== 'string' || !requested.trim() || requested.length > 32768 || requested.includes('\0')) throw new Error('文件路径无效');
+    const location = requested.startsWith('~/') ? path.join(os.homedir(), requested.slice(2)) : requested;
     let target: string;
-    if (path.isAbsolute(requested)) target = path.normalize(requested);
+    if (path.isAbsolute(location)) target = path.normalize(location);
     else {
       const vault = await effectiveVaultPath(DATA_DIR(), desktopConfig?.vaultPath);
-      target = path.resolve(vault, requested);
+      target = path.resolve(vault, location);
       const relative = path.relative(vault, target);
       if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new Error('相对路径必须位于当前笔记库内');
     }

@@ -38,6 +38,6 @@ VOLUME ["/vault", "/data"]
 EXPOSE 8787
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
-  CMD wget -qO- http://localhost:8787/healthz || exit 1
+  CMD wget -qO- "http://127.0.0.1:${PORT}/healthz" || exit 1
 
 CMD ["node", "server/dist/index.js"]
