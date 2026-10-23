@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
 import { nativeTags } from '../services/tags/service.js';
 
@@ -29,7 +28,6 @@ const parse = <T>(schema: z.ZodType<T>, input: unknown): T => {
 
 /** Mount once at /api/tags; same session authentication as existing files/search. */
 export const tagsRouter = Router();
-tagsRouter.use(requireAuth);
 tagsRouter.get('/', asyncHandler(async (_req, res) => { res.json(await nativeTags.summary()); }));
 tagsRouter.get('/page', asyncHandler(async (req, res) => { res.json(await nativeTags.page(parse(tag, req.query.tag))); }));
 tagsRouter.post('/page', asyncHandler(async (req, res) => {

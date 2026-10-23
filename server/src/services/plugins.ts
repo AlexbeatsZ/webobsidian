@@ -161,48 +161,6 @@ export async function adapterOperation(op: string, rel: string, body: any = {}) 
   }
 }
 
-/**
- * Install a community plugin from a GitHub repo (owner/repo). Pulls
- * manifest.json + main.js (+ styles.css) from the latest release assets.
- */
-export async function installFromGithub(repo: string): Promise<InstalledPlugin> {
-  const clean = repo.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').trim();
-  const relApi = `https://api.github.com/repos/${clean}/releases/latest`;
-  const res = await fetch(relApi, { headers: { 'User-Agent': 'WebObsidian' } });
-  if (!res.ok) throw new Error(`GitHub release lookup failed: ${res.status}`);
-  const release = (await res.json()) as { assets: { name: string; browser_download_url: string }[] };
-  const assets = Object.fromEntries(release.assets.map((a) => [a.name, a.browser_download_url]));
-  if (!assets['manifest.json'] || !assets['main.js']) {
-    throw new Error('Release missing manifest.json or main.js');
-  }
-
-  const manifest = JSON.parse(await fetchText(assets['manifest.json'])) as PluginManifest;
-  // id comes from a REMOTE manifest — validate before it becomes a path segment
-  // (a crafted `../../..` would otherwise write main.js outside the plugins dir).
-  const id = assertSafeId(manifest.id || clean.split('/')[1]);
-  const dir = await pluginsDir();
-  const target = path.join(dir, id);
-  await fs.mkdir(target, { recursive: true });
-  await fs.writeFile(path.join(target, 'manifest.json'), JSON.stringify(manifest, null, 2));
-  await fs.writeFile(path.join(target, 'main.js'), await fetchText(assets['main.js']));
-  if (assets['styles.css']) {
-    await fs.writeFile(path.join(target, 'styles.css'), await fetchText(assets['styles.css']));
-  }
-  await updateSettings((d) => {
-    if (!d.plugins.installed.includes(id)) d.plugins.installed.push(id);
-  });
-  const installed = await listInstalled();
-  const found = installed.find((p) => p.id === id);
-  if (!found) throw new Error('Install verification failed');
-  return found;
-}
-
-async function fetchText(url: string): Promise<string> {
-  const r = await fetch(url, { headers: { 'User-Agent': 'WebObsidian' } });
-  if (!r.ok) throw new Error(`Download failed: ${url} (${r.status})`);
-  return r.text();
-}
-
 async function fileExists(p: string): Promise<boolean> {
   try {
     await fs.access(p);

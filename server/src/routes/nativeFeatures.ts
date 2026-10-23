@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
 import { nativeFeatureSettings, patchNativeFeatureSettings } from '../services/nativeFeatureSettings.js';
 import { AutomationSchema, readAutomationConfiguration, saveAutomationConfiguration, importAutomationConfiguration } from '../services/automationSettings.js';
@@ -10,7 +9,6 @@ import { broadcast } from '../services/realtime.js';
 import { readBlockEffects } from '../services/blockEffects.js';
 
 export const nativeFeaturesRouter = Router();
-nativeFeaturesRouter.use(requireAuth);
 nativeFeaturesRouter.get('/blocks', asyncHandler(async (_req, res) => { res.json(await readBlockEffects()); }));
 const configSource = z.object({ path: z.literal('automation.jsonc'), content: z.string().max(1024 * 1024),
   exists: z.boolean(), revision: z.string().optional(), vault: z.string().min(1) }).strict();

@@ -21,14 +21,6 @@ export interface TrashItem {
   mtime: number;
 }
 
-export interface ShareRecord {
-  id: string;
-  path: string;
-  enabled: boolean;
-  createdAt: string;
-  hasPassword?: boolean;
-}
-
 export interface SearchHit {
   path: string;
   title: string;
@@ -72,7 +64,7 @@ const mutationChanged = () => { for (const listener of mutationListeners) listen
 
 async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
   if (vaultSessionStale && !['GET', 'HEAD', 'OPTIONS'].includes((opts.method ?? 'GET').toUpperCase()) &&
-    !url.startsWith('/api/settings') && !url.startsWith('/auth/')) {
+    !url.startsWith('/api/settings')) {
     throw new ApiError('Vault 已切换，请重新加载应用；旧文档会话保留', 409);
   }
   // The settings switch owns the server maintenance lease. Counting its own
@@ -93,9 +85,6 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
     // would drop Content-Type whenever a caller passes its own headers.
     headers: { ...(opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(optHeaders ?? {}) },
   });
-  if (res.status === 401) {
-    throw new ApiError('Unauthorized', 401);
-  }
   if (!res.ok) {
     let msg = res.statusText;
     try {
@@ -110,7 +99,7 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
   } finally { if (mutation) { mutations--; mutationChanged(); } }
 }
 
-// Feature modules share authentication and error handling with the core client.
+// Feature modules share the core request and error-handling path.
 export { req as request };
 
 export class ApiError extends Error {
@@ -123,23 +112,6 @@ export class ApiError extends Error {
 }
 
 export const api = {
-  // auth
-  authStatus: () => req<{ passwordSet: boolean; mustChangePassword: boolean }>('/auth/status'),
-  setup: (password: string) =>
-    req<{ ok: true }>('/auth/setup', { method: 'POST', body: JSON.stringify({ password }) }),
-  login: (password: string) =>
-    req<{ ok: true; mustChangePassword: boolean }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    }),
-  logout: () => req<{ ok: true }>('/auth/logout', { method: 'POST' }),
-  changePassword: (currentPassword: string, newPassword: string) =>
-    req<{ ok: true }>('/auth/change-password', {
-      method: 'POST',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    }),
-  me: () => req<{ authenticated: boolean; mustChangePassword: boolean }>('/auth/me'),
-
   // files
   tree: () => req<TreeNode>('/api/files/'),
   read: (path: string) =>
@@ -268,28 +240,6 @@ export const api = {
       `/api/git/show?hash=${encodeURIComponent(hash)}&path=${encodeURIComponent(path)}`,
     ),
 
-  // api keys
-  listKeys: () => req<{ keys: any[] }>('/api/keys/'),
-  createKey: (name: string, scopes: string[]) =>
-    req<{ key: string; record: any }>('/api/keys/', {
-      method: 'POST',
-      body: JSON.stringify({ name, scopes }),
-    }),
-  revokeKey: (id: string) => req<{ ok: boolean }>(`/api/keys/${id}`, { method: 'DELETE' }),
-
-  // public shares (FR-10)
-  listShares: () => req<{ shares: ShareRecord[] }>('/api/shares/'),
-  createShare: (path: string) =>
-    req<{ share: ShareRecord }>('/api/shares/', { method: 'POST', body: JSON.stringify({ path }) }),
-  setShareEnabled: (id: string, enabled: boolean) =>
-    req<{ share: ShareRecord }>(`/api/shares/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
-  deleteShare: (id: string) => req<{ ok: true }>(`/api/shares/${id}`, { method: 'DELETE' }),
-  // password = null clears the share's password
-  setSharePassword: (id: string, password: string | null) =>
-    req<{ share: ShareRecord }>(`/api/shares/${id}`, { method: 'PATCH', body: JSON.stringify({ password }) }),
-  // NOTE: the public-facing /share/<id> page is fully server-rendered (SSR) —
-  // the SPA never fetches /public/shares/* itself.
-
   // plugins
   listPlugins: () => req<{ plugins: any[] }>('/api/plugins/'),
   pluginData: (id: string) => req<{ data: any }>(`/api/plugins/${encodeURIComponent(id)}/data`),
@@ -302,8 +252,6 @@ export const api = {
     }),
   pluginAdapter: (op: string, path: string, body = {}) =>
     req<any>('/api/plugins/adapter', { method: 'POST', body: JSON.stringify({ op, path, ...body }) }),
-  installPlugin: (repo: string) =>
-    req<{ plugin: any }>('/api/plugins/install', { method: 'POST', body: JSON.stringify({ repo }) }),
   setPluginEnabled: (id: string, enabled: boolean) =>
     req<{ ok: true }>(`/api/plugins/${id}/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
 };

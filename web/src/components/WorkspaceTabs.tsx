@@ -34,7 +34,6 @@ export default function WorkspaceTabs() {
   const openContextMenu = useStore((s) => s.openContextMenu);
   const setMovePath = useStore((s) => s.setMovePath);
   const setRightPanel = useStore((s) => s.setRightPanel);
-  const setShareDialog = useStore((s) => s.setShareDialog);
   const setVersionHistory = useStore((s) => s.setVersionHistory);
   const revealInTree = useStore((s) => s.revealInTree);
   const loadTree = useStore((s) => s.loadTree);
@@ -80,7 +79,6 @@ export default function WorkspaceTabs() {
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const isMd = /\.(md|markdown)$/i.test(path);
-    const isShareable = /\.(md|markdown|canvas)$/i.test(path);
     const canSplit = /\.(md|markdown|txt|json|csv|canvas|css|js|ya?ml)$/i.test(path);
     const baseName = path.split('/').pop() ?? path;
     const closeOthers = () => tabs.filter((t) => t.path !== path).forEach((t) => closeTab(t.path));
@@ -192,7 +190,6 @@ export default function WorkspaceTabs() {
             if (isMobile) setMobileDrawer('left');
           },
         },
-        ...(isShareable ? [{ id: 'file:share', label: 'Share…', icon: 'globe', onClick: () => setShareDialog(path) }] : []),
         sep,
         ...tabItems,
         sep,

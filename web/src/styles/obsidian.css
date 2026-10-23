@@ -1202,17 +1202,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .btn.secondary { background: var(--bg-modifier-active); color: var(--text-normal); }
 .btn.danger { background: #d6453d; color: #fff; }
 
-/* Login */
-.login-screen { height: 100%; display: grid; place-items: center; background: var(--bg-secondary); }
-.login-card { width: 360px; background: var(--bg-primary); border: 1px solid var(--bg-modifier-border);
-  border-radius: 12px; padding: 36px 32px; text-align: center; box-shadow: var(--shadow); }
-.login-card .logo { color: var(--interactive-accent); display: flex; justify-content: center; margin-bottom: 8px; }
-.login-card h1 { font-size: 22px; margin: 0 0 4px; }
-.login-card p { color: var(--text-muted); margin: 4px 0 20px; font-size: 13px; }
-.login-card input { margin-bottom: 12px; padding: 9px 12px; }
-.login-card .btn { width: 100%; padding: 10px; }
-.login-card .err { color: #d6453d; font-size: 12px; min-height: 16px; margin-bottom: 8px; }
-
 .empty-state { flex: 1; display: grid; place-items: center; color: var(--text-faint); text-align: center; }
 .empty-state .big { display: flex; justify-content: center; color: var(--base-40); margin-bottom: 12px; }
 .toast { position: fixed; bottom: 34px; right: 16px; background: var(--bg-primary); border: 1px solid var(--bg-modifier-border);
@@ -1275,15 +1264,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   border-radius: var(--radius-s); background: transparent; cursor: pointer; flex-shrink: 0; }
 .graph-color::-webkit-color-swatch-wrapper { padding: 2px; }
 .graph-color::-webkit-color-swatch { border: 0; border-radius: 3px; }
-
-/* ---- Public share page (/share/<id>) — FR-10 ---- */
-.public-page { height: 100%; min-height: 100vh; background: var(--bg-primary); display: flex; flex-direction: column; }
-.public-page .markdown-preview { padding-bottom: 80px; }
-.public-page .public-error { color: var(--text-muted); text-align: center; margin-top: 15vh; font-size: 15px; }
-.public-page a.internal-link { color: var(--text-normal); text-decoration: none; cursor: default; }
-.public-unlock { display: flex; flex-direction: column; gap: 10px; max-width: 320px; margin: 18vh auto 0; }
-.public-unlock-title { font-weight: 600; color: var(--text-normal); text-align: center; }
-.public-unlock-error { color: #e5534b; font-size: 13px; text-align: center; }
 
 /* ====================================================================== */
 /* Mobile / responsive (phone, touch) — FR-11                              */
@@ -1413,7 +1393,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
     border-bottom: 1px solid var(--bg-modifier-border); }
 
   /* Share dialog spans the width too (its rows reuse .setting-row above). */
-  .share-dialog { width: 100%; max-width: calc(100vw - 24px); }
 }
 
 /* Narrow Electron windows still align tabs with their 32px native caption controls. */
@@ -1502,17 +1481,6 @@ html[data-desktop-titlebar] .app.mobile .drawer-backdrop { top: 32px; }
   font-size: 12px;
   color: var(--text-faint);
 }
-
-/* ---- Share dialog + shared-note badge (FR-10) ---- */
-.share-globe { color: var(--interactive-accent); margin-left: 4px; flex-shrink: 0; }
-.share-dialog { width: 480px; max-width: calc(100vw - 32px); padding: 18px 20px; }
-.share-dialog-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; color: var(--text-normal); }
-.share-dialog-title { font-weight: 700; font-size: 15px; }
-.share-dialog-path { color: var(--text-muted); font-size: 12px; word-break: break-all; }
-.share-dialog-hint { color: var(--text-muted); font-size: 13px; margin: 6px 0 12px; }
-.share-url { display: flex; gap: 6px; margin: 4px 0 10px; }
-.share-url .text-input { flex: 1; min-width: 0; }
-.share-dialog-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
 
 /* ---- Reveal file in navigation: brief highlight of the targeted row ---- */
 .tree-row.reveal-flash { animation: wo-reveal-flash 1.2s ease-out; }
@@ -1758,27 +1726,6 @@ html[data-desktop-titlebar] .app.mobile .drawer-backdrop { top: 32px; }
   background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
   pointer-events: none; z-index: 8;
 }
-
-/* Interactive canvas render for the public share page (read-only pan/zoom) */
-.public-page.public-canvas { padding: 0; }
-.public-canvas-title { font-size: 20px; font-weight: 700; padding: 14px 20px; color: var(--text-normal);
-  border-bottom: 1px solid var(--background-modifier-border); flex-shrink: 0; }
-.canvas-public-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; cursor: grab;
-  touch-action: none; background: var(--background-primary);
-  background-image: radial-gradient(var(--background-modifier-border) 1px, transparent 1px);
-  background-size: 24px 24px; }
-.canvas-public-viewport:active { cursor: grabbing; }
-.canvas-static { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
-.canvas-static .canvas-node { cursor: default; }
-.canvas-static .canvas-text-body, .canvas-static .canvas-file-body { overflow: hidden; }
-.canvas-static-empty { padding: 40px; text-align: center; color: var(--text-muted); }
-.canvas-public-controls { position: absolute; right: 14px; bottom: 14px; display: flex; gap: 4px; z-index: 5;
-  background: var(--background-primary); border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m); box-shadow: 0 2px 10px rgba(0,0,0,.25); padding: 4px; }
-.canvas-public-controls button { width: 32px; height: 32px; border: 0; background: transparent;
-  color: var(--text-muted); border-radius: var(--radius-s); cursor: pointer; font-size: 18px; line-height: 1;
-  display: grid; place-items: center; }
-.canvas-public-controls button:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 
 /* Alignment guide lines while dragging nodes (Obsidian's canvas-snaps) */
 .canvas-snaps { pointer-events: none; opacity: 0.7; z-index: 9; }

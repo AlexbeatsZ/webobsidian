@@ -1,8 +1,6 @@
-import { createHash } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
-import { COOKIE_NAME, requireAuth } from '../middleware/auth.js';
 import { AttachmentCleanupService } from '../services/attachment-cleanup/service.js';
 
 const optionsSchema = z.object({
@@ -17,19 +15,16 @@ const executeSchema = z.object({
 /** Mount once at /api/attachments after the coordinator supplies the real mutation lease. */
 export function createAttachmentsRouter(service: AttachmentCleanupService) {
   const router = Router();
-  router.use(requireAuth);
-  // Bind a random preview to the authenticated session without retaining credentials.
-  const owner = (req: Parameters<typeof requireAuth>[0]) => createHash('sha256')
-    .update(String(req.cookies?.[COOKIE_NAME] || req.headers.authorization || '')).digest('base64url');
+  // Personal local application: the existing random, expiring preview token owns the operation.
   router.post('/scan', asyncHandler(async (req, res) => {
     const parsed = optionsSchema.safeParse(req.body ?? {});
     if (!parsed.success) { res.status(400).json({ error: '附件扫描排除配置无效' }); return; }
-    res.json(await service.preview(parsed.data, owner(req)));
+    res.json(await service.preview(parsed.data, 'local'));
   }));
   router.post('/execute', asyncHandler(async (req, res) => {
     const parsed = executeSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: '需要有效扫描令牌、选中路径及明确确认' }); return; }
-    res.json(await service.execute(parsed.data.token, parsed.data.paths, owner(req)));
+    res.json(await service.execute(parsed.data.token, parsed.data.paths, 'local'));
   }));
   return router;
 }

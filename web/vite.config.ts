@@ -13,7 +13,7 @@ export default defineConfig({
     emptyOutDir: true,
     chunkSizeWarningLimit: 900,
     rollupOptions: {
-      input: { index: resolve(__dirname, 'index.html'), share: resolve(__dirname, 'src/share.ts') },
+      input: { index: resolve(__dirname, 'index.html') },
       output: {
         manualChunks: {
           codemirror: [
@@ -33,9 +33,6 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://localhost:8787',
-      '/auth': 'http://localhost:8787',
-      '/public': 'http://localhost:8787',
-      '/share': 'http://localhost:8787', // SSR share page is server-rendered even in dev
       '/ws': { target: 'ws://localhost:8787', ws: true },
     },
   },

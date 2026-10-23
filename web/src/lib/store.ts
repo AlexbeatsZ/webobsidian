@@ -1,6 +1,6 @@
 import { manualSave } from './writing/format';
 import { create } from 'zustand';
-import { api, type TreeNode, type ShareRecord } from './api';
+import { api, type TreeNode } from './api';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
 import { parseLinkTarget } from '@webobsidian/markdown-core';
@@ -107,11 +107,6 @@ export interface ContextMenuState {
 }
 
 interface AppState {
-  authed: boolean;
-  setAuthed: (v: boolean) => void;
-  mustChangePassword: boolean;
-  setMustChangePassword: (v: boolean) => void;
-
   tree: TreeNode | null;
   filePaths: string[];
   lastFileChange: { path: string; stat: FileStat } | null;
@@ -214,12 +209,6 @@ interface AppState {
   openContextMenu: (m: ContextMenuState) => void;
   closeContextMenu: () => void;
 
-  /** Public share links (FR-10) — cached so the tree can badge shared notes. */
-  shares: ShareRecord[];
-  loadShares: () => Promise<void>;
-  /** Note path whose Share dialog is open (null = closed). */
-  shareDialogPath: string | null;
-  setShareDialog: (path: string | null) => void;
   /** Note path whose Version history modal is open (null = closed). */
   versionHistoryPath: string | null;
   setVersionHistory: (path: string | null) => void;
@@ -348,11 +337,6 @@ function scheduleSave(): void {
 
 export const useStore = create<AppState>()(
     (set, get) => ({
-      authed: false,
-      setAuthed: (v) => set({ authed: v }),
-      mustChangePassword: false,
-      setMustChangePassword: (v) => set({ mustChangePassword: v }),
-
       tree: null,
       filePaths: [],
       lastFileChange: null,
@@ -548,17 +532,6 @@ export const useStore = create<AppState>()(
       openContextMenu: (m) => set({ contextMenu: m }),
       closeContextMenu: () => set({ contextMenu: null }),
 
-      shares: [],
-      loadShares: async () => {
-        try {
-          const { shares } = await api.listShares();
-          set({ shares });
-        } catch {
-          /* not authed yet */
-        }
-      },
-      shareDialogPath: null,
-      setShareDialog: (path) => set({ shareDialogPath: path }),
       versionHistoryPath: null,
       setVersionHistory: (path) => set({ versionHistoryPath: path }),
       revealInTree: (path) => {

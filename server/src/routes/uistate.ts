@@ -1,11 +1,9 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error.js';
-import { requireAuth } from '../middleware/auth.js';
 import { readUiState, writeUiState } from '../services/uistate.js';
 import { broadcast } from '../services/realtime.js';
 
 export const uiStateRouter = Router();
-uiStateRouter.use(requireAuth);
 
 uiStateRouter.get(
   '/',

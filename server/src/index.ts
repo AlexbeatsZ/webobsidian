@@ -1,10 +1,8 @@
 import { migrateSearchSettings } from './services/searchmigration.js';
 import { writingRouter } from './routes/writing.js';
-import express, { type Response } from 'express';
-import cookieParser from 'cookie-parser';
+import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promises as fs } from 'node:fs';
@@ -13,21 +11,15 @@ import { WebSocketServer } from 'ws';
 import chokidar from 'chokidar';
 
 import { config } from './config.js';
-import { loadSettings, getSettings, setPasswordIfInitial } from './bootstrap.js';
+import { loadSettings, getSettings } from './services/settings.js';
 import { errorHandler } from './middleware/error.js';
-import { COOKIE_NAME } from './middleware/auth.js';
-import { verifyToken } from './services/auth.js';
-import { authRouter } from './routes/auth.js';
+import { requireLocal, isLocalRequest } from './middleware/localAccess.js';
 import { filesRouter } from './routes/files.js';
 import { searchRouter } from './routes/search.js';
 import { settingsRouter, configureVaultSwitch } from './routes/settings.js';
 import { gitRouter } from './routes/git.js';
-import { keysRouter } from './routes/keys.js';
 import { pluginsRouter } from './routes/plugins.js';
-import { agentRouter } from './routes/agent.js';
 import { uiStateRouter } from './routes/uistate.js';
-import { sharesRouter, publicSharesRouter } from './routes/shares.js';
-import { sharePageRouter } from './routes/sharepage.js';
 import { configuredMenusRouter } from './routes/configuredMenus.js';
 import { tagsRouter } from './routes/tags.js';
 import { nativeFeaturesRouter } from './routes/nativeFeatures.js';
@@ -59,46 +51,22 @@ process.on('unhandledRejection', (reason) => {
 
 async function main() {
   await loadSettings();
-  await setPasswordIfInitial();
   await ensureVault();
 
   const app = express();
-  // Honour X-Forwarded-* per the deployment's proxy topology (TRUST_PROXY).
-  // Default true (trust the immediate hop) so X-Forwarded-Proto-based `Secure`
-  // cookies work behind the recommended reverse-proxy setup without extra config.
-  // This is safe against F-03: the login rate limiter keys on the TCP socket
-  // address (see middleware/ratelimit.ts), not the spoofable X-Forwarded-For.
-  // Set TRUST_PROXY=false for a directly-exposed instance with no proxy.
-  app.set('trust proxy', config.trustProxy);
+  app.use(requireLocal);
   app.use(express.json({ limit: '32mb' }));
-  app.use(cookieParser());
   app.use(guardVaultMutations);
 
-  // Per-request CSP nonce — used by the SSR share page's inline <script>.
-  app.use((_req, res, next) => {
-    res.locals.cspNonce = randomBytes(16).toString('base64');
-    next();
-  });
-  // Security headers. The CSP intentionally does NOT emit `upgrade-insecure-requests`
-  // (it would break plain-HTTP self-hosting). `script-src` is 'self' + per-request
-  // nonce; `style-src` allows inline styles (React inline styles + the SSR page's
-  // <style>). Note: inline <script> inside ```html render-blocks won't execute under
-  // this policy — acceptable for the marginal XSS hardening it buys.
   app.use(
     helmet({
       contentSecurityPolicy: {
         useDefaults: true,
         directives: {
           defaultSrc: ["'self'"],
-          // Trusted community plugins (Templater/DataviewJS/Interactive JS)
-          // evaluate user scripts. Public shares retain the strict policy.
-          scriptSrc: [
-            "'self'",
-            (_req, res) => `'nonce-${(res as Response).locals.cspNonce}'`,
-            (req) => (req.url?.startsWith('/share/') ? '' : "'unsafe-eval'"),
-            (req) => (req.url?.startsWith('/share/') ? '' : 'blob:'),
-          ],
-          workerSrc: ["'self'", (req) => (req.url?.startsWith('/share/') ? '' : 'blob:')],
+          // Trusted personal plugins share the local application policy.
+          scriptSrc: ["'self'", "'unsafe-eval'", 'blob:'],
+          workerSrc: ["'self'", 'blob:'],
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
           fontSrc: ["'self'", 'data:'],
@@ -111,9 +79,8 @@ async function main() {
           upgradeInsecureRequests: null,
         },
       },
-      // Allow social crawlers / other sites to load public share og:images.
       crossOriginEmbedderPolicy: false,
-      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      crossOriginResourcePolicy: { policy: 'same-origin' },
     }),
   );
 
@@ -121,19 +88,14 @@ async function main() {
     app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
   }
 
-  // Health (no auth) — for docker healthcheck
+  // Local readiness endpoint for the desktop launcher.
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
-  // Routes. NOTE: specific /api/* routers must be registered BEFORE the broad
-  // '/api' search router, whose router-level requireAuth middleware would
-  // otherwise gate every /api/* path (incl. /api/v1 and /api/keys) by prefix.
-  app.use('/auth', authRouter);
-  app.use('/api/v1', agentRouter); // agent API (api-key auth)
+  // Specific routes precede the shared search router. Access is checked once above.
   app.use('/api/files', filesRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/writing', writingRouter);
   app.use('/api/git', gitRouter);
-  app.use('/api/keys', keysRouter);
   app.use('/api/plugins', pluginsRouter);
   app.use('/api/menus', configuredMenusRouter);
   app.use('/api/tags', tagsRouter);
@@ -148,9 +110,6 @@ async function main() {
   });
   app.use('/api/attachments', createAttachmentsRouter(attachmentCleanup));
   app.use('/api/uistate', uiStateRouter);
-  app.use('/api/shares', sharesRouter); // manage public share links (auth)
-  app.use('/public/shares', publicSharesRouter); // shared-note content (NO auth)
-  app.use('/share', sharePageRouter); // SSR public share page (NO auth, SEO/OG meta)
   app.use('/api', searchRouter); // /api/search, /api/tags, /api/backlinks, /api/graph...
 
   // Static SPA (built into server/public)
@@ -158,7 +117,7 @@ async function main() {
   if (await dirExists(publicDir)) {
     app.use(express.static(publicDir));
     app.get('*', (req, res, next) => {
-      if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/public'))
+      if (req.path.startsWith('/api'))
         return next();
       res.sendFile(path.join(publicDir, 'index.html'));
     });
@@ -196,8 +155,7 @@ async function main() {
 }
 
 // --- WebSocket: broadcast filesystem & UI-state events to connected clients ----
-// Auth-gated: the WS stream leaks vault structure (paths of created/changed/deleted
-// files), so the upgrade is rejected unless the request carries a valid session.
+// HTTP and WebSocket use the same local-request check.
 function setupWebsocket(server: http.Server) {
   const wss = new WebSocketServer({ noServer: true });
   bindMaintenanceClients(() => wss.clients);
@@ -213,15 +171,12 @@ function setupWebsocket(server: http.Server) {
       socket.destroy();
       return;
     }
-    const token = cookieValue(req.headers.cookie, COOKIE_NAME) ?? bearerToken(req.headers.authorization);
-    void (async () => {
-      if (!token || !(await verifyToken(token))) {
-        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-        socket.destroy();
-        return;
-      }
-      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
-    })();
+    if (!isLocalRequest(req)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
   wss.on('connection', (ws) => {
@@ -238,21 +193,6 @@ function setupWebsocket(server: http.Server) {
       if (client.readyState === 1) client.send(data);
     }
   });
-}
-
-/** Parse a single cookie value out of a raw `Cookie:` header (no cookie-parser on upgrade). */
-function cookieValue(header: string | undefined, name: string): string | undefined {
-  if (!header) return undefined;
-  for (const part of header.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq === -1) continue;
-    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
-  }
-  return undefined;
-}
-
-function bearerToken(header: string | undefined): string | undefined {
-  return header?.startsWith('Bearer ') ? header.slice(7) : undefined;
 }
 
 // --- chokidar watcher: reflect external changes (git pull, direct edits) ---

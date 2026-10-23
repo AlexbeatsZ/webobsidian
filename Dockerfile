@@ -28,7 +28,7 @@ COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/server/public ./server/public
 
 ENV PORT=8787 \
-    HOST=0.0.0.0 \
+    HOST=127.0.0.1 \
     DATA_DIR=/data \
     VAULT_PATH=/vault \
     ALLOWED_ROOTS=/vault \

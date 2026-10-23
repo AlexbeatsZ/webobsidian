@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error.js';
-import { requireAuth } from '../middleware/auth.js';
 import { qmd } from '../services/search.js';
 import { backlinksFor, graphData, resolveLink } from '../services/links.js';
 import { resolveIndexedTarget } from '../services/fileindex.js';
@@ -12,7 +11,6 @@ import { catalog } from '../services/catalog.js';
 import { getSettings } from '../services/settings.js';
 
 export const searchRouter = Router();
-searchRouter.use(requireAuth);
 
 searchRouter.get(
   '/search',

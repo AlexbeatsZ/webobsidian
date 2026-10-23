@@ -154,8 +154,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
   const toggleBookmark = useStore((s) => s.toggleBookmark);
   const bookmarks = useStore((s) => s.bookmarks);
   const notify = useStore((s) => s.notify);
-  const setShareDialog = useStore((s) => s.setShareDialog);
-  const shares = useStore((s) => s.shares);
   const isSelected = useStore((s) => s.selected.includes(node.path));
   const setSelected = useStore((s) => s.setSelected);
   const setSelectAnchor = useStore((s) => s.setSelectAnchor);
@@ -323,9 +321,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           { id: 'file:open-to-side', label: 'Open to the right', onClick: () => openToSide(node.path) },
           { label: '', separator: true },
           { id: 'file:bookmark', label: bookmarks.includes(node.path) ? 'Remove bookmark' : 'Bookmark', onClick: () => toggleBookmark(node.path) },
-          ...(/\.(md|markdown|canvas)$/i.test(node.path)
-            ? [{ id: 'file:share', label: 'Share…', icon: 'globe', onClick: () => setShareDialog(node.path) }]
-            : []),
           { id: 'file:duplicate', label: 'Make a copy', onClick: doCopy },
           { label: '', separator: true },
           { id: 'file:copy', label: 'Copy', onClick: doClipboard('copy') },
@@ -421,9 +416,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           <RenameInput node={node} onDone={() => setRenamingPath(null)} />
         ) : (
           <span className="name">{node.name.replace(/\.(md|markdown)$/, '')}</span>
-        )}
-        {shares.some((s) => s.path === node.path && s.enabled) && (
-          <Icon name="globe" size={12} className="share-globe" />
         )}
         {bookmarks.includes(node.path) && <Icon name="bookmark" size={12} className="bm-star" />}
       </div>

@@ -1,7 +1,6 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, net, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, net, shell, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -24,8 +23,6 @@ const SERVER_STARTUP_TIMEOUT_MS = 120_000;
 interface DesktopConfig {
   vaultPath?: string;
   trustedPlugins?: boolean;
-  /** Random per-install password — passed to the server as WEBOBSIDIAN_PASSWORD. */
-  secret: string;
 }
 
 let serverProc: ChildProcess | null = null;
@@ -38,13 +35,13 @@ async function readConfig(): Promise<DesktopConfig> {
   try {
     const raw = await fs.readFile(CONFIG_FILE(), 'utf8');
     const parsed = JSON.parse(raw) as Partial<DesktopConfig>;
-    if (parsed && typeof parsed.secret === 'string' && parsed.secret.length >= 12) {
+    if (parsed && typeof parsed === 'object') {
       return parsed as DesktopConfig;
     }
   } catch {
     /* first run / corrupt — fall through to fresh config */
   }
-  return { secret: randomBytes(24).toString('hex') };
+  return {};
 }
 
 async function writeConfig(cfg: DesktopConfig): Promise<void> {
@@ -101,10 +98,6 @@ async function startServer(cfg: DesktopConfig): Promise<void> {
     VAULT_PATH: cfg.vaultPath,
     // Let the in-app folder browser roam the user's home (single-user desktop).
     ALLOWED_ROOTS: os.homedir(),
-    // Per-install recovery/override password → enables seamless auto-login.
-    WEBOBSIDIAN_PASSWORD: cfg.secret,
-    // Cookies must not be Secure over plain http://127.0.0.1.
-    COOKIE_SECURE: 'false',
     PATH: augmentedPath(),
   };
 
@@ -135,7 +128,6 @@ async function startServer(cfg: DesktopConfig): Promise<void> {
 
   await waitForHealth(serverPort, () => startupError);
   log.write(`[desktop] server healthy after ${Date.now() - startedAt}ms\n`);
-  await autoLogin(serverPort, cfg.secret);
 }
 
 function baseUrl(port: number): string {
@@ -165,7 +157,6 @@ async function waitForHealth(port: number, failure: () => Error | undefined): Pr
 interface ApiResult {
   status: number;
   json: unknown;
-  setCookie: string[];
 }
 
 function apiRequest(
@@ -180,8 +171,6 @@ function apiRequest(
     for (const [k, v] of Object.entries(headers ?? {})) req.setHeader(k, v);
     let data = '';
     req.on('response', (res) => {
-      const raw = (res.headers['set-cookie'] ?? []) as string | string[];
-      const setCookie = Array.isArray(raw) ? raw : raw ? [raw] : [];
       res.on('data', (chunk) => (data += chunk.toString()));
       res.on('end', () => {
         let json: unknown = null;
@@ -190,61 +179,13 @@ function apiRequest(
         } catch {
           json = null;
         }
-        resolve({ status: res.statusCode ?? 0, json, setCookie });
+        resolve({ status: res.statusCode ?? 0, json });
       });
     });
     req.on('error', reject);
     if (body !== undefined) req.write(JSON.stringify(body));
     req.end();
   });
-}
-
-const TOKEN_COOKIE = 'webobsidian_token';
-
-function tokenFromSetCookie(setCookie: string[]): string | undefined {
-  for (const c of setCookie) {
-    const m = /(?:^|;\s*)webobsidian_token=([^;]+)/.exec(c);
-    if (m) return decodeURIComponent(m[1]);
-  }
-  return undefined;
-}
-
-// Log in with the per-install secret (always accepted as the override password),
-// then seed the JWT into the window's session cookie jar so the BrowserWindow is
-// authenticated with no login prompt. If still on the default password, promote
-// the secret to the custom password (via Bearer auth) so the UI doesn't force a
-// password change on first launch. JWTs survive the password change (signed with
-// a stable jwtSecret), so the same token stays valid for the window.
-async function autoLogin(port: number, secret: string): Promise<void> {
-  try {
-    const login = await apiRequest('POST', `${baseUrl(port)}/auth/login`, { password: secret });
-    if (login.status !== 200) return;
-    const token = tokenFromSetCookie(login.setCookie);
-    if (!token) return;
-
-    const mustChange = Boolean(
-      login.json && typeof login.json === 'object' && (login.json as { mustChangePassword?: boolean }).mustChangePassword,
-    );
-    if (mustChange) {
-      await apiRequest(
-        'POST',
-        `${baseUrl(port)}/auth/change-password`,
-        { currentPassword: secret, newPassword: secret },
-        { Authorization: `Bearer ${token}` },
-      );
-    }
-
-    await session.defaultSession.cookies.set({
-      url: baseUrl(port),
-      name: TOKEN_COOKIE,
-      value: token,
-      httpOnly: true,
-      sameSite: 'lax',
-      expirationDate: Math.floor((Date.now() + 30 * 24 * 60 * 60 * 1000) / 1000),
-    });
-  } catch {
-    // Non-fatal: the window simply shows the normal login screen.
-  }
 }
 
 // ---------------------------------------------------------------------------

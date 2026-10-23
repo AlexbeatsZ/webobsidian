@@ -178,7 +178,7 @@ the dialog directs the user to inspect Trash/files before retrying.
 
 ## HTTP and recovery
 
-The authenticated router uses existing `requireAuth`, `asyncHandler`, error
+The local-only router uses the server-wide local access check, `asyncHandler`, error
 middleware and strict zod validation:
 
 - `POST /api/attachments/scan`: `{excludeDirectories, excludeExtensions}`.

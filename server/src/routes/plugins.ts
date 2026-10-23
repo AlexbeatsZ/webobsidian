@@ -1,10 +1,8 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error.js';
-import { requireAuth } from '../middleware/auth.js';
 import * as plugins from '../services/plugins.js';
 
 export const pluginsRouter = Router();
-pluginsRouter.use(requireAuth);
 
 pluginsRouter.get('/', asyncHandler(async (_req, res) => res.json({ plugins: await plugins.listInstalled() })));
 
@@ -23,18 +21,6 @@ pluginsRouter.get('/:id/data', asyncHandler(async (req, res) => res.json({ data:
 pluginsRouter.put('/:id/data', asyncHandler(async (req, res) => {
   await plugins.writePluginData(req.params.id, req.body?.data ?? null); res.json({ ok: true });
 }));
-
-pluginsRouter.post(
-  '/install',
-  asyncHandler(async (req, res) => {
-    const repo = String(req.body?.repo ?? '');
-    if (!repo) {
-      res.status(400).json({ error: 'repo required (owner/name)' });
-      return;
-    }
-    res.json({ plugin: await plugins.installFromGithub(repo) });
-  }),
-);
 
 pluginsRouter.patch(
   '/:id/enabled',

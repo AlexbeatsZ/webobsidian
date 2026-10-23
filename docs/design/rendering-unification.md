@@ -81,8 +81,13 @@ acceptance; no running user app was restarted or replaced.
 | Structured edits | properties.ts, tables.ts | Token/range patches; cell draft commits on leaving cell; unsupported YAML/irregular tables use source |
 | Canvas | CanvasMarkdown.tsx, CanvasVisible.tsx, canvasSource.ts | Shared card engine; offscreen cards unmount; only changed JSON tokens for text/geometry edits; exact-source undo |
 | Print/PDF | printDocument.ts | Independent readonly full-document host; wait for assets/fonts, freeze DOM, print; no mode switch or fixed delay |
-| Public shares | share.ts, shareScope.ts, shares.ts, sharepage.ts | Same reading engine; server grants declared embeds/media only, section boundaries preserved, no authenticated client APIs |
-| SSR fallback | server/services/renderhtml.ts, rendercanvas.ts | Retained for crawlers/no JS; shared HTML schema, not a promise of browser-identical server layout |
+| Personal local access | server/middleware/localAccess.ts | HTTP and WebSocket share one loopback/Host/Origin predicate; account, API-key and public-sharing runtimes removed at the owner's request |
+
+2026-10-23: Public-share SPA, routes, scope projection, SSR note/Canvas renderers
+and their exclusive dependencies are removed. Earlier share/SSR acceptance records
+below describe the former implementation. They do not describe the current
+runtime; Print/PDF and ordinary readonly fragments retain their shared client
+renderer and non-executing context.
 
 Fragment hosts carry data-source-from. Their local MarkdownModel positions plus
 that base offset identify ranges in the parent document. Embed contexts carry the

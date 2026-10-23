@@ -1,10 +1,8 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error.js';
-import { requireAuth } from '../middleware/auth.js';
 import * as git from '../services/git.js';
 
 export const gitRouter = Router();
-gitRouter.use(requireAuth);
 
 gitRouter.get('/status', asyncHandler(async (_req, res) => res.json(await git.status())));
 

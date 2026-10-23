@@ -1,11 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
-import { requireAuth } from '../middleware/auth.js';
 import { writingSettings, saveWritingSettings } from '../services/writing.js';
 import { MathConfigurationSchema, saveMathConfiguration } from '../services/mathSettings.js';
 export const writingRouter = Router();
-writingRouter.use(requireAuth);
 writingRouter.get(
   '/',
   asyncHandler(async (_req, res) => res.json(await writingSettings())),

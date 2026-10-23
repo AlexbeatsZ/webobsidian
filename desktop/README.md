@@ -13,8 +13,8 @@ the matching prebuilt Electron binary — no cross-compilation, no `node-gyp`.
 
 - **First launch** prompts for a vault folder (default `~/Documents/WebObsidianVault`).
 - App data (`settings.json`, search index) lives in Electron's per-user `userData` dir.
-- A random per-install password is generated, passed to the server as
-  `WEBOBSIDIAN_PASSWORD`, and used to **auto-login** — no password prompt.
+- The desktop opens its loopback-only server directly. Account, session, API-key
+  and public-sharing code has been removed.
 - **F10 → File → Switch Vault…** changes the vault on Windows/Linux (relaunches to re-index);
   **Open Vault/Data Folder** and **Open Logs** help debugging.
 - On Windows/Linux, compact **file tabs and sidebar toggles** share a single 32px

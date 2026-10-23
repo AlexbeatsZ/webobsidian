@@ -2,10 +2,8 @@ import { ensureWriting, writingFileChanged, watchExternalWritingSources } from '
 import { runWritingHotkey, bindWritingNavigation } from './lib/writing/commands';
 import { refreshSearch, searchSettings } from './lib/search';
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { api, ApiError, invalidateVaultRequests } from './lib/api';
+import { api, invalidateVaultRequests } from './lib/api';
 import { useStore } from './lib/store';
-import Login from './components/Login';
-import ForceChangePassword from './components/ForceChangePassword';
 import Ribbon from './components/Ribbon';
 import Sidebar from './components/Sidebar';
 import RightSidebar from './components/RightSidebar';
@@ -14,7 +12,6 @@ import Workspace from './components/Workspace';
 import WorkspaceTabs from './components/WorkspaceTabs';
 import CommandPalette from './components/CommandPalette';
 import Settings from './components/Settings';
-import ShareDialog from './components/ShareDialog';
 import VersionHistory from './components/VersionHistory';
 import TrashView from './components/TrashView';
 import ContextMenu from './components/ContextMenu';
@@ -32,10 +29,6 @@ import TagOperationsHost from './components/TagOperationsHost';
 import { clearNativeFeaturePreferences } from './lib/nativeFeaturePreferences';
 
 export default function App() {
-  const authed = useStore((s) => s.authed);
-  const setAuthed = useStore((s) => s.setAuthed);
-  const mustChangePassword = useStore((s) => s.mustChangePassword);
-  const setMustChangePassword = useStore((s) => s.setMustChangePassword);
   const loadTree = useStore((s) => s.loadTree);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
@@ -46,7 +39,6 @@ export default function App() {
   const setPalette = useStore((s) => s.setPalette);
   const save = useStore((s) => s.save);
   const toast = useStore((s) => s.toast);
-  const [checking, setChecking] = useState(true);
   const [theme, setTheme] = useState<'theme-dark' | 'theme-light'>('theme-light');
 
   useLayoutEffect(() => {
@@ -62,20 +54,6 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    api
-      .me()
-      .then((r) => {
-        setMustChangePassword(Boolean(r.mustChangePassword));
-        setAuthed(true);
-      })
-      .catch((e) => {
-        if (!(e instanceof ApiError && e.status === 401)) console.error(e);
-      })
-      .finally(() => setChecking(false));
-  }, [setAuthed, setMustChangePassword]);
-
-  useEffect(() => {
-    if (!authed) return;
     const stopUserscripts = bootstrapUserscripts();
     let stopMenus = initializeNativeMenus();
     void readNativeFeatures().then(value => { attachmentDialogHost.initialOptions = value.attachments; }).catch(console.error);
@@ -99,7 +77,6 @@ export default function App() {
       .getSettings()
       .then((s) => setTheme(s?.ui?.theme === 'obsidian-dark' ? 'theme-dark' : 'theme-light'))
       .catch(() => {});
-    useStore.getState().loadShares(); // badge shared notes in the file tree
     loadPlugins().catch(() => {});
     // websocket live updates
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -166,7 +143,7 @@ export default function App() {
       stopWritingFiles();
       stopWritingNavigation();
     };
-  }, [authed, loadTree]);
+  }, [loadTree]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -275,21 +252,6 @@ export default function App() {
     };
   }, [isMobile, setMobileDrawer]);
 
-  if (checking) return <div className={theme} style={{ height: '100%' }} />;
-  if (!authed)
-    return (
-      <div className={theme}>
-        <Login onAuthed={() => setAuthed(true)} />
-      </div>
-    );
-  // Signed in but still on the default password → block the app until it's changed.
-  if (mustChangePassword)
-    return (
-      <div className={theme}>
-        <ForceChangePassword />
-      </div>
-    );
-
   // Both sidebars float; mobile visibility stays device-local. Keep guest hosts
   // mounted when hidden so changing panels doesn't restart a web page.
   const showLeft = isMobile ? mobileDrawer === 'left' : leftOpen;
@@ -320,7 +282,6 @@ export default function App() {
       </div>
       <CommandPalette />
       <Settings />
-      <ShareDialog />
       <VersionHistory />
       <TrashView />
       <AttachmentCleanupDialog host={attachmentDialogHost} />

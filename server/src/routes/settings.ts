@@ -3,7 +3,6 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { asyncHandler } from '../middleware/error.js';
-import { requireAuth } from '../middleware/auth.js';
 import { getSettings, updateSettings, redactSettings, ensureVaultBrowsable } from '../services/settings.js';
 import { config } from '../config.js';
 import { broadcast } from '../services/realtime.js';
@@ -16,7 +15,6 @@ let switchRuntime = async (_commit: () => Promise<void>): Promise<void> => { thr
 export function configureVaultSwitch(handler: typeof switchRuntime): void { switchRuntime = handler; }
 
 export const settingsRouter = Router();
-settingsRouter.use(requireAuth);
 
 settingsRouter.get(
   '/',
@@ -59,9 +57,6 @@ settingsRouter.put(
         }
       }
       if (body.ui) Object.assign(d.ui, body.ui);
-      if (body.api && typeof body.api.rateLimitPerMin === 'number') {
-        d.api.rateLimitPerMin = body.api.rateLimitPerMin;
-      }
     }); };
     if (typeof body.vault?.path === 'string') {
       await withVaultMaintenance(drainFileUpdates, async () => {

@@ -1,11 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
-import { requireAuth } from '../middleware/auth.js';
 import { readConfiguredMenu, writeConfiguredMenu } from '../services/configuredMenus.js';
 
 export const configuredMenusRouter = Router();
-configuredMenusRouter.use(requireAuth);
 configuredMenusRouter.get('/config', asyncHandler(async (req, res) => {
   const input = z.object({ path: z.string().max(240).default('menu.jsonc'), vault: z.string().max(100).optional() }).parse(req.query);
   res.setHeader('Cache-Control', 'no-store');

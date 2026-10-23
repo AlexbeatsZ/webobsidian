@@ -2,17 +2,14 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'node:path';
 import { asyncHandler } from '../middleware/error.js';
-import { requireAuth } from '../middleware/auth.js';
 import * as vault from '../services/vault.js';
 import { getSettings } from '../services/settings.js';
 import { scheduleAutoCommitOnSave } from '../services/git.js';
 import { resolveFile } from '../services/fileindex.js';
-import { onFileRenamed } from '../services/shares.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 
 export const filesRouter = Router();
-filesRouter.use(requireAuth);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512 * 1024 * 1024 } });
 
@@ -109,7 +106,6 @@ filesRouter.patch(
       return;
     }
     await vault.rename(from, to);
-    await onFileRenamed(from, to).catch(() => {}); // keep public share links pointing at the note
     scheduleAutoCommitOnSave();
     res.json({ ok: true, from, to });
   }),

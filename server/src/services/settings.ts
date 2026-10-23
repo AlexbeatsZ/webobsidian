@@ -6,16 +6,6 @@ import { config, SETTINGS_FILE } from '../config.js';
 
 /** ---- Schema (PRD §6) ---------------------------------------------------- */
 
-const ApiKeySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  hash: z.string(),
-  prefix: z.string(), // first chars, for display
-  scopes: z.array(z.enum(['read', 'write', 'search'])).default(['read', 'search']),
-  createdAt: z.string(),
-  lastUsed: z.string().nullable().default(null),
-});
-
 const SettingsSchema = z.object({
   nativeFeatures: z.record(z.object({
     // Retained for explicit migration; active definitions belong to Vault files.
@@ -33,15 +23,6 @@ const SettingsSchema = z.object({
     hotkeys: z.record(z.array(z.object({modifiers:z.array(z.string()),key:z.string()}))).default({}),
   })).default({}),
   version: z.number().default(1),
-  auth: z
-    .object({
-      // Mật khẩu người dùng đã đổi. Rỗng = đang dùng mật khẩu mặc định (123456).
-      userPasswordHash: z.string().default(''),
-      // Mật khẩu override để khôi phục khi quên pass (sửa tay vào file). Rỗng = không có.
-      passwordHash: z.string().default(''),
-      jwtSecret: z.string().default(''),
-    })
-    .default({}),
   vault: z
     .object({
       path: z.string().default(''),
@@ -98,12 +79,6 @@ const SettingsSchema = z.object({
       indexFrontmatter: z.boolean().default(true),
     })
     .default({}),
-  api: z
-    .object({
-      keys: z.array(ApiKeySchema).default([]),
-      rateLimitPerMin: z.number().default(120),
-    })
-    .default({}),
   ui: z
     .object({
       theme: z.enum(['obsidian-dark', 'obsidian-light']).default('obsidian-light'),
@@ -113,13 +88,11 @@ const SettingsSchema = z.object({
   plugins: z
     .object({
       enabled: z.array(z.string()).default([]),
-      installed: z.array(z.string()).default([]),
     })
     .default({}),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
-export type ApiKeyRecord = z.infer<typeof ApiKeySchema>;
 
 /** ---- Store --------------------------------------------------------------- */
 
@@ -127,7 +100,6 @@ let cache: Settings | null = null;
 
 function defaults(): Settings {
   const base = SettingsSchema.parse({});
-  base.auth.jwtSecret = randomBytes(48).toString('hex');
   base.vault.path = config.defaultVaultPath;
   base.vault.allowedRoots = config.allowedRoots.length
     ? config.allowedRoots
@@ -178,21 +150,7 @@ export async function loadSettings(): Promise<Settings> {
   try {
     const raw = await fs.readFile(SETTINGS_FILE, 'utf8');
     const parsed = SettingsSchema.parse(JSON.parse(raw));
-    // Backfill secrets that may be empty in older files.
     let dirty = false;
-    if (!parsed.auth.jwtSecret) {
-      parsed.auth.jwtSecret = randomBytes(48).toString('hex');
-      dirty = true;
-    }
-    // Migration: trước đây `passwordHash` là mật khẩu đăng nhập. Mô hình mới coi
-    // `passwordHash` là mật khẩu override và `userPasswordHash` là pass đăng nhập
-    // (rỗng = mặc định 123456). Để file cũ không bị backdoor bằng 123456, chuyển
-    // pass cũ sang `userPasswordHash` rồi xoá field override.
-    if (parsed.auth.passwordHash && !parsed.auth.userPasswordHash) {
-      parsed.auth.userPasswordHash = parsed.auth.passwordHash;
-      parsed.auth.passwordHash = '';
-      dirty = true;
-    }
     // Heal older files whose allowedRoots predate the current vault path.
     if (ensureVaultBrowsable(parsed)) dirty = true;
     cache = parsed;
@@ -229,22 +187,6 @@ export function redactSettings(s: Settings) {
   const {writing,nativeFeatures,...publicSettings}=s;
   return {
     ...publicSettings,
-    auth: {
-      // hasCustomPassword=false nghĩa là đang dùng mật khẩu mặc định (123456).
-      hasCustomPassword: Boolean(s.auth.userPasswordHash),
-      hasOverridePassword: Boolean(s.auth.passwordHash),
-    },
     git: { ...s.git, token: s.git.token ? '••••••••' : '' },
-    api: {
-      ...s.api,
-      keys: s.api.keys.map((k) => ({
-        id: k.id,
-        name: k.name,
-        prefix: k.prefix,
-        scopes: k.scopes,
-        createdAt: k.createdAt,
-        lastUsed: k.lastUsed,
-      })),
-    },
   };
 }
