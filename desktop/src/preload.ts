@@ -36,7 +36,10 @@ else {
   Object.defineProperty(window, 'webobsidianNativeRequire', { value: require });
 }
 
-if (process.platform !== 'darwin' && process.isMainFrame) {
+if (process.isMainFrame) {
+  ipcRenderer.on('desktop:command', (_event, command: string) => {
+    window.dispatchEvent(new CustomEvent('desktop-command', { detail: command }));
+  });
   window.addEventListener('DOMContentLoaded', () => void installTitleBar(), { once: true });
 }
 }

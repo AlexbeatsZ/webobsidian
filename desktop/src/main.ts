@@ -244,10 +244,12 @@ function createWindow(starting = false): void {
     backgroundColor: '#1e1e1e',
     title: 'WebObsidian',
     icon: app.isPackaged ? undefined : path.join(__dirname, '..', 'buildResources', 'icon.png'),
-    ...(process.platform !== 'darwin' ? {
-      titleBarStyle: 'hidden' as const,
+    titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin' ? {
+      trafficLightPosition: { x: 12, y: 9 },
+    } : {
       titleBarOverlay: { color: starting ? '#1e1e1e' : '#f6f6f6', symbolColor: starting ? '#dddddd' : '#333333', height: 32 },
-    } : {}),
+    }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       // Native Obsidian plugins have the same machine access as the user.
@@ -296,6 +298,8 @@ function createWindow(starting = false): void {
   const syncFullscreen = () => mainWindow?.webContents.send('desktop:fullscreen', mainWindow.isFullScreen());
   mainWindow.on('enter-full-screen', syncFullscreen);
   mainWindow.on('leave-full-screen', syncFullscreen);
+  mainWindow.webContents.on('did-finish-load', syncFullscreen);
+  mainWindow.on('maximize', () => mainWindow?.webContents.send('desktop:fullscreen', mainWindow.isFullScreen()));
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -321,11 +325,29 @@ async function switchVault(): Promise<void> {
 
 function buildMenu(): void {
   const isMac = process.platform === 'darwin';
+  // Native menus dispatch the same registered commands as the palette/hotkeys.
+  const command = (id: string) => () => mainWindow?.webContents.send('desktop:command', id);
   const template: MenuItemConstructorOptions[] = [
-    ...(isMac ? [{ role: 'appMenu' as const }] : []),
+    ...(isMac ? [{ label: 'WebObsidian', submenu: [
+      { role: 'about' as const, label: '关于 WebObsidian' },
+      { type: 'separator' as const },
+      { label: '设置…', accelerator: 'Command+,', click: command('settings') },
+      { type: 'separator' as const },
+      { role: 'services' as const, label: '服务' },
+      { type: 'separator' as const },
+      { role: 'hide' as const, label: '隐藏 WebObsidian' },
+      { role: 'hideOthers' as const, label: '隐藏其他' },
+      { role: 'unhide' as const, label: '全部显示' },
+      { type: 'separator' as const },
+      { role: 'quit' as const, label: '退出 WebObsidian' },
+    ] }] : []),
     {
       label: "文件",
       submenu: [
+        { label: '新建笔记', accelerator: 'CommandOrControl+N', click: command('new') },
+        { label: '打开笔记…', accelerator: 'CommandOrControl+O', click: command('files') },
+        { label: '保存', accelerator: 'CommandOrControl+S', click: command('save') },
+        { type: 'separator' },
         { label: "信任原生插件 (下次启动生效)", type: 'checkbox', checked: !!desktopConfig?.trustedPlugins,
           click: async (item) => { const cfg = await readConfig(); cfg.trustedPlugins = item.checked; await writeConfig(cfg); } },
         { label: "切换仓库…", click: () => void switchVault() },
@@ -355,10 +377,12 @@ function buildMenu(): void {
         { role: 'pasteAndMatchStyle', label: '粘贴并匹配样式' },
         { role: 'delete', label: '删除' },
         { role: 'selectAll', label: '全选' },
+        ...(isMac ? [{ type: 'separator' as const }, { role: 'startSpeaking' as const, label: '开始朗读' },
+          { role: 'stopSpeaking' as const, label: '停止朗读' }] : []),
       ],
     },
     {
-      label: "视图",
+      label: "显示",
       submenu: [
         { role: 'reload', label: '重新加载' },
         { role: 'forceReload', label: '强制重新加载' },
@@ -375,7 +399,9 @@ function buildMenu(): void {
       label: "窗口",
       submenu: [
         { role: 'minimize', label: '最小化' },
-        ...(isMac ? [{ role: 'zoom' as const, label: '缩放' }, { role: 'front' as const, label: '全部置于顶层' }] : [{ role: 'close' as const, label: '关闭窗口' }]),
+        ...(isMac ? [{ role: 'zoom' as const, label: '缩放' }, { role: 'close' as const, label: '关闭窗口' },
+          { type: 'separator' as const }, { role: 'front' as const, label: '全部置于顶层' },
+          { role: 'window' as const, label: '窗口' }] : [{ role: 'close' as const, label: '关闭窗口' }]),
       ],
     },
     {
@@ -416,7 +442,7 @@ function registerTitleBar(): void {
   });
   ipcMain.on('desktop:titlebar-theme', (event, dark: boolean) => {
     const win = desktopWindow(event);
-    if (win && typeof dark === 'boolean') win.setTitleBarOverlay({
+    if (win && process.platform !== 'darwin' && typeof dark === 'boolean') win.setTitleBarOverlay({
       color: dark ? '#262626' : '#f6f6f6',
       symbolColor: dark ? '#dadada' : '#333333',
     });
@@ -470,7 +496,7 @@ if (!app.requestSingleInstanceLock()) {
       await startServer(cfg);
       if (!mainWindow || mainWindow.isDestroyed()) return;
       buildMenu();
-      if (process.platform !== 'darwin') registerTitleBar();
+      registerTitleBar();
       registerDesktopRequests();
       userscripts = new UserscriptService({ dataDir: DATA_DIR(), fallbackVault: cfg.vaultPath!,
         window: () => mainWindow, hostAllowed: event => !!desktopWindow(event) });

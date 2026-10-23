@@ -5,6 +5,7 @@ export function installTitleBar(): void {
   const root = document.getElementById('root');
   if (!root) return;
   document.documentElement.dataset.desktopTitlebar = 'true';
+  document.documentElement.dataset.desktopPlatform = process.platform;
   ipcRenderer.on('desktop:fullscreen', (_event, fullscreen: boolean) => {
     document.documentElement.toggleAttribute('data-desktop-fullscreen', fullscreen);
   });
@@ -34,7 +35,7 @@ export function installTitleBar(): void {
     if (dark === lastDark) return;
     lastDark = dark;
     fallback.dataset.dark = String(dark);
-    ipcRenderer.send('desktop:titlebar-theme', dark);
+    if (process.platform !== 'darwin') ipcRenderer.send('desktop:titlebar-theme', dark);
   };
   const themeObserver = new MutationObserver(syncChrome);
   const watchTheme = () => {
@@ -50,7 +51,7 @@ export function installTitleBar(): void {
   // Preserve access to vault/window actions without displaying File/Edit labels.
   let opening = false;
   window.addEventListener('keydown', (event) => {
-    if (event.defaultPrevented || event.key !== 'F10' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (process.platform === 'darwin' || event.defaultPrevented || event.key !== 'F10' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
     event.preventDefault();
     if (opening) return;
     opening = true;

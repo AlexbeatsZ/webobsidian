@@ -426,6 +426,7 @@ html[data-desktop-titlebar] .tab-bar {
 }
 html[data-desktop-titlebar] .tab-bar .tab-ctl,
 html[data-desktop-titlebar] .tab-scroll { -webkit-app-region: no-drag; }
+html[data-desktop-platform="darwin"] .tab-bar { padding-left: 84px; padding-right: 0; }
 html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0; padding-right: 0; -webkit-app-region: no-drag; }
 .titlebar-drag-space { flex: 1; min-width: 40px; }
 /* Only the tabs scroll; the toggle/new-note controls stay pinned and never get
@@ -1285,7 +1286,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) {
   /* Single-column: only the workspace is in normal flow; drawers are fixed. */
   .app.mobile { grid-template-columns: 1fr; --tabbar-height: calc(48px + env(safe-area-inset-top)); }
   .app.mobile > .workspace { grid-column: 1; }

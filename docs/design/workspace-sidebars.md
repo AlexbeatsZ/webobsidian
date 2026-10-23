@@ -1,5 +1,15 @@
 # 双侧悬浮栏与视图归属
 
+## Android / touch (0.1.17)
+
+`useIsMobile` and the matching responsive CSS now also select a coarse primary
+pointer, covering Android tablets regardless of viewport width. There is still
+one `mobileDrawer` and one App touch lifecycle, shared by both SidebarDock hosts.
+Edge-in opens, drawer-out closes; vertical scrolling/multitouch/cancel/selection
+and horizontally scrolling content cancel or bypass the gesture. No per-platform
+drawer store, duplicate listener or backend notification is added. Detailed
+thresholds, storage and device acceptance entry points are in android-runtime.md.
+
 ## 用户需求与视觉基准
 
 - 删除原生日记创建动作、命令及入口；已有 Daily 文件继续作为普通笔记，不删除用户内容。

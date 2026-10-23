@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 /** Phone-sized touch layout breakpoint (matches the CSS `@media (max-width: 768px)`). */
-export const MOBILE_QUERY = '(max-width: 768px)';
+export const MOBILE_QUERY = '(max-width: 768px), (pointer: coarse)';
 
 /** Reactive `true` when the viewport is phone-sized. Drives drawer-based mobile UI. */
 export function useIsMobile(): boolean {

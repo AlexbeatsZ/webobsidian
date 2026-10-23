@@ -1,5 +1,16 @@
 # Desktop server packaging and startup
 
+## macOS personal signing
+
+`mac.sign` explicitly calls the existing @electron/osx-sign dependency with an
+ad-hoc `-` identity and validates the complete app using codesign deep/strict
+before DMG/ZIP creation. The default identity lookup in electron-builder25.1.8
+does not interpret `mac.identity=-` as ad-hoc and silently skips signing; an
+arm64 linker signature alone lacks the resource seal and is insufficient.
+The explicit signer uses no keychain certificate, timestamp or provisioning
+profile. These are personal sideload builds, without Developer ID/notarization;
+Gatekeeper acceptance is separate from codesign structural validity.
+
 ## Standalone server contract
 
 The desktop build copies the built SPA and bundles the compiled Express server
@@ -7,6 +18,12 @@ into `resources/server/dist/index.mjs`. It does not ship the server's
 `node_modules` tree. The desktop shell starts this entry with its own Electron
 executable and `ELECTRON_RUN_AS_NODE=1`, bound to a random loopback port. User
 vault/config/data paths are passed separately and are not build inputs.
+
+`scripts/bundle-server.mjs` is the single packaging owner for that server+SPA;
+desktop/scripts/build.mjs and android/scripts/prepare.mjs are its two callers.
+Both retain the same jsonc-parser ESM alias, optional fsevents exclusion and
+static standalone guard. Android embeds a Bionic Node library rather than
+spawning Electron; see android-runtime.md for its storage/lifecycle boundaries.
 
 The server bundle aliases only `jsonc-parser` to its supplied ESM entry. Its
 default UMD entry passes `require` into a factory; esbuild leaves calls such as

@@ -18,6 +18,13 @@ test-results/
 # Desktop (Electron) build artifacts
 desktop/.gen/
 desktop/release/
+android/.gradle/
+android/app/.cxx/
+android/.gen/
+android/.runtime/
+android/.signing/
+android/local.properties
+android/release/
 # Local agent runbooks/skills — may contain server creds; never commit.
 .claude/skills/
 report.md

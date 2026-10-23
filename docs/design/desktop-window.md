@@ -36,7 +36,8 @@ File actions formerly available from the note header's More button are available
 from the corresponding tab's context menu (including bookmark, split, properties,
 PDF, history and sharing). The document title remains part of the document view.
 Native vault/window actions and accelerators remain available through F10 on
-Windows/Linux. macOS retains the system title/menu bars; browsers share the new
+Windows/Linux. macOS shares the compact row with left-side native traffic lights
+and retains its system menu bar; browsers share the new
 workspace layout without native caption insets or draggable regions.
 
 ## Implementation
@@ -66,6 +67,25 @@ workspace layout without native caption insets or draggable regions.
   caption-width fallback), keeps controls/tabs no-drag, and reserves at least
   40px of empty drag space. Narrow Electron windows retain the native 32px row
   instead of the mobile browser's 48px row.
+
+## macOS chrome and menus (0.1.17)
+
+The same hidden native titlebar and preload run on macOS. BrowserWindow keeps
+native traffic lights at x12/y9; `data-desktop-platform=darwin` reserves84px on
+the left and removes the Windows right-caption reservation. Fullscreen removes
+both insets; did-finish-load resends actual fullscreen state after a reload.
+The existing fallback covers startup without an extra row; only Windows/Linux
+call setTitleBarOverlay. The label bar retains drag/no-drag regions and minimum
+drag space. No custom imitation of macOS window controls is drawn.
+
+macOS has a persistent system menu: app About/Settings/Services/Hide/Quit;
+File New/Open/Save/Vault/Close; native Edit Undo/Redo/Cut/Copy/Paste/Select All
+and speech; View reload/zoom/fullscreen; Window minimize/zoom/front/window list.
+New/Open/Save/Settings dispatch existing registered application commands through
+the local main-frame preload; they do not implement a second document action.
+Command accelerators are supplied by Electron's native menu, including Cmd+,
+for settings, Cmd+N/O/S and native editing/close/quit. Windows/Linux retain F10
+and hidden menu rows. macOS does not bind F10 to a duplicate popup.
 
 ## Verification and delivery
 

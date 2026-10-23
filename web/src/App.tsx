@@ -29,6 +29,7 @@ import TagOperationsHost from './components/TagOperationsHost';
 import ReviewHost from './components/ReviewHost';
 import { bindOperationWorkspace } from './lib/review/client';
 import { clearNativeFeaturePreferences } from './lib/nativeFeaturePreferences';
+import { documents } from './lib/documents';
 
 export default function App() {
   const loadTree = useStore((s) => s.loadTree);
@@ -158,6 +159,29 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
+  useEffect(() => {
+    const command = (event: Event) => {
+      const id = (event as CustomEvent<unknown>).detail;
+      if (typeof id === 'string' && ['new', 'files', 'save', 'settings'].includes(id)) sharedApp.commands.executeCommandById(id);
+    };
+    const save = () => {
+      for (const snapshot of documents.snapshots()) {
+        if (snapshot.dirty && !snapshot.conflict) void documents.get(snapshot.id)?.save().catch(error => useStore.getState().notify(String(error)));
+      }
+    };
+    const hidden = () => { if (document.visibilityState === 'hidden') save(); };
+    window.addEventListener('desktop-command', command);
+    window.addEventListener('webobsidian-background', save);
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      window.removeEventListener('desktop-command', command);
+      window.removeEventListener('webobsidian-background', save);
+      window.removeEventListener('pagehide', save);
+      document.removeEventListener('visibilitychange', hidden);
+    };
+  }, []);
+
   // Mobile: close the overlay drawer once a note is opened (tap note → read it).
   useEffect(() => {
     if (isMobile && useStore.getState().mobileDrawer) setMobileDrawer(null);
@@ -167,40 +191,57 @@ export default function App() {
   // Mobile: edge-swipe to open/close the drawers (Obsidian Mobile gesture).
   useEffect(() => {
     if (!isMobile) return;
-    let sx = 0,
-      sy = 0,
-      fromLeftEdge = false,
-      fromRightEdge = false,
-      tracking = false;
+    let gesture: { id: number; x: number; y: number; time: number; open: 'left' | 'right' | null; edge: 'left' | 'right' | null; horizontal: boolean } | undefined;
+    const cancel = () => { gesture = undefined; };
     const onStart = (e: TouchEvent) => {
+      cancel();
+      if (e.defaultPrevented || e.touches.length !== 1) return;
       const t = e.touches[0];
-      sx = t.clientX;
-      sy = t.clientY;
-      fromLeftEdge = sx <= 28;
-      fromRightEdge = sx >= window.innerWidth - 28;
-      tracking = true;
+      const target = e.target instanceof Element ? e.target : null;
+      const open = useStore.getState().mobileDrawer;
+      const edge = t.clientX <= 28 ? 'left' : t.clientX >= window.innerWidth - 28 ? 'right' : null;
+      if ((!open && !edge) || target?.closest('input, textarea, select, [contenteditable="true"], .canvas-view') && !edge) return;
+      if (!window.getSelection()?.isCollapsed) return;
+      // Horizontal tables/code/tab strips keep their native scrolling.
+      for (let node = target; node && node !== document.body; node = node.parentElement) {
+        if (node.scrollWidth > node.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(node).overflowX)) return;
+      }
+      if (open && !target?.closest('.sidebar-dock, .drawer-backdrop')) return;
+      gesture = { id: t.identifier, x: t.clientX, y: t.clientY, time: performance.now(), open, edge, horizontal: false };
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!gesture) return;
+      if (e.touches.length !== 1) { cancel(); return; }
+      const t = e.touches[0];
+      const dx = t.clientX - gesture.x, dy = t.clientY - gesture.y;
+      if (!gesture.horizontal) {
+        if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { cancel(); return; }
+        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+        const side = gesture.open ?? gesture.edge;
+        if ((side === 'left' && (gesture.open ? dx > 0 : dx < 0)) || (side === 'right' && (gesture.open ? dx < 0 : dx > 0))) { cancel(); return; }
+        gesture.horizontal = true;
+      }
+      if (e.cancelable) e.preventDefault();
     };
     const onEnd = (e: TouchEvent) => {
-      if (!tracking) return;
-      tracking = false;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - sx,
-        dy = t.clientY - sy;
-      if (Math.abs(dx) < 45 || Math.abs(dy) > Math.abs(dx)) return; // mostly-horizontal only
-      const open = useStore.getState().mobileDrawer;
-      if (dx > 0) {
-        if (open === 'right') setMobileDrawer(null);
-        else if (fromLeftEdge && !open) setMobileDrawer('left');
-      } else {
-        if (open === 'left') setMobileDrawer(null);
-        else if (fromRightEdge && !open) setMobileDrawer('right');
-      }
+      const current = gesture; cancel();
+      if (!current || e.touches.length || performance.now() - current.time > 900) return;
+      const t = Array.from(e.changedTouches).find(touch => touch.identifier === current.id);
+      if (!t) return;
+      const dx = t.clientX - current.x, dy = t.clientY - current.y;
+      if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.3 || useStore.getState().mobileDrawer !== current.open) return;
+      if (current.open === 'left' && dx < 0 || current.open === 'right' && dx > 0) setMobileDrawer(null);
+      else if (!current.open && (current.edge === 'left' && dx > 0 || current.edge === 'right' && dx < 0)) setMobileDrawer(current.edge);
     };
     window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onEnd, { passive: true });
+    window.addEventListener('touchcancel', cancel);
     return () => {
       window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', cancel);
     };
   }, [isMobile, setMobileDrawer]);
 

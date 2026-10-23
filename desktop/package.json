@@ -1,6 +1,6 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "private": true,
   "description": "WebObsidian desktop app (Electron shell around the self-hosted server)",
   "author": "xnohat <xnohat@gmail.com>",
@@ -48,6 +48,7 @@
     "electronLanguages": ["en-US"],
     "mac": {
       "category": "public.app-category.productivity",
+      "sign": "scripts/sign-mac.cjs",
       "icon": "buildResources/icon.png",
       "target": [
         { "target": "dmg", "arch": ["arm64", "x64"] },
