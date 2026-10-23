@@ -2,7 +2,8 @@ import { matchName } from '../search';
 import { Component } from './events';
 import { createDiv, createEl } from './dom';
 import moment from 'moment';
-import { iconPaths } from '../icons';
+import { addIcon, getIcon, setIcon } from '../icons';
+export { addIcon, getIcon, setIcon } from '../icons';
 import { applyConfiguredMenu, subscribeMenuConfiguration } from '../configuredMenus/controller';
 import { menuModifiers, snapshotMenuContext } from '../configuredMenus/transform';
 import type { ConfiguredMenuItem, MenuContext } from '../configuredMenus/types';
@@ -627,28 +628,6 @@ export class PluginSettingTab {
   }
   display() {}
   hide() {}
-}
-const icons = new Map<string, string>();
-export function addIcon(name: string, svg: string) {
-  icons.set(name, svg);
-}
-export function getIcon(name: string): SVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', '18');
-  svg.setAttribute('height', '18');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '1.75');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.classList.add('svg-icon');
-  if (icons.has(name)) svg.innerHTML = icons.get(name)!;
-  else svg.innerHTML = iconPaths[name.replace(/^lucide-/, '')] ?? iconPaths.file;
-  return svg;
-}
-export function setIcon(el: HTMLElement, name: string) {
-  el.replaceChildren(getIcon(name));
 }
 export function setTooltip(el: HTMLElement, text: string, _options?: any) {
   el.title = text;

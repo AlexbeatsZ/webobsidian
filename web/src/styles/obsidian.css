@@ -805,7 +805,9 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 /* Interactive property editor (Live mode) */
 .cm-properties .cm-props-header { font-size: 13px; color: var(--text-faint); font-weight: 600; margin-bottom: 6px; }
 .cm-properties .prop-row { position: relative; }
-.cm-properties .prop-icon { width: 16px; flex-shrink: 0; text-align: center; color: var(--text-faint); font-size: 12px; }
+.cm-properties .prop-icon, .cm-props-dd-item .prop-icon { width: 16px; flex: 0 0 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); border-radius: 3px; }
+.cm-properties .prop-icon > svg, .cm-props-dd-item .prop-icon > svg { display: block; width: 16px; height: 16px; }
+.cm-properties .prop-icon:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
 .cm-properties .prop-key { min-width: 120px; outline: none; border-radius: 4px; padding: 1px 4px; cursor: text; }
 .cm-properties .prop-val-input { outline: none; border-radius: 4px; padding: 1px 5px; min-width: 40px; cursor: text; color: var(--text-normal); }
 .cm-properties .prop-input { font: inherit; color: var(--text-normal); background: var(--bg-primary);
@@ -820,15 +822,19 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-properties .prop-pill-input { outline: none; min-width: 80px; padding: 1px 6px; border-radius: 12px;
   background: var(--bg-primary); box-shadow: inset 0 0 0 1px var(--interactive-accent); font-size: 0.86em; }
 .prop-val-dropdown.cm-props-dropdown { position: fixed; margin: 0; z-index: 9999; }
-.cm-properties .prop-pill-x { cursor: pointer; opacity: 0; font-size: 1.05em; line-height: 1; }
+.cm-properties .prop-pill-x { cursor: pointer; opacity: 0; display: inline-flex; align-items: center; }
+.cm-properties .prop-pill-x > svg { width: 12px; height: 12px; }
 .cm-properties .prop-pill:hover .prop-pill-x { opacity: 0.55; }
 .cm-properties .prop-pill-x:hover { opacity: 1; }
-.cm-properties .prop-pill-add { cursor: pointer; color: var(--text-faint); border: 1px dashed var(--bg-modifier-border); border-radius: 12px; padding: 0 8px; font-size: 0.86em; line-height: 1.5; }
+.cm-properties .prop-pill-add { cursor: pointer; color: var(--text-faint); border: 1px dashed var(--bg-modifier-border); border-radius: 12px; padding: 0 8px; display: inline-flex; align-items: center; }
+.cm-properties .prop-pill-add > svg { width: 13px; height: 16px; }
 .cm-properties .prop-pill-add:hover { color: var(--text-accent); border-color: var(--interactive-accent); }
-.cm-properties .prop-del { margin-left: auto; cursor: pointer; color: var(--text-faint); opacity: 0; padding: 0 4px; font-size: 1.1em; }
+.cm-properties .prop-del { margin-left: auto; cursor: pointer; color: var(--text-faint); opacity: 0; padding: 0 4px; display: inline-flex; align-items: center; }
+.cm-properties .prop-del > svg { width: 14px; height: 14px; }
 .cm-properties .prop-row:hover .prop-del { opacity: 0.55; }
 .cm-properties .prop-del:hover { opacity: 1; color: #e5534b; }
-.cm-properties .cm-props-add { color: var(--text-faint); font-size: 13px; cursor: pointer; padding: 8px 0 0; user-select: none; }
+.cm-properties .cm-props-add { color: var(--text-muted); font: 13px var(--font-ui); cursor: pointer; padding: 8px 0 0; user-select: none; display: flex; align-items: center; gap: 12px; }
+.cm-properties .cm-props-add > svg { width: 16px; height: 16px; }
 .cm-properties .cm-props-add:hover { color: var(--text-accent); }
 .cm-properties .prop-new-key { min-width: 200px; background: var(--bg-primary); box-shadow: inset 0 0 0 1px var(--interactive-accent); }
 .cm-props-dropdown { position: relative; margin: 2px 0 0 24px; max-width: 280px; min-width: 180px; background: var(--bg-primary);
@@ -837,7 +843,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-props-dd-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--radius-s);
   cursor: pointer; font-size: 14px; color: var(--text-normal); }
 .cm-props-dd-item:hover { background: var(--bg-modifier-hover); }
-.cm-props-dd-item .prop-icon { color: var(--text-faint); width: 16px; text-align: center; }
 
 /* Static HTML fallback uses the same document tokens. */
 .callout { --callout-color: var(--callout-default); }

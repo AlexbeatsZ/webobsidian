@@ -10,7 +10,7 @@ import { StateField, StateEffect, type EditorState, type Range } from '@codemirr
 import { getIndentUnit, foldedRanges } from '@codemirror/language';
 import { markdownListLine } from './listLayout';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
-import { iconPaths } from './icons';
+import { iconPaths, setIcon } from './icons';
 import { openLightbox } from './imageLightbox';
 import { applyImagePresentation, presentHtmlImages } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
@@ -1071,7 +1071,7 @@ const parseFrontmatter = readPropertyRows;
 // Obsidian's built-in List properties.
 const CORE_LIST_PROPS = new Set(['tags', 'aliases', 'cssclasses']);
 
-// Property type → small glyph for the leading icon (display only, like Obsidian).
+// Infer a property's type only when the Vault registry has no explicit type.
 function propType(p: Prop): string {
   if (p.list || CORE_LIST_PROPS.has(p.key)) return 'list';
   const v = p.values[0] ?? '';
@@ -1081,14 +1081,20 @@ function propType(p: Prop): string {
   if (/^(true|false)$/i.test(v)) return 'checkbox';
   return 'text';
 }
-const TYPE_GLYPH: Record<string, string> = {
-  text: 'T',
-  list: '≣',
-  date: '🗓',
-  datetime: '🕒',
-  number: '#',
-  checkbox: '☑',
+const PROP_TYPES: Record<string, { label: string; icon: string }> = {
+  auto: { label: '自动', icon: 'loader' },
+  checkbox: { label: '复选框', icon: 'check-square' },
+  date: { label: '日期', icon: 'calendar' },
+  datetime: { label: '日期 & 时间', icon: 'clock' },
+  list: { label: '列表', icon: 'list' },
+  number: { label: '数字', icon: 'hash' },
+  text: { label: '文本', icon: 'type' },
 };
+function setPropertyIcon(element: HTMLElement, type: string): void {
+  const entry = PROP_TYPES[type] ?? PROP_TYPES.text;
+  setIcon(element, entry.icon);
+  element.title = entry.label;
+}
 
 // Obsidian type id ↔ our display type.
 const OBS_TO_DT: Record<string, string> = {
@@ -1111,15 +1117,6 @@ function displayTypeOf(p: Prop, registry: Record<string, string>): string {
   if (reg && OBS_TO_DT[reg]) return OBS_TO_DT[reg];
   return propType(p);
 }
-// The six selectable types shown in the right-click "Property type" submenu.
-const PROP_TYPE_OPTIONS: { label: string; dt: string }[] = [
-  { label: 'Text', dt: 'text' },
-  { label: 'List', dt: 'list' },
-  { label: 'Number', dt: 'number' },
-  { label: 'Checkbox', dt: 'checkbox' },
-  { label: 'Date', dt: 'date' },
-  { label: 'Date & time', dt: 'datetime' },
-];
 
 class FrontmatterWidget extends WidgetType {
   /** `ro` = reading mode: display-only properties. */
@@ -1190,17 +1187,20 @@ class FrontmatterWidget extends WidgetType {
     // note's YAML if list-ness changed (else just refresh the icon in place).
     const setType = async (key: string, dt: string) => {
       try {
-        const types = await contextOf(view).setPropertyType(key, dtToObs(dt, key));
-        void types;
-      } catch {
-        /* keep going with local change */
+        await contextOf(view).setPropertyType(key, dtToObs(dt, key));
+      } catch (error) {
+        contextOf(view).reportError?.(String(error));
+        return;
       }
       const row = ([...box.querySelectorAll('.prop-row:not(.prop-newrow)')] as HTMLElement[]).find(
         (r) => (r.querySelector('.prop-key') as HTMLElement).innerText.trim() === key,
       );
       const curIsList = row?.dataset.list === '1';
-      const newIsList = dt === 'list';
-      if (newIsList !== curIsList) {
+      // The existing registry fallback infers from source. Selecting Auto must
+      // not convert YAML values or turn an existing source list into text.
+      const effectiveType = dt === 'auto' ? propType(props.find(prop => prop.key === key) ?? { key, values: [], list: false }) : dt;
+      const newIsList = effectiveType === 'list';
+      if (dt !== 'auto' && newIsList !== curIsList) {
         mutate((ps) => {
           const p = ps.find((x) => x.key === key);
           if (!p) return;
@@ -1216,22 +1216,24 @@ class FrontmatterWidget extends WidgetType {
         // the value control to match the new type (e.g. date → number input).
         const ic = row.querySelector('.prop-icon') as HTMLElement | null;
         if (ic) {
-          ic.textContent = TYPE_GLYPH[dt] ?? 'T';
-          ic.title = dt;
+          setPropertyIcon(ic, effectiveType);
         }
         const valCell = row.querySelector('.prop-val');
         const oldField = row.querySelector('.prop-val-field') as HTMLElement | null;
-        if (valCell && oldField) valCell.replaceChild(makeScalarField(dt, oldField.dataset.raw ?? ''), oldField);
+        if (valCell && oldField) valCell.replaceChild(makeScalarField(effectiveType, oldField.dataset.raw ?? ''), oldField);
       }
     };
 
-    const propMenu = (key: string, idx: number, curDt: string): LpMenuItem[] => [
+    const propMenu = (key: string, idx: number): LpMenuItem[] => {
+      const selectedType = OBS_TO_DT[contextOf(view).propertyTypes()[key]] ?? 'auto';
+      return [
       {
-        label: 'Property type',
-        icon: 'list',
-        submenu: PROP_TYPE_OPTIONS.map((o) => ({
-          label: (o.dt === curDt ? '✓  ' : '  ') + o.label,
-          onClick: () => void setType(key, o.dt),
+        label: '属性类型',
+        icon: PROP_TYPES[selectedType].icon,
+        submenu: Object.entries(PROP_TYPES).map(([type, entry]) => ({
+          label: entry.label, icon: entry.icon,
+          checked: type === selectedType,
+          onClick: () => void setType(key, type),
         })),
       },
       { label: '', separator: true },
@@ -1244,8 +1246,8 @@ class FrontmatterWidget extends WidgetType {
         },
       },
       { label: '', separator: true },
-      { label: 'Remove', icon: 'trash-2', onClick: () => mutate((ps) => ps.splice(idx, 1)) },
-    ];
+      { label: 'Remove', icon: 'trash', onClick: () => mutate((ps) => ps.splice(idx, 1)) },
+    ]; };
 
     const props = parseFrontmatter(this.yaml);
 
@@ -1384,7 +1386,7 @@ class FrontmatterWidget extends WidgetType {
           it.className = 'cm-props-dd-item';
           const ic = document.createElement('span');
           ic.className = 'prop-icon';
-          ic.textContent = '#';
+          setIcon(ic, 'hash');
           const nm = document.createElement('span');
           nm.textContent = s;
           it.append(ic, nm);
@@ -1427,8 +1429,7 @@ class FrontmatterWidget extends WidgetType {
 
       const icon = document.createElement('span');
       icon.className = 'prop-icon';
-      icon.textContent = TYPE_GLYPH[renderAsList ? 'list' : dt] ?? 'T';
-      icon.title = renderAsList ? 'list' : dt;
+      setPropertyIcon(icon, renderAsList ? 'list' : dt);
 
       const k = document.createElement('span');
       k.className = 'prop-key';
@@ -1440,7 +1441,7 @@ class FrontmatterWidget extends WidgetType {
         if (this.ro || p.editable === false) return;
         e.preventDefault();
         e.stopPropagation();
-        contextOf(view).openMenu({ x: e.clientX, y: e.clientY, items: propMenu(p.key, idx, renderAsList ? 'list' : dt) });
+        contextOf(view).openMenu({ x: e.clientX, y: e.clientY, items: propMenu(p.key, idx) });
       };
       k.addEventListener('contextmenu', openPropMenu);
       icon.addEventListener('contextmenu', openPropMenu);
@@ -1482,7 +1483,7 @@ class FrontmatterWidget extends WidgetType {
           });
           const x = document.createElement('span');
           x.className = 'prop-pill-x';
-          x.textContent = '×';
+          setIcon(x, 'x');
           x.addEventListener('mousedown', (e) => {
             e.preventDefault();
             mutate((ps) => {
@@ -1497,7 +1498,7 @@ class FrontmatterWidget extends WidgetType {
         }
         const add = document.createElement('span');
         add.className = 'prop-pill-add';
-        add.textContent = '+';
+        setIcon(add, 'plus');
         add.title = 'Add item';
         add.addEventListener('mousedown', (e) => {
           e.preventDefault();
@@ -1510,7 +1511,7 @@ class FrontmatterWidget extends WidgetType {
 
       const del = document.createElement('span');
       del.className = 'prop-del';
-      del.textContent = '×';
+      setIcon(del, 'x');
       del.title = 'Delete property';
       del.addEventListener('mousedown', (e) => {
         e.preventDefault();
@@ -1529,7 +1530,8 @@ class FrontmatterWidget extends WidgetType {
 
     const addBtn = document.createElement('div');
     addBtn.className = 'cm-props-add';
-    addBtn.textContent = '+ Add property';
+    setIcon(addBtn, 'plus');
+    addBtn.append('添加属性');
 
     // Add a property with a name-suggester dropdown (existing vault keys), like Obsidian.
     const startAdd = async () => {
@@ -1538,7 +1540,7 @@ class FrontmatterWidget extends WidgetType {
       editorRow.className = 'prop-row prop-newrow';
       const icon = document.createElement('span');
       icon.className = 'prop-icon';
-      icon.textContent = 'T';
+      setPropertyIcon(icon, 'auto');
       const input = document.createElement('span');
       input.className = 'prop-key prop-new-key';
       input.setAttribute('contenteditable', 'true');
@@ -1578,7 +1580,7 @@ class FrontmatterWidget extends WidgetType {
           it.className = 'cm-props-dd-item';
           const ic = document.createElement('span');
           ic.className = 'prop-icon';
-          ic.textContent = TYPE_GLYPH[p.type] ?? 'T';
+          setPropertyIcon(ic, OBS_TO_DT[p.type] ?? p.type);
           const nm = document.createElement('span');
           nm.textContent = p.key;
           it.append(ic, nm);

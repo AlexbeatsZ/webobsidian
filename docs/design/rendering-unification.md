@@ -310,3 +310,25 @@ Only source and Git diff review were performed. Actual click placement, folded
 or hidden properties, title combinations, wrapping, IME and browser/native UI
 behavior remain unverified. No new tests, type/build checks, probes or application
 launches were performed for this change.
+
+## Property type icons (2026-10-23)
+
+Frontmatter rows, the property-type submenu and the add-property suggestions use
+the same property type/icon mapping: automatic inference, checkbox, date, date &
+time, list, number and text. All glyphs come from `lib/icons.ts`; the existing DOM
+getIcon/setIcon/addIcon implementation and its one custom-icon registry live
+there too. `obsidian/ui.ts` retains its public exports by re-exporting that same
+implementation, keeping the core editor independent of the plugin UI module.
+Menus use the existing icon column and checked state instead of Unicode check
+prefixes; property add/remove/list controls use catalog plus/x icons.
+
+Automatic removes the key's override through the existing setPropertyType service
+and uses the existing registry fallback to infer from the YAML source. No `auto`
+pseudo-type is persisted to Obsidian's types.json, and no source list/scalar value
+is converted. An explicit type save failure is
+reported before changing local controls. The S2 flow-root measurement shell,
+divider, source patches, selection and document session remain unchanged.
+
+Only source and Git diff inspection were performed. No tests, typechecks,
+builds, probes, app/server/browser launches or UI/performance acceptance were
+performed; the change is unverified and has not entered a new package.

@@ -32,7 +32,10 @@ export async function setPropertyType(key: string, type: string): Promise<Record
   } catch {
     /* no existing file */
   }
-  data.types[key] = type;
+  // Automatic is the absence of an override in Obsidian's registry. Keep its
+  // interoperable type vocabulary intact and let the existing reader infer it.
+  if (type === 'auto') delete data.types[key];
+  else data.types[key] = type;
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, JSON.stringify(data, null, 2));
   return data.types;

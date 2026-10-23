@@ -1,6 +1,8 @@
 // One Lucide path catalog for React UI and Obsidian-compatible DOM controls.
 export const iconPaths: Record<string, string> = {
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
+  type: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
+  loader: '<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
   key: '<circle cx="8" cy="8" r="5"/><path d="m11.5 11.5 9 9M17 16l3-3M15 18l3-3"/>',
@@ -78,3 +80,24 @@ export const iconPaths: Record<string, string> = {
   undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>',
   redo: '<path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>',
 };
+
+// React icons and DOM-owned editor/plugin controls share this catalog. Keep the
+// DOM factory here so a core renderer never needs to import the plugin UI host.
+const customIcons = new Map<string, string>();
+export function addIcon(name: string, svg: string): void { customIcons.set(name, svg); }
+export function getIcon(name: string): SVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '18');
+  svg.setAttribute('height', '18');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.75');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.classList.add('svg-icon');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = customIcons.get(name) ?? iconPaths[name.replace(/^lucide-/, '')] ?? iconPaths.file;
+  return svg;
+}
+export function setIcon(el: HTMLElement, name: string): void { el.replaceChildren(getIcon(name)); }
