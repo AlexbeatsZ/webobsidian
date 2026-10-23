@@ -7,24 +7,22 @@ import ConfigurationFile from './ConfigurationFile';
 export default function MathSettings() {
   const { settings } = useWriting();
   const math = settings.math ?? defaultMathConfiguration();
-  const [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
   return <SettingGroup title="MathJax 宏包与自定义命令">
     <ConfigurationFile path=".obsidian/webobsidian/math.jsonc" desc="在外部编辑导言区和宏包选项；保存后自动加载。" />
     <fieldset disabled={busy || !settings.mathSource}>
       {settings.mathSource && !settings.mathSource.exists && <SettingRow name="创建数学配置" desc="将当前宏包和导言区配置保存到仓库。"><button onClick={() => {
-        setBusy(true); setError(''); void updateWriting({ math }).catch(cause => setError(String(cause))).finally(() => setBusy(false));
+        setBusy(true); void updateWriting({ math }).catch(() => {}).finally(() => setBusy(false));
       }}>创建配置文件</button></SettingRow>}
       {mathPackages.map(entry => <SettingRow name={entry.name} key={entry.id}>
         <input type="checkbox" checked={math.packages.includes(entry.id)} onChange={event => {
-          setBusy(true); setError('');
+          setBusy(true);
           void updateWriting({ math: { ...math,
             packages: event.target.checked ? [...math.packages, entry.id] : math.packages.filter(id => id !== entry.id),
-          } }).catch(cause => setError(String(cause))).finally(() => setBusy(false));
+          } }).catch(() => {}).finally(() => setBusy(false));
         }} />
       </SettingRow>)}
     </fieldset>
-    <p>AMS 和基本数学命令始终可用。Physics 与 Braket、siunitx 分别冲突；siunitx 自动启用所需基础扩展。</p>
     {math.preambleFile && <ConfigurationFile name="导言区文件" path={math.preambleFile} />}
-    {error && <p role="alert">{error}</p>}
   </SettingGroup>;
 }

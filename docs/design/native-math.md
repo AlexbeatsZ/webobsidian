@@ -63,6 +63,18 @@ native math; use native math settings.
 
 Candidates which lose the generation race or fail persistence are disposed.
 Pending conversions verify the effective revision before caching/applying output.
+Package checkboxes display the last successfully applied configuration. Enabling
+Physics while Braket is enabled rejects the candidate before persistence; Physics
+therefore remains off. A rejection is an attempted-save diagnostic, not evidence
+that the displayed effective profile contains both packages. Users explicitly
+disable a conflicting package before enabling its alternative; no automatic
+package removal occurs.
+
+The writing configuration store owns the single save/reload error lifecycle.
+MathSettings and WritingSettings do not retain separate failure messages. A
+successful save or external reload clears the same error; an obsolete failed
+save cannot overwrite a newer generation's result. Failed external loads retain
+the last applied settings and identify the unapplied configuration in the message.
 The MathJax 4 Promise conversion already serializes its document work; the one
 application queue adds cancellation-before-start and an 8ms inter-formula budget.
 It cannot preempt a synchronous long conversion.

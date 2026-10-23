@@ -183,7 +183,7 @@ export async function refreshWriting(forceRules = false) {
   } catch (cause) {
     candidate?.dispose();
     if (current !== generation) return;
-    error = String(cause);
+    error = `配置加载失败，新配置未应用：${String(cause)}`;
     changed();
     throw cause;
   }
@@ -200,33 +200,41 @@ export function updateWriting(patch: Partial<WritingSettings>) {
     .catch(() => {})
     .then(async () => {
       const startingGeneration = ++generation;
-      if (patch.math && Object.keys(patch).some(key => key !== 'math')) throw new Error('请单独保存公式设置');
-      const ruleConfigs = { ...settings.linter.ruleConfigs };
-      for (const [id, value] of Object.entries(patch.linter?.ruleConfigs ?? {}))
-        ruleConfigs[id] = { ...ruleConfigs[id], ...(value as object) };
-      const next = {
-        ...settings,
-        ...patch,
-        latex: { ...settings.latex, ...patch.latex },
-        linter: { ...settings.linter, ...patch.linter, ruleConfigs },
-      };
-      const candidate = await validateMathProfile(await prepareMathProfile(next.math));
-      let persisted: WritingSettings, compiled: LatexSuiteCMSettings;
       try {
-        compiled = await compile(next, candidate.commands);
-        persisted = await request<WritingSettings>('', patch.math ? { math: patch.math, mathSource: settings.mathSource } : { ...patch, source: settings.source });
-      } catch (cause) { candidate.dispose(); throw cause; }
-      if (generation !== startingGeneration) {
-        candidate.dispose();
-        await refreshWriting();
-        return;
+        if (patch.math && Object.keys(patch).some(key => key !== 'math')) throw new Error('请单独保存公式设置');
+        const ruleConfigs = { ...settings.linter.ruleConfigs };
+        for (const [id, value] of Object.entries(patch.linter?.ruleConfigs ?? {}))
+          ruleConfigs[id] = { ...ruleConfigs[id], ...(value as object) };
+        const next = {
+          ...settings,
+          ...patch,
+          latex: { ...settings.latex, ...patch.latex },
+          linter: { ...settings.linter, ...patch.linter, ruleConfigs },
+        };
+        const candidate = await validateMathProfile(await prepareMathProfile(next.math));
+        let persisted: WritingSettings, compiled: LatexSuiteCMSettings;
+        try {
+          compiled = await compile(next, candidate.commands);
+          persisted = await request<WritingSettings>('', patch.math ? { math: patch.math, mathSource: settings.mathSource } : { ...patch, source: settings.source });
+        } catch (cause) { candidate.dispose(); throw cause; }
+        if (generation !== startingGeneration) {
+          candidate.dispose();
+          await refreshWriting();
+          return;
+        }
+        generation++;
+        settings = persisted;
+        cm = compiled;
+        candidate.commit();
+        error = '';
+        changed();
+      } catch (cause) {
+        if (generation === startingGeneration) {
+          error = `此次保存未生效：${String(cause)}`;
+          changed();
+        }
+        throw cause;
       }
-      generation++;
-      settings = persisted;
-      cm = compiled;
-      candidate.commit();
-      error = '';
-      changed();
     });
   return writes;
 }

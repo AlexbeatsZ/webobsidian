@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useWriting, updateWriting, refreshWriting, writingCMSettings } from '../lib/writing/config';
 import { DEFAULT_SETTINGS } from '../lib/writing/latex/settings/settings';
 import { formatRules, formatterSettings } from '../lib/writing/format';
@@ -9,10 +8,8 @@ import ConfigurationFile from './ConfigurationFile';
 
 export default function WritingSettings({ formatting = false }: { formatting?: boolean }) {
   const { settings, error } = useWriting();
-  const [failure, setFailure] = useState('');
   const attempt = (value: Parameters<typeof updateWriting>[0]) => {
-    setFailure('');
-    void updateWriting(value).catch(cause => setFailure(String(cause)));
+    void updateWriting(value).catch(() => {});
   };
   const raw = { ...DEFAULT_SETTINGS, ...settings.latex };
   const checkbox = (name: string, value: boolean, change: (value: boolean) => void, desc?: string) => (
@@ -23,13 +20,13 @@ export default function WritingSettings({ formatting = false }: { formatting?: b
   const fmt = formatterSettings();
   return <div>
     <h2>{formatting ? '文档格式化' : '公式与片段'}</h2>
-    {(failure || error) && <p role="alert">{failure || error}</p>}
+    {error && <p role="alert">{error}</p>}
     <SettingGroup>
       <ConfigurationFile path=".obsidian/webobsidian/writing.jsonc" desc={formatting
         ? '自定义正则、忽略路径和高级规则在配置文件中编辑。'
         : '高级公式与片段配置在此文件中编辑。'}>
         <button type="button" title="重新加载配置与规则" onClick={() => {
-          setFailure(''); void refreshWriting(true).catch(cause => setFailure(String(cause)));
+          void refreshWriting(true).catch(() => {});
         }}>重新加载</button>
       </ConfigurationFile>
       {settings.source && !settings.source.exists && <SettingRow name="创建配置文件" desc="将当前写作配置保存到仓库，原应用与插件配置保留。">
