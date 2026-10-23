@@ -10,6 +10,10 @@ are registered only in the disposable Vault, with their original source intact.
 User CSS, scripts, command definitions and templates belong to the Vault, not
 application settings or installation resources.
 
+QuoteMark nodes are container punctuation, not target blocks or list-item text.
+Skip them when choosing the next same-parent block and extracting list bodies;
+the source ranges and quote prefixes remain in the shared model.
+
 ## Architecture and implementation sequence
 
 1. Reuse the command/template Module's `vaultConfiguration.ts` for UTF-8 JSONC and

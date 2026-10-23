@@ -15,6 +15,12 @@ automatic input-method switching and Vim. Matrix template snippets remain valid.
 Normal IME composition handling remains necessary. Future Excalidraw formula
 editors must consume these same native editing capabilities.
 
+The LaTeX configuration facet must not process default settings inside
+Facet.define's combine([]): CodeMirror evaluates it immediately, before cyclic
+settings/math-context imports necessarily finish. Use an inert missing value and
+one lazily cached fallback through the existing getter. Production-entry boot is
+covered by tests/packaged-startup.mjs, beyond harness/type checking.
+
 Body-local titles (`####### 标题`) are shared `BodyHeading` syntax, outside
 structural H1–H6 formatting. The common heading matcher and AST heading visitors
 exclude them; Header Increment must neither rewrite them nor use them to map

@@ -29,6 +29,9 @@ export const mathPackages: readonly MathPackage[] = [
   { id: 'bbox', name: 'Bbox · 公式边框', component: '[tex]/bbox' },
   { id: 'enclose', name: 'Enclose · 标记与框线', component: '[tex]/enclose' },
   { id: 'unicode', name: 'Unicode · 字符', component: '[tex]/unicode' },
+  { id: 'bbm', name: 'Bbm · 黑板粗体字体', component: '[tex]/bbm' },
+  { id: 'bboldx', name: 'Bboldx · 扩展黑板粗体字体', component: '[tex]/bboldx' },
+  { id: 'dsfont', name: 'Dsfont · 双线字体', component: '[tex]/dsfont' },
   { id: 'extpfeil', name: 'Extpfeil · 扩展箭头', component: '[tex]/extpfeil' },
   { id: 'html', name: 'HTML · 公式类名与链接', component: '[tex]/html' },
   { id: 'gensymb', name: 'Gensymb · 物理符号', component: '[tex]/gensymb' },
@@ -55,7 +58,7 @@ export interface MathConfiguration {
 }
 export const defaultMathConfiguration = (): MathConfiguration => ({
   version: 1,
-  packages: ['mathtools', 'mhchem', 'bussproofs', 'cancel', 'color', 'boldsymbol', 'braket', 'bbox', 'enclose', 'unicode', 'extpfeil', 'html'],
+  packages: ['mathtools', 'mhchem', 'bussproofs', 'cancel', 'color', 'boldsymbol', 'braket', 'bbox', 'enclose', 'unicode', 'bbm', 'bboldx', 'dsfont', 'extpfeil', 'html'],
   packageOptions: {}, preambleFile: '', preamble: '', migration: 'native-math-v1',
 });
 export function resolveMathPackages(ids: readonly string[]): MathPackage[] {

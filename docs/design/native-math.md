@@ -131,6 +131,12 @@ The local component set includes mhchem, mathtools, bussproofs and other selecte
 MathJax extensions. Physics is opt-in and conflicts with braket and siunitx.
 Physics also defines dd; review personal macros when selecting it.
 
+The already shipped bbm/bboldx/dsfont font extensions have package-directory
+entries and are selected by default, so the explicit require allowlist retains
+their earlier supported commands. Profile/preamble validation throws contextual
+TeX errors; normal note formulas use MathJax's merror output rather than aborting
+the SVG conversion. Both paths keep the same engine, queue and local assets.
+
 siunitx-pcc is vendored at a pinned upstream revision with its Apache-2.0 license.
 It is a partial implementation. Its two old global parser-patch imports are
 disabled because 4.1.3 already implements those methods. The component links
@@ -142,6 +148,13 @@ folder/note profile selection, TikZ/chemfig backends, complete TeX compilation,
 or a new automatic-numbering mechanism. These do not change the package contract.
 
 ## Verification
+
+2026-10-22 update: runtime acceptance was explicitly authorized. Core/unit tests,
+browser formula/source/MathJax regressions, and the real packaged production
+entry with formula references now execute successfully. A copied-Vault browser
+run also displays numbered formulas and quoted TeX. This does not cover every
+macro/package option, profile hot reload, native guests, OS print or long-run
+performance; the original static-only record below describes the initial pass.
 
 Static-only: scoped source types, isolated core/server/web/desktop compilation,
 production web build and standalone-server bundle checks. Regression sources are

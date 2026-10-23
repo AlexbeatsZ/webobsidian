@@ -13,6 +13,7 @@ vi.mock('../services/vault.js', () => ({ exists: async () => true,
 vi.mock('../services/fileindex.js', () => ({ resolveFile: (target: string) => target.endsWith('.png') ? target : target + '.md' }));
 vi.mock('../services/shares.js', () => ({ getActiveShare: async () => ({ id: 'test', path: 'root.md', passwordHash: fixture.locked ? 'locked' : undefined }) }));
 vi.mock('../services/httpfile.js', () => ({ sendFileWithRange: async (_req: unknown, res: express.Response, path: string) => res.send(path) }));
+vi.mock('../services/mathSettings.js', () => ({ sharedMathProfile: async () => ({}) }));
 
 const { publicSharesRouter } = await import('./shares.js');
 const app = express(); app.use('/public/shares', publicSharesRouter);

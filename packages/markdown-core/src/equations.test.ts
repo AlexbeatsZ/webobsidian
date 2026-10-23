@@ -7,7 +7,7 @@ import { DocumentSession } from './session.js';
 describe('native equations (prepared; execution deferred by user)', () => {
   it('keeps the same block identity when a preceding formula changes the number', () => {
     const source = '# A\n$$x$$ ^eq-energy\n由 [[#^eq-energy]] 可得';
-    const before = analyzeMarkdown(source), after = analyzeMarkdown(source.replace('# A\n', '# A\n$$y$$\n'));
+    const before = analyzeMarkdown(source), after = analyzeMarkdown(source.replace('# A\n', () => '# A\n$$y$$\n'));
     expect(equationTarget(equationContext(before), '^eq-energy')?.number).toBe('1-1');
     expect(equationTarget(equationContext(after), '^eq-energy')?.number).toBe('1-2');
     expect(after.text).toContain('[[#^eq-energy]]');
@@ -56,7 +56,7 @@ describe('native equations (prepared; execution deferred by user)', () => {
     const formula = equations(session.analysis)[0];
     const { change } = equationAnchor(session.analysis, formula.from, 'test');
     session.edit(session.snapshot.version, [change!], 'equation-anchor');
-    expect(session.snapshot.raw).toBe(source.replace('$$x$$', '$$x$$ ^eq-test'));
+    expect(session.snapshot.raw).toBe(source.replace('$$x$$', () => '$$x$$ ^eq-test'));
     session.undo(); expect(session.snapshot.raw).toBe(source);
   });
 });

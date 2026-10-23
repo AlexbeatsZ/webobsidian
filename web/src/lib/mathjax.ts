@@ -132,12 +132,14 @@ async function createEngine(profile: MathProfile, definitions: readonly string[]
   await mathjax.loader.load(...packages.map(p => p.component));
   const Input = mathjax.startup.constructors.tex;
   if (!Input || !mathjax.startup.mathjax?.document) throw new Error('MathJax context constructors unavailable');
+  let validating = true;
   const input = new Input({
     packages: ['base', 'ams', 'newcommand', 'textmacros', 'configmacros', 'begingroup', 'require', ...packages.map(p => p.id)],
     require: { defaultAllow: false, allow: Object.fromEntries(packages.filter(p => p.component.startsWith('[tex]/')).map(p => [p.id, true])) },
     ...profile.configuration.packageOptions, tags: 'none',
     ...(packages.some(p => p.id === 'mathtools') ? { mathtools: { ...profile.configuration.packageOptions.mathtools, 'allow-mathtoolsset': false } } : {}),
     formatError: (jax: any, error: Error) => {
+      if (!validating) return jax.formatError(error);
       const parser = jax.parseOptions.parser;
       const line = parser?.string?.slice(0, parser.i).split('\n').length;
       throw new Error(`${error.message}${line ? ` (line ${line})` : ''}`);
@@ -166,6 +168,7 @@ async function createEngine(profile: MathProfile, definitions: readonly string[]
     const dataState = packages.flatMap(p => (p.state?.data ?? []).map(key => {
       const field = packageState(key); return { field, value: structuredClone(field.get()) };
     }));
+    validating = false;
     return {
       profile, document: doc, input, commands: new Set(engineCommandNames({ input })), stylesheet: () => output.styleSheet(doc),
       resetPackageState() {

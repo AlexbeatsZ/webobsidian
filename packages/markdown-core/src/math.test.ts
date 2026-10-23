@@ -30,6 +30,9 @@ describe('shared formula source and history', () => {
     const regions = mathRegions(analyzeMarkdown('$$x\n# Next\n$y$'));
     expect(regions[0].closed).toBe(false);
     expect(regions[1].tex).toBe('y');
+    const multiline = mathRegions(analyzeMarkdown('$$\nunclosed\n# Next\n$$y$$'));
+    expect(multiline[0].closed).toBe(false);
+    expect(multiline[1].tex).toBe('y');
   });
   it('maps unchanged formulas through unrelated text edits', () => {
     const original = analyzeMarkdown('body $x$');

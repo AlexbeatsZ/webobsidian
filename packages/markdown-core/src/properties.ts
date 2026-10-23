@@ -4,10 +4,13 @@ import type { SourceChange } from './source.js';
 const yamlDocuments=new Map<string,ReturnType<typeof parseDocument>>();
 /** Property editing and formatting share token-preserving YAML parsing. */
 export function parseYamlSource(source:string,mutable=false){
+  // yaml's Document.clone() shares CST token objects. Formatting moves those
+  // tokens, so mutable callers need their own parse to preserve cached sources.
+  if(mutable)return parseDocument(source,{keepSourceTokens:true,uniqueKeys:true});
   let document=yamlDocuments.get(source);
   if(!document){document=parseDocument(source,{keepSourceTokens:true,uniqueKeys:true});yamlDocuments.set(source,document);
     while(yamlDocuments.size>16)yamlDocuments.delete(yamlDocuments.keys().next().value!);}
-  return mutable?document.clone():document;
+  return document;
 }
 
 export interface PropertyRow {
@@ -73,22 +76,23 @@ function patchSequence(yaml: string, node: YAMLSeq, next: string[]): SourceChang
   while (first < end && first < nextEnd && old[first] === next[first]) first++;
   while (end > first && nextEnd > first && old[end - 1] === next[nextEnd - 1]) { end--; nextEnd--; }
   const middle = next.slice(first, nextEnd);
+  const render = (value: string) => valueText(value, items.find(item => scalarText(item) === value));
   if (node.flow) {
     if (first === end) {
-      if (end < items.length) return [{ from: items[end].range![0], to: items[end].range![0], insert: middle.map((value) => valueText(value)).join(', ') + ', ' }];
+      if (end < items.length) return [{ from: items[end].range![0], to: items[end].range![0], insert: middle.map(render).join(', ') + ', ' }];
       const closing = node.range![1] - 1;
       const trailing = items.length ? yaml.slice(items.at(-1)!.range![1], closing) : '';
-      return [{ from: closing, to: closing, insert: (items.length && !trailing.includes(',') ? ', ' : '') + middle.map((value) => valueText(value)).join(', ') }];
+      return [{ from: closing, to: closing, insert: (items.length && !trailing.includes(',') ? ', ' : '') + middle.map(render).join(', ') }];
     }
-    if (end < items.length) return [{ from: items[first].range![0], to: items[end].range![0], insert: middle.length ? middle.map((value) => valueText(value)).join(', ') + ', ' : '' }];
+    if (end < items.length) return [{ from: items[first].range![0], to: items[end].range![0], insert: middle.length ? middle.map(render).join(', ') + ', ' : '' }];
     return [{ from: first ? items[first - 1].range![1] : items[first].range![0], to: items[end - 1].range![1],
-      insert: (first && middle.length ? ', ' : '') + middle.map((value) => valueText(value)).join(', ') }];
+      insert: (first && middle.length ? ', ' : '') + middle.map(render).join(', ') }];
   }
   const sample = items[first] ?? items.at(-1);
   const prefix = sample ? yaml.slice(lineStart(yaml, sample.range![0]), sample.range![0]) : '  - ';
   const from = first < items.length ? lineStart(yaml, items[first].range![0]) : items.length ? lineEnd(yaml, items.at(-1)!.range![2]) : node.range![1];
   const to = end > first ? lineEnd(yaml, items[end - 1].range![2]) : from;
-  let insert = middle.map((value) => prefix + valueText(value) + '\n').join('');
+  let insert = middle.map((value) => prefix + render(value) + '\n').join('');
   if (from === yaml.length && from > 0 && !yaml.endsWith('\n') && insert) insert = '\n' + insert;
   if (to === yaml.length && !yaml.endsWith('\n')) insert = insert.replace(/\n$/, '');
   return [{ from, to, insert }];

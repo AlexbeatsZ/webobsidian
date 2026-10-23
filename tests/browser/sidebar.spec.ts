@@ -21,19 +21,20 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => Boolean(window.renderHarness));
   await page.evaluate(async () => {
     const module = (path: string) => import(path);
-    const [React, { createRoot }, { default: RightSidebar }, { default: Editor }, { useStore }, { documents },
+    const [React, ReactDOM, { default: RightSidebar }, { default: Editor }, { useStore }, { documents },
       { sharedApp }, { ItemView }, active] = await Promise.all([
       module('/node_modules/.vite/deps/react.js'), module('/node_modules/.vite/deps/react-dom_client.js'),
       module('/src/components/RightSidebar.tsx'), module('/src/components/Editor.tsx'), module('/src/lib/store.ts'),
       module('/src/lib/documents.ts'), module('/src/lib/plugins.ts'), module('/src/lib/obsidian/workspace.ts'), module('/src/lib/activeEditor.ts'),
     ]);
+    const createRoot = ReactDOM.createRoot ?? ReactDOM.default.createRoot;
     document.getElementById('root')!.hidden = true;
     const tree = { name: 'Fixture', type: 'folder', path: '', children: ['a.md', 'b.md'].map(path => ({ name: path, path, type: 'file', extension: 'md', mtime: 1, ctime: 1, size: 16 })) };
     useStore.setState({ tree, filePaths: ['a.md', 'b.md'], rightTabs: [], rightActiveId: null, rightOpen: true });
     sharedApp.vault.sync(tree);
     await useStore.getState().openFile('a.md');
     const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0'; document.body.append(host);
-    const h = React.createElement;
+    const h = (React.default ?? React).createElement;
     function Shell() {
       const open = useStore((state: any) => state.rightOpen);
       return h('div', { className: 'app theme-dark' }, h('div', { className: 'workspace' }, h(Editor, { path: 'a.md' })), h(RightSidebar, { open, onTheme: () => {} }));

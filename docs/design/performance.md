@@ -1,5 +1,11 @@
 # Editing performance
 
+YAML source caches are immutable. yaml Document.clone() retains shared CST token
+objects, so mutable formatting callers must parse their own token tree. Reusing
+the clone can corrupt subsequent key-sorting/property operations despite leaving
+the cached AST's values apparently intact. Nonmutating source reads keep the
+bounded existing cache; formatting remains an explicit save operation.
+
 ## Contract and verification
 
 Optimize redundant work without changing raw-source preservation, shared document

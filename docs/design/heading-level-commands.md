@@ -17,6 +17,8 @@ Reuse the view's full `syntaxModel`, core metadata exclusions and formula ranges
 Code, YAML, comments, HTML and formulas are protected. Setext headings and the
 independent seven-hash BodyHeading syntax do not participate. Valid ordinary
 headings inside quote/list containers retain their existing container prefixes.
+Tab-delimited ATX headings are recognized by the same shared grammar extension
+used in CodeMirror and the source model; marker-only edits retain the tabs.
 The native behavior deliberately avoids the templates' literal-regex changes to
 examples inside code or metadata.
 

@@ -39,6 +39,25 @@ On Windows the log is under
 `%APPDATA%/@webobsidian/desktop/logs/server.log`. Startup diagnostics must never
 print the persisted secret or reset desktop config/vault data to fix packaging.
 
+## Production renderer boot (0.1.7)
+
+A healthy server is not sufficient for a usable desktop. The 0.1.6 blank window
+was reproduced with a production-entry ReferenceError: CodeMirror calls a
+Facet's combine([]) during Facet.define, while the native LaTeX settings module
+can still be evaluating through its math-context/conceal imports. The facet now
+has an inert undefined default; its getter lazily creates and caches the fallback
+after module initialization. The document registry also avoids eager workspace
+store imports through automatic folder-tag saves.
+
+Run `npm run test:packaged-startup -- <resources-directory>` after bundling. It
+starts the actual standalone bundle with a disposable Vault and opens the real
+production SPA, then checks login, note typing/disk save, native snippets,
+command-backed templates, JS/custom blocks, equation references, body titles,
+view modes, pinyin search, configured menus, attachment scan protection and
+right tabs. It fails on renderer initialization/runtime errors. This is browser
+and server integration evidence; native Electron window controls and guests
+still require separate desktop acceptance.
+
 ## Persisted Vault selection and local test data
 
 On Windows the desktop profile is

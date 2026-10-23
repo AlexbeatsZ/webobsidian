@@ -16,6 +16,7 @@ export function blockEffectTargets(model: MarkdownModel): readonly BlockEffectTa
     ...(model.frontmatter ? [model.frontmatter] : [])];
   const siblings = new Map<number | null, SyntaxRange[]>();
   for (const node of model.nodes) {
+    if (node.name === 'QuoteMark') continue;
     const group = siblings.get(node.parent) ?? []; group.push(node); siblings.set(node.parent, group);
   }
   const result: BlockEffectTarget[] = [];
@@ -54,7 +55,7 @@ export function blockEffectList(model: MarkdownModel, root: SyntaxRange): readon
       if (indices.has(ancestor)) { parent = indices.get(ancestor)!; break; }
       ancestor = model.nodes[ancestor].parent;
     }
-    const children = (childrenByParent.get(index) ?? []).filter(n => !['ListMark', 'BulletList', 'OrderedList'].includes(n.name));
+    const children = (childrenByParent.get(index) ?? []).filter(n => !['QuoteMark', 'ListMark', 'BulletList', 'OrderedList'].includes(n.name));
     const text = children.map(n => model.text.slice(n.from, n.to)).join('\n\n');
     indices.set(index, result.length);
     result.push({ from: node.from, to: node.to, depth: parent === null ? 0 : result[parent].depth + 1, parent, text });

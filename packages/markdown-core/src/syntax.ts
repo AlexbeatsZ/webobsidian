@@ -25,6 +25,8 @@ export function markdownComments(model: MarkdownModel): SourceSpan[] {
     const from = match.index!, to = from + match[0].length;
     return forbidden.some(r => from < r.to && to > r.from) ? [] : [{ from, to }];
   });
+  comments.push(...model.nodes.filter(node => ['Comment', 'CommentBlock'].includes(node.name)).map(({from, to}) => ({from, to})));
+  comments.sort((a, b) => a.from - b.from);
   commentCache.set(model, comments); return comments;
 }
 

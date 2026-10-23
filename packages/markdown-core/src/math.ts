@@ -93,7 +93,8 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
     const segments: SourceSpan[] = [];
     let start = bodyFrom;
     // Strip only quote prefixes on subsequent lines. Offsets remain absolute.
-    const depth = (text.slice(text.lastIndexOf('\n', from - 1) + 1, from).match(/>/g) ?? []).length;
+    const openingPrefix = text.slice(text.lastIndexOf('\n', from - 1) + 1, bodyFrom).match(/^(?: {0,3}> ?)+/)?.[0] ?? '';
+    const depth = (openingPrefix.match(/>/g) ?? []).length;
     for (let p = bodyFrom; p <= bodyTo; p++)
       if (p === bodyTo || text[p] === '\n') {
         let a = start;
@@ -214,7 +215,16 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
       closed = false;
     for (; end < text.length; end++) {
       if (!display && text[end] === '\n') break;
-      if (display && text[end] === '\n' && /^\n(?: {0,3}> ?)*#{1,7}\s/.test(text.slice(end))) break;
+      if (display && text[end] === '\n' && /^\n(?: {0,3}> ?)*#{1,7}\s/.test(text.slice(end))) {
+        // A heading-shaped TeX line is allowed in a properly delimited block.
+        // Do not consume the next section's single-line display as its closer.
+        const closing = text.indexOf('$$', end + 1);
+        const closingStart = text.lastIndexOf('\n', closing - 1) + 1;
+        const closingEnd = text.indexOf('\n', closing);
+        if (!/^\s*(?:\n|$)/.test(text.slice(bodyFrom)) || closing < 0 ||
+          !/^(?: {0,3}> ?)*[ \t]*$/.test(text.slice(closingStart, closing)) ||
+          !/^[ \t]*(?:\^[\p{L}\p{N}-]+[ \t]*)?$/u.test(text.slice(closing + 2, closingEnd < 0 ? text.length : closingEnd))) break;
+      }
       if (text[end] !== '$' || isEscaped(text, end)) continue;
       if (
         display

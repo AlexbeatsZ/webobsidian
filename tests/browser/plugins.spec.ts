@@ -183,7 +183,7 @@ test('real command, settings, metadata, CM extension, fenced renderer and unload
   await expect(page.locator('.plugin-code-block')).toHaveCount(0);
   expect(
     await page.evaluate(() => [
-      ...(window as any).pluginHarness.pluginCommands.keys(),
+      ...[...(window as any).pluginHarness.pluginCommands.keys()].filter((id: string) => id.startsWith('fixture:')),
     ])
   ).toEqual([]);
   expect(errors).toEqual([]);

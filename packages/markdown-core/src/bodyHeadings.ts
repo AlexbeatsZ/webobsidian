@@ -18,6 +18,25 @@ export function bodyHeadingParts(text: string): { contentFrom: number; contentTo
 export const bodyHeadingSyntax: MarkdownConfig = {
   defineNodes: [{ name: BODY_HEADING_NODE, block: true }],
   parseBlock: [{
+    name: 'TabATXHeading',
+    before: 'ATXHeading',
+    parse(cx, line) {
+      if (line.next !== 35 || line.indent - line.baseIndent >= 4) return false;
+      const raw = line.text.slice(line.pos), open = raw.match(/^(#{1,6})\t+[ \t]*/);
+      if (!open) return false;
+      const from = cx.lineStart + line.pos;
+      const closing = raw.slice(open[0].length).match(/[ \t]+#+[ \t]*$/);
+      const end = closing ? open[0].length + closing.index! : raw.length;
+      const children = [cx.elt('HeaderMark', from, from + open[1].length),
+        ...cx.parser.parseInline(raw.slice(open[0].length, end), from + open[0].length)];
+      if (closing) children.push(cx.elt('HeaderMark', from + end, from + raw.length));
+      const heading = cx.elt('ATXHeading' + open[1].length, from, from + raw.length, children);
+      cx.nextLine(); cx.addElement(heading); return true;
+    },
+    endLeaf(_cx, line) {
+      return line.next === 35 && line.indent - line.baseIndent < 4 && /^#{1,6}\t/.test(line.text.slice(line.pos));
+    },
+  }, {
     name: BODY_HEADING_NODE,
     before: 'ATXHeading',
     parse(cx, line) {

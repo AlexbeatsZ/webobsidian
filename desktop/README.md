@@ -79,6 +79,12 @@ the full startup deadline. Version 0.1.6 allows up to 120 seconds for a live
 server to finish cold Vault indexing before the HTTP listener opens. The log
 records each startup time and elapsed time until its health check succeeds.
 
+Version 0.1.7 also fixes a native LaTeX configuration initialization cycle that
+could leave the window blank after the server was healthy. To check the real
+production entry and integrated note workflows with a disposable fixture, run
+`npm run test:packaged-startup -- desktop/.gen` after the desktop bundle build,
+or pass `desktop/release/<version>/win-unpacked/resources` after packaging.
+
 The 2026-10-18 Windows 0.1.1 build could fail with
 `Cannot find module './impl/format'`: the standalone bundle had selected
 `jsonc-parser`'s UMD entry. Version 0.1.2 uses its ESM entry and rejects surviving

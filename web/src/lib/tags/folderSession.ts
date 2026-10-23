@@ -1,13 +1,14 @@
 import { DocumentSession } from '@webobsidian/markdown-core';
 import { haveNativeFeaturePreferences, readNativeFeatures, tagPreferences } from '../nativeFeaturePreferences';
-import { assertTagVaultCurrent } from './api';
 import { planFolderTags } from '../../../../server/src/services/tags/folderRules';
-import { useStore } from '../store';
 
 /** The existing session remains the sole text/history/save owner. */
 export class WorkspaceDocumentSession extends DocumentSession {
   private rejectedVersion = -1;
   override async save(): Promise<void> {
+    // A session registry must be constructible before the workspace store.
+    const { assertTagVaultCurrent } = await import('./api');
+    const { useStore } = await import('../store');
     assertTagVaultCurrent();
     if (!haveNativeFeaturePreferences()) {
       try { await readNativeFeatures(); }

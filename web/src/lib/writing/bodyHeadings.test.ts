@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { markdownAst } from './analysis';
-import { compileFormattingSettings, formatText } from './format';
+import { compileFormattingSettings, formatText, formatRules } from './format';
 
 describe('body-local titles outside structural formatting', () => {
   const source = '# Top\n#### Gap\n####### Local title!\n###### Next\n## Return';
@@ -12,13 +12,14 @@ describe('body-local titles outside structural formatting', () => {
   });
 
   it.each([false, true])('keeps seven hashes and the following hierarchy intact (startAtH2=%s)', startAtH2 => {
+    const option = formatRules.find(rule => rule.alias === 'header-increment')!.options[1].configKey;
     const settings = compileFormattingSettings({ ruleConfigs: {
-      'header-increment': { enabled: true, startAtH2 },
+      'header-increment': { enabled: true, [option]: startAtH2 },
     } });
     const once = formatText(source, 'fixture.md', {}, settings);
     expect(once).toBe(startAtH2
-      ? '## Top\n### Gap\n####### Local title!\n#### Next\n### Return'
-      : '# Top\n## Gap\n####### Local title!\n### Next\n## Return');
+      ? '## Top\n### Gap\n####### Local title!\n#### Next\n## Return'
+      : '# Top\n## Gap\n####### Local title!\n### Next\n# Return');
     expect(formatText(once, 'fixture.md', {}, settings)).toBe(once);
   });
 

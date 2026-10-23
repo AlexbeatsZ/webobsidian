@@ -80,7 +80,7 @@ export class Plugin extends events.Component {
     super();
   }
   addCommand(command: Command) {
-    const cmd = { ...command, id: `${this.manifest.id}:${command.id}` };
+    const cmd = { ...command, id: `${this.manifest.id}:${command.id}`, name: `${this.manifest.name}: ${command.name}` };
     pluginCommands.set(cmd.id, cmd);
     this.register(() => {
       if (pluginCommands.get(cmd.id) === cmd) pluginCommands.delete(cmd.id);

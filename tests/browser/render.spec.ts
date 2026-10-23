@@ -254,7 +254,11 @@ test('MathJax 4.1.3 renders inline, display, chemistry and dynamic glyphs with l
     assets.push(route.request().url());
     await route.continue();
   });
-  const raw = 'Inline $\\frac{a}{b}$ and $\\ce{2 H2 + O2 -> 2 H2O}$.\n\n$$\n\\begin{aligned} f(x)&=\\int_0^1 x^2\\,dx \\\\ \\mathbb{R}&\\ni x \\end{aligned}\n$$\n\n$\\unicode{x1F0A1}$\n\n$\\require{bbm}\\mathbbm{R} + \\require{bboldx}\\mathbb{N} + \\require{dsfont}\\mathds{1}$\n\nend';
+  // Native writing can initialize MathJax before the test body. Observe the
+  // fresh page's complete loader lifecycle rather than only cache misses.
+  await page.reload();
+  await page.waitForFunction(() => Boolean(window.renderHarness));
+  const raw = 'Inline $\\frac{a}{b}$ and $\\ce{2 H2 + O2 -> 2 H2O}$.\n\n$$\n\\begin{aligned} f(x)&=\\int_0^1 x^2\\,dx \\\\ \\mathbb{R}&\\ni x \\end{aligned}\n$$\n\n$\\mathfrak{g} + \\unicode{x1F0A1}$\n\n$\\require{bbm}\\mathbbm{R} + \\require{bboldx}\\mathbb{N} + \\require{dsfont}\\mathds{1}$\n\nend';
   await page.evaluate(source => window.renderHarness.reset(source), raw);
   await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
   for (const slot of [0, 1]) {
