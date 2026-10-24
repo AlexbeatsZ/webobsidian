@@ -7,7 +7,8 @@ source patches, CodeMirror selection and native folding. No duplicate Markdown
 parser, editable Callout body, note history or persistent fold store is added.
 The earlier opinion changes received source/diff inspection only. On 2026-10-24
 the user explicitly authorized a focused code-based small-page test of the quote
-fixes. Four isolated Edge cases now pass; see tests/reports/quote-origin-20261024.md.
+fixes. The follow-up distinguishes ordinary rules from Callout title rules and
+adds an actual Enter/Tab/Backspace reproduction; see tests/reports/quote-origin-20261024.md.
 That authorization does not imply portable/native/live-Vault or broad acceptance.
 
 ## Callouts
@@ -32,8 +33,8 @@ an unquoted marker, or code cannot declare one. Nested quotes are classified fro
 their own first logical lines: an inner Callout has its own frame/type/title color;
 an inner ordinary quote remains a quote inside the outer frame. No new recognizer
 or inherited-type state is added; markdown-core's cached blockContainers owns this.
-The colored title rule uses the same intrinsic source-prefix text as ordinary
-quote rules, through its own `>` but excluding the final optional separator space.
+The colored title rule uses intrinsic source-prefix text through its own `>`
+but excluding the final optional separator space.
 The rule is at the right edge of that marker, not before it. Nested rules include
 all preceding levels and their native spaces, plus their own marker. This absolute
 decoration adds no source width; the native `>` and separator remain unchanged.
@@ -113,12 +114,15 @@ owns `text-indent: -(Q + L)` and `padding-left: base + Q + L`: the first line
 keeps its native source positions and wrapped body lines align after the same
 prefix. Ordinary lines have base zero; body-local headings retain their separate
 24px title decoration. No quote-specific 24px gap or widened marker box is added.
-Native .md-quote wrappers own continuous/nested rules as absolute pseudo-elements,
-with no horizontal border/padding in flow. Their transparent pseudo-element text
-is the exact quote-level source prefix through its own `>` (via existing
-stripQuotePrefix, excluding the final separator space), so its right-edge origin
-follows native characters rather than a fixed
-depth offset. Quoted lists retain source whitespace/marker width. There is no
+Native .md-quote wrappers own continuous/nested white rules as absolute
+pseudo-elements, with no horizontal border/padding in flow. Unlike colored
+Callout title rules, the white rule precedes its own `>`. Its transparent strut
+contains the exact source prefix before that marker, including preceding levels
+and spaces. The 3px painted border ends at the marker's left edge; only the
+pseudo-element is placed one border width left, never the source marker or line.
+The previous shared right-edge policy was a mistaken requirement interpretation
+and its test assertions have been corrected. Quoted lists retain source
+whitespace/marker width. There is no
 second rule renderer, observer or fold state.
 Callout title replacement remains its existing icon/title control path; body
 prefixes and display-math source use the same native-text layout. Math owns its
@@ -157,6 +161,21 @@ For an unmarked, nonempty paragraph line inside a ListItem, Enter preserves that
 line's exact quote and whitespace prefix. This avoids resetting an extra Tab to
 the parent's marker width or inserting a new bullet. Empty lines and other block
 types retain native Markdown continuation and list-exit behavior.
+
+Backspace immediately after an empty ListItem's ListMark and following whitespace
+removes exactly that marker and trailing whitespace. It preserves all bytes before
+ListMark, including explicit spaces, tabs and quote prefixes. The existing
+Backspace command uses markdownListLine and the same syntax-owned ListMark range;
+other deletion contexts still delegate to deleteMarkupBackward. No extra keymap,
+parser or indentation normalization is added. Actual keyboard reproduction showed
+native deletion turning four spaces plus `- ` into two spaces after Enter/Tab:
+the native context deletion starts before ListMark and can consume indentation.
+The narrowed source patch retains all four spaces, including in quotes and ordered
+lists, and leaves a literal tab intact. This fixes newly created continuation text
+being too close to its guide without changing manual two-space lines or adding
+presentation padding. At18px, explicit two-space text has about2.05px guide clearance;
+the intended four-space/literal-tab continuation has about11.05px. Existing notes
+are never reindented automatically.
 
 MarkdownView explicitly installs four-space `indentUnit` and four-column
 `EditorState.tabSize` for every Markdown host, including readonly fragments and

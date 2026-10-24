@@ -30,9 +30,11 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
     if (block.kind !== 'code') {
       const first = state.doc.lineAt(block.from).text;
       const body = stripQuotePrefix(first, block.depth);
-      // The rule follows this level's own >, before its optional separator.
-      // Its intrinsic source strut adds no width or indentation to native text.
-      attributes['data-quote-prefix'] = first.slice(0, first.length - body.length).replace(/ $/, '');
+      const prefix = first.slice(0, first.length - body.length);
+      // Ordinary rules precede their own >; colored Callout title rules follow it.
+      // Both struts use only native source text and add no in-flow width.
+      attributes['data-quote-prefix'] = block.kind === 'quote'
+        ? prefix.slice(0, prefix.lastIndexOf('>')) : prefix.replace(/ $/, '');
     }
     if (block.kind === 'callout') {
       attributes['data-callout'] = block.type;

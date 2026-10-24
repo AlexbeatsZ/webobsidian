@@ -75,6 +75,27 @@ function continueMarkdown(view: EditorView): boolean {
   return true;
 }
 
+/** Removing an empty list marker must not rewrite the user's indentation. */
+function deleteMarkdownMarkup(view: EditorView): boolean {
+  const { state } = view;
+  if (state.readOnly || view.composing) return false;
+  const markers = state.selection.ranges.map(range => {
+    if (!range.empty) return null;
+    const line = state.doc.lineAt(range.from), context = markdownListLine(state, line);
+    const marker = context?.header ? context.item.getChild('ListMark') : null;
+    return marker && range.from === line.to && /^[ \t]*$/.test(state.sliceDoc(marker.to, line.to))
+      ? { from: marker.from, to: line.to } : null;
+  });
+  if (markers.some(marker => !marker)) return deleteMarkupBackward(view);
+  let index = 0;
+  const change = state.changeByRange(() => {
+    const marker = markers[index++]!;
+    return { changes: marker, range: EditorSelection.cursor(marker.from) };
+  });
+  view.dispatch(change, { scrollIntoView: true, userEvent: 'delete.backward' });
+  return true;
+}
+
 export const markdownListKeymap: KeyBinding[] = [
   { key: 'Tab', run: view => indentMarkdown(view, false) },
   { key: 'Shift-Tab', run: view => indentMarkdown(view, true) },
@@ -243,7 +264,7 @@ export function obsidianKeymap(_h: ObsidianKeymapHandlers): KeyBinding[] {
   return [
     // Native marker continuation plus exact indentation for unmarked list text.
     { key: 'Enter', run: continueMarkdown },
-    { key: 'Backspace', run: deleteMarkupBackward },
+    { key: 'Backspace', run: deleteMarkdownMarkup },
   ];
 }
 

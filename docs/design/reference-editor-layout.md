@@ -8,8 +8,12 @@ This supersedes the earlier 24px wrapper-gutter formula recorded below. Current
 listLayout still measures intrinsic Q/L boxes; line padding is base + Q + L and
 text-indent is -(Q + L). Quote wrappers add no horizontal padding/border width;
 their continuous rule is absolute, with nested origins supplied by intrinsic
-transparent prefix text through each level's own `>`, excluding its final separator
-space. The rule follows the marker's right edge, never its left. Removed unused cm-blockquote line borders and
+transparent prefix text. The latest user clarification distinguishes white
+ordinary quote rules (before their own `>`, strut ends before that marker) from
+colored Callout title rules (after their own `>`, strut includes it but excludes
+the final separator). Ordinary 3px borders end at the marker's left edge;
+the source text never moves. The prior shared right-edge claim was incorrect.
+Removed unused cm-blockquote line borders and
 depth-gradient rules; native md-quote is the only quote-rule owner. Math source
 continuations retain the same structural-prefix pass before literal-body exclusion.
 The filename now lives outside contentDOM, so a first-source quote cannot wrap it.
@@ -27,8 +31,10 @@ zero horizontal padding and use an inset painted border instead of an in-flow
 border, so no ancestor frame adds a 16px/0.5px source-origin shift. This correction
 does not move individual `>` glyphs. Thematic breaks now use the existing grammar's
 HorizontalRule node rather than a full-raw-line regex, retaining quoted prefixes.
-These corrections have source/diff evidence only; earlier geometry tests below
-did not establish this newly specified native-width behavior.
+The2026-10-24 focused real-editor Edge tests now check the distinct rule sides,
+source origins, nesting/reveal, Tip Enter and table/quoted HR; see
+tests/reports/quote-origin-20261024.md. The actual user's native window/IME and
+historical Tip transient cause remain unverified.
 
 ## Evidence and ownership
 
