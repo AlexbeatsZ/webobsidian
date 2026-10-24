@@ -1,5 +1,6 @@
 import type { MarkdownModel, SourceSpan } from './syntax.js';
 import type { SourceChange } from './source.js';
+import { sourceLinePrefix } from './blocks.js';
 
 export interface TableCell extends SourceSpan { text: string; slotFrom: number; slotTo: number }
 export interface TableRow extends SourceSpan { text: string; prefix: string; cells: TableCell[] }
@@ -10,7 +11,7 @@ export interface TableModel extends SourceSpan {
 
 function row(text: string, from: number, to: number): TableRow {
   const value = text.slice(from, to);
-  const prefix = value.match(/^(?:[ \t]*>[ \t]?)*[ \t]*/)?.[0] ?? '';
+  const prefix = sourceLinePrefix(value);
   const start = from + prefix.length;
   const pipes: number[] = [];
   for (let p = start; p < to; p++) if (text[p] === '|') {

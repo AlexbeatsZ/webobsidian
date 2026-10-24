@@ -2,6 +2,14 @@
 
 ## Current source-width contract
 
+2026-10-24 element follow-up: native text retains this contract. Four whole-line
+widgets (table/math/Mermaid/HTML) now share blockLayout.sourceBlockReplacement,
+which restores the exact source prefix swallowed by the full-line replacement.
+The Callout alone adds a symmetric right source-width grid column and intrinsic
+growth; child widgets have no independently assigned quote insets. This supersedes
+the former100% frame clamp, not the native left source origin. Related50-case
+render/interaction evidence is in tests/reports/elements-20261024.md.
+
 The later user correction explicitly requires only the native `>` / source-space
 advance, transparent when concealed, with styling added without widening it.
 This supersedes the earlier 24px wrapper-gutter formula recorded below. Current

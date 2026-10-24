@@ -2,11 +2,32 @@ import { expect, test } from './test';
 import type { RenderHarnessApi } from '../../web/src/dev/RenderHarness';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import type { Page } from '@playwright/test';
 const { PNG } = require(path.join(path.dirname(require.resolve('playwright-core/package.json')), 'lib/utilsBundle.js'));
 // Allow only one 8-bit level of rasterization rounding, never displaced geometry.
 function samePixels(a: Buffer, b: Buffer): boolean {
   const left = PNG.sync.read(a), right = PNG.sync.read(b);
   return left.width === right.width && left.height === right.height && left.data.every((value: number, i: number) => Math.abs(value - right.data[i]) <= 1);
+}
+
+async function wrappedBodyOffset(page: Page, slot: number) {
+  return page.evaluate(slot => {
+    const line = document.querySelector(`[data-slot="${slot}"] .HyperMD-list-line`)!;
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      if (node.parentElement?.closest('.cm-list-prefix,.cm-list-fold-anchor') || !node.textContent?.trim()) continue;
+      const first = document.createRange(); first.setStart(node, 0); first.setEnd(node, 1);
+      const origin = first.getBoundingClientRect();
+      for (let i = 1; i < node.textContent.length; i++) {
+        if (/\s/.test(node.textContent[i])) continue;
+        const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 1);
+        const rect = range.getBoundingClientRect();
+        if (rect.top > origin.top + 2) return Math.abs(rect.left - origin.left);
+      }
+    }
+    throw new Error('Fixture did not wrap');
+  }, slot);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -149,10 +170,10 @@ test('table source entry reveals and closes without rewriting source', async ({ 
   await page.evaluate((source) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.reset(source), raw);
   const live = page.locator('[data-slot="0"]');
   await expect(live.locator('.cm-table')).toHaveCount(1);
-  await live.getByRole('button', { name: 'Edit table source' }).click();
+  await live.getByRole('button', { name: '编辑表格源码' }).click();
   await expect(live.locator('.cm-table')).toHaveCount(0);
   await expect(live.locator('.cm-content')).toContainText('|  raw  |  spaced  |');
-  await live.getByRole('button', { name: 'Close source' }).click();
+  await page.keyboard.press('Escape');
   await expect(live.locator('.cm-table')).toHaveCount(1);
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw);
 });
@@ -202,15 +223,10 @@ test('wrapped list text aligns with the list body', async ({ page }) => {
   await page.evaluate((source) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.reset(source), raw);
   await expect(page.locator('[data-slot="0"] .cm-content')).toContainText('plain');
   await page.evaluate((position) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.cursor(0, position), raw.length);
-  const offset = await page.evaluate(() => {
-    const h = (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness;
-    const first = h.coords(0, 2)!;
-    for (let position = 3; position < 300; position++) {
-      const next = h.coords(0, position);
-      if (next && next.top > first.top + 2) return next.left - first.left;
-    }
-    throw new Error('Fixture did not wrap');
-  });
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('.cm-line[data-prefix-layout]')]
+    .every(line => line.style.getPropertyValue('--cm-list-prefix-width') !== ''));
+  const offset = await wrappedBodyOffset(page, 0);
   expect(Math.abs(offset)).toBeLessThan(2);
 });
 
@@ -220,11 +236,13 @@ test('nested callouts own their math and code and fold independently', async ({ 
   const reading = page.locator('[data-slot="1"]');
   await expect(reading.locator('.md-callout .md-callout')).toHaveCount(1);
   await expect(reading.locator('mjx-container[jax="SVG"]')).toHaveCount(0);
-  await reading.locator('.cm-callout-fold').click();
+  await reading.locator('.md-callout[data-callout="warning"] .cm-callout-fold').click();
   await expect(reading.locator('mjx-container[jax="SVG"][display="true"]')).toHaveCount(1);
   await expect(reading.locator('.md-code')).toContainText('let x = 1');
-  await expect(reading.locator('.cm-content')).not.toContainText('> >');
-  await reading.locator('.cm-callout-fold').click();
+  // Prefix source remains native text; concealment changes color, never deletes it.
+  for (const prefix of await reading.locator('.cm-quote-prefix,.cm-block-prefix').all())
+    await expect(prefix).toHaveCSS('color', 'rgba(0, 0, 0, 0)');
+  await reading.locator('.md-callout[data-callout="warning"] .cm-callout-fold').click();
   await expect(reading.locator('mjx-container[jax="SVG"]')).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw);
 });
@@ -236,10 +254,12 @@ test('display formula supports source entry without losing multiline source', as
   await page.evaluate((position) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.cursor(0, position), raw.length);
   const live = page.locator('[data-slot="0"]');
   await expect(live.locator('mjx-container[jax="SVG"][display="true"]')).toHaveCount(1);
-  await live.getByRole('button', { name: 'Edit formula source' }).click();
-  await expect(live.locator('mjx-container[jax="SVG"][display="true"]')).toHaveCount(0);
+  await live.getByRole('button', { name: '编辑公式源码' }).click();
+  // Display source keeps the existing in-document preview while it is edited.
+  await expect(live.locator('.cm-math-edit-preview mjx-container[jax="SVG"][display="true"]')).toHaveCount(1);
   await expect(live.locator('.cm-content')).toContainText('\\frac{a}{b}');
-  await live.getByRole('button', { name: 'Close source' }).click();
+  await page.keyboard.press('Escape');
+  await expect(live.locator('.cm-math-edit-preview')).toHaveCount(0);
   await expect(live.locator('mjx-container[jax="SVG"][display="true"]')).toHaveCount(1);
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw);
 });
@@ -295,14 +315,7 @@ test('wrapped lists retain measured indentation after asynchronous formula layou
   await expect(page.locator('mjx-container')).toHaveCount(2);
   await expect(page.locator('[data-render-pending]')).toHaveCount(0);
   for (const slot of [0, 1]) {
-    await expect.poll(() => page.evaluate(slot => {
-      const h = window.renderHarness, first = h.coords(slot, 2)!;
-      for (let position = 3; position < 300; position++) {
-        const next = h.coords(slot, position);
-        if (next && next.top > first.top + 2) return Math.abs(next.left - first.left);
-      }
-      return Infinity;
-    }, slot)).toBeLessThan(2);
+    await expect.poll(() => wrappedBodyOffset(page, slot)).toBeLessThan(2);
   }
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(raw);
 });
@@ -336,7 +349,7 @@ test('default typography loads bundled fonts and shares callout presentation', a
   for (const slot of [0, 1]) {
     const host = page.locator(`[data-slot="${slot}"]`);
     await expect(host.locator('.cm-content').first()).toHaveCSS('font-size', '18px');
-    await expect(host.locator('.cm-heading-labelled')).toHaveCount(1);
+    await expect(host.locator('.cm-heading-label')).toHaveCount(1);
     for (const kind of ['proof', 'think', 'tactic']) {
       const callout = host.locator(`.md-callout[data-callout="${kind}"]`);
       expect(await callout.evaluate(el => getComputedStyle(el).boxShadow)).toContain('inset');
@@ -351,8 +364,9 @@ test('default typography loads bundled fonts and shares callout presentation', a
     await page.screenshot({ path: test.info().outputPath('theme-' + theme + '.png') });
   }
   await page.evaluate(() => window.renderHarness.cursor(0, 3));
-  await expect(page.locator('[data-slot="0"] .cm-heading-labelled')).toHaveCount(0);
-  await expect(page.locator('[data-slot="1"] .cm-heading-labelled')).toHaveCount(1);
+  // The native H1/fold control remains available while the heading text is edited.
+  await expect(page.locator('[data-slot="0"] .cm-heading-label')).toHaveCount(1);
+  await expect(page.locator('[data-slot="1"] .cm-heading-label')).toHaveCount(1);
 });
 
 test('callout title owns its rule and centers the original Lucide icons', async ({ page }) => {
@@ -372,10 +386,11 @@ test('callout title owns its rule and centers the original Lucide icons', async 
         const text = [...el.querySelectorAll('.cm-callout-title')].map(node => node.getBoundingClientRect());
         return { top: rule.top, bottom: rule.bottom, width: rule.width, height: parseFloat(rule.height),
           textOffset: (Math.min(...text.map(r => r.top)) + Math.max(...text.map(r => r.bottom)) - rect.top - rect.bottom) / 2,
-          titleHeight: rect.height, iconOffset: (svg.top + svg.bottom - rect.top - rect.bottom) / 2,
+          titleHeight: rect.height, iconOffset: (svg.top + svg.bottom) / 2 - rect.top - parseFloat(getComputedStyle(el.querySelector('.cm-line')!).lineHeight) / 2,
           lineRule: getComputedStyle(el.querySelector('.cm-line')!, '::before').content };
       });
-      expect(geometry.top).toBe('0px'); expect(geometry.bottom).toBe('0px'); expect(geometry.width).toBe('3px');
+      expect(geometry.top).toBe('0px'); expect(geometry.bottom).toBe('0px');
+      expect(await title.evaluate(el => getComputedStyle(el, '::before').borderRightWidth)).toBe('3px');
       expect(geometry.height).toBeCloseTo(geometry.titleHeight, 1);
       expect(Math.abs(geometry.iconOffset)).toBeLessThan(0.6);
       expect(Math.abs(geometry.textOffset)).toBeLessThan(2);

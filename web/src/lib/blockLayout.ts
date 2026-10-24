@@ -1,6 +1,6 @@
 import { RangeSet, StateField, type Range, type EditorState } from '@codemirror/state';
-import { BlockWrapper, EditorView } from '@codemirror/view';
-import { caretTouches, stripQuotePrefix } from '@webobsidian/markdown-core';
+import { BlockWrapper, Decoration, EditorView, WidgetType } from '@codemirror/view';
+import { caretTouches, stripQuotePrefix, sourceLinePrefix, type SourceSpan } from '@webobsidian/markdown-core';
 import { blockModel } from './syntaxModel';
 import { livePreviewState, livePreviewReadonly } from './renderState';
 import { compositionSelection } from './inlineHtml';
@@ -8,6 +8,30 @@ import { sourceOwns } from './sourceControls';
 import { CALLOUT_SLOT } from './callouts';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
+
+/** All whole-line replacements preserve the same source prefix as native lines. */
+export function sourceBlockReplacement(state: EditorState, range: SourceSpan, widget: WidgetType) {
+  const line = state.doc.lineAt(range.from), prefix = sourceLinePrefix(line.text);
+  const wholeLine = range.from <= line.from + prefix.length;
+  return Decoration.replace({ widget: prefix && wholeLine ? new PrefixedBlock(widget, prefix) : widget, block: true })
+    .range(wholeLine ? line.from : range.from, range.to);
+}
+
+class PrefixedBlock extends WidgetType {
+  constructor(readonly content: WidgetType, readonly prefix: string) { super(); }
+  eq(other: PrefixedBlock) {
+    return this.prefix === other.prefix && this.content.constructor === other.content.constructor && this.content.eq(other.content);
+  }
+  toDOM(view: EditorView) {
+    const shell = document.createElement('div'); shell.className = 'cm-prefixed-block';
+    const prefix = document.createElement('span'); prefix.className = 'cm-block-prefix';
+    prefix.textContent = this.prefix; prefix.setAttribute('aria-hidden', 'true');
+    shell.append(prefix, this.content.toDOM(view));
+    return shell;
+  }
+  ignoreEvent(event: Event) { return this.content.ignoreEvent(event); }
+  destroy(dom: HTMLElement) { this.content.destroy(dom.lastElementChild as HTMLElement); }
+}
 
 export const blockLayout = StateField.define<RangeSet<BlockWrapper>>({
   create: build,
@@ -38,6 +62,8 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
     }
     if (block.kind === 'callout') {
       attributes['data-callout'] = block.type;
+      const prefix = sourceLinePrefix(state.doc.lineAt(block.from).text);
+      attributes['data-callout-inset'] = prefix.slice(prefix.lastIndexOf('>'));
       // BlockWrapper measurement includes padding, but not collapsed margins or
       // gaps between sibling lines. Keep every pixel in a measured wrapper.
       // All body lines remain CodeMirror text; these wrappers only draw frames.

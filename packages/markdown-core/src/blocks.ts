@@ -11,6 +11,9 @@ export const stripQuotePrefix = (line: string, depth: number): string => {
   return line;
 };
 
+/** Exact source advance before a block's content, including quote/list whitespace. */
+export const sourceLinePrefix = (line: string): string => line.match(/^(?:[ \t]*>[ \t]?)*[ \t]*/)?.[0] ?? '';
+
 const containerCache = new WeakMap<MarkdownModel, BlockContainer[]>();
 export function blockContainers(model: MarkdownModel): BlockContainer[] {
   const cached = containerCache.get(model); if (cached) return cached;

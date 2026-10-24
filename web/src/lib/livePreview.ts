@@ -20,13 +20,14 @@ import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
+import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, sourceLinePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { followRenderedLink } from './fragmentNavigation';
 import { renderMath, readMathMetrics, type MathMetrics, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
 import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } from './writing/latex/editor_context/mathPresentation';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
+import { sourceBlockReplacement } from './blockLayout';
 import { equationLabel, equationReferenceLabel, equationReferenceName, equationTarget, equationAt, parseLinkTarget, type Equation, type MarkdownModel } from '@webobsidian/markdown-core';
 import { createMathTooltip } from './mathTooltip';
 
@@ -690,7 +691,7 @@ function buildMermaid(state: EditorState): DecorationSet {
   for (const block of state.field(blockModel).containers) {
     if (block.kind !== 'code' || block.language.toLowerCase() !== 'mermaid' || sourceIsOpen(state, block) || blockEffectOwns(state, block)) continue;
     if (!forceRendered(state, block) && caretTouches(block, state.field(compositionSelection).selection.ranges, ro)) continue;
-    ranges.push(Decoration.replace({ widget: new MermaidWidget(block.body, block), block: true }).range(block.from, block.to));
+    ranges.push(sourceBlockReplacement(state, block, new MermaidWidget(block.body, block)));
   }
   return Decoration.set(ranges, true);
 }
@@ -700,7 +701,7 @@ function buildMathBlocks(state: EditorState): DecorationSet {
   if (state.field(livePreviewState, false)) for (const region of state.field(blockModel).mathRanges) {
     if (region.closed && region.kind === 'dollar' && (region.block || region.tex.includes('\n')) &&
       !blockEffectOwns(state, region) && !mathSourceVisible(state, region))
-      decorations.push(Decoration.replace({ widget: numberedMath(state, region.tex, true, region), block: true }).range(region.from, region.to));
+      decorations.push(sourceBlockReplacement(state, region, numberedMath(state, region.tex, true, region)));
   }
   const preview = mathPreview(state);
   if (preview?.placement === 'document' && !blockEffectOwns(state, preview.region))
@@ -2068,7 +2069,9 @@ function buildDecorations(view: EditorView): DecorationSet {
         all.push(Decoration.line({ class: 'HyperMD-list-line', attributes: { 'data-prefix-layout': String(line.from) } }).range(line.from));
         const from = line.from + list.quoteTo;
         const to = prefix ? bodyFrom + prefix[0].length : line.from + list.indentTo;
-        if (to > from) all.push(Decoration.mark({ class: 'cm-list-prefix' }).range(from, to));
+        // Inclusive edges keep marker replacement widgets inside the measured
+        // prefix box instead of leaving a bullet/checkbox outside its advance.
+        if (to > from) all.push(Decoration.mark({ class: 'cm-list-prefix', inclusive: true }).range(from, to));
         if (list.header && list.item.parent?.name === 'OrderedList') {
           const marker = list.item.getChild('ListMark');
           if (marker) all.push(Decoration.mark({ class: 'cm-list-number' }).range(marker.from, marker.to));
@@ -2150,7 +2153,8 @@ function buildDecorations(view: EditorView): DecorationSet {
       while ((m = hlRe.exec(text))) {
         const s = line.from + m.index;
         const e = s + m[0].length;
-        if (inCode(s, e)) continue;
+        // Only delimiters declare highlighting; a contained formula keeps its own renderer.
+        if (inCode(s, s + 2, true) || inCode(e - 2, e, true)) continue;
         all.push(Decoration.mark({ class: 'cm-highlight' }).range(s + 2, e - 2));
         if (!touches(s, e)) {
           pushReplace(s, s + 2, hidden);
@@ -2454,9 +2458,9 @@ function buildTables(state: EditorState): DecorationSet {
   // Like Obsidian, tables are ALWAYS shown as the interactive widget (never as raw
   // pipes) — editing happens in-cell, so the selection no longer reveals raw.
   const ranges: Range<Decoration>[] = tables.map((t) =>
-    Decoration.replace({ widget: new TableWidget(t, ro, JSON.stringify([
+    sourceBlockReplacement(state, t, new TableWidget(t, ro, JSON.stringify([
       t.key.includes('[[') ? referenceKey : '', mathDefinitionContext(model, t.to + (source?.from ?? 0)),
-    ])), block: true }).range(t.from, t.to),
+    ]))),
   );
   return Decoration.set(ranges, true);
 }
@@ -2491,8 +2495,9 @@ function buildHtmlBlocks(state: EditorState): DecorationSet {
         }
       }
     if (touched) continue;
-    const html = state.doc.sliceString(b.from, b.to);
-    ranges.push(Decoration.replace({ widget: new HtmlBlockWidget(html, b), block: true }).range(b.from, b.to));
+    const depth = sourceLinePrefix(state.doc.lineAt(b.from).text).split('>').length - 1;
+    const html = state.doc.sliceString(b.from, b.to).split('\n').map(line => stripQuotePrefix(line, depth)).join('\n');
+    ranges.push(sourceBlockReplacement(state, b, new HtmlBlockWidget(html, b)));
   }
   return Decoration.set(ranges, true);
 }

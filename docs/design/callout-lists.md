@@ -9,7 +9,9 @@ The earlier opinion changes received source/diff inspection only. On 2026-10-24
 the user explicitly authorized a focused code-based small-page test of the quote
 fixes. The follow-up distinguishes ordinary rules from Callout title rules and
 adds an actual Enter/Tab/Backspace reproduction; see tests/reports/quote-origin-20261024.md.
-That authorization does not imply portable/native/live-Vault or broad acceptance.
+The later table follow-up explicitly authorizes the complete related-element
+render/interaction suite; see tests/reports/elements-20261024.md. Original Vault
+data and user profiles remain outside test inputs.
 
 ## Callouts
 
@@ -25,6 +27,24 @@ padding and measured outer/body vertical spacing remain. This removes the retain
 the marker split. Outer and nested containers use this same rule; indentation is
 only actual source prefixes, not accumulated frame insets. No negative marker
 offset, compensating margin or separate caret coordinate correction is allowed.
+
+The latest symmetric-inset requirement adds a right grid column to this same
+container. Its transparent text is the exact current level's `>` and separator,
+supplied as data-callout-inset from sourceLinePrefix. Native source on the left
+retains its original origin; no extra left padding or expanded prefix is added.
+The container uses fit-content/min-width:100% and min-content-aware grid sizing
+instead of the former width:100%/max-width:100% clamp. Wide tables, images and
+unbreakable formulas expand the one frame, including its right inset. Each nested
+Callout owns one level's right inset; ancestors continue to enclose it.
+
+Whole-line block replacements all enter sourceBlockReplacement in blockLayout:
+table, block math, Mermaid and HTML have the same intrinsic source-prefix shell.
+The core sourceLinePrefix also replaces the table model's duplicate prefix regex.
+The shell owns no parser, measurements or state; it preserves widget equality,
+events and destruction by delegating to the original widget. A block range that
+started after its quote marker expands to that line's start and renders the prefix
+once. Inline images/formulas and native code/list lines retain their existing text
+prefix path. Right insets belong only to Callout, never to individual widgets.
 
 The first logical line of each existing Blockquote node can declare a Callout:
 after stripping exactly that node's structural quote depth, it must start with
@@ -71,6 +91,12 @@ was 1.5px before and is 6.8906px after. Native > origin/right-edge geometry rema
 unchanged through reveal. This is presentation of [!type], not widened > source.
 The focused page test covers root and nested custom titles in live/reading modes;
 general wrapped-title/folding/IME/native acceptance is still outside that result.
+
+The element follow-up fixes icon alignment without font-specific transforms:
+cm-callout-icon is an inherited 1lh inline box, top-aligned and internally centered.
+Its SVG remains16px. It aligns to the first title line, not the vertical center
+of a wrapped multi-line header; seven types at18px/24px have0px center error in
+the later suite, which also exercises independent folding.
 
 ### Thematic breaks inside quotes
 
@@ -256,6 +282,13 @@ source width. Bullet and ordered-marker spacing is no longer collapsed to a
 single space. These changes preserve the four-column source step in rendered
 headers and marker-free continuations without inventing a CSS-only indent level
 or changing the existing hanging-layout measurement formula.
+
+The cm-list-prefix mark must have inclusive edges. Otherwise CodeMirror places
+a replacement bullet/checkbox that starts at the same source position outside
+that mark, and the existing measured box omits its advance. The complete-element
+suite exposed a9.890625px wrapped-line error. Inclusive edges include the real
+widget in the existing Q/L box; no second measurement or marker-width correction
+is necessary. Both source reveal and async formula/layout checks remain shared.
 
 ## List layout invalidation
 

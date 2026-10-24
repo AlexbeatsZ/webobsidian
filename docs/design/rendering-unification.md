@@ -278,6 +278,26 @@ open/edit/scroll of a formula-heavy note with the user's enabled plugins.
 
 ## Table interaction revision (2026-10-22)
 
+### Whole-line source layout follow-up (2026-10-24)
+
+Tables formerly replaced their complete source lines, including native quote and
+list prefixes, while inline images/native text retained those prefixes. Fixing
+only the table's own CSS would leave math/Mermaid/HTML with separate behavior.
+blockLayout.sourceBlockReplacement is now the single entry for those four
+whole-line renderers. It retains exact sourceLinePrefix text in an intrinsic flex
+column and delegates lifecycle/events/equality to the original widget. TableRow
+prefix extraction consumes the same core function. No added observer/cache/parser,
+coordinate correction or per-type pixel offset. Native source/session ranges and
+the existing TableWidget cell edit/changeTable/sourceControls remain authoritative.
+Quoted HTML bodies strip only their structural quote markers before sanitizing;
+HTMLBlock extent still belongs to the Markdown grammar, not an HTML-closing regex.
+
+Callout owns a source-width right column and intrinsic frame growth for all
+children; see callout-lists.md. The render project now includes elements.spec.ts
+and quote-origin.spec.ts, so their checks run with the existing render/theme/prefix
+suites. tests/reports/elements-20261024.md records50/50 browser results, actual
+geometry, source-preserving cell/row/drag/undo, and the native acceptance limit.
+
 Table source entry uses the shared temporary source region: leaving its selection
 or the editor restores the widget without a separate close switch. Cell drafts
 still commit through the existing fragment editor. Cell
