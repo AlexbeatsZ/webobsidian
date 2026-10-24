@@ -160,8 +160,17 @@ Width must not flow back into the editor's own width:
   subtracted once). Its inline-block root contains all inner SVG fragments in one
   CM widget rectangle, so MathJax's internal wrapping does not introduce anonymous
   inline breaks with an undeclared `WidgetType.lineBreaks` count. The root resets
-  inherited list text-indent and keeps the column-width limit; baseline and line
-  height remain native. See rendering-unification.md for the B2 click investigation
+  inherited list text-indent and keeps the column-width limit. The host retains
+  the surrounding text line-height and native baseline. Only its direct MathJax
+  SVG container has `line-height: 0`, so a MathJax font-size adjustment cannot
+  introduce a second, scaled text strut. SVG height and negative vertical-align
+  still contribute the formula's actual ascent/descent: small inline formulas
+  fit the normal text line; genuinely tall formulas may expand it. Pending/error
+  source text keeps the host's natural text line-height. This is a persistent
+  layout rule shared by Live/Reading MarkdownView, without per-toggle spacing,
+  height memory, clipping or changes to display formulas. The 2026-10-23 inline
+  spacing correction has source/diff review only; actual screenshot parity is
+  not yet verified. See rendering-unification.md for the B2 click investigation
   and its unverified runtime boundary. The inline tooltip keeps CodeMirror's
   default fixed positioning, sizes to `max-content` with a bounded width, and scrolls inside its
   own body. Restoring absolute positioning or a shrink-to-fit root inside the
