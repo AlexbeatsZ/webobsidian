@@ -327,6 +327,26 @@ or hidden properties, title combinations, wrapping, IME and browser/native UI
 behavior remain unverified. No new tests, type/build checks, probes or application
 launches were performed for this change.
 
+### Filename outside source containers (2026-10-23)
+
+A note opening with `>` exposed a distinct ownership bug: inlineTitleField placed
+a zero-length block widget at source position 0. CM 6.43.0 BlockWrapper wraps
+all blocks beginning at `from`, including a negative-side block widget, so the
+first quote (or Callout/code wrapper) included the filename itself.
+
+The existing noteTitleField/setNoteTitle and H1 duplicate suppression now feed
+one inlineTitle ViewPlugin. It owns a filename row directly in scrollDOM, outside
+contentDOM and all source wrappers. The row scrolls with the note and uses the
+same stylesheet column width, margins and font family as content. Flex wrapping
+puts the row before the existing native gutter/content row; only a visible title
+owns the top page padding. No source position, document text or cursor transaction
+belongs to the title. Mode/showTitle/rename/H1 edits update that one presentation;
+destroy removes it. The position-0 widget/decoration field is deleted.
+
+Source/diff review only; no tests, types, build, runtime or new package. The
+reported temporary raw `> [!tip]` title after Enter recovered on the user's side;
+its transient cause has not been established and no speculative Enter fix landed.
+
 ## Property type icons (2026-10-23)
 
 Frontmatter rows, the property-type submenu and the add-property suggestions use

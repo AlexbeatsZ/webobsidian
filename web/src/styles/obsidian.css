@@ -474,9 +474,12 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-host { flex: 1; overflow: auto; }
 .cm-editor { height: 100%; background: var(--background-primary) !important; color: var(--text-normal); }
 .cm-editor.cm-focused { outline: none !important; }
-.cm-editor .cm-content { font-family: var(--font-text); font-size: var(--font-text-size); line-height: var(--line-height-normal);
-  min-width: 0; margin: 0 auto; padding: 28px var(--file-margins) 40vh; caret-color: var(--text-normal); }
-.markdown-source-view.is-readable-line-width .cm-content { max-width: var(--file-line-width); }
+.cm-editor .cm-content, .cm-editor .cm-inline-title { font-family: var(--font-text);
+  box-sizing: border-box; min-width: 0; margin: 0 auto; padding: 28px var(--file-margins) 40vh; }
+.cm-editor .cm-content { font-size: var(--font-text-size); line-height: var(--line-height-normal); caret-color: var(--text-normal); }
+.cm-editor .cm-inline-title { width: 100%; padding-bottom: .5em; }
+.markdown-source-view.is-readable-line-width .cm-content,
+.markdown-source-view.is-readable-line-width .cm-inline-title { max-width: var(--file-line-width); }
 .cm-editor .cm-line { padding: 0; }
 .cm-gutters { background: var(--background-primary) !important; border: 0 !important; color: var(--text-faint) !important; }
 .cm-activeLine { background: transparent !important; }
@@ -597,18 +600,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   content: attr(data-lang); float: right; color: var(--text-faint);
   font-size: var(--font-ui-smaller); font-family: var(--font-ui); text-transform: capitalize;
 }
-/* Nested blockquote bars: one bar per level via layered gradients */
-.cm-s-obsidian .cm-line.cm-blockquote[data-quote-depth="2"] {
-  padding-left: 48px;
-  background-image: linear-gradient(var(--interactive-accent), var(--interactive-accent));
-  background-repeat: no-repeat; background-size: 2px 100%; background-position: 22px 0;
-}
-.cm-s-obsidian .cm-line.cm-blockquote[data-quote-depth="3"] {
-  padding-left: 72px;
-  background-image: linear-gradient(var(--interactive-accent), var(--interactive-accent)),
-    linear-gradient(var(--interactive-accent), var(--interactive-accent));
-  background-repeat: no-repeat; background-size: 2px 100%, 2px 100%; background-position: 22px 0, 46px 0;
-}
 /* List indentation guides (one per indent unit) — same mechanism as Obsidian:
    absolutely positioned 1px rule spanning the full line height at a bullet's center. */
 .cm-s-obsidian .cm-line { position: relative; }
@@ -683,7 +674,9 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-properties, .cm-html-block, .plugin-code-block { position: relative; }
 .is-reading-mode .cm-props-add,
 .is-reading-mode .prop-pill-x, .is-reading-mode .prop-pill-add, .is-reading-mode .prop-del { visibility: hidden; }
-.md-quote { border-left: 3px solid var(--text-normal); padding-left: 24px; }
+.md-quote { position: relative; }
+.md-quote::before { content: attr(data-quote-prefix); position: absolute; top: 0; bottom: 0; left: 0;
+  width: max-content; white-space: pre; color: transparent; border-right: 3px solid var(--text-normal); pointer-events: none; }
 .md-callout, .callout { width: fit-content; min-width: 100%; max-width: none; background: var(--document-surface); border: 0.5px solid var(--document-border); border-radius: 4px; padding: 12px 16px; margin: 16px 0; }
 /* CM measures wrapper padding, not vertical margins between its text lines. */
 .md-callout-spacing { padding: 16px 0; width: 100%; min-width: 0; }

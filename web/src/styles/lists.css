@@ -18,9 +18,9 @@
 .cm-s-obsidian .cm-quote-prefix, .cm-s-obsidian .cm-list-prefix { display: inline-block; white-space: pre; text-indent: 0; }
 .cm-s-obsidian .cm-quote-prefix { color: transparent; }
 .cm-s-obsidian .cm-quote-prefix.is-revealed { color: var(--text-faint); }
-/* Ordinary CM text lines have zero padding. Containers own quote/frame padding;
-   list continuation uses only the list prefix, never a cached DOM baseline. */
+/* Hanging wraps use the actual source prefix advance. The first line keeps its
+   native > / whitespace positions; quote styling adds no horizontal width. */
 .cm-s-obsidian .cm-line[data-prefix-layout] {
-  padding-left: calc(var(--cm-prefix-base-padding, 0px) + var(--cm-list-prefix-width, 0px));
+  padding-left: calc(var(--cm-prefix-base-padding, 0px) + var(--cm-quote-prefix-width, 0px) + var(--cm-list-prefix-width, 0px));
   text-indent: calc(0px - var(--cm-quote-prefix-width, 0px) - var(--cm-list-prefix-width, 0px));
 }

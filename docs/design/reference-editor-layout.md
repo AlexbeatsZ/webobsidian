@@ -1,5 +1,20 @@
 # Quote prefixes and heading gutters (2026-10-23)
 
+## Current source-width contract
+
+The later user correction explicitly requires only the native `>` / source-space
+advance, transparent when concealed, with styling added without widening it.
+This supersedes the earlier 24px wrapper-gutter formula recorded below. Current
+listLayout still measures intrinsic Q/L boxes; line padding is base + Q + L and
+text-indent is -(Q + L). Quote wrappers add no horizontal padding/border width;
+their continuous rule is absolute, with nested origins supplied by intrinsic
+transparent preceding-prefix text. Removed unused cm-blockquote line borders and
+depth-gradient rules; native md-quote is the only quote-rule owner. Math source
+continuations retain the same structural-prefix pass before literal-body exclusion.
+The filename now lives outside contentDOM, so a first-source quote cannot wrap it.
+These corrections have source/diff evidence only; earlier geometry tests below
+did not establish this newly specified native-width behavior.
+
 ## Evidence and ownership
 
 Reference archive read only: `C:/Users/Meta/AppData/Roaming/obsidian/obsidian-1.14.5.asar`.

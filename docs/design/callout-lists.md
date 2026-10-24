@@ -35,15 +35,22 @@ only their color changes through `cm-quote-prefix`. The previous marker-only
 The existing listLayout measures separate native inline-block boxes: quote
 prefix Q and list indent/marker prefix L. It reads their actual widths, never
 source-boundary caret coordinates or an already indented line's padding. CSS
-owns `text-indent: -(Q + L)` and `padding-left: base + L`; ordinary lines have
-base zero, while body-local headings declare their existing 24px base in their
-own stylesheet rule. A plain quote has L = 0, so body text and wraps stay at the
-wrapper's original content edge while its prefix occupies the existing gutter.
-Quoted lists retain their actual source whitespace/marker width. Native
-.md-quote wrappers continue to own continuous/nested rules, including
-lazy continuation lines; no second rule renderer, observer or fold state exists.
+owns `text-indent: -(Q + L)` and `padding-left: base + Q + L`: the first line
+keeps its native source positions and wrapped body lines align after the same
+prefix. Ordinary lines have base zero; body-local headings retain their separate
+24px title decoration. No quote-specific 24px gap or widened marker box is added.
+Native .md-quote wrappers own continuous/nested rules as absolute pseudo-elements,
+with no horizontal border/padding in flow. Their transparent pseudo-element text
+is the exact preceding quote-level source prefix (via existing stripQuotePrefix),
+so the rule's intrinsic origin follows native characters rather than a fixed
+depth offset. Quoted lists retain source whitespace/marker width. There is no
+second rule renderer, observer or fold state.
 Callout title replacement remains its existing icon/title control path; body
-prefixes use the same native-text layout. A Callout title is excluded from list
+prefixes and display-math source use the same native-text layout. Math owns its
+literal body, not the structural quote prefixes of continuation lines. Explicit
+source entry also retains the prefix path when an enclosing quote remains styled;
+opening a whole owning quote as source retains normal raw-source behavior.
+A Callout title is excluded from list
 prefix measurement even when it is nested in a parent ListItem, so its own icon
 padding stays authoritative. Full source mode retains literal text.
 See reference-editor-layout.md for the local Obsidian package evidence and limits.
@@ -186,13 +193,14 @@ and `ListMark` children into multiline inline nodes. Those children remain owned
 by the quote/list prefix path, so entering or leaving emphasis cannot remove the
 prefix box. The existing math-delimiter ownership guard remains in force.
 
-The line-level exclusion must also distinguish block code from inline code.
+The line-level exclusion must also distinguish block code from inline code/math.
 Lezer's multiline InlineCode source range can cover an entire continuation line,
-including a structural QuoteMark injected inside that node. Block code, HTML and
-math still skip the whole line before structural layout. Inline code remains in
+including a structural QuoteMark injected inside that node. Block code and HTML
+still skip the whole line before structural layout. Inline code/math remain in
 the existing literal ranges, but its quote/list prefix and continuation indentation
 first go through the same native prefix path as ordinary text. The body passes
-then skip a fully covered literal line; inline HTML rendering also honors the
+then skip a fully covered literal line. Display math follows this same order;
+inline HTML rendering also honors the
 existing literal-range guard. This preserves literal body text without exposing
 the structural marker or introducing a second parser/layout path.
 

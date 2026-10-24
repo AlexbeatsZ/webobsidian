@@ -1794,8 +1794,8 @@ function buildDecorations(view: EditorView): DecorationSet {
     const from = equation.anchor.from - equationInfo.from, to = equation.anchor.to - equationInfo.from;
     if (from >= 0 && to <= doc.length && !lineActive(from)) pushReplace(from, to, Decoration.replace({}));
   }
-  const lineExcludedRanges = [...model.html, ...model.entities, ...view.state.field(blockModel).math];
-  const codeRanges = [...model.literal, ...lineExcludedRanges];
+  const lineExcludedRanges = [...model.html, ...model.entities];
+  const codeRanges = [...model.literal, ...lineExcludedRanges, ...view.state.field(blockModel).math];
   const inCode = (from: number, to: number, ignoreMath = false) => {
     for (const r of codeRanges) if (from < r.to && to > r.from) return true;
     return !ignoreMath && mathRanges.some(r => r.kind === 'dollar' && from < r.to && to > r.from);
@@ -1937,13 +1937,26 @@ function buildDecorations(view: EditorView): DecorationSet {
     for (let ln = startLine; ln <= endLine; ln++) {
       const line = doc.line(ln);
       const text = line.text;
-      if (blockEffectOwns(view.state, line) || sourceOwns(view.state, line)) continue;
+      if (blockEffectOwns(view.state, line)) continue;
+      const sourceLine = sourceOwns(view.state, line);
+      if (sourceLine) {
+        // Source entry owns the body, but an enclosing quote still owns its
+        // structural prefix unless that whole quote was also opened as source.
+        let quoted = false;
+        for (let node: ReturnType<typeof tree.resolveInner> | null = tree.resolveInner(line.to, -1); node; node = node.parent) {
+          if (node.name === 'Blockquote' && !sourceOwns(view.state, {
+            from: doc.lineAt(node.from).from, to: node.to,
+          })) { quoted = true; break; }
+        }
+        if (!quoted) continue;
+      }
 
       // Skip lines covered by a rendered table / HTML block widget.
       if (renderedTable(line.from, line.to) || renderedHtml(line.from, line.to)) continue;
       // Skip the frontmatter block (rendered by frontmatterField).
       if (line.to <= fmEnd) continue;
-      // Block code / HTML / math owns the entire line, including its prefix.
+      // Block code / HTML owns the whole line. Math source still has structural
+      // quote prefixes; its literal body is excluded after prefix layout below.
       if (lineExcludedRanges.some((r) => r.from <= line.from && r.to >= line.to)) continue;
       // Whole-line %% block comment region → grey out, keep raw.
       if (commentLines.has(ln)) {
@@ -1953,13 +1966,13 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       // Inline-HTML paragraph line (e.g. `<u>…</u> và <mark>…`): Lezer only marks
       // block-level openers as HTMLBlock, so render whole-line inline HTML here.
-      if (/^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from) && !inCode(line.from, line.to) && !view.state.field(syntaxModel).html.some((tag) => tag.from >= line.from && tag.to <= line.to)) {
+      if (!sourceLine && /^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from) && !inCode(line.from, line.to) && !view.state.field(syntaxModel).html.some((tag) => tag.from >= line.from && tag.to <= line.to)) {
         pushReplace(line.from, line.to, Decoration.replace({ widget: new HtmlBlockWidget(text, { from: line.from, to: line.to }) }));
         continue;
       }
 
       // Horizontal rule: `---` / `***` / `___` → <hr> when the caret is elsewhere.
-      if (/^ {0,3}([-*_])(?:\s*\1){2,}\s*$/.test(text) && !inCode(line.from, line.to)) {
+      if (!sourceLine && /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/.test(text) && !inCode(line.from, line.to)) {
         all.push(Decoration.line({ class: 'HyperMD-hr' }).range(line.from, line.from));
         if (!lineActive(line.from) && line.to > line.from) {
           pushReplace(line.from, line.to, Decoration.replace({ widget: new HrWidget() }));
@@ -1976,7 +1989,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       if (quotePrefix) {
         const prefix = quotePrefix[0];
         bodyStart = prefix.length;
-        if (header) {
+        if (header && !sourceLine) {
           const slot = CALLOUT_SLOT[header.type] ?? 'default';
           const folded = isCalloutFolded(view.state, header.from, header.fold);
           if (!touches(line.from, header.prefixTo)) {
@@ -1996,13 +2009,15 @@ function buildDecorations(view: EditorView): DecorationSet {
           if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
           bodyStart = header.prefixTo - line.from;
         } else {
-          // Keep native prefix text and advance in both states. The existing
-          // hanging-layout measure places it in the wrapper's quote gutter.
+          // Preserve only the native source advance in both reveal states.
+          // Quotes, Callout bodies and math source use this same prefix path.
           all.push(Decoration.line({ attributes: { 'data-prefix-layout': String(line.from) } }).range(line.from));
           all.push(Decoration.mark({ class: 'cm-quote-prefix' +
             (touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
         }
       }
+
+      if (sourceLine) continue;
 
       // Task checkbox + bullet — applied to the line body (works in quotes /
       // callouts too). Per §7 any single char is a valid status and any
@@ -2315,21 +2330,6 @@ function buildFrontmatter(state: EditorState): DecorationSet {
 
 /* ---------------- inline title (note filename, Obsidian-style) ---------------- */
 
-class TitleWidget extends WidgetType {
-  constructor(readonly title: string) {
-    super();
-  }
-  eq(o: TitleWidget) {
-    return o.title === this.title;
-  }
-  toDOM() {
-    const d = document.createElement('div');
-    d.className = 'cm-inline-title';
-    d.textContent = this.title;
-    return d;
-  }
-}
-
 export const setNoteTitle = StateEffect.define<string>();
 
 export const noteTitleField = StateField.define<string>({
@@ -2340,29 +2340,52 @@ export const noteTitleField = StateField.define<string>({
   },
 });
 
-function buildInlineTitle(state: EditorState): DecorationSet {
-  if (!state.field(livePreviewState, false)) return Decoration.none;
+function inlineTitleText(state: EditorState): string {
+  if (!state.field(livePreviewState, false)) return '';
   const title = state.field(noteTitleField, false) ?? '';
-  if (!title) return Decoration.none;
+  if (!title) return '';
   // Skip when the note already opens with an H1 equal to the title — the Trilium
   // export repeats the title as a heading, and Obsidian would otherwise show it twice.
   const head = state.doc.sliceString(0, Math.min(state.doc.length, 2000));
   const noFm = head.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, '');
   const firstLine = noFm.split(/\r?\n/).find((l) => l.trim() !== '');
   const h1 = firstLine?.match(/^#\s+(.+?)\s*$/);
-  if (h1 && h1[1].trim().toLowerCase() === title.trim().toLowerCase()) return Decoration.none;
-  return Decoration.set([Decoration.widget({ widget: new TitleWidget(title), block: true, side: -1 }).range(0)]);
+  return h1 && h1[1].trim().toLowerCase() === title.trim().toLowerCase() ? '' : title;
 }
 
-export const inlineTitleField = StateField.define<DecorationSet>({
-  create: (state) => buildInlineTitle(state),
-  update(value, tr) {
-    if (tr.docChanged || tr.effects.some((e) => e.is(setNoteTitle) || e.is(setLivePreviewEnabled))) {
-      return buildInlineTitle(tr.state);
+// A block decoration at source position 0 is inside any first-block wrapper,
+// regardless of its side. The filename belongs to the scroll area, not the source.
+export const inlineTitle = ViewPlugin.fromClass(class {
+  readonly row: HTMLDivElement;
+  readonly title: HTMLDivElement;
+  constructor(readonly view: EditorView) {
+    const doc = view.dom.ownerDocument;
+    this.row = doc.createElement('div');
+    this.row.className = 'cm-note-title-row';
+    this.title = this.row.appendChild(doc.createElement('div'));
+    this.title.className = 'cm-inline-title';
+    this.sync();
+  }
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.transactions.some(tr =>
+      tr.effects.some(e => e.is(setNoteTitle) || e.is(setLivePreviewEnabled)))) this.sync();
+  }
+  sync() {
+    const title = inlineTitleText(this.view.state);
+    if (this.title.textContent === title && !!this.row.parentNode === !!title) return;
+    this.title.textContent = title;
+    if (title) {
+      if (!this.row.parentNode) this.view.scrollDOM.prepend(this.row);
+    } else {
+      this.row.remove();
     }
-    return value.map(tr.changes);
-  },
-  provide: (f) => EditorView.decorations.from(f),
+    this.view.scrollDOM.classList.toggle('cm-has-inline-title', !!title);
+    this.view.requestMeasure();
+  }
+  destroy() {
+    this.row.remove();
+    this.view.scrollDOM.classList.remove('cm-has-inline-title');
+  }
 });
 
 export const frontmatterField = StateField.define<DecorationSet>({
@@ -2477,15 +2500,17 @@ export const livePreviewTheme = EditorView.baseTheme({
   '.cm-h1 span, .cm-h2 span, .cm-h3 span, .cm-h4 span, .cm-h5 span, .cm-h6 span': {
     textDecoration: 'none !important',
   },
-  // Inline title = h1 alias (§19); keep its gap inside the measured widget.
+  // Filename title is a separate scrolling row, outside source block wrappers.
+  '.cm-scroller.cm-has-inline-title': { flexWrap: 'wrap', alignContent: 'flex-start' },
+  '.cm-note-title-row': { flex: '0 0 100%', minWidth: '0' },
+  '.cm-scroller.cm-has-inline-title > .cm-content': { paddingTop: '0', minHeight: '0' },
   '.cm-inline-title': {
     fontSize: 'var(--h1-size)',
     fontWeight: 'var(--h1-weight)',
     lineHeight: 'var(--line-height-tight)',
     letterSpacing: '-0.015em',
     color: 'var(--text-normal)',
-    margin: '0',
-    padding: '0 0 0.5em',
+    overflowWrap: 'anywhere',
   },
   '.cm-em': { fontStyle: 'italic' },
   '.cm-strike': { textDecoration: 'line-through' },
@@ -2522,15 +2547,6 @@ export const livePreviewTheme = EditorView.baseTheme({
   },
   '.cm-task-checkbox': { verticalAlign: 'middle', marginRight: '4px', cursor: 'pointer' },
   '.cm-properties': { margin: '4px 0 18px' },
-  // Compound `.cm-line.cm-blockquote` selector beats CodeMirror's own `.cm-line`
-  // padding rule (equal specificity, declared later) so the gap actually applies —
-  // otherwise text sits flush against the bar. Blockquote: 3px text-color bar +
-  // 24px padding (§19). Callout colors live in obsidian.css (--callout-* slots).
-  '.cm-line.cm-blockquote': {
-    borderLeft: '3px solid var(--text-normal)',
-    paddingLeft: '24px',
-    color: 'var(--text-normal)',
-  },
   // Markdown tables — mirror Obsidian's table CSS variables
   // (https://docs.obsidian.md/Reference/CSS+variables/Editor/Table): 1px border,
   // left-aligned + top-valigned cells, semibold header with a subtle background.

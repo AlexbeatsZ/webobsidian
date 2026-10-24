@@ -1,6 +1,6 @@
 import { RangeSet, StateField, type Range, type EditorState } from '@codemirror/state';
 import { BlockWrapper, EditorView } from '@codemirror/view';
-import { caretTouches } from '@webobsidian/markdown-core';
+import { caretTouches, stripQuotePrefix } from '@webobsidian/markdown-core';
 import { blockModel } from './syntaxModel';
 import { livePreviewState, livePreviewReadonly } from './renderState';
 import { compositionSelection } from './inlineHtml';
@@ -27,6 +27,13 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
       'data-source-from': String(block.from), 'data-source-to': String(block.to),
     };
     const rank = Math.max(1, (block.kind === 'code' ? 80 : 100) - block.depth);
+    if (block.kind === 'quote') {
+      const first = state.doc.lineAt(block.from).text;
+      const own = stripQuotePrefix(first, block.depth - 1);
+      // An absolute rule follows the intrinsic text of preceding quote levels.
+      // The wrapper itself contributes neither a border width nor indentation.
+      attributes['data-quote-prefix'] = first.slice(0, first.length - own.length) + (own.match(/^ {0,3}(?=>)/)?.[0] ?? '');
+    }
     if (block.kind === 'callout') {
       attributes['data-callout'] = block.type;
       attributes.style = `--callout-color: var(--callout-${CALLOUT_SLOT[block.type] ?? 'default'})`;

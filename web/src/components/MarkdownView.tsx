@@ -36,7 +36,7 @@ import { attachMenuContext } from '../lib/configuredMenus/transform';
 import type { RenderMenuItem } from '../lib/renderContext';
 import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField,
   tableField, htmlBlockField, mermaidField, htmlRenderedState, htmlPreviewField,
-  calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitleField,
+  calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitle,
   livePreviewReadonly, setLivePreviewReadonly, setLivePreviewEnabled, setNoteTitle } from '../lib/livePreview';
 
 export type MarkdownMode = 'live' | 'reading' | 'source';
@@ -264,7 +264,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         livePreviewState.init(() => isMd && p.mode !== 'source'),
         livePreviewReadonly.init(() => p.mode === 'reading'),
         noteTitleField.init(() => p.showTitle === false ? '' : titleOf(p.snapshot.id)),
-        sourceControls, blockEffects, inlineTitleField, frontmatterField, tableField, htmlBlockField, mermaidField,
+        sourceControls, blockEffects, inlineTitle, frontmatterField, tableField, htmlBlockField, mermaidField,
         codeBlocks,
         ...(p.context.allowPlugins ? [pluginPostProcessing] : []),
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,
