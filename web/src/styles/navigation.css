@@ -8,5 +8,6 @@
 .cm-footnote-entry { display: flex; gap: .5em; margin-top: .6em; font-size: var(--footnote-size, .9em); }
 .cm-footnote-entry.is-first { margin-top: 1.5em; padding-top: .8em; border-top: 1px solid var(--background-modifier-border); }
 .cm-footnote-body { min-width: 0; flex: 1; }
+.cm-footnote-body .cm-editor { background: transparent !important; }
 .cm-footnote-returns { display: flex; flex-wrap: wrap; gap: .5em; }
 .cm-footnote-reference.is-unresolved { text-decoration: underline wavy; opacity: .75; }

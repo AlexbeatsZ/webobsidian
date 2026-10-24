@@ -57,6 +57,7 @@ for (const slot of [0, 1]) test(`footnote definition number returns to a highlig
   const editor = page.locator(`[data-slot="${slot}"]`);
   await editor.locator('.cm-footnote-reference').click();
   await expect(editor.locator(slot ? '.cm-footnote-entry.cm-navigation-target' : '.cm-navigation-target')).toContainText('这和前面的假设等价');
+  if (slot) await expect(editor.locator('.cm-footnote-body .cm-editor')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await editor.locator(slot ? '.cm-footnote-number' : '.cm-footnote-definition').click();
   expect(await page.evaluate(slot => window.renderHarness.location(slot)?.anchor, slot)).toBe(raw.indexOf('[^1]'));
   await expect(editor.locator('.cm-footnote-reference.cm-navigation-target')).toBeVisible();

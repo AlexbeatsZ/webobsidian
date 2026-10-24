@@ -26,6 +26,7 @@
   引用替换 widget 直接投影原 navigationHighlight 的范围与三秒生命周期，避免 CodeMirror mark
   无法覆盖替换节点造成落点无可见高亮；不增加第二份导航状态。片段携带完整模型和绝对范围，
   包含从零偏移开始的片段；合成页脚不写回源文件。
+  尾注内嵌编辑器使用透明背景，由所属脚注条目提供背景，避免覆盖条目的落点高亮。
 
 旧的前端脚注 regex/私有编号/直接 dispatch、Markdown 和裸 URL widget 重复识别、独立公式 hover、
 path-only pending 和 path-only history 已删除。没有增加文档保存服务、Vault 索引、MathJax 引擎或折叠系统。
