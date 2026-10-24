@@ -21,7 +21,7 @@ export function mountMarkdownFragment(host: HTMLElement, source: string, options
       onUndo: () => { session.undo(); return session.snapshot; },
       onRedo: () => { session.redo(); return session.snapshot; },
     }), []);
-    const context = useMemo(() => ({ ...options.context, equations: options.equations, mathSource: options.mathSource }), []);
+    const context = useMemo(() => ({ ...options.context, sourceFragment: true, equations: options.equations, mathSource: options.mathSource }), []);
     return <div onBlurCapture={() => {
       queueMicrotask(() => {
         if (!destroyed && !host.contains(document.activeElement)) options.onCommit?.(session.snapshot.raw);

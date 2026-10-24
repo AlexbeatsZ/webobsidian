@@ -7,9 +7,14 @@ export const equationsOf = (state: EditorState) => {
   const context = state.facet(renderContext), model = state.field(syntaxModel);
   // Local transactions precede the React snapshot update. A fragment retains
   // its original-note context; a full editor can already use its newest model.
-  return context.equations && (context.equations.from !== 0 || context.mathSource?.model.text === model.text)
+  return context.equations && (context.sourceFragment || context.equations.from !== 0 || context.mathSource?.model.text === model.text)
     ? context.equations : equationContext(model);
 };
+export function sourceOf(state: EditorState): { model: MarkdownModel; from: number } {
+  const context = state.facet(renderContext);
+  return context.mathSource && (context.sourceFragment || context.mathSource.from !== 0)
+    ? context.mathSource : { model: state.field(syntaxModel), from: 0 };
+}
 
 /** Layout-independent complete model; never inferred from rendered/visible DOM. */
 export const adoptSyntaxModel = StateEffect.define<MarkdownModel>();

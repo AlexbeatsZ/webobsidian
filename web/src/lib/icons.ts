@@ -1,5 +1,6 @@
 // One Lucide path catalog for React UI and Obsidian-compatible DOM controls.
 export const iconPaths: Record<string, string> = {
+  'external-link': '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
   type: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
   loader: '<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"/>',

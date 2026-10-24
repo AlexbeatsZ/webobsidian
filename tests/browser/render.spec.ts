@@ -3,6 +3,9 @@ import type { RenderHarnessApi } from '../../web/src/dev/RenderHarness';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
+import { analyzeMarkdown } from '../../packages/markdown-core/src/syntax';
+import { footnotes } from '../../packages/markdown-core/src/footnotes';
+import { SourceDocument } from '../../packages/markdown-core/src/source';
 const { PNG } = require(path.join(path.dirname(require.resolve('playwright-core/package.json')), 'lib/utilsBundle.js'));
 // Allow only one 8-bit level of rasterization rounding, never displaced geometry.
 function samePixels(a: Buffer, b: Buffer): boolean {
@@ -117,8 +120,11 @@ test('unfocused live syntax has the same pixels as reading', async ({ page }) =>
   expect(samePixels(live, reading)).toBe(true);
 });
 
-test('the full syntax fixture stays visually equal through multiple scroll positions', async ({ page }, info) => {
-  const source = readFileSync('tests/fixtures/rendering.md', 'utf8');
+test('shared syntax stays visually equal through multiple scroll positions; footnote projections have separate acceptance', async ({ page }, info) => {
+  let source = new SourceDocument(readFileSync('tests/fixtures/rendering.md', 'utf8')).text;
+  const notes = footnotes(analyzeMarkdown(source));
+  const spans = notes.notes.flatMap(note => note.inline ? note.references : [...note.references, ...note.definitions]).sort((a, b) => b.from - a.from);
+  for (const span of spans) source = source.slice(0, span.from) + source.slice(span.to);
   await page.evaluate(source => window.renderHarness.reset(source), source);
   await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).replace(/\r\n|\r/g, '\n').length));
   await expect(page.locator('[data-slot="0"] .cm-table')).toHaveCount(1);
@@ -164,7 +170,7 @@ test('comments and block IDs stay hidden; Unicode tags and reference links share
   await expect(page.locator('[data-slot="0"] .cm-content')).toContainText('plain');
   await page.evaluate((position) => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.cursor(0, position), raw.length);
   for (const slot of [0, 1]) {
-    const content = page.locator(`[data-slot="${slot}"] .cm-content`);
+    const content = page.locator(`[data-slot="${slot}"] .cm-content`).first();
     await expect(content).not.toContainText('hidden');
     await expect(content).not.toContainText('^block-id');
     await expect(content.locator('.cm-hashtag-end')).toHaveText('中文标签');

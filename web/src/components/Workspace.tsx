@@ -126,7 +126,7 @@ export default function Workspace() {
                 <Icon name="x" size={16} />
               </button>
             </div>
-            <Editor path={splitPath} reading />
+            <Editor path={splitPath} navigationId="split" reading />
           </div>
         )}
       </div>

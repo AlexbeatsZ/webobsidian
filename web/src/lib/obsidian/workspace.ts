@@ -423,9 +423,9 @@ export class Workspace extends Events {
     newLeaf?: boolean,
     state?: any
   ) {
-    const file = this.app.metadataCache.getFirstLinkpathDest(link, source);
-    if (file) await (newLeaf ? this.split : this.main).openFile(file, state);
-    else await useStore.getState().openWikilink(link, source);
+    await useStore.getState().openWikilink(link, source, {
+      disposition: newLeaf ? 'side' : 'current', line: state?.eState?.line, focus: state?.active,
+    });
   }
   detachLeavesOfType(type: string) {
     this.getLeavesOfType(type).forEach((l) => l.detach());

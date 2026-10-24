@@ -9,11 +9,13 @@ import MarkdownView from './MarkdownView';
 import { analyzeMarkdown, fragmentRange, equationContext } from '@webobsidian/markdown-core';
 import { nativeReviewExtension } from '../lib/review/view';
 import { propertyTypesSnapshot, subscribePropertyTypes } from '../lib/propertyTypes';
+import type { LinkIntent } from '../lib/fragmentNavigation';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
-export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment, sidebar = false, onOpenLink, onReady }: {
+export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment, sidebar = false, navigationId, onOpenLink, onReady }: {
   path?: string; reading?: boolean; embedded?: boolean; fragment?: string; sidebar?: boolean;
-  onOpenLink?: (target: string, sourcePath?: string) => Promise<void>;
+  navigationId?: string;
+  onOpenLink?: (target: string, sourcePath?: string, intent?: LinkIntent) => Promise<void>;
   onReady?: (view: import('@codemirror/view').EditorView | null) => void;
 }) {
   const activePath = useStore((s) => suppliedPath ? null : s.activePath);
@@ -40,15 +42,15 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     const stopPlugins = bindPluginEditor(editorView, path ?? '');
     return () => { stopPlugins(); stopEditor(); };
   }, [editorView, session]);
-  const context = useMemo(() => createVaultRenderContext(path ?? '', {
-    bindEditor: registerEditor, openLink: (target, sourcePath) => { void openLink(target, sourcePath ?? path ?? undefined); }, openMenu, reportError: notify,
+  const context = useMemo(() => ({ ...createVaultRenderContext(path ?? '', {
+    bindEditor: registerEditor, openLink: (target, sourcePath, intent) => { void openLink(target, sourcePath ?? path ?? undefined, intent); }, openMenu, reportError: notify,
     files: () => [...files],
-  }), [path, openLink, openMenu, files, propertyTypes, notify]);
+  }), navigationId: navigationId ?? (suppliedPath ? 'split' : 'main'), recordNavigation: useStore.getState().recordNavigation }), [path, openLink, openMenu, files, propertyTypes, notify, navigationId, suppliedPath]);
   const numberedContext = useMemo(() => {
     const model = session?.analysis;
     if (!model) return context;
     const from = fragment ? fragmentRange(model, fragment)?.from ?? 0 : 0;
-    return { ...context, equations: equationContext(model, from), mathSource: { model, from } };
+    return { ...context, sourceFragment: !!fragment, equations: equationContext(model, from), mathSource: { model, from } };
   }, [context, session, snapshot.version, fragment]);
   if (error) return <div className="editor-error" role="alert">{error.message}</div>;
   if (!session) return <div className="editor-loading">加载中…</div>;

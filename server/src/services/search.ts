@@ -15,6 +15,7 @@ import {
   type SearchOptions,
 } from '@webobsidian/search-core';
 import { parseNote, type ParsedNote } from './markdown.js';
+import { SourceDocument } from '@webobsidian/markdown-core';
 
 /**
  * QMD — the WebObsidian search engine.
@@ -47,6 +48,7 @@ export interface SearchHit {
  *  marking where the query terms occur (for highlighting). */
 export interface MatchContext {
   text: string;
+  source?: { from: number; to: number; text: string };
   ranges: [number, number][];
   /** ellipsis flags — context is clipped from the surrounding body. */
   pre: boolean;
@@ -258,9 +260,11 @@ export class QmdEngine {
     const needles = terms.map((t) => (opts.caseSensitive ? t : t.toLowerCase())).filter(Boolean);
     if (!needles.length && !opts.pinyinQuery) return { path: rel, count: 0, contexts: [] };
 
-    let body = '';
+    let body = '', bodyFrom = 0;
     try {
-      body = parseNote(rel, await readFileText(rel)).body;
+      const source = new SourceDocument(await readFileText(rel)).text;
+      body = parseNote(rel, source).body;
+      bodyFrom = source.endsWith(body) ? source.length - body.length : 0;
       if (opts.pinyin) body = body.slice(0, MAX_BODY);
     } catch {
       return { path: rel, count: 0, contexts: [] };
@@ -311,6 +315,8 @@ export class QmdEngine {
       const ranges = group.map((o) => [o.start - winStart, o.len] as [number, number]);
       contexts.push({
         text: text.trim(),
+        source: { from: bodyFrom + group[0].start, to: bodyFrom + group[0].start + group[0].len,
+          text: body.slice(group[0].start, group[0].start + group[0].len) },
         ranges: shiftRanges(text, ranges),
         pre: winStart > 0,
         post: winEnd < body.length,

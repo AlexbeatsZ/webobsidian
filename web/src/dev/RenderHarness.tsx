@@ -12,6 +12,10 @@ import { api } from '../lib/api';
 import { configureDebug } from '../lib/debug';
 import { StateEffect } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
+import { navigateTo, captureLocation, type NavigationRequest, type NavigationLocation } from '../lib/fragmentNavigation';
+import { equationContext } from '@webobsidian/markdown-core';
+import Editor from '../components/Editor';
+import RightSidebar from '../components/RightSidebar';
 
 export interface RenderHarnessApi {
   reset: (source: string, shared?: boolean) => void;
@@ -35,6 +39,9 @@ export interface RenderHarnessApi {
   crashPlugin: (slot: number) => void;
   links: string[];
   writes: string[];
+  navigate: (slot: number, request: NavigationRequest) => ReturnType<typeof navigateTo>;
+  location: (slot: number) => NavigationLocation | undefined;
+  workspace: (path: string) => Promise<void>;
 }
 declare global { interface Window { renderHarness: RenderHarnessApi } }
 
@@ -42,7 +49,8 @@ function HarnessView({ session, mode, context, ready }: {
   session: DocumentSession; mode: MarkdownMode; context: RenderContext; ready: (v: EditorView | null) => void;
 }) {
   const snapshot = useSyncExternalStore(session.subscribe, () => session.snapshot);
-  return <MarkdownView snapshot={snapshot} mode={mode} context={context} showTitle={false}
+  const fullContext = useMemo(() => ({ ...context, mathSource: { model: session.analysis, from: 0 }, equations: equationContext(session.analysis, 0) }), [context, session, snapshot.version]);
+  return <MarkdownView snapshot={snapshot} mode={mode} context={fullContext} showTitle={false}
     onChange={(changes, version, origin) => { session.edit(version, changes, origin); return session.snapshot; }}
     onUndo={() => { session.undo(); return session.snapshot; }}
     onRedo={() => { session.redo(); return session.snapshot; }}
@@ -50,6 +58,14 @@ function HarnessView({ session, mode, context, ready }: {
 }
 
 /** Dev-only entry. No production vault, authentication, settings or save API. */
+function NavigationWorkspace() {
+  const split = useStore(state => state.splitPath), open = useStore(state => state.rightOpen);
+  return <div className="app theme-light"><main className="workspace" style={{ height: 700 }}><Editor /></main>
+    {split && <section data-navigation-split style={{ height: 600 }}><Editor path={split} navigationId="split" reading /></section>}
+    <RightSidebar open={open} />
+  </div>;
+}
+
 export default function RenderHarness() {
   const debugging = new URLSearchParams(location.search).has('debug');
   useEffect(() => {
@@ -59,6 +75,7 @@ export default function RenderHarness() {
   const [config, setConfig] = useState({ source: '# Title\n\n**bold** and plain.\n\nCaret sentinel.', shared: true, generation: 0 });
   const [modes, setModes] = useState<MarkdownMode[]>(['live', 'reading']);
   const [canvas, setCanvas] = useState(false);
+  const [workspace, setWorkspace] = useState(false);
   const [secondary, setSecondary] = useState(true);
   const refs = useRef<(EditorView | null)[]>([]);
   const removers = useRef<(() => void)[]>([]);
@@ -72,15 +89,15 @@ export default function RenderHarness() {
   }, [config]);
   const contexts = useMemo(() => sessions.map((session, slot): RenderContext => {
     const contextFor = (path: string): RenderContext => ({
-    bindEditor: registerEditor, sourcePath: path, openLink: (target) => { links.current.push(slot + ':' + target); }, openMenu: () => {},
+    bindEditor: registerEditor, navigationId: 'harness:' + slot, sourcePath: path, openLink: (target) => { links.current.push(slot + ':' + target); }, openMenu: () => {},
     rawUrl: (target) => target, files: () => [], tags: async () => [], properties: async () => [],
     propertyTypes: () => ({}), setPropertyType: async () => ({}), renderEmbed: async target => {
       const parsed = parseLinkTarget(target);
       const id = parsed.path ? (parsed.path.endsWith('.md') ? parsed.path : parsed.path + '.md') : path;
       const note = notes.current.get(id); if (!note) return null;
       return { path: id, context: contextFor(id), subscribe: note.subscribe, read: () => {
-        const range = fragmentRange(analyzeMarkdown(note.snapshot.text), parsed.fragment);
-        return range ? { source: note.snapshot.text.slice(range.from, range.to), from: range.from } : null;
+        const model = note.analysis, range = fragmentRange(model, parsed.fragment);
+        return range ? { source: model.text.slice(range.from, range.to), from: range.from, mathSource: { model, from: range.from }, equations: equationContext(model, range.from) } : null;
       } };
     },
     }); return contextFor(session.id);
@@ -123,8 +140,12 @@ export default function RenderHarness() {
         return rect ? { left: rect.left, top: rect.top } : null;
       },
       scroll: (slot, top) => { const view = refs.current[slot]; if (view) { view.scrollDOM.scrollTop = top; view.requestMeasure(); } },
+      navigate: (slot, request) => navigateTo(sessions[slot].id, { ...request, viewId: 'harness:' + slot }, refs.current[slot]!),
+      location: slot => refs.current[slot] ? captureLocation(sessions[slot].id, 'harness:' + slot, refs.current[slot]!) : undefined,
+      workspace: async path => { await useStore.getState().openFile(path); setWorkspace(true); },
     };
   }, [sessions]);
+  if (workspace) return <NavigationWorkspace />;
   if (canvas) return <div className="theme-light" style={{ width: 1000, height: 700 }}><CanvasView /></div>;
   return <><div className="theme-light" style={{ minHeight: '100vh', display: 'flex', gap: 12 }}>
     {sessions.map((session, slot) => (slot === 0 || secondary) &&

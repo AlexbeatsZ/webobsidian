@@ -4,7 +4,7 @@ import { api, type TreeNode } from './api';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
 import { parseLinkTarget } from '@webobsidian/markdown-core';
-import { openFragment } from './fragmentNavigation';
+import { navigateTo, captureLocation, cancelNavigation, type NavigationLocation, type NavigationRequest, type LinkIntent } from './fragmentNavigation';
 import { sidebarTab, restoreSidebarTabs, type SidebarTab } from './sidebarTabs';
 import { getActiveEditor } from './activeEditor';
 import { contextOf } from './renderContext';
@@ -13,6 +13,7 @@ let openGeneration = 0;
 let splitGeneration = 0;
 const rightGenerations = new Map<string, number>();
 let rightGeneration = 0;
+const linkGenerations = new Map<string, number>();
 
 async function saveLeavingSidebarTab(tab: SidebarTab | undefined): Promise<void> {
   await documents.saveLeaving(tab?.type === 'markdown' ? tab.state.file : undefined);
@@ -113,7 +114,9 @@ interface AppState {
   tabs: Tab[];
   activePath: string | null;
   /** Back/forward navigation stack of visited paths (incl. GRAPH_PATH). */
-  history: string[];
+  history: NavigationLocation[];
+  recordNavigation: (before: NavigationLocation, after: NavigationLocation) => void;
+  navigate: (path: string, request?: NavigationRequest) => Promise<void>;
   histIndex: number;
   goBack: () => void;
   goForward: () => void;
@@ -197,7 +200,7 @@ interface AppState {
   setTrash: (v: boolean) => void;
   /** Open (true) or close (false) the Graph view tab. */
   setGraph: (v: boolean) => void;
-  openGraph: () => Promise<void>;
+  openGraph: (recordHistory?: boolean) => Promise<void>;
   graphSettings: GraphSettings;
   setGraphSettings: (patch: Partial<GraphSettings>) => void;
   resetGraphSettings: () => void;
@@ -216,9 +219,9 @@ interface AppState {
   /** Show a toast. ms=0 keeps it until another notify() replaces it. */
   notify: (msg: string, ms?: number) => void;
 
-  openFile: (path: string) => Promise<void>;
+  openFile: (path: string, recordHistory?: boolean) => Promise<void>;
   openHomepage: () => Promise<void>;
-  openWikilink: (target: string, sourcePath?: string) => Promise<void>;
+  openWikilink: (target: string, sourcePath?: string, intent?: LinkIntent) => Promise<void>;
   closeTab: (path: string) => Promise<void>;
   renamePath: (from: string, to: string) => Promise<void>;
   removePath: (path: string) => ReturnType<typeof api.remove>;
@@ -265,8 +268,8 @@ function remapWorkspacePaths(state: AppState, from: string, to?: string): Partia
     rightActiveId: rightTabs.some(tab => tab.id === state.rightActiveId) ? state.rightActiveId : null,
     leftActiveId: rightTabs.some(tab => tab.id === state.leftActiveId) ? state.leftActiveId : null,
     recent: list(state.recent), bookmarks: list(state.bookmarks), expanded: list(state.expanded), selected: list(state.selected),
-    history: state.history.map(map).filter((path): path is string => path !== null),
-    histIndex: state.history.slice(0, state.histIndex + 1).map(map).filter(path => path !== null).length - 1,
+    history: state.history.flatMap(location => { const path = map(location.path); return path === null ? [] : [{ ...location, path }]; }),
+    histIndex: state.history.slice(0, state.histIndex + 1).filter(location => map(location.path) !== null).length - 1,
     renamingPath: map(state.renamingPath), selectAnchor: map(state.selectAnchor), versionHistoryPath: map(state.versionHistoryPath),
     clipboard: state.clipboard && map(state.clipboard.path) ? { ...state.clipboard, path: map(state.clipboard.path)! } : null,
     movePath: Array.isArray(state.movePath) ? list(state.movePath) : map(state.movePath) };
@@ -332,15 +335,14 @@ function applyPersisted(s: any, set: (p: any) => void): void {
   });
 }
 
-/** When true, openFile/openGraph won't push a new history entry (we're replaying one). */
-let navByHistory = false;
-
 /** Push `path` onto the back/forward stack (truncating any forward entries). */
-function pushHistory(s: { history: string[]; histIndex: number }, path: string): { history: string[]; histIndex: number } {
-  if (navByHistory || s.history[s.histIndex] === path) {
+function pushHistory(s: { history: NavigationLocation[]; histIndex: number; activePath?: string | null }, path: string, record = true) {
+  if (!record || s.history[s.histIndex]?.path === path && s.history[s.histIndex]?.viewId === 'main') {
     return { history: s.history, histIndex: s.histIndex };
   }
-  let history = [...s.history.slice(0, s.histIndex + 1), path];
+  const prior = s.history.slice(0, s.histIndex + 1);
+  if (s.activePath && prior.length) prior[prior.length - 1] = captureLocation(s.activePath);
+  let history = [...prior, { path, viewId: 'main' }];
   if (history.length > 100) history = history.slice(history.length - 100);
   return { history, histIndex: history.length - 1 };
 }
@@ -388,29 +390,61 @@ export const useStore = create<AppState>()(
       activePath: null,
       history: [],
       histIndex: -1,
+      recordNavigation: (before, after) => {
+        set(state => {
+          const history = state.history.slice(0, state.histIndex + 1);
+          const current = history.at(-1);
+          if (current?.path === after.path && current.viewId === after.viewId && current.anchor === undefined
+            && (before.path !== after.path || before.viewId !== after.viewId)) history[history.length - 1] = after;
+          else {
+            if (history.length) history[history.length - 1] = before; else history.push(before);
+            if (before.path !== after.path || before.viewId !== after.viewId || before.anchor !== after.anchor || before.head !== after.head) history.push(after);
+          }
+          return { history: history.slice(-100), histIndex: Math.min(history.length, 100) - 1 };
+        });
+      },
+      navigate: async (path, request = {}) => {
+        const source = request.source;
+        const origin = source ? contextOf(source).sourcePath : request.viewId?.startsWith('sidebar:')
+          ? get().rightTabs.find(tab => 'sidebar:' + tab.id === request.viewId)?.state.file ?? path
+          : request.viewId === 'split' ? get().splitPath ?? path : get().activePath ?? path;
+        const before = captureLocation(origin, request.viewId ?? 'main', source);
+        let viewId = request.viewId ?? 'main';
+        if (request.disposition === 'side' || viewId === 'split') { viewId = 'split'; await get().openToSide(path); }
+        else if (request.disposition === 'tab' || viewId.startsWith('sidebar:')) {
+          const id = await get().openRightTab('markdown', { file: path }, request.disposition === 'tab' ? undefined : viewId.slice(8));
+          if (!id) return; viewId = 'sidebar:' + id;
+        } else {
+          viewId = 'main';
+          await get().openFile(path, request.history !== false);
+          if (get().activePath !== path) return;
+          if (request.location?.mode) get().setViewMode(request.location.mode);
+        }
+        if (!/\.(md|markdown)$/i.test(path)) return;
+        const result = await navigateTo(path, { ...request, viewId, history: false });
+        if (result.status === 'opened' && request.history !== false) get().recordNavigation(before, result.location);
+      },
       goBack: () => {
         const { history, histIndex } = get();
         if (histIndex <= 0) return;
+        const captured = captureLocation(history[histIndex].path, history[histIndex].viewId);
+        captured.fragment = history[histIndex].fragment;
+        const updated = history.map((item, index) => index === histIndex && captured.anchor !== undefined ? captured : item);
         const target = history[histIndex - 1];
-        navByHistory = true;
-        set({ histIndex: histIndex - 1 });
-        Promise.resolve(get().openFile(target))
-          .catch(() => {})
-          .finally(() => {
-            navByHistory = false;
-          });
+        set({ history: updated, histIndex: histIndex - 1 });
+        Promise.resolve(get().navigate(target.path, { viewId: target.viewId, location: target, history: false }))
+          .catch(error => get().notify('恢复历史位置失败：' + String(error)));
       },
       goForward: () => {
         const { history, histIndex } = get();
         if (histIndex >= history.length - 1) return;
+        const captured = captureLocation(history[histIndex].path, history[histIndex].viewId);
+        captured.fragment = history[histIndex].fragment;
+        const updated = history.map((item, index) => index === histIndex && captured.anchor !== undefined ? captured : item);
         const target = history[histIndex + 1];
-        navByHistory = true;
-        set({ histIndex: histIndex + 1 });
-        Promise.resolve(get().openFile(target))
-          .catch(() => {})
-          .finally(() => {
-            navByHistory = false;
-          });
+        set({ history: updated, histIndex: histIndex + 1 });
+        Promise.resolve(get().navigate(target.path, { viewId: target.viewId, location: target, history: false }))
+          .catch(error => get().notify('恢复历史位置失败：' + String(error)));
       },
       content: '',
       dirty: false,
@@ -436,6 +470,7 @@ export const useStore = create<AppState>()(
       splitContent: '',
       splitDirection: 'right',
       openToSide: async (path, direction) => {
+        cancelNavigation('split', path);
         if (!TEXT_RE.test(path)) return;
         const generation = ++splitGeneration;
         const doc = await documents.open(path);
@@ -477,6 +512,7 @@ export const useStore = create<AppState>()(
       openRightTab: (type, state = {}, id) => get().openSidebarTab(get().rightTabs.find(tab => tab.id === id)?.side ?? 'right', type, state, id),
       openSidebarTab: async (side, type, state = {}, id) => {
         const tab = { ...sidebarTab(type, state, id), side };
+        cancelNavigation('sidebar:' + tab.id, type === 'markdown' ? state.file : undefined);
         const generation = ++rightGeneration;
         rightGenerations.set(tab.id, generation);
         const previous = get().rightTabs.find(item => item.id === tab.id);
@@ -543,7 +579,7 @@ export const useStore = create<AppState>()(
         if (v) get().openGraph();
         else get().closeTab(GRAPH_PATH);
       },
-      openGraph: async () => {
+      openGraph: async (recordHistory = true) => {
         await documents.saveLeaving(get().activePath);
         set((s) => ({
           tabs: s.tabs.some((t) => t.path === GRAPH_PATH)
@@ -552,7 +588,7 @@ export const useStore = create<AppState>()(
           activePath: GRAPH_PATH,
           content: '',
           dirty: false,
-          ...pushHistory(s, GRAPH_PATH),
+          ...pushHistory(s, GRAPH_PATH, recordHistory),
         }));
       },
       graphSettings: DEFAULT_GRAPH_SETTINGS,
@@ -597,9 +633,10 @@ export const useStore = create<AppState>()(
       },
 
       openHomepage: () => get().openFile(`home://${crypto.randomUUID()}`),
-      openFile: async (path) => {
+      openFile: async (path, recordHistory = true) => {
+        cancelNavigation('main', path);
         const generation = ++openGeneration;
-        if (path === GRAPH_PATH) return get().openGraph();
+        if (path === GRAPH_PATH) return get().openGraph(recordHistory);
         await documents.saveLeaving(get().activePath);
         const home = isHomepagePath(path);
         // A folder path (e.g. deep-link /note/<folder>) opens a folder content
@@ -615,22 +652,25 @@ export const useStore = create<AppState>()(
         set((s) => {
           const tabs = s.tabs.find((t) => t.path === path) ? s.tabs : [...s.tabs, { path, title }];
           const recent = isFolder || home ? s.recent : [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
-          return { tabs, activePath: path, content, dirty: documents.get(path)?.snapshot.dirty ?? false, recent, ...pushHistory(s, path) };
+          return { tabs, activePath: path, content, dirty: documents.get(path)?.snapshot.dirty ?? false, recent, ...pushHistory(s, path, recordHistory) };
         });
       },
 
-      openWikilink: async (target, sourcePath) => {
+      openWikilink: async (target, sourcePath, intent = {}) => {
+        const viewId = intent.viewId ?? 'main', generation = (linkGenerations.get(viewId) ?? 0) + 1;
+        linkGenerations.set(viewId, generation);
         try {
-          const resolved = await api.resolve(target, sourcePath ?? get().activePath ?? '');
+          const origin = sourcePath ?? get().activePath ?? '';
+          const resolved = target.startsWith('#') ? { path: origin } : await api.resolve(target, origin);
+          if (linkGenerations.get(viewId) !== generation) return;
           const { path } = resolved;
           if (resolved.status === 'ambiguous' || resolved.status === 'denied') {
             get().notify(resolved.status === 'ambiguous' ? '链接有歧义：' + target : '不允许打开该链接');
             return;
           }
           if (path) {
-            await get().openFile(path);
             const fragment = parseLinkTarget(target).fragment;
-            if (fragment && /\.(md|markdown)$/i.test(path)) openFragment(path, fragment);
+            await get().navigate(path, { ...intent, fragment });
           }
           else {
             // Only append `.md` when the target has no extension at all — a target
@@ -640,8 +680,8 @@ export const useStore = create<AppState>()(
             const newPath = hasExt ? destination : `${destination}.md`;
             await get().createNote(newPath, `# ${target.replace(/\.md$/, '')}\n`);
           }
-        } catch {
-          /* ignore */
+        } catch (error) {
+          get().notify('打开链接失败：' + String(error));
         }
       },
 

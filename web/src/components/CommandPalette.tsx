@@ -3,7 +3,6 @@ import MatchLabel from './MatchLabel';
 import { documents } from '../lib/documents';
 import { extractMetadata } from '@webobsidian/markdown-core';
 import { getEditorForPath } from '../lib/activeEditor';
-import { EditorView } from '@codemirror/view';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { fileTitleError, parseSearchQuery, hotkeyLabel, type Hotkey } from '@webobsidian/search-core';
 import Icon from './Icon';
@@ -60,12 +59,7 @@ export default function CommandPalette() {
             run: () => {
               const view = activePath ? getEditorForPath(activePath) : null;
               if (view) {
-                const at = Math.min(heading.from, view.state.doc.length);
-                view.dispatch({
-                  selection: { anchor: at },
-                  effects: EditorView.scrollIntoView(at, { y: 'start' }),
-                });
-                view.focus();
+                void useStore.getState().navigate(activePath!, { range: { from: heading.from, to: heading.to }, source: view });
               }
             },
           },

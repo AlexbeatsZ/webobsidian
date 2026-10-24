@@ -7,13 +7,14 @@ import { tagPreferences } from './nativeFeaturePreferences';
 import { menuModifiers } from './configuredMenus/transform';
 import { searchTags } from './search';
 import { propertyTypesSnapshot, setPropertyType } from './propertyTypes';
+import type { LinkIntent } from './fragmentNavigation';
 
 type Services = Pick<RenderContext, 'openMenu' | 'files' | 'reportError' | 'bindEditor'> & {
-  openLink: (target: string, sourcePath?: string) => void;
+  openLink: (target: string, sourcePath?: string, intent?: LinkIntent) => void;
 };
 export function createVaultRenderContext(path: string, services: Services): RenderContext {
   return {
-    ...services, sourcePath: path, allowHtmlExecution: true, allowScriptExecution: true, allowBlockEffects: true, allowPlugins: true, openLink: target => services.openLink(target, path),
+    ...services, sourcePath: path, allowHtmlExecution: true, allowScriptExecution: true, allowBlockEffects: true, allowPlugins: true, openLink: (target, intent) => services.openLink(target, path, intent),
     tagMenu: (tag, event, source) => {
       services.openMenu({ x: event.clientX, y: event.clientY,
         items: nativeTagMenuItems({ tag, ...tagPreferences(), readonly: source === 'reading' }),

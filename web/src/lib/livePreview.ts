@@ -5,7 +5,6 @@ import {
   ViewPlugin,
   ViewUpdate,
   WidgetType,
-  hoverTooltip,
 } from '@codemirror/view';
 import { StateField, StateEffect, type EditorState, type Range } from '@codemirror/state';
 import { getIndentUnit, foldedRanges } from '@codemirror/language';
@@ -15,21 +14,21 @@ import { iconPaths, setIcon } from './icons';
 import { openLightbox } from './imageLightbox';
 import { applyImagePresentation, presentHtmlImages, markdownImageAt } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
-import { syntaxModel, blockModel, equationsOf } from './syntaxModel';
+import { syntaxModel, blockModel, equationsOf, documentMetadata } from './syntaxModel';
 import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered } from './sourceControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, sourceLinePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
-import { followRenderedLink } from './fragmentNavigation';
+import { followRenderedLink, revealNavigation } from './fragmentNavigation';
+import { bindRenderedLink } from './linkPreview';
 import { renderMath, readMathMetrics, type MathMetrics, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
 import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } from './writing/latex/editor_context/mathPresentation';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
 import { sourceBlockReplacement } from './blockLayout';
 import { equationLabel, equationReferenceLabel, equationReferenceName, equationTarget, equationAt, parseLinkTarget, type Equation, type MarkdownModel } from '@webobsidian/markdown-core';
-import { createMathTooltip } from './mathTooltip';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -70,44 +69,11 @@ export function triggerAddProperty(view: EditorView): void {
 
 /* ---------------- widgets ---------------- */
 
-// Small "external link" glyph appended after outgoing http(s) links, like Obsidian.
-function externalLinkIcon(): SVGElement {
-  const NS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('class', 'cm-external-icon');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  for (const d of ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6']) {
-    const p = document.createElementNS(NS, 'path');
-    p.setAttribute('d', d);
-    svg.appendChild(p);
-  }
-  return svg;
-}
-
 interface EquationLinkMount {
   controller: AbortController; stop?: () => void;
   read: () => { equation: Equation; model: MarkdownModel; path: string; length: number } | undefined;
 }
 const equationLinkMounts = new WeakMap<HTMLElement, EquationLinkMount>();
-export const equationReferenceHover = hoverTooltip((view, pos, side) => {
-  for (const link of view.contentDOM.querySelectorAll<HTMLElement>('[data-equation-reference]')) {
-    if (link.closest('.cm-editor') !== view.dom) continue;
-    const preview = equationLinkMounts.get(link)?.read();
-    if (!preview) continue;
-    const from = view.posAtDOM(link), to = from + preview.length;
-    if (pos < from || pos > to || (pos === from && side < 0) || (pos === to && side > 0)) continue;
-    const { equation, model, path } = preview;
-    return { pos: from, end: to, above: true, arrow: true,
-      create: () => createMathTooltip(view, equation.tex, { display: true, sourcePath: path,
-        definitions: mathDefinitionContext(model, equation.from) }) };
-  }
-  return null;
-}, { hideOnChange: true, hideOn: tr => tr.startState.facet(renderContext) !== tr.state.facet(renderContext) });
 
 class WikilinkWidget extends WidgetType {
   destroy(dom: HTMLElement) {
@@ -157,36 +123,7 @@ class WikilinkWidget extends WidgetType {
       }).catch(paint);
     }
     if (this.aria && equationReferenceName(destination.fragment) === undefined) a.setAttribute('aria-label', this.aria);
-    a.onmousedown = (e) => {
-      e.preventDefault();
-      contextOf(view).openLink(this.target);
-    };
-    return a;
-  }
-  ignoreEvent() {
-    return false;
-  }
-}
-
-class MdLinkWidget extends WidgetType {
-  constructor(readonly label: string, readonly href: string) {
-    super();
-  }
-  eq(o: MdLinkWidget) {
-    return o.label === this.label && o.href === this.href;
-  }
-  toDOM(view: EditorView) {
-    const external = /^https?:\/\//i.test(this.href);
-    const a = document.createElement('a');
-    a.className = 'cm-md-link' + (external ? ' external-link' : ' internal-link');
-    a.dataset.menuLink = this.href;
-    a.textContent = this.label;
-    a.title = this.href;
-    if (external) a.appendChild(externalLinkIcon());
-    a.onmousedown = (e) => {
-      e.preventDefault();
-      followRenderedLink(view, this.href);
-    };
+    bindRenderedLink(a, view, this.target);
     return a;
   }
   ignoreEvent() {
@@ -872,6 +809,11 @@ export const calloutFoldState = StateField.define<readonly number[]>({
     for (const e of tr.effects) {
       if (e.is(toggleCalloutFold)) {
         v = v.includes(e.value) ? v.filter((x) => x !== e.value) : [...v, e.value];
+      }
+      if (e.is(revealNavigation)) for (const block of tr.state.field(blockModel).containers) {
+        if (block.kind !== 'callout' || e.value.to < block.bodyFrom || e.value.from > block.to) continue;
+        const toggled = v.includes(block.from);
+        if ((block.fold === '-') !== toggled) v = toggled ? v.filter(pos => pos !== block.from) : [...v, block.from];
       }
     }
     // A caret must never remain hidden in a collapsed body, including after a
@@ -1822,6 +1764,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   // Inline code and code blocks are literal — wikilink/embed/link/tag syntax
   // inside them must stay raw (e.g. `![[file]]` in backticks is not an embed).
   const model = view.state.field(syntaxModel);
+  const links = view.state.field(documentMetadata).linkOccurrences;
   const equationInfo = equationsOf(view.state);
   for (const equation of equationInfo.equations) {
     if (!equation.anchor) continue;
@@ -2137,18 +2080,6 @@ function buildDecorations(view: EditorView): DecorationSet {
         all.push(Decoration.mark({ class: 'cm-hashtag cm-hashtag-end cm-tag', attributes: { 'data-native-tag': tag.slice(1) } }).range(s + 1, s + tag.length));
       }
 
-      // Footnote definition `[^1]: text` → superscript marker, brackets concealed.
-      const fdef = text.match(/^\[\^([^\]\s]+)\]:/);
-      if (fdef) {
-        all.push(Decoration.line({ class: 'HyperMD-footnote' }).range(line.from, line.from));
-        all.push(Decoration.mark({ class: 'cm-footref' }).range(line.from + 2, line.from + 2 + fdef[1].length));
-        if (!lineActive(line.from)) {
-          pushReplace(line.from, line.from + 2, hidden);
-          const close = line.from + 2 + fdef[1].length;
-          pushReplace(close, close + 2, hidden);
-        }
-      }
-
       // ==Highlight== → <mark>-style; conceal the markers when the caret is outside.
       const hlRe = /==(?![\s=])(.+?)==/g;
       let m: RegExpExecArray | null;
@@ -2184,38 +2115,11 @@ function buildDecorations(view: EditorView): DecorationSet {
         else all.push(Decoration.mark({class:'cm-math'}).range(s,e));
       }
 
-      // Footnote refs [^id] (not a definition) → superscript.
-      const fnRe = /\[\^([^\]\s]+)\](?!:)/g;
-      while ((m = fnRe.exec(text))) {
-        const s = line.from + m.index;
-        const e = s + m[0].length;
-        if (inCode(s, e)) continue;
-        all.push(Decoration.mark({ class: 'cm-footref' }).range(s, e));
-      }
-
-      // Inline footnote ^[note] → superscript styling for the whole token (§7).
-      const ifnRe = /\^\[([^\]]+)\]/g;
-      while ((m = ifnRe.exec(text))) {
-        const s = line.from + m.index;
-        const e = s + m[0].length;
-        if (inCode(s, e)) continue;
-        all.push(Decoration.mark({ class: 'cm-footref' }).range(s, e));
-      }
-
       // Trailing block id ` ^abc-123` (charset [a-zA-Z0-9-] only, §7).
       const bid = text.match(/(^|\s)(\^[a-zA-Z0-9-]+)$/);
       if (bid) {
         const s = line.to - bid[2].length;
         all.push(Decoration.mark({ class: 'cm-blockid' }).range(s, line.to));
-      }
-
-      // Bare URLs → styled like links (Obsidian cm-url).
-      const urlRe = /(^|[\s(<])((?:https?|ftp):\/\/[^\s<>)"']+)/g;
-      while ((m = urlRe.exec(text))) {
-        const s = line.from + m.index + m[1].length;
-        const e = s + m[2].length;
-        if (inCode(s, e)) continue;
-        all.push(Decoration.mark({ class: 'cm-url' }).range(s, e));
       }
 
       // Wikilinks / embeds — alias after the FIRST `|`; default display text
@@ -2226,11 +2130,15 @@ function buildDecorations(view: EditorView): DecorationSet {
         const s = line.from + m.index;
         const e = s + m[0].length;
         if (touches(s, e) || inCode(s, e)) continue;
+        let low = 0, high = links.length;
+        while (low < high) { const middle = (low + high) >>> 1; if (links[middle].from < s) low = middle + 1; else high = middle; }
+        const semantic = links[low];
+        if (semantic?.from !== s || semantic.to !== e || semantic.kind !== 'wiki') continue;
         const inner = m[2];
         if (inner.includes('[[')) continue;
         const isEmbed = m[1] === '!';
         const pi = inner.indexOf('|');
-        const href = (pi > 0 ? inner.slice(0, pi) : inner)
+        const href = semantic.target
           .replace(/\\$/, '')
           .replace(/ /g, ' ')
           .trim()
@@ -2324,16 +2232,6 @@ function buildDecorations(view: EditorView): DecorationSet {
       const imageOnly = withoutImages.replace(/^(?: {0,3}> ?)*/, '')
         .replace(/!\[\[[^\]]+\]\]/g, '').trim() === '';
       if (imageOnly && hasRenderedImage && !lineActive(line.from)) all.push(Decoration.line({ class: 'cm-image-row' }).range(line.from));
-
-      // Markdown links [text](url) — not preceded by ! (those are images)
-      const linkRe = /(?<!\!)\[([^\]]+?)\]\(([^)]+)\)/g;
-      while ((m = linkRe.exec(text))) {
-        const s = line.from + m.index;
-        const e = s + m[0].length;
-        if (touches(s, e) || inCode(s, e)) continue;
-        const url = m[2].replace(/\s+"[^"]*"$/, '').trim();
-        pushReplace(s, e, Decoration.replace({ widget: new MdLinkWidget(m[1], url) }));
-      }
 
       // Markdown escapes `\.` `\*` … — conceal the backslash like Obsidian LP
       // (e.g. Trilium/turndown exports escape `2\.` to avoid list parsing).

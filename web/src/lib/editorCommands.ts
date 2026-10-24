@@ -3,7 +3,8 @@ import { countColumn, EditorSelection, type ChangeSpec } from '@codemirror/state
 import { insertNewlineContinueMarkup, deleteMarkupBackward } from '@codemirror/lang-markdown';
 import { getIndentUnit, indentString, indentUnit } from '@codemirror/language';
 import { syntaxModel } from './syntaxModel';
-import { mathRegions } from '@webobsidian/markdown-core';
+import { mathRegions, extractMetadata, footnotes, footnoteFragment } from '@webobsidian/markdown-core';
+import { followRenderedLink } from './fragmentNavigation';
 import { markdownListFold, markdownListLine } from './listLayout';
 
 /** Source indentation for list items and plain continuation lines, never bullets. */
@@ -223,30 +224,12 @@ export function insertLink(view: EditorView): boolean {
 }
 
 /** editor:follow-link (Alt+Enter): open the wikilink / markdown link under the caret. */
-export function followLink(view: EditorView, open: (target: string) => void): boolean {
-  const { state } = view;
-  const pos = state.selection.main.head;
-  const line = state.doc.lineAt(pos);
-  const col = pos - line.from;
-  const wiki = /!?\[\[(.+?)\]\]/g;
-  let m: RegExpExecArray | null;
-  while ((m = wiki.exec(line.text))) {
-    if (col >= m.index && col <= m.index + m[0].length) {
-      const inner = m[1];
-      if (inner.includes('[[')) continue;
-      const pi = inner.indexOf('|');
-      open((pi > 0 ? inner.slice(0, pi) : inner).trim());
-      return true;
-    }
-  }
-  const md = /\[[^\]]*?\]\(([^)]+)\)/g;
-  while ((m = md.exec(line.text))) {
-    if (col >= m.index && col <= m.index + m[0].length) {
-      const href = m[1].replace(/\s+"[^"]*"$/, '').trim();
-      if (/^https?:\/\//i.test(href)) window.open(href, '_blank', 'noopener');
-      else open(href.replace(/\.(md|markdown)$/i, ''));
-      return true;
-    }
+export function followLink(view: EditorView, _open?: (target: string) => void): boolean {
+  const model = view.state.field(syntaxModel), pos = view.state.selection.main.head;
+  const link = extractMetadata(model).linkOccurrences.find(link => pos >= link.from && pos <= link.to);
+  if (link) { followRenderedLink(view, link.target); return true; }
+  for (const note of footnotes(model).notes) if (note.references.some(ref => pos >= ref.from && pos <= ref.to)) {
+    followRenderedLink(view, '#' + footnoteFragment(note)); return true;
   }
   return false;
 }

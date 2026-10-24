@@ -3,6 +3,8 @@ import { getActiveEditor, fmtInsert, fmtIndent, fmtOutdent, fmtUndo, fmtRedo, ed
 import { toggleInline, toggleChecklist, insertLink, followLink, deleteParagraph, toggleLineStyle, surroundSelection } from './editorCommands';
 import { contextOf } from './renderContext';
 import type { EditorView } from '@codemirror/view';
+import { footnotes } from '@webobsidian/markdown-core';
+import { syntaxModel } from './syntaxModel';
 
 const edit = (id: string, title: string, run: (view: EditorView) => unknown, key?: string): NativeCommand => ({
   id, title, hotkeyScope: 'editor', hotkeys: key ? [{ modifiers: ['Mod'], key }] : [],
@@ -26,7 +28,8 @@ export const nativeEditorCommands: NativeCommand[] = [
   edit('editor:insert-footnote', '插入脚注', view => {
     // A unique ordinary Markdown footnote, committed as one editor transaction.
     let number = 1; const source = view.state.doc.toString();
-    while (source.includes(`[^${number}]`)) number++;
+    const ids = new Set(footnotes(view.state.field(syntaxModel)).notes.map(note => note.id));
+    while (ids.has(String(number))) number++;
     const at = view.state.selection.main.to, id = `[^${number}]`, tail = `\n\n${id}: `;
     if (at === source.length) { fmtInsert(id + tail); return; }
     const changes = view.state.changes([{ from: at, insert: id }, { from: source.length, insert: tail }]);

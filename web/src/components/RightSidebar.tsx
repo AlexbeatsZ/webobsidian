@@ -10,6 +10,7 @@ import { useIndexVersion } from '../lib/indexEvents';
 import { useDocumentSession } from '../lib/useDocumentSession';
 import { sharedApp } from '../lib/plugins';
 import SidebarDock from './SidebarDock';
+import { useLinkPreview } from '../lib/useLinkPreview';
 
 const MD_RE = /\.(md|markdown)$/i;
 const name = (p: string) => p.split('/').pop()?.replace(MD_RE, '') ?? p;
@@ -50,6 +51,27 @@ function Section({
       {open && children}
     </>
   );
+}
+
+function LinkedMention({ path, target }: { path: string; target: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const { session, snapshot, error } = useDocumentSession(expanded ? path : null);
+  const preview = useLinkPreview(path);
+  const occurrences = useMemo(() => {
+    if (!session) return [];
+    return extractMetadata(session.analysis).linkOccurrences.filter(link => sharedApp.metadataCache.getFirstLinkpathDest(link.target, path)?.path === target);
+  }, [session, snapshot.version, path, target]);
+  return <div className="mention-box">
+    <div className="mention-src" {...preview(path)} onClick={() => void useStore.getState().openFile(path)}>{name(path)}</div>
+    <button className="text-btn" onClick={() => setExpanded(!expanded)}>{expanded ? '收起引用' : '查看引用位置'}</button>
+    {error && <div role="alert">{error.message}</div>}
+    {expanded && occurrences.map(link => <div key={link.from} className="mention-context" role="button" tabIndex={0}
+      {...preview(path)} onClick={() => void useStore.getState().navigate(path, { range: link, text: session!.analysis.text.slice(link.from, link.to) })}
+      onKeyDown={event => { if (event.key === 'Enter') void useStore.getState().navigate(path, { range: link, text: session!.analysis.text.slice(link.from, link.to) }); }}>
+      {session!.analysis.text.slice(Math.max(0, link.from - 32), link.to + 32).replace(/\n/g, ' ')}
+    </div>)}
+    {expanded && session && !occurrences.length && <div>当前正文没有可定位的引用</div>}
+  </div>;
 }
 
 /** Linked mentions (backlinks index) + Unlinked mentions (plain-text title hits). */
@@ -111,14 +133,7 @@ function BacklinksPanel() {
       <div className="sidebar-body">
         <Section title="已链接提及" count={linked.length} open={openLinked} onToggle={() => setOpenLinked(!openLinked)}>
           {linked.length === 0 && <div className="panel-item">未发现反向链接。</div>}
-          {linked.map((b) => (
-            <div key={b} className="mention-box">
-              <div className="mention-src" onClick={() => openFile(b)}>
-                {name(b)}
-              </div>
-              <div style={{ color: 'var(--text-faint)' }}>链接到 {name(activePath ?? '')}</div>
-            </div>
-          ))}
+          {linked.map(b => <LinkedMention key={b} path={b} target={activePath!} />)}
         </Section>
         <Section
           title="未链接提及"
@@ -133,7 +148,11 @@ function BacklinksPanel() {
                 {name(m.path)}
               </div>
               {m.contexts[0] && (
-                <div style={{ color: 'var(--text-muted)' }}>
+                <div style={{ color: 'var(--text-muted)' }} onClick={() => {
+                  const source = m.contexts[0].source;
+                  if (source) void useStore.getState().navigate(m.path, { range: source, text: source.text });
+                  else void openFile(m.path);
+                }}>
                   {m.contexts[0].pre && '…'}
                   {m.contexts[0].text}
                   {m.contexts[0].post && '…'}
@@ -153,12 +172,13 @@ function OutgoingPanel() {
   const openWikilink = useStore((s) => s.openWikilink);
   const metadata = useActiveMetadata();
   const indexVersion = useIndexVersion();
+  const preview = useLinkPreview(activePath);
 
   const targets = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
     for (const link of metadata.links) {
-      const t = parseLinkTarget(link).path;
+      const t = link;
       if (t && !seen.has(t)) {
         seen.add(t);
         out.push(t);
@@ -190,7 +210,7 @@ function OutgoingPanel() {
         </div>
         {links.length === 0 && <div className="panel-item">无出链。</div>}
         {links.map((t) => (
-          <div key={t} className="outgoing-item" onClick={() => openWikilink(t)} title={resolved[t] ?? t}>
+          <div key={t} className="outgoing-item" {...preview(t)} onClick={() => openWikilink(t, activePath ?? undefined)} title={resolved[t] ?? t}>
             <Icon name="file-text" size={14} />
             <span>{t}</span>
           </div>
@@ -222,7 +242,10 @@ function OutlinePanel() {
       <div className="sidebar-body">
         {heads.length === 0 && <div className="panel-item">无标题</div>}
         {heads.map((h, i) => (
-          <div key={i} className="outline-item" style={{ paddingLeft: 10 + (h.level - 1) * 12 }}>
+          <div key={i} className="outline-item" style={{ paddingLeft: 10 + (h.level - 1) * 12 }} onClick={() => {
+            const path = useStore.getState().activePath;
+            if (path) void useStore.getState().navigate(path, { range: { from: h.from, to: h.to } });
+          }}>
             {h.text}
           </div>
         ))}

@@ -8,7 +8,8 @@ import { editorSelection } from '../lib/editorSelection';
 import { editorDebugging } from '../lib/editorDebug';
 import { bindEditorMode } from '../lib/activeEditor';
 import { editorPhrases } from '../lib/editorPhrases';
-import { bindFragmentNavigation } from '../lib/fragmentNavigation';
+import { bindFragmentNavigation, navigationExtensions, followRenderedLink } from '../lib/fragmentNavigation';
+import { linkPreview } from '../lib/linkPreview';
 import { nativeWritingExtensions } from '../lib/writing/extensions';
 import { mathEditingExtensions } from '../lib/writing/latex/editor_extensions/math_tooltip';
 import { captureWritingState, restoreWritingState, snippetChangeEffects, writingOperation, snippetGroup, type WritingViewState } from '../lib/writing/editing';
@@ -30,12 +31,12 @@ import { listLayout, prefixWidths } from '../lib/listLayout';
 import { listFolding } from '../lib/listFolding';
 import { blockLayout } from '../lib/blockLayout';
 import { blockEffects } from '../lib/blocks/view';
-import { blockEffectSyntax } from '@webobsidian/markdown-core';
+import { blockEffectSyntax, footnoteSyntax } from '@webobsidian/markdown-core';
 import { renderContext, type RenderContext } from '../lib/renderContext';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import { attachMenuContext } from '../lib/configuredMenus/transform';
 import type { RenderMenuItem } from '../lib/renderContext';
-import { livePreviewPlugin, livePreviewState, livePreviewTheme, equationReferenceHover, frontmatterField,
+import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField,
   tableField, htmlBlockField, mermaidField, htmlRenderedState, htmlPreviewField,
   calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitle,
   livePreviewReadonly, setLivePreviewReadonly, setLivePreviewEnabled, setNoteTitle } from '../lib/livePreview';
@@ -155,10 +156,15 @@ export default function MarkdownView(props: MarkdownViewProps) {
     }));
     const showMenu = (menu: { x: number; y: number; items: RenderMenuItem[] }) => openContextMenu({ ...menu,
       context: menuContext, items: attachMenuContext(protect(menu.items), menuContext) });
+    const linkItems: RenderMenuItem[] = link && v ? [
+      { id: 'link:open', label: '打开链接', onClick: () => followRenderedLink(v, link) },
+      { id: 'link:tab', label: '在新侧栏标签页打开', onClick: () => followRenderedLink(v, link, { disposition: 'tab' }) },
+      { id: 'link:side', label: '在分栏打开', onClick: () => followRenderedLink(v, link, { disposition: 'side' }) },
+      { id: 'link:copy', label: '复制链接', onClick: () => { void navigator.clipboard.writeText(link); } },
+    ] : [];
     if (latest.current.mode === 'reading') {
       showMenu({ x: e.clientX, y: e.clientY, items: [
-        ...(link ? [{ id: 'link:open', label: "打开链接", onClick: () => context.openLink(link) },
-          { id: 'link:copy', label: "复制链接", onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
+        ...linkItems,
         { id: 'editor:copy', label: "复制", onClick: copy }, { id: 'editor:select-all', label: "全选", onClick: selectAll },
       ] });
       return;
@@ -168,8 +174,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       x: e.clientX,
       y: e.clientY,
       items: [
-        ...(link ? [{ id: 'link:open', label: "打开链接", onClick: () => context.openLink(link) },
-          { id: 'link:copy', label: "复制链接", onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
+        ...linkItems,
         {
           id: 'editor:format', label: "格式", icon: 'pencil', submenu: [
             { id: 'editor:format:bold', label: "粗体", onClick: () => { if (v) toggleInline(v, '**'); } },
@@ -237,7 +242,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       doc: p.snapshot.text,
       selection: { anchor: initPos },
       extensions: [
-        indentUnit.of('    '), EditorState.tabSize.of(4), editorPhrases,
+        indentUnit.of('    '), EditorState.tabSize.of(4), editorPhrases, navigationExtensions, linkPreview,
         editorSelection, editorDebugging, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
         extraComp.of(p.extensions ?? []),
@@ -256,7 +261,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         ])),
         search({ top: true }),
         keymap.of([...defaultKeymap, ...searchKeymap, ...markdownListKeymap, indentWithTab]),
-        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax, blockEffectSyntax] }),
+        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax, blockEffectSyntax, footnoteSyntax] }),
         suggesterPlugin,
         mathEditingExtensions,
         ...(p.context.allowPlugins ? [nativeWritingExtensions()] : []),
@@ -269,7 +274,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         codeBlocks,
         ...(p.context.allowPlugins ? [pluginPostProcessing] : []),
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,
-        inlineHtml, semanticDecorations, mathBlockField, blockLayout, listFolding, livePreviewPlugin, livePreviewTheme, equationReferenceHover, prefixWidths, listLayout,
+        inlineHtml, semanticDecorations, mathBlockField, blockLayout, listFolding, livePreviewPlugin, livePreviewTheme, prefixWidths, listLayout,
         EditorView.updateListener.of((u) => {
           if (!u.docChanged || u.transactions.every((tr) => tr.annotation(externalUpdate))) return;
           const changes: SourceChange[] = [];
@@ -299,8 +304,8 @@ export default function MarkdownView(props: MarkdownViewProps) {
 
   useEffect(() => {
     const v = view.current;
-    if (v) return bindFragmentNavigation(v, snapshot.id, !context.embedTrail?.length && !context.equations?.from);
-  }, [props.documentSession, snapshot.id, context.embedTrail?.length, context.equations?.from]);
+    if (v) return bindFragmentNavigation(v, snapshot.id, !context.sourceFragment && !context.embedTrail?.length && !context.equations?.from);
+  }, [props.documentSession, snapshot.id, context.embedTrail?.length, context.equations?.from, context.navigationId, context.sourceFragment]);
 
   useEffect(() => { sync(snapshot); }, [snapshot]);
   useEffect(() => { view.current?.dispatch({ effects: extraComp.reconfigure(props.extensions ?? []) }); }, [props.extensions]);
@@ -320,7 +325,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
     layout === 'page' ? 'is-readable-line-width' : 'markdown-embedded-view',
     mode !== 'source' ? 'is-live-preview live-preview' : '',
     mode === 'reading' ? 'is-reading-mode' : ''].join(' ');
-  return <div className={cls} data-document-id={snapshot.id} ref={host} onContextMenu={onContextMenu}
+  return <div className={cls} data-document-id={snapshot.id} data-mode={mode} ref={host} onContextMenu={onContextMenu}
     onMouseOver={event => {
       const tag = (event.target as Element).closest<HTMLElement>('[data-native-tag]');
       if (tag && !tag.contains(event.relatedTarget as Node | null)) context.tagHover?.(tag.dataset.nativeTag!, event.nativeEvent);

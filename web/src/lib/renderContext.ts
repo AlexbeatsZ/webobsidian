@@ -2,6 +2,7 @@ import { Facet } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { MenuContext } from './configuredMenus/types';
 import type { EquationContext, MarkdownModel } from '@webobsidian/markdown-core';
+import type { LinkIntent, NavigationLocation } from './fragmentNavigation';
 
 export interface RenderMenuItem {
   id?: string; label: string; icon?: string; disabled?: boolean; checked?: boolean;
@@ -28,7 +29,12 @@ export interface RenderContext {
   /** Full-source semantic snapshot, optionally projected into a fragment. */
   equations?: EquationContext;
   mathSource?: { model: MarkdownModel; from: number };
-  openLink: (target: string) => void;
+  sourceFragment?: boolean;
+  openLink: (target: string, intent?: LinkIntent) => void;
+  navigationId?: string;
+  recordNavigation?: (before: NavigationLocation, after: NavigationLocation) => void;
+  /** A footnote body preview/footer must not recursively append another footer. */
+  footnoteBody?: boolean;
   openMenu: (menu: { x: number; y: number; items: RenderMenuItem[]; context?: MenuContext }) => void;
   tagMenu?: (tag: string, event: MouseEvent, source: string) => void;
   openTag?: (tag: string, toSide: boolean) => void;

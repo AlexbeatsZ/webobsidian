@@ -6,10 +6,13 @@ import { recordDebug } from './debug';
 
 /** Every source entry is temporary; only source coordinates belong in this state. */
 export const toggleSourceRegion = StateEffect.define<SourceSpan | null>();
+/** Navigation retains the existing rendered representation without opening source. */
+export const renderSourceRegion = StateEffect.define<SourceSpan>();
 export const sourceRegion = StateField.define<SourceSpan | null>({
   create: () => null,
   update(value, transaction) {
     if (transaction.state.readOnly) return null;
+    if (transaction.effects.some(effect => effect.is(renderSourceRegion))) return null;
     for (const effect of transaction.effects) if (effect.is(toggleSourceRegion))
       return effect.value ? { from: effect.value.from, to: effect.value.to } : null;
     if (!value) return null;
@@ -25,6 +28,7 @@ export const sourceRegion = StateField.define<SourceSpan | null>({
 export const forcedRenderedRegion = StateField.define<SourceSpan | null>({
   create: () => null,
   update(value, transaction) {
+    for (const effect of transaction.effects) if (effect.is(renderSourceRegion)) return effect.value;
     for (const effect of transaction.effects) if (effect.is(toggleSourceRegion)) {
       return effect.value === null ? transaction.startState.field(sourceRegion) : null;
     }

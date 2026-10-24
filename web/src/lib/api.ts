@@ -35,6 +35,7 @@ export interface SearchHit {
 
 export interface MatchContext {
   text: string;
+  source?: { from: number; to: number; text: string };
   ranges: [number, number][];
   pre: boolean;
   post: boolean;

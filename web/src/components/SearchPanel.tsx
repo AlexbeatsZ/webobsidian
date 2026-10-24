@@ -8,6 +8,7 @@ import { extendFileMenu } from '../lib/obsidian/menus';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import Icon from './Icon';
 import { MenuList } from './ContextMenu';
+import { useLinkPreview } from '../lib/useLinkPreview';
 
 type SortMode = 'relevance' | 'name-asc' | 'name-desc' | 'path-asc';
 
@@ -51,6 +52,7 @@ export default function SearchPanel() {
   const [visible, setVisible] = useState(50); // render incrementally to stay smooth
   const [noteOverride, setNoteOverride] = useState<Map<string, boolean>>(new Map());
   const openFile = useStore((s) => s.openFile);
+  const preview = useLinkPreview();
   const searchQuery = useStore((s) => s.searchQuery);
   const timer = useRef<number>();
   const sentinel = useRef<HTMLDivElement>(null);
@@ -283,7 +285,7 @@ export default function SearchPanel() {
                 >
                   <Icon name={noteCollapsed ? 'chevron-right' : 'chevron-down'} size={14} />
                 </button>
-                <span className="rg-title" onClick={() => openFile(h.path)}>
+                <span className="rg-title" {...preview(h.path)} onClick={() => openFile(h.path)}>
                   {h.title}
                   {h.matchedField && <small> · {h.matchedField}</small>}
                 </span>
@@ -296,7 +298,7 @@ export default function SearchPanel() {
                         <div
                           key={i}
                           className={`rg-match ${moreContext ? 'expanded' : ''}`}
-                          onClick={() => openFile(h.path)}
+                          onClick={() => c.source ? useStore.getState().navigate(h.path, { range: c.source, text: c.source.text }) : openFile(h.path)}
                         >
                           {highlight(c)}
                         </div>

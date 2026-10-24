@@ -1,5 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { parseLinkTarget } from '@webobsidian/markdown-core';
+import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useStore } from '../lib/store';
 import { sharedApp, subscribePlugins, pluginRevision } from '../lib/plugins';
 import type { SidebarTab } from '../lib/sidebarTabs';
@@ -8,23 +7,15 @@ import Editor from './Editor';
 import Icon from './Icon';
 import BookmarksPanel from './BookmarksPanel';
 import WorkspaceLauncher from './WorkspaceLauncher';
-const MD_RE = /\.(md|markdown)$/i;
 
 const SidebarNote = memo(function SidebarNote({ tab, active }: { tab: SidebarTab; active: boolean }) {
   const opened = useRef(false);
   const editor = useRef<import('@codemirror/view').EditorView | null>(null);
   if (active) opened.current = true;
-  const openLink = useCallback(async (target: string, source?: string) => {
-    const fragment = parseLinkTarget(target).fragment;
-    const file = sharedApp.metadataCache.getFirstLinkpathDest(target, source ?? tab.state.file);
-    if (!file || !MD_RE.test(file.path)) { useStore.getState().notify('侧栏仅支持打开已有笔记'); return; }
-    if (file.path === tab.state.file && fragment && editor.current) { openFragment(file.path, fragment, editor.current); return; }
-    await useStore.getState().openRightTab('markdown', { file: file.path, ...(fragment ? { fragment } : {}) }, tab.id);
-  }, [tab.id, tab.state.file]);
   return <div className="sidebar-note" hidden={!active} data-sidebar-tab={tab.id}>
-    {opened.current && <Editor path={tab.state.file} sidebar onOpenLink={openLink} onReady={view => {
+    {opened.current && <Editor path={tab.state.file} sidebar navigationId={'sidebar:' + tab.id} onReady={view => {
       editor.current = view;
-      if (view && tab.state.fragment) openFragment(tab.state.file, tab.state.fragment, view);
+      if (view && tab.state.fragment) void openFragment(tab.state.file, tab.state.fragment, view, { viewId: 'sidebar:' + tab.id });
     }} />}
   </div>;
 });

@@ -2,6 +2,13 @@ import type { MarkdownModel, SourceSpan } from './syntax.js';
 import { extractMetadata } from './metadata.js';
 import { legacySubheadings } from './legacySubheadings.js';
 import { equationContext, equationTarget, equationReferenceName } from './equations.js';
+import { footnotes, footnoteFragment } from './footnotes.js';
+
+export interface FragmentRange extends SourceSpan {
+  kind: 'document' | 'heading' | 'block' | 'equation' | 'footnote' | 'reference';
+  /** The landing mark may be smaller than the section used for a preview/embed. */
+  focus: SourceSpan;
+}
 
 function formulaRange(model: MarkdownModel, formula: SourceSpan & { anchor?: SourceSpan }): SourceSpan {
   const start = model.text.lastIndexOf('\n', formula.from - 1) + 1;
@@ -9,34 +16,53 @@ function formulaRange(model: MarkdownModel, formula: SourceSpan & { anchor?: Sou
   return { from: /^(?:[\t ]*> ?)*[\t ]*$/.test(prefix) ? start : formula.from, to: formula.anchor?.to ?? formula.to };
 }
 
-export function fragmentRange(model: MarkdownModel, fragment: string): SourceSpan | null {
-  if (!fragment) return { from: 0, to: model.text.length };
+export function fragmentRange(model: MarkdownModel, fragment: string): FragmentRange | null {
+  const result = (range: SourceSpan, kind: FragmentRange['kind'], focus: SourceSpan = range): FragmentRange => ({ ...range, kind, focus });
+  if (!fragment) return result({ from: 0, to: model.text.length }, 'document', { from: 0, to: 0 });
   const meta = extractMetadata(model);
   let decoded = fragment;
   try { decoded = decodeURIComponent(fragment); } catch { /* literal percent */ }
+  const foot = /^(\[\^[^\]]+\]|\[inline:\d+\])(?:@(\d+))?$/.exec(decoded);
+  if (foot) {
+    const note = footnotes(model).notes.find(note => footnoteFragment(note) === foot[1]);
+    if (!note) return null;
+    if (foot[2]) { const reference = note.references[Number(foot[2]) - 1]; return reference ? result(reference, 'reference') : null; }
+    if (note.status !== 'resolved') return null;
+    const definition = note.definitions[0];
+    return result(note.inline ? { from: definition.bodyFrom, to: definition.to - 1 } : definition, 'footnote', definition);
+  }
   if (decoded.startsWith('^')) {
     const matches = meta.blockIds.filter(candidate => candidate.id === decoded.slice(1));
     if (matches.length !== 1) return null;
     const formula = equationTarget(equationContext(model), decoded);
-    if (formula) return formulaRange(model, formula);
+    if (formula) return result(formulaRange(model, formula), 'equation');
     if (equationReferenceName(decoded) !== undefined) return null;
     const block = matches[0];
     if (!block) return null;
     const paragraph = model.nodes.filter((node) => ['Paragraph', 'ListItem', 'Blockquote'].includes(node.name) && node.from <= block.from && node.to >= block.to)
       .sort((a, b) => a.to - a.from - (b.to - b.from))[0];
-    return paragraph ? { from: paragraph.from, to: paragraph.to } : { from: model.text.lastIndexOf('\n', block.from - 1) + 1, to: block.to };
+    return result(paragraph ? { from: paragraph.from, to: paragraph.to } : { from: model.text.lastIndexOf('\n', block.from - 1) + 1, to: block.to }, 'block');
   }
   if (decoded.startsWith('-')) {
     const subheadings = legacySubheadings(model, meta.comments);
     const item = subheadings.find(candidate => candidate.fragment.normalize('NFC') === decoded.normalize('NFC'));
     if (item) {
       const next = [...subheadings, ...meta.headings].filter(candidate => candidate.from > item.from).sort((a, b) => a.from - b.from)[0];
-      return { from: item.from, to: next?.from ?? model.text.length };
+      return result({ from: item.from, to: next?.from ?? model.text.length }, 'heading', { from: item.from, to: item.to });
     }
   }
-  const index = meta.headings.findIndex((heading) => heading.text.normalize('NFC').toLocaleLowerCase() === decoded.normalize('NFC').toLocaleLowerCase());
-  if (index < 0) return null;
-  const heading = meta.headings[index];
+  const normalize = (text: string) => text.replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim().normalize('NFC').toLocaleLowerCase();
+  let candidates = meta.headings;
+  let heading: typeof meta.headings[number] | undefined;
+  const exact = candidates.find(candidate => normalize(candidate.text) === normalize(decoded));
+  for (const part of exact ? [decoded] : decoded.split('#').filter(Boolean)) {
+    heading = candidates.find(candidate => normalize(candidate.text) === normalize(part));
+    if (!heading) return null;
+    const end = meta.headings.find(candidate => candidate.from > heading!.from && candidate.level <= heading!.level)?.from ?? model.text.length;
+    candidates = meta.headings.filter(candidate => candidate.from > heading!.from && candidate.from < end);
+  }
+  if (!heading) return null;
+  const index = meta.headings.indexOf(heading);
   const next = meta.headings.slice(index + 1).find((candidate) => candidate.level <= heading.level);
-  return { from: heading.from, to: next?.from ?? model.text.length };
+  return result({ from: heading.from, to: next?.from ?? model.text.length }, 'heading', heading);
 }

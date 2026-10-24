@@ -1,0 +1,12 @@
+.cm-navigation-target { background-color: var(--highlight-background, rgba(160, 130, 255, .22)); border-radius: var(--radius-s, 3px); }
+.cm-link-preview {
+  width: min(480px, calc(100vw - 24px)); max-height: min(440px, 65vh); overflow: auto; padding: 12px; box-sizing: border-box;
+  color: var(--text-normal); background: var(--background-primary, var(--bg-primary));
+  border: 1px solid var(--background-modifier-border); border-radius: 8px; box-shadow: 0 8px 28px #0004; font-family: var(--font-text);
+}
+.cm-link-preview-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-family: var(--font-interface); }
+.cm-footnote-entry { display: flex; gap: .5em; margin-top: .6em; font-size: var(--footnote-size, .9em); }
+.cm-footnote-entry.is-first { margin-top: 1.5em; padding-top: .8em; border-top: 1px solid var(--background-modifier-border); }
+.cm-footnote-body { min-width: 0; flex: 1; }
+.cm-footnote-returns { display: flex; flex-wrap: wrap; gap: .5em; }
+.cm-footnote-reference.is-unresolved { text-decoration: underline wavy; opacity: .75; }

@@ -21,9 +21,12 @@ export function bindEditorMode(view: EditorView, handler: (mode: ModeRequest) =>
 export function setActiveEditorMode(mode: ModeRequest): boolean {
   const view = getActiveEditor();
   if (!view) return false;
-  modeHandlers.get(view)?.(mode);
+  setEditorMode(view, mode);
   // An editor without a mode switch must never redirect the action to another pane.
   return true;
+}
+export function setEditorMode(view: EditorView, mode: ModeRequest): boolean {
+  const handler = modeHandlers.get(view); handler?.(mode); return !!handler;
 }
 const available = (view: EditorView) => view.dom.isConnected && !view.dom.closest('[hidden], [aria-hidden="true"]');
 
