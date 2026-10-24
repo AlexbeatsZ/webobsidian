@@ -52,3 +52,38 @@ pixel tolerance. Failure-only image/geometry attachments now preserve any recurr
 Its cause is not asserted. No original Vault/profile/current user window or server/public
 was modified. No original exception was captured, and no native/system-IME or
 long-running performance acceptance is implied.
+
+## Packaged production resources and release
+
+Exact source b61d4365efa5f888772cea5aa9acec754d341692 was archived into a new
+Temp/.agents/meta-obsidian-win-0122-20261024/source. Fresh core/search/Web/server
+compilation, desktop bundles/portable package and the packaged standalone guard
+passed. Existing dynamic/static import and large-chunk warnings remain build
+warnings; they did not prevent compilation or packaging.
+
+The actual packaged server and SPA ran against a separate disposable Vault/data
+directory in Edge. Real Settings > 调试 enabled recording; actual typed input and
+formula-source/Escape, note switches, command capture/export, reload and disable
+were exercised.255 exported records include editor creation/destruction, source
+open, math request/result, input/transaction and document state. The real JSONL
+file exists in DATA_DIR/debug; enabled preference survives reload, and disabled
+preference is verified on disk after the save completes. No runtime page errors.
+The first probe sampled the locally toggled checkbox before its asynchronous
+preference write completed; the final probe waits for the actual persisted state.
+
+Original12-row table retains18.515625px on both sides. Actual cell input/save changes
+only its intended source bytes.1100px image expands the Callout to1137.03125px.
+The exact user two-row title and nested frame production screenshot was inspected,
+as was the actual Debug settings page. Own browser/server exited; root public
+entry size/UTC ticks remain unchanged and the user's existing instance is untouched.
+
+Evidence: .local/editor-debugging-20261024 contains browser-results.json,
+production-result.json, production-debug-settings.png, production-title-nested.png
+and production-debug-export.jsonl. Original probe/build logs remain in Temp.
+
+Windows x64 portable0.1.22 is85,827,038bytes, PE file/product version0.1.22.
+[Release v0.1.22](https://github.com/AlexbeatsZ/webobsidian/releases/tag/v0.1.22)
+is published, non-draft/non-prerelease. Exact remote uploaded asset name/size and
+tag target b61d4365efa5f888772cea5aa9acec754d341692 were checked. BUILD-INFO.json
+records source/package/runtime boundaries. Native EXE window, physical IME and
+long-run behavior were not accepted; the original transient cause remains unknown.
