@@ -1,4 +1,3 @@
-// Prepared maintenance regressions; not executed under static-only acceptance.
 import { beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   root: '/disposable-fixture',
@@ -8,9 +7,7 @@ const state = vi.hoisted(() => ({
   beforeWrite: undefined as undefined | (() => Promise<void>),
 }));
 vi.mock('../catalog.js', () => ({ catalog: { notes: state.notes } }));
-vi.mock('../git.js', () => ({ scheduleAutoCommitOnSave: vi.fn() }));
-vi.mock('../fileupdates.js', () => ({ queueFileUpdate: vi.fn(async () => {}) }));
-vi.mock('../vault.js', () => ({
+vi.mock('../vaultFile.js', () => ({
   getVaultRoot: async () => state.root,
   resolveInVault: async (path: string) => '/disposable-fixture/' + path,
   readFileSnapshot: async (path: string) => {
@@ -18,6 +15,8 @@ vi.mock('../vault.js', () => ({
     if (!file) throw new Error('Missing fixture');
     return { ...file };
   },
+}));
+vi.mock('../vault.js', () => ({
   writeFileText: async (path: string, content: string, revision: string) => {
     await state.beforeWrite?.();
     if (state.files.get(path)?.revision !== revision) throw Object.assign(new Error('Conflict'), { status: 409 });

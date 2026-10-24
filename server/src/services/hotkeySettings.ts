@@ -1,4 +1,4 @@
-import { vaultPathKey } from './vault.js';
+import { vaultPathKey } from './vaultFile.js';
 import { bindingFromString, emptyHotkeys, hotkeyCommandId, hotkeySignature, normalizeHotkeyMap, type HotkeyPreferences, type VaultHotkeys } from '@webobsidian/search-core';
 import { getSettings, updateSettings } from './settings.js';
 import { parseConfiguration, readObsidianConfiguration, vaultConfigurationIdentity } from './vaultConfiguration.js';

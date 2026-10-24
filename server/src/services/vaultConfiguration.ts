@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse, printParseErrorCode, type ParseError } from 'jsonc-parser';
-import { getVaultRoot, vaultPathKey } from './vault.js';
+import { getVaultRoot, vaultPathKey } from './vaultFile.js';
 import { readTextFile, writeTextFile } from './textFile.js';
 
 const DIRECTORY = '.obsidian/webobsidian';

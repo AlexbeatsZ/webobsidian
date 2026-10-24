@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { config } from '../config.js';
-import { vaultPathKey } from './vault.js';
+import { vaultPathKey } from './vaultFile.js';
 
 /**
  * Persisted UI/workspace state (open tabs, active note, expanded folders, panel

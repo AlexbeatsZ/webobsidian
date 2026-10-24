@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { modify, applyEdits } from 'jsonc-parser';
 import { z } from 'zod';
-import { resolveInVault, readFileSnapshot } from './vault.js';
+import { resolveInVault, readFileSnapshot } from './vaultFile.js';
 import { readObsidianConfiguration, writeObsidianAppearance, parseConfiguration, type VaultConfigurationSource } from './vaultConfiguration.js';
 
 const appearanceSchema = z.object({ enabledCssSnippets: z.array(z.string()).default([]) }).passthrough();

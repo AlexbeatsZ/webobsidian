@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import MiniSearch from 'minisearch';
 import { getSettings } from './settings.js';
 import { INDEX_FILE, config } from '../config.js';
-import { getVaultRoot, readFileText } from './vault.js';
+import { getVaultRoot, readFileText } from './vaultFile.js';
 import { catalog as activeCatalog, VaultCatalog, CORE_LIST_PROPS, CATALOG_SCHEMA_VERSION } from './catalog.js';
 import { matchesTagFilters } from '@webobsidian/search-core';
 import {

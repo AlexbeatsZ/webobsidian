@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { catalog } from './catalog.js';
-import { readFileText } from './vault.js';
+import { readFileText } from './vaultFile.js';
 import { parseNote, linkKey, type ParsedNote } from './markdown.js';
 
 interface LinkGraph {

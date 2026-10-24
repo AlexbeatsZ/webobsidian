@@ -4,7 +4,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { nativeFeatureSettings, patchNativeFeatureSettings } from '../services/nativeFeatureSettings.js';
 import { AutomationSchema, readAutomationConfiguration, saveAutomationConfiguration, importAutomationConfiguration } from '../services/automationSettings.js';
 import { promises as fs } from 'node:fs';
-import { readFileSnapshot, resolveInVault } from '../services/vault.js';
+import { readFileSnapshot, resolveInVault } from '../services/vaultFile.js';
 import { broadcast } from '../services/realtime.js';
 import { readBlockEffects } from '../services/blockEffects.js';
 

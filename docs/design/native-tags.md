@@ -121,8 +121,10 @@ silently cleared or submitted to the newly selected Vault.
 The YAML patcher can replace the selected scalar or a selected list range when
 the list structure changes. Comments and all bytes outside those necessary target
 ranges remain protected; it does not promise identical quote style after converting
-a scalar tag list to an array. Tag Page creation uses the existing Vault path and
-symlink authorization, exclusive `wx` file creation and original update queue.
+a scalar tag list to an array. Tag Page creation uses the existing Vault text
+writer, path/symlink authorization, exclusive `wx` file creation and original
+update queue. Its preview source is already prepared, so folder rules do not
+rewrite it; creation awaits indexing before returning and scheduling Git.
 
 ## Module map and integration
 

@@ -4,7 +4,7 @@ import { analyzeMarkdown, type MarkdownModel, type SourceSpan } from '../syntax.
 import { extractMetadata } from '../metadata.js';
 import { mathRegions } from '../math.js';
 import { canEditProperties, readPropertyRows, patchPropertyRows } from '../properties.js';
-import { matchesTag, normalizeStoredTags, tagKey, tagName, validTag } from '@webobsidian/search-core';
+import { matchesTag, normalizeStoredTags, tagKey, tagName, validTag } from '@webobsidian/search-core/query';
 import type { TagOperation } from './types.js';
 
 export function validateTagOperation(operation: TagOperation): TagOperation {

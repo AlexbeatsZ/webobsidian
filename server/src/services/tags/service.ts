@@ -1,10 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { catalog, type VaultCatalog } from '../catalog.js';
-import * as vault from '../vault.js';
-import { scheduleAutoCommitOnSave } from '../git.js';
-import { queueFileUpdate } from '../fileupdates.js';
+import { writeFileText } from '../vault.js';
+import { getVaultRoot, resolveInVault, readFileSnapshot, exists } from '../vaultFile.js';
 import { folderRuleTags, planFolderTags, inTagScope, planTagSource, transformTag, validateTagOperation, readTagSourceNames } from '@webobsidian/markdown-core';
 import { matchesTag, normalizeStoredTags, tagKey, tagName, tagPageAliases, validTag } from '@webobsidian/search-core';
 import type { TagApplyResult, TagCollision, TagFilePreview, TagOperation, TagPreferences, TagPreview, TagPreviewRequest, TagSummary } from '@webobsidian/markdown-core';
@@ -92,7 +89,7 @@ export class NativeTagService {
   async preview(input: TagPreviewRequest): Promise<TagPreview> {
     const operation = validateTagOperation(input.operation);
     const preferences = await this.allowed(operation);
-    const current = catalog, root = await vault.getVaultRoot();
+    const current = catalog, root = await getVaultRoot();
     const overlays = new Map((input.overlays ?? []).map((o) => [o.path, o]));
     const candidates = new Set<string>();
     const selectedFiles = input.scope.kind === 'files' ? new Set(input.scope.paths) : null;
@@ -122,8 +119,8 @@ export class NativeTagService {
       const overlay = overlays.get(file);
       try {
         // Resolve even client-owned sessions through the existing Vault boundary.
-        await vault.resolveInVault(file);
-        const snapshot = overlay ?? await vault.readFileSnapshot(file);
+        await resolveInVault(file);
+        const snapshot = overlay ?? await readFileSnapshot(file);
         const raw = 'raw' in snapshot ? snapshot.raw : snapshot.content;
         const plan = operation.kind === 'folder-rules' ? planFolderTags(raw, file, preferences.folderTags) : planTagSource(raw, operation);
         if (plan.changes.length && operation.kind === 'rename') generatedByFile.set(file,
@@ -151,7 +148,7 @@ export class NativeTagService {
     const item = this.previews.get(id);
     if (!item || item.public.expiresAt < Date.now()) fail('Tag preview expired; preview again', 409);
     if (item.cancelled) fail('Tag operation cancelled', 409);
-    if (item.root !== await vault.getVaultRoot()) fail('Vault changed after tag preview', 409);
+    if (item.root !== await getVaultRoot()) fail('Vault changed after tag preview', 409);
     const preferences = await this.allowed(item.public.operation);
     if (item.folderConfiguration !== undefined && item.folderConfiguration !== JSON.stringify(preferences.folderTags))
       fail('文件夹规则在预览后已改变，请重新预览', 409);
@@ -171,21 +168,21 @@ export class NativeTagService {
     item.applying = true;
     try {
       if (file.local || local) {
-        const disk = await vault.readFileSnapshot(path);
+        const disk = await readFileSnapshot(path);
         if (disk.revision !== file.revision) fail('File changed on disk after preview; local source preserved', 409);
         if (item.cancelled) fail('Tag operation cancelled', 409);
         file.applied = true;
         for (const tag of file.generated) item.generated.add(tag);
         return { path, status: 'local' };
       }
-      const snapshot = await vault.readFileSnapshot(path);
+      const snapshot = await readFileSnapshot(path);
       if (snapshot.revision !== file.revision) fail('File changed after preview; preview again', 409);
       const plan = item.public.operation.kind === 'folder-rules'
         ? planFolderTags(snapshot.content, path, (await readPreferences()).folderTags)
         : planTagSource(snapshot.content, item.public.operation);
       await this.transaction(id);
       if (item.cancelled) fail('Tag operation cancelled', 409);
-      const result = await vault.writeFileText(path, plan.raw, snapshot.revision);
+      const result = await writeFileText(path, plan.raw, snapshot.revision);
       file.applied = true;
       for (const tag of file.generated) item.generated.add(tag);
       return { path, status: 'written', revision: result.revision };
@@ -209,19 +206,13 @@ export class NativeTagService {
     const page = await this.page(tag);
     if (page.pages.length) fail('This tag already has a page; open an existing page', 409);
     if (!/\.(md|markdown)$/i.test(relative)) fail('Tag Pages must be Markdown files');
-    // Existing api.write/createNote overwrites an existing file. Exclusive create
-    // is required here; reuse Vault path authorization and file-update queue.
-    const absolute = await vault.resolveInVault(relative);
     const current = catalog.resolve(relative, '', 'allFiles');
     const exactKey = (value: string) => value.normalize('NFC').toLowerCase();
     const exact = current.status === 'resolved' ? exactKey(current.path) === exactKey(relative) :
       current.candidates.some((candidate) => exactKey(candidate) === exactKey(relative));
-    if (exact || await vault.exists(relative)) fail('Tag Page path already exists', 409);
-    await fs.mkdir(path.dirname(absolute), { recursive: true });
-    try { await fs.writeFile(absolute, page.content, { encoding: 'utf8', flag: 'wx' }); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') fail('Tag Page path already exists', 409); throw error; }
-    await queueFileUpdate(relative, 'add');
-    scheduleAutoCommitOnSave();
+    if (exact || await exists(relative)) fail('Tag Page path already exists', 409);
+    // The preview is final source; exclusive creation must preserve it and await indexing.
+    await writeFileText(relative, page.content, undefined, { createOnly: true, prepared: true, waitForIndex: true });
     return { path: relative };
   }
 }

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { modify, applyEdits } from 'jsonc-parser';
 import { normalizeMathConfiguration, defaultMathConfiguration, type MathConfiguration } from '@webobsidian/markdown-core';
 import { readVaultConfiguration, writeVaultConfiguration, parseConfiguration, type VaultConfigurationSource } from './vaultConfiguration.js';
-import { resolveInVault } from './vault.js';
+import { resolveInVault } from './vaultFile.js';
 
 export const MathConfigurationSchema = z.object({
   version: z.literal(1), packages: z.array(z.string().min(1).max(80)).max(64),

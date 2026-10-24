@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git';
 import { getSettings } from './settings.js';
-import { getVaultRoot } from './vault.js';
+import { getVaultRoot } from './vaultFile.js';
 import { redactUrlCreds } from '../lib/redact.js';
 import { beginBackgroundVaultWrite } from './vaultMaintenance.js';
 

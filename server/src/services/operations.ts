@@ -6,6 +6,7 @@ import { SourceDocument, reviewHunks, materializeReview, rebaseReview, mergeRevi
 import { config } from '../config.js';
 import { operationContract } from '../operations/contract.js';
 import * as vault from './vault.js';
+import { getVaultRoot, resolveInVault, isTextFile, readFileSnapshot } from './vaultFile.js';
 import { catalog } from './catalog.js';
 import { qmd } from './search.js';
 import { broadcast } from './realtime.js';
@@ -26,7 +27,7 @@ type Snapshot = { raw: string; revision: string; disk: { content: string; revisi
 
 async function snapshot(file: string, captures?: WorkspaceCapture[]): Promise<Snapshot> {
   visible(file);
-  const disk = await vault.readFileSnapshot(file);
+  const disk = await readFileSnapshot(file);
   if (disk.content.length > MAX_TEXT) fail('单文件候选上限为 1 Mi UTF-16 字符', 413);
   const workspaces = captures ?? await captureWorkspaces(file);
   if (workspaces.some(c => c.stale)) fail('有工作区已经切换 Vault，请重新加载后继续');
@@ -51,7 +52,7 @@ class NativeReview {
     const job = this.serial.then(work); this.serial = job.catch(() => {}); return job;
   }
   private async load() {
-    const root = await vault.getVaultRoot();
+    const root = await getVaultRoot();
     if (this.root === root) return;
     this.directory = path.join(config.dataDir, 'review', hash(root));
     const next = new Map<string, ReviewProposal & { fingerprint: string }>();
@@ -65,7 +66,7 @@ class NativeReview {
     this.records = next; this.root = root;
   }
   private async save(p: ReviewProposal & { fingerprint: string }) {
-    if (await vault.getVaultRoot() !== p.root) fail('Vault 已切换，保留候选但停止本次操作');
+    if (await getVaultRoot() !== p.root) fail('Vault 已切换，保留候选但停止本次操作');
     await fs.mkdir(this.directory, { recursive: true });
     const file = path.join(this.directory, p.id + '.json'), temp = file + '.tmp-' + randomUUID();
     try { await fs.writeFile(temp, JSON.stringify(p), { mode: 0o600 }); await fs.rename(temp, file); }
@@ -77,7 +78,7 @@ class NativeReview {
   }
   private async settle(p: ReviewProposal & { fingerprint: string }) {
     if (!p.uncertain) return;
-    const j = p.uncertain, current = await vault.readFileSnapshot(p.path);
+    const j = p.uncertain, current = await readFileSnapshot(p.path);
     if (current.content === j.after) {
       if (j.kind === 'accept') { p.applied.push({ before: j.before, after: j.after }); p.hunks = j.hunks; }
       else p.restored = true;
@@ -130,7 +131,7 @@ class NativeReview {
     source.apply(changes);
     const candidate = await vault.prepareNoteSave(file, source.raw);
     if (candidate.length > MAX_TEXT) fail('候选正文超过上限', 413);
-    if (await vault.getVaultRoot() !== root) fail('Vault 已切换');
+    if (await getVaultRoot() !== root) fail('Vault 已切换');
     const p = { id: randomUUID(), request_id: input.request_id, fingerprint, title: input.title ?? '候选修改', root,
       path: file, createdAt: new Date().toISOString(), baseline: before.raw, hunks: reviewHunks(before.raw, candidate), applied: [] };
     await this.save(p); this.records.set(p.id, p); return this.statusOf(p);
@@ -197,12 +198,12 @@ export const nativeReview = new NativeReview();
 export async function callOperation(name: OperationName, raw: unknown): Promise<object> {
   if (!(operationNames as readonly string[]).includes(name)) fail('不支持该操作', 400);
   const args = operationContract[name].schema.parse(raw ?? {}) as any;
-  const root = await vault.getVaultRoot(), vaultId = hash(root);
+  const root = await getVaultRoot(), vaultId = hash(root);
   switch (name) {
     case 'obsidian_list_files': {
       const prefix = visible(args.path, true);
       const files = [...catalog.entries.values()].filter(f => f.kind === 'file' && !f.path.split('/').some(p => p.startsWith('.')) && under(f.path, prefix)
-        && (args.type === 'all' || (args.type === 'markdown' ? /\.(md|markdown)$/i.test(f.path) : args.type === 'text' ? vault.isTextFile(f.path) : !vault.isTextFile(f.path))))
+        && (args.type === 'all' || (args.type === 'markdown' ? /\.(md|markdown)$/i.test(f.path) : args.type === 'text' ? isTextFile(f.path) : !isTextFile(f.path))))
         .sort((a, b) => a.path.localeCompare(b.path));
       return { vault: vaultId, files: files.slice(args.offset, args.offset + args.limit), total: files.length,
         next_offset: args.offset + args.limit < files.length ? args.offset + args.limit : null };
@@ -214,8 +215,8 @@ export async function callOperation(name: OperationName, raw: unknown): Promise<
     }
     case 'obsidian_read_file': {
       const file = visible(args.path);
-      if (!vault.isTextFile(file)) {
-        const stat = await fs.stat(await vault.resolveInVault(file));
+      if (!isTextFile(file)) {
+        const stat = await fs.stat(await resolveInVault(file));
         if (!stat.isFile()) fail('目标不是文件', 400);
         return { vault: vaultId, path: file, supported_content: false, size: stat.size, mtime: stat.mtimeMs };
       }

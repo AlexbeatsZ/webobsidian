@@ -125,3 +125,42 @@ format parity/undo; delayed render disposal/embed navigation; index-time changes
 polling fallback and failed switches all remain unexecuted checks. Structural
 performance changes are one autosave scheduler per session, targeted refresh and
 cached selection-only analysis. No timing or speedup is inferred from source.
+
+## Shared tags and Vault file ownership (2026-10-24)
+
+Tag source planning, folder rules, transient overlay values and declarative data
+contracts live in `packages/markdown-core/src/tags`; Web and Server import that
+implementation. Core imports the existing query-only search-core export, avoiding
+an additional phonetic-dictionary load for Markdown-only consumers. The old
+Server pure modules and query compatibility entry are removed. Internal core
+imports point directly to existing source/syntax/metadata/math/property owners,
+not back through the package barrel. Server keeps preview tokens, Catalog access,
+IO and transaction state. No parser, save history or feature state is duplicated.
+
+`vaultFile.ts` owns the existing root/path/symlink checks, source snapshots,
+directory/tree reads and stat cache. `textFile.ts` continues to own UTF-8 checking,
+revision tokens, per-file write serialization and atomic/exclusive writes. All
+read-only callers, including fileupdates, search, links, Git, settings and startup,
+use the lower file module. No compatibility reexports remain in vault. This
+removes vault/fileupdates and vault/Git cycles, including the search/links return
+paths. Existing lazy search/fileindex rebuild delegation to vaultindex is retained;
+this change does not claim every possible module cycle was removed.
+
+`vault.ts` owns application mutations and their update/Git effects. Rename, copy,
+remove, trash and restore schedule Git after their successful operation; routes
+only invoke the operation. Tag Page creation uses the existing Vault text writer,
+with exclusive creation, already-prepared source and awaited indexing. Normal
+text saves still return without waiting for indexing; initial ordinary notes still
+apply folder rules. Binary/folder writes retain their existing non-Git behavior.
+Watcher events only enter fileupdates and do not schedule Git.
+
+The single fileupdates queue retains canonical-path/latest-state draining,
+four-worker concurrency, full-rebuild exclusion, revision deduplication, one parse
+for search/links, stat invalidation, maintenance accounting and watcher handoff.
+No new event framework, observer, index or foreground editing work is introduced.
+No speedup is inferred from module ownership changes.
+
+Scoped tests cover source-preserving tags, preview/revision safety, native folder
+rule import, actual disposable file operations, Tag Page creation timing, stat and
+path guards, latest-state drains and rebuild exclusion. Evidence and validation
+limits are recorded in tests/reports/tags-vault-architecture-20261024.md.

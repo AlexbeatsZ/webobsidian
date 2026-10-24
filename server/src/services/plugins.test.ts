@@ -10,7 +10,7 @@ vi.mock('./settings.js', () => ({
   getSettings: async () => state.settings,
   updateSettings: async (fn: any) => fn(state.settings),
 }));
-vi.mock('./vault.js', () => ({
+vi.mock('./vaultFile.js', () => ({
   getVaultRoot: async () => state.root,
   resolveInVault: async (rel: string) => {
     const absolute = path.resolve(state.root, rel);

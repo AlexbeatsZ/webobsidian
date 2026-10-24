@@ -1,4 +1,4 @@
-import { vaultPathKey } from './vault.js';
+import { vaultPathKey } from './vaultFile.js';
 import { vaultConfigurationIdentity } from './vaultConfiguration.js';
 import { getSettings, updateSettings } from './settings.js';
 import { readLegacyTagPreferences } from './tags/migration.js';

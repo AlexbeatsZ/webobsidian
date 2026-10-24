@@ -1,5 +1,5 @@
 import { planTagSource, type TagSourcePlan } from './source.js';
-import { tagKey, tagName, validTag } from '@webobsidian/search-core';
+import { tagKey, tagName, validTag } from '@webobsidian/search-core/query';
 import type { FolderTagSettings, FolderTagRule } from './types.js';
 import type { MarkdownModel } from '../syntax.js';
 

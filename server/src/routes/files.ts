@@ -3,8 +3,8 @@ import multer from 'multer';
 import path from 'node:path';
 import { asyncHandler } from '../middleware/error.js';
 import * as vault from '../services/vault.js';
+import { resolveInVault, listTree, isTextFile, readFileSnapshot, resolveDirCaseInsensitive, exists } from '../services/vaultFile.js';
 import { getSettings } from '../services/settings.js';
-import { scheduleAutoCommitOnSave } from '../services/git.js';
 import { resolveFile } from '../services/fileindex.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
@@ -16,7 +16,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512
 filesRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
-    res.json(await vault.listTree());
+    res.json(await listTree());
   }),
 );
 
@@ -30,15 +30,15 @@ filesRouter.get(
     }
     // Obsidian-style resolution: if the exact path doesn't exist (e.g. an embed
     // `![[image.jpg]]` that lives in Attachments/), resolve it by basename.
-    if (req.query.sourcePath || !(await vault.exists(rel))) {
+    if (req.query.sourcePath || !(await exists(rel))) {
       const resolved = resolveFile(rel, String(req.query.sourcePath ?? ''));
       if (resolved) rel = resolved;
     }
-    if (vault.isTextFile(rel) && req.query.raw !== '1') {
-      res.json({ path: rel, ...(await vault.readFileSnapshot(rel)), encoding: 'utf8' });
+    if (isTextFile(rel) && req.query.raw !== '1') {
+      res.json({ path: rel, ...(await readFileSnapshot(rel)), encoding: 'utf8' });
     } else {
       // Stream with Range support so embedded <video>/<audio> can seek.
-      const abs = await vault.resolveInVault(rel);
+      const abs = await resolveInVault(rel);
       await sendFileWithRange(req, res, abs, mimeFor(rel));
     }
   }),
@@ -59,7 +59,7 @@ filesRouter.put(
     if (createOnly !== undefined && (typeof createOnly !== 'boolean' || (createOnly && baseRevision !== undefined))) {
       res.status(400).json({ error: 'createOnly must be a boolean without baseRevision' }); return;
     }
-    const snapshot = await vault.writeFileText(rel, content, baseRevision, createOnly === true);
+    const snapshot = await vault.writeFileText(rel, content, baseRevision, { createOnly: createOnly === true });
     res.json({ ok: true, path: rel, ...snapshot });
   }),
 );
@@ -88,8 +88,8 @@ filesRouter.post(
       return;
     }
     // Reuse an existing folder that differs only in case (e.g. an Obsidian vault's
-    // "Attachments") instead of creating a duplicate "attachments". See vault.ts.
-    const resolvedDir = dir ? await vault.resolveDirCaseInsensitive(dir) : '';
+    // "Attachments") instead of creating a duplicate "attachments". See vaultFile.ts.
+    const resolvedDir = dir ? await resolveDirCaseInsensitive(dir) : '';
     const rel = path.posix.join(resolvedDir, file.originalname);
     await vault.writeFileBuffer(rel, file.buffer);
     res.json({ ok: true, path: rel, size: file.size });
@@ -105,7 +105,6 @@ filesRouter.patch(
       return;
     }
     await vault.rename(from, to);
-    scheduleAutoCommitOnSave();
     res.json({ ok: true, from, to });
   }),
 );
@@ -119,7 +118,6 @@ filesRouter.post(
       return;
     }
     await vault.copy(from, to);
-    scheduleAutoCommitOnSave();
     res.json({ ok: true, from, to });
   }),
 );
@@ -144,7 +142,6 @@ filesRouter.post(
       return;
     }
     const restored = await vault.restoreFromTrash(rel);
-    scheduleAutoCommitOnSave();
     res.json({ ok: true, restored });
   }),
 );
@@ -183,12 +180,10 @@ filesRouter.delete(
     const s = await getSettings();
     if (s.vault.deleteMode === 'permanent') {
       await vault.remove(rel);
-      scheduleAutoCommitOnSave();
       res.json({ ok: true, deleted: rel });
       return;
     }
     const dest = await vault.trash(rel);
-    scheduleAutoCommitOnSave();
     res.json({ ok: true, trashed: dest });
   }),
 );

@@ -37,7 +37,8 @@ import { guardVaultMutations, bindMaintenanceClients, maintenanceClientConnected
 import { initSearch } from './services/search.js';
 import { setBroadcaster, broadcast } from './services/realtime.js';
 import { isVaultConfigurationPath } from './services/vaultConfiguration.js';
-import { getVaultRoot, ensureVault, clearVaultStats } from './services/vault.js';
+import { ensureVault } from './services/vault.js';
+import { getVaultRoot, clearVaultStats } from './services/vaultFile.js';
 import { enableFileUpdates, queueFileUpdate, drainFileUpdates, rebuildFileIndexes } from './services/fileupdates.js';
 import { startAutoSync } from './services/autosync.js';
 

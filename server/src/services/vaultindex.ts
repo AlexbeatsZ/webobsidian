@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { getVaultRoot, readFileSnapshot } from './vault.js';
+import { getVaultRoot, readFileSnapshot } from './vaultFile.js';
 import { INDEX_FILE } from '../config.js';
 import { SEARCH_VERSION } from '@webobsidian/search-core';
 import { VaultCatalog, replaceCatalog, CATALOG_SCHEMA_VERSION } from './catalog.js';

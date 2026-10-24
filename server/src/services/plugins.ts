@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { resolveInVault } from './vault.js';
+import { resolveInVault } from './vaultFile.js';
 import { getSettings, updateSettings } from './settings.js';
 import { writeTextFile } from './textFile.js';
 

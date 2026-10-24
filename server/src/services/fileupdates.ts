@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { resolveInVault, readFileSnapshot, invalidateStat } from './vault.js';
+import { resolveInVault, readFileSnapshot, invalidateStat } from './vaultFile.js';
 import { parseNote } from './markdown.js';
 import { qmd } from './search.js';
 import { updateLinkGraphFromNote } from './links.js';

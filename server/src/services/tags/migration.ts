@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { resolveInVault } from '../vault.js';
+import { resolveInVault } from '../vaultFile.js';
 import type { TagPreferences } from '@webobsidian/markdown-core';
 
 /** Called once by the coordinator's per-vault settings migration, never at menus. */
