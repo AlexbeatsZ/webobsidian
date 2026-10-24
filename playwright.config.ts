@@ -15,7 +15,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'render', testMatch: /(?:render|quote-origin|elements)\.spec\.ts/ },
+    { name: 'render', testMatch: /(?:render|quote-origin|elements|math-inline)\.spec\.ts/ },
     { name: 'integration', testMatch: /integration\.spec\.ts/ },
     { name: 'plugins', testMatch: /plugins\.spec\.ts/ },
     { name: 'workspace', testMatch: /sidebar\.spec\.ts/ },

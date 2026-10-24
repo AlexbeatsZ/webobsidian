@@ -549,7 +549,9 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-s-obsidian .cm-formatting { color: var(--text-faint); }
 .cm-s-obsidian .cm-highlight { background: var(--text-highlight-bg); }
 .cm-s-obsidian .cm-comment { color: var(--text-faint); }
-.cm-s-obsidian .cm-math { color: var(--text-muted); font-style: italic; }
+/* Raw TeX uses the surrounding font metrics; italic MathJax_Main has a
+   different baseline/leading and expands otherwise ordinary text lines. */
+.cm-s-obsidian .cm-math { color: var(--text-muted); }
 .cm-s-obsidian .cm-footref { color: var(--text-accent); font-size: var(--font-smallest); vertical-align: super; }
 .cm-s-obsidian .cm-blockid { color: var(--text-faint); font-size: var(--font-smaller); }
 .cm-s-obsidian .cm-url { color: var(--text-accent); text-decoration: underline; }

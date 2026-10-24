@@ -169,13 +169,26 @@ Width must not flow back into the editor's own width:
   source text keeps the host's natural text line-height. This is a persistent
   layout rule shared by Live/Reading MarkdownView, without per-toggle spacing,
   height memory, clipping or changes to display formulas. The 2026-10-23 inline
-  spacing correction has source/diff review only; actual screenshot parity is
-  not yet verified. See rendering-unification.md for the B2 click investigation
+  spacing correction initially had source/diff review only; its remaining source
+  font-metric mismatch is now measured and fixed below. See rendering-unification.md for the B2 click investigation
   and its unverified runtime boundary. The inline tooltip keeps CodeMirror's
   default fixed positioning, sizes to `max-content` with a bounded width, and scrolls inside its
   own body. Restoring absolute positioning or a shrink-to-fit root inside the
   editable DOM risks coupling width and position again. This is a source-supported
   feedback risk, not a confirmed runtime explanation for either reported jitter.
+- Raw TeX source inherits the surrounding font style, as well as its font family,
+  size and line-height. Do not apply blanket italic styling to `.cm-math`:
+  the bundled MathJax_Main italic face has different baseline metrics from the
+  normal face. At 18px / 1.5, mixing these two faces made a 27px text line grow to
+  28px on source reveal even with the same computed 27px line-height. Removing
+  that style restores the normal text metrics without offsets or compensation;
+  formula-local token colors and explicit concealment styles remain owned by
+  their existing syntax/concealment extensions. A tall rendered SVG and wrapped
+  source still take their natural height. The 2026-10-24 isolated renderer tests
+  now verify source reveal/restoration, mouse clicks, scrolling, 16/18/24px,
+  light/dark, list/quote contexts and Live/Source/Reading modes. This establishes
+  the reproduced 1px source-font cause; the previous output-container reset
+  alone did not fix it. See tests/reports/inline-math-20261024.md for evidence.
 - `livePreviewPlugin` coalesces initial mounts, `docViewUpdate` and geometry
   changes into one keyed `requestMeasure` per view. It reads only mounted formula
   roots belonging to that view, excluding nested fragment editors. Each DOM-owned
