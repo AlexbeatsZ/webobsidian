@@ -166,6 +166,11 @@ the same desktop/package.json configuration. The installer permits a custom
 directory, does not elevate or auto-launch, creates only a Start menu shortcut,
 and retains user data when uninstalled. macOS/Linux targets are unchanged.
 Packaging itself never installs or launches the generated application.
+The user's explicit Desktop shortcut request is maintained by copying the generated
+Start menu shortcut after installation and verifying its installed EXE target.
+The 0.1.24 upgrade removed the earlier manually copied Desktop link while the
+installer's createDesktopShortcut option was false, so restore this link after
+an upgrade; packaging success alone does not establish that the shortcut remains.
 The existing NSIS customCheckAppRunning extension point checks the current
 user's executable name and exits with code 2 while it is running. It does not
 fall through to electron-builder's default taskkill loop, including in silent
