@@ -21,3 +21,7 @@ export * from './blockEffects.js';
 export * from './equations.js';
 export * from './fragments.js';
 export * from './review.js';
+export * from './tags/types.js';
+export * from './tags/source.js';
+export * from './tags/folderRules.js';
+export * from './tags/values.js';

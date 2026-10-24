@@ -32,7 +32,7 @@ Review and save the imported draft explicitly. It does not require Templater.
 
 ## Ownership, timing and source safety
 
-- `tags/folderRules.ts` is the browser-safe matching/planning owner. It delegates
+- `packages/markdown-core/src/tags/folderRules.ts` is the shared matching/planning owner. It delegates
   YAML source changes to `planTagSource`; no second YAML writer/parser is added.
 - WorkspaceDocumentSession prepares automatic additions before the existing save.
   Edits enter shared session history as one group, then normal saves/autosaves

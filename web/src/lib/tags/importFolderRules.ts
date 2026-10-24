@@ -1,6 +1,6 @@
 import { parseTree, getNodeValue, type ParseError, type Node } from 'jsonc-parser';
-import { normalizeFolderTags } from '../../../../server/src/services/tags/folderRules';
-import type { FolderTagSettings, FolderTagRule } from '../../../../server/src/services/tags/types';
+import { normalizeFolderTags } from '@webobsidian/markdown-core';
+import type { FolderTagSettings, FolderTagRule } from '@webobsidian/markdown-core';
 
 /** Read the known data-only object literal without evaluating JavaScript. */
 export function importLegacyFolderRules(note: string): FolderTagSettings {

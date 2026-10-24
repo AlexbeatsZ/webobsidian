@@ -1,7 +1,7 @@
 import matter from 'gray-matter';
 import path from 'node:path';
 import { extractMetadata, parseLinkTarget } from '@webobsidian/markdown-core';
-import { normalizeStoredTags } from './tags/query.js';
+import { normalizeStoredTags } from '@webobsidian/search-core';
 
 export interface ParsedNote {
   title: string;

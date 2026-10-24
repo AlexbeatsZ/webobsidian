@@ -1,10 +1,10 @@
 /** Browser-safe tag source operations. Also used for unsaved DocumentSessions. */
-import {
-  SourceDocument, analyzeMarkdown, extractMetadata, mathRegions,
-  canEditProperties, readPropertyRows, patchPropertyRows,
-  type MarkdownModel, type SourceChange, type SourceSpan,
-} from '@webobsidian/markdown-core';
-import { matchesTag, normalizeStoredTags, tagKey, tagName, validTag } from './query.js';
+import { SourceDocument, type SourceChange } from '../source.js';
+import { analyzeMarkdown, type MarkdownModel, type SourceSpan } from '../syntax.js';
+import { extractMetadata } from '../metadata.js';
+import { mathRegions } from '../math.js';
+import { canEditProperties, readPropertyRows, patchPropertyRows } from '../properties.js';
+import { matchesTag, normalizeStoredTags, tagKey, tagName, validTag } from '@webobsidian/search-core';
 import type { TagOperation } from './types.js';
 
 export function validateTagOperation(operation: TagOperation): TagOperation {

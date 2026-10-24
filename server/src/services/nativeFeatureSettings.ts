@@ -2,8 +2,8 @@ import { vaultPathKey } from './vault.js';
 import { vaultConfigurationIdentity } from './vaultConfiguration.js';
 import { getSettings, updateSettings } from './settings.js';
 import { readLegacyTagPreferences } from './tags/migration.js';
-import { normalizeFolderTags } from './tags/folderRules.js';
-import type { TagPreferences } from './tags/types.js';
+import { normalizeFolderTags } from '@webobsidian/markdown-core';
+import type { TagPreferences } from '@webobsidian/markdown-core';
 
 export async function nativeFeatureSettings() {
   const settings = await getSettings(), identity = await vaultConfigurationIdentity(), key = vaultPathKey(settings.vault.path);

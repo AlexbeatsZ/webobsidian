@@ -5,11 +5,10 @@ import { catalog, type VaultCatalog } from '../catalog.js';
 import * as vault from '../vault.js';
 import { scheduleAutoCommitOnSave } from '../git.js';
 import { queueFileUpdate } from '../fileupdates.js';
-import { folderRuleTags, planFolderTags } from './folderRules.js';
-import { inTagScope, planTagSource, transformTag, validateTagOperation } from './source.js';
-import { matchesTag, normalizeStoredTags, tagKey, tagName, tagPageAliases, validTag } from './query.js';
-import type { TagApplyResult, TagCollision, TagFilePreview, TagOperation, TagPreferences, TagPreview, TagPreviewRequest, TagSummary } from './types.js';
-export type { TagPreferences } from './types.js';
+import { folderRuleTags, planFolderTags, inTagScope, planTagSource, transformTag, validateTagOperation, readTagSourceNames } from '@webobsidian/markdown-core';
+import { matchesTag, normalizeStoredTags, tagKey, tagName, tagPageAliases, validTag } from '@webobsidian/search-core';
+import type { TagApplyResult, TagCollision, TagFilePreview, TagOperation, TagPreferences, TagPreview, TagPreviewRequest, TagSummary } from '@webobsidian/markdown-core';
+export type { TagPreferences } from '@webobsidian/markdown-core';
 
 function fail(message: string, status = 400): never { throw Object.assign(new Error(message), { status }); }
 interface PreviewRecord {
@@ -115,7 +114,6 @@ export class NativeTagService {
     const files: TagFilePreview[] = [];
     const extraTags: string[] = [];
     const generatedByFile = new Map<string, string[]>();
-    const { readTagSourceNames } = await import('./values.js');
     const { extractMetadata, SourceDocument } = await import('@webobsidian/markdown-core');
     for (const overlay of overlays.values()) {
       extraTags.push(...extractMetadata(new SourceDocument(overlay.raw).text).tags, ...readTagSourceNames(overlay.raw));

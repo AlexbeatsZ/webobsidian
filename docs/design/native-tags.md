@@ -128,9 +128,9 @@ symlink authorization, exclusive `wx` file creation and original update queue.
 
 | Module | Responsibility |
 | --- | --- |
-| `packages/search-core/src/query.ts` / `server/src/services/tags/query.ts` | Shared names, normalization, aliases and exact hierarchy filters; the server entry reexports the pure search-core functions for existing tag callers. |
-| `source.ts`, `values.ts`, `types.ts` | Source-range planning/validation, transient overlay property extraction and shared data contracts. Browser-safe source planner. |
-| `service.ts`, `migration.ts` | Catalog summary, bounded preview/apply/cancel transaction, safe Tag Page creation, read-only legacy preference import. |
+| `packages/search-core/src/query.ts` | Shared names, normalization, aliases and exact hierarchy filters. All callers import search-core directly; no Server compatibility entry. |
+| `packages/markdown-core/src/tags/{source,folderRules,values,types}.ts` | Browser-safe source-range planning/validation, folder rules, transient overlay property extraction and shared data contracts. Both Web and Server use the same exported implementation; internal imports point directly to existing core owners. |
+| `server/src/services/tags/{service,migration}.ts` | Catalog summary, bounded preview/apply/cancel transaction, safe Tag Page creation, read-only legacy preference import. Runtime state and IO stay in Server. |
 | `server/src/routes/tags.ts` | Existing session auth; summary, page, preview, apply, cancel routes. Mounted before broad search routes. |
 | `web/src/lib/tags` | Existing request wrapper, stable shared menu contributions, command definitions and transient dialog/hover requests. |
 | `TagsPanel`, `TagOperationsHost`, `TagPageHover`, `TagSettings` | Tree, preview/confirmation/progress, readonly fragment hover and controlled settings UI. |

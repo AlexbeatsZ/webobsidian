@@ -1,6 +1,6 @@
 import { request } from '../api';
 import { useStore } from '../store';
-import type { TagApplyResult, TagPreview, TagPreviewRequest, TagSummary, TagPreferences } from '../../../../server/src/services/tags/types';
+import type { TagApplyResult, TagPreview, TagPreviewRequest, TagSummary, TagPreferences } from '@webobsidian/markdown-core';
 
 export const tagsApi = {
   summary: (signal?: AbortSignal) => request<{ tags: TagSummary[]; preferences: TagPreferences }>('/api/tags', { signal }),

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptyFolderTags, folderRuleTags, normalizeFolderTags, planFolderTags } from './folderRules.js';
 
-// Prepared regression source; runtime execution remains user-deferred.
 describe('folder tag rules', () => {
   const settings = { enabled: true, pruneAncestors: true, rules: [
     { folder: '04资料', tags: ['_资料', '自有'], recursive: true },

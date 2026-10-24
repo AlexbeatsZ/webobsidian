@@ -15,6 +15,7 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
   "dependencies": {
+    "@webobsidian/search-core": "*",
     "@lezer/common": "^1.5.3",
     "@lezer/markdown": "^1.6.4",
     "diff": "^7.0.0",

@@ -1,5 +1,6 @@
-import { SourceDocument, readPropertyRows, canEditProperties } from '@webobsidian/markdown-core';
-import { normalizeStoredTags, tagPageAliases } from './query.js';
+import { SourceDocument } from '../source.js';
+import { readPropertyRows, canEditProperties } from '../properties.js';
+import { normalizeStoredTags, tagPageAliases } from '@webobsidian/search-core';
 
 /** Source-property helper for transient unsaved overlays, never a saved cache. */
 export function readTagSourceNames(raw: string): string[] {

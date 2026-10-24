@@ -1,6 +1,6 @@
 import { request } from './api';
 import type { CleanupOptions } from './attachments/types';
-import type { TagPreferences } from '../../../server/src/services/tags/types';
+import type { TagPreferences } from '@webobsidian/markdown-core';
 
 export interface NativeFeaturePreferences {
   vault: string; tags: TagPreferences; attachments: CleanupOptions;

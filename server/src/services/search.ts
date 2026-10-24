@@ -4,7 +4,7 @@ import { getSettings } from './settings.js';
 import { INDEX_FILE, config } from '../config.js';
 import { getVaultRoot, readFileText } from './vault.js';
 import { catalog as activeCatalog, VaultCatalog, CORE_LIST_PROPS, CATALOG_SCHEMA_VERSION } from './catalog.js';
-import { matchesTagFilters } from './tags/query.js';
+import { matchesTagFilters } from '@webobsidian/search-core';
 import {
   findText,
   phoneticTokens,

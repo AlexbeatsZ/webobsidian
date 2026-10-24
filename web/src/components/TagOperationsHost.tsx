@@ -4,8 +4,8 @@ import { documents } from '../lib/documents';
 import { useStore } from '../lib/store';
 import { tagsApi, assertTagVaultCurrent } from '../lib/tags/api';
 import { closeTagDialog, useTagDialogRequest, useNativeTagHover, type TagOperationRequest, type TagDialogRequest } from '../lib/tags/actions';
-import { inTagScope, validateCapturedTagChanges, validateTagOperation } from '../../../server/src/services/tags/source';
-import type { TagFilePreview, TagOperation, TagPreview } from '../../../server/src/services/tags/types';
+import { inTagScope, validateCapturedTagChanges, validateTagOperation } from '@webobsidian/markdown-core';
+import type { TagFilePreview, TagOperation, TagPreview } from '@webobsidian/markdown-core';
 import './nativeTags.css';
 import TagPageHover from './TagPageHover';
 

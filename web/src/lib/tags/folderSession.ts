@@ -1,6 +1,6 @@
 import { DocumentSession } from '@webobsidian/markdown-core';
 import { haveNativeFeaturePreferences, readNativeFeatures, tagPreferences } from '../nativeFeaturePreferences';
-import { planFolderTags } from '../../../../server/src/services/tags/folderRules';
+import { planFolderTags } from '@webobsidian/markdown-core';
 
 /** The existing session remains the sole text/history/save owner. */
 export class WorkspaceDocumentSession extends DocumentSession {

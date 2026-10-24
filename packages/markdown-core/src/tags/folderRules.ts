@@ -1,7 +1,7 @@
 import { planTagSource, type TagSourcePlan } from './source.js';
-import { tagKey, tagName, validTag } from './query.js';
+import { tagKey, tagName, validTag } from '@webobsidian/search-core';
 import type { FolderTagSettings, FolderTagRule } from './types.js';
-import type { MarkdownModel } from '@webobsidian/markdown-core';
+import type { MarkdownModel } from '../syntax.js';
 
 export const emptyFolderTags = (): FolderTagSettings => ({ enabled: false, pruneAncestors: true, rules: [] });
 const invalid = (message: string): never => { throw Object.assign(new Error(message), { status: 400 }); };

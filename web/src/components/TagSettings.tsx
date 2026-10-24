@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { TagPreferences } from '../../../server/src/services/tags/types';
-import { emptyFolderTags, normalizeFolderTags } from '../../../server/src/services/tags/folderRules';
+import type { TagPreferences } from '@webobsidian/markdown-core';
+import { emptyFolderTags, normalizeFolderTags } from '@webobsidian/markdown-core';
 import { importLegacyFolderRules } from '../lib/tags/importFolderRules';
 import { importFolderTagNote } from '../lib/nativeFeaturePreferences';
 import { openTagOperation } from '../lib/tags/actions';

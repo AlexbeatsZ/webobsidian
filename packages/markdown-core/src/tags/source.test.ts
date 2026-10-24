@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { SourceDocument, DocumentSession } from '@webobsidian/markdown-core';
+import { SourceDocument } from '../source.js';
+import { DocumentSession } from '../session.js';
 import { planTagSource, transformTag, validateCapturedTagChanges } from './source.js';
-import { matchesTagFilters, normalizeStoredTags, parseTagFilters, tagPageAliases, withTagFilter } from './query.js';
+import { matchesTagFilters, normalizeStoredTags, parseTagFilters, tagPageAliases, withTagFilter } from '@webobsidian/search-core';
 import { readTagSourceNames } from './values.js';
 
-// Prepared regression source only. Do not execute while static-only acceptance
-// applies; these cases do not read or modify any actual Vault.
+// Source-only fixtures; no actual Vault is read or modified.
 describe('native tag source preservation', () => {
   it('renames mixed-case target properties and inline hierarchy without touching unrelated bytes', () => {
     const raw = '\ufeff' + [

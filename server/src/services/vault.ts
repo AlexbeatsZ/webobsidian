@@ -4,7 +4,7 @@ import { queueFileUpdate } from './fileupdates.js';
 import { indexedFilesUnder } from './fileindex.js';
 import { getSettings } from './settings.js';
 import { readTextFile, writeTextFile } from './textFile.js';
-import { planFolderTags } from './tags/folderRules.js';
+import { planFolderTags } from '@webobsidian/markdown-core';
 import { fileTitleError } from '@webobsidian/search-core';
 import { scheduleAutoCommitOnSave } from './git.js';
 

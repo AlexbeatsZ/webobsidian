@@ -1,4 +1,4 @@
-import type { SourceChange } from '@webobsidian/markdown-core';
+import type { SourceChange } from '../source.js';
 
 export type TagOperation =
   | { kind: 'add'; tags: string[]; pruneAncestors?: boolean }
