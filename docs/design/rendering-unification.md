@@ -465,7 +465,8 @@ The previous MathWidget root was an ordinary inline span with the default
 `WidgetType.lineBreaks = 0`. CM requires ordinary inline widgets to report added
 line breaks; a span's fragment rectangles also need not enclose the inner SVG
 like one atomic box. The inline root now uses `inline-block`, with the existing
-column-width limit and a local text-indent reset, so internal SVG layout stays
+column-width limit and the shared source-line indentation boundary, so internal
+SVG layout stays
 inside the single box measured and scanned by CM. It retains the normal baseline
 and automatic line height. Display widgets keep their existing block shell.
 There is no guessed break count, fixed height, mouse adjustment or new state.
@@ -473,6 +474,14 @@ Only MathWidget creates `.cm-math-rendered.math-inline`; the plugin adapter's
 separate `.math.math-inline` output and the tooltip are outside this selector.
 Readonly/embedded/print views that deliberately mount the same MarkdownView use
 the same corrected host contract, without a global SVG or reading-output reset.
+
+The 2026-10-24 quote/link correction removes the former MathWidget-local
+`text-indent: 0`. `lists.css` now stops native line indentation at every direct
+element child, covering math, links, images, nested marks and controls through
+one rule. Per-widget resets formerly hid this missing ownership boundary until
+an unprotected inline-block link inherited the same negative Q/L indent. See
+callout-lists.md, One source-line indentation boundary, for ownership/deletions
+and tests/reports/quote-inline-layout-20261024.md for actual reproduction/results.
 
 Math regions/source visibility, the shared selection lifecycle, source ranges,
 MathJax queue/cache, width invalidation and completion measurement remain the

@@ -147,6 +147,43 @@ rest keeps its normal decoration. Source mode remains available for arbitrary
 Markdown edits. Existing padding-only wrappers retain CodeMirror measurement and
 mouse coordinate ownership, including tables/formulas inside the Callout.
 
+### One source-line indentation boundary (2026-10-24)
+
+`listLayout` / `prefixWidths` measure the native quote/list prefix once. The
+existing `lists.css` line rule owns `padding-left = base + Q + L` and
+`text-indent = -(Q + L)`. The first source line and its wrapped continuations
+therefore share one layout implementation across ordinary quotes, Callouts,
+nested quotes and lists. Callout frame paint remains independent of source origin.
+
+`text-indent` is inherited. A line's negative indent must stop at its direct
+element children: `.cm-s-obsidian .cm-line > * { text-indent: 0; }`. Native text
+still participates in the line's first-line indent, while inline marks, widgets
+and their nested presentation lay out their own contents without applying it
+again. This boundary also covers a newly added inline renderer without requiring
+its implementation to know Q/L or add a reset.
+
+The SCF/Hartree screenshots exposed the missing boundary: inline-block wiki and
+Markdown links inherited the negative indent, putting their labels18.515625px
+left of their own boxes in a single quote. Sentence-middle links overlapped
+preceding text; sentence-initial links crossed the Callout's painted edge.
+Nested quote/list offsets were additive. The initial link-only reset was removed.
+Nine per-presentation resets in prefix/list/fold/math/title rules were deleted;
+the existing line-layout stylesheet now owns this invariant. No renderer-specific
+offset, shared widget superclass, second measurement or parser is added.
+
+The rendered Callout title's own flex **source line** still resets its line indent
+because its prefix/title use separate flex items. The detached math tooltip's
+reset is also retained: it belongs to a separate surface outside source lines.
+Whole-line Table/Math/Mermaid/HTML replacements retain their existing
+`sourceBlockReplacement` prefix shell; they do not consume a native line's indent.
+No source text, DocumentSession or caret/pointer pipeline changes.
+
+The regression surface is real rendered geometry across seven source contexts
+and both views, native input/reveal/Undo/navigation beside math, and all nested
+inline presentations at18px/24px. Copied original-note sections exercise the two
+reported screenshots without editing the original Vault. See
+tests/reports/quote-inline-layout-20261024.md for results and acceptance limits.
+
 Quote prefixes remain native text with the same width when hidden and revealed;
 only their color changes through `cm-quote-prefix`. The previous marker-only
 `left: -1ch` offset and hidden-prefix replacement were removed after user feedback.
@@ -292,9 +329,9 @@ through the existing `--interactive-accent`. Native `.cm-foldPlaceholder` gets
 transparent/rest and theme-token hover/foreground styles instead of CodeMirror's
 hardcoded light background and border.
 
-List whitespace must not inherit the parent line's negative hanging
-`text-indent` inside `.cm-indent` inline blocks. The list-scoped indent span resets
-`text-indent: 0` and uses `white-space: pre`; its actual spaces/tabs retain their
+List whitespace uses the shared source-line indentation boundary described above,
+so `.cm-indent` inline blocks do not inherit the line's negative hanging indent.
+The indent span uses `white-space: pre`; its actual spaces/tabs retain their
 source width. Bullet and ordered-marker spacing is no longer collapsed to a
 single space. These changes preserve the four-column source step in rendered
 headers and marker-free continuations without inventing a CSS-only indent level

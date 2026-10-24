@@ -1,10 +1,12 @@
 import { expect, test } from './test';
 import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { SourceDocument } from '../../packages/markdown-core/src/source';
 
 async function reset(page: Page, source: string) {
   await page.evaluate(source => window.renderHarness.reset(source), source);
-  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+  await page.evaluate(length => window.renderHarness.cursor(0, length), new SourceDocument(source).text.length);
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator('[data-render-pending]')).toHaveCount(0);
 }
@@ -13,6 +15,134 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/__render-test');
   await page.waitForFunction(() => Boolean(window.renderHarness));
   await page.evaluate(() => { document.querySelector('.theme-light')!.className = 'theme-dark'; });
+});
+
+test('elements: rendered links stay inside their boxes and native quote/list body inset', async ({ page }, info) => {
+  for (const [name, prefix, lead] of [
+    ['root', '', ''], ['quote', '> ', ''], ['nested-quote', '> > ', '> Outer\n'],
+    ['callout', '> ', '> [!tip]+ 引用中的链接\n'],
+    ['nested-callout', '> > ', '> [!example]+ 外层\n> > [!tip]+ 内层\n'],
+    ['list', '    ', '- Parent\n'], ['quoted-list', '>     ', '> - Parent\n'],
+  ]) {
+    const source = lead + [
+      'Anchor正文', '详细推导参考[[迭代降低能量]]之后', '[[#全同粒子]]交换后波函数的平方不变',
+      '详细推导参考[迭代降低能量](note.md)之后', '[全同粒子](https://example.com)交换后波函数的平方不变',
+    ].map(line => prefix + line).join('\n') + '\n\nTail';
+    await reset(page, source);
+    await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('.cm-line[data-prefix-layout]')]
+      .every(line => line.style.getPropertyValue('--cm-quote-prefix-width') !== ''));
+    const rows = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-slot]')].map(host => {
+      const textRect = (node: Node, start: number, end: number) => {
+        const range = document.createRange(); range.setStart(node, start); range.setEnd(node, end);
+        return range.getBoundingClientRect();
+      };
+      const anchorLine = [...host.querySelectorAll('.cm-line')].find(line => line.textContent?.includes('Anchor正文'))!;
+      const walker = document.createTreeWalker(anchorLine, NodeFilter.SHOW_TEXT);
+      let anchorNode: Node | null;
+      while ((anchorNode = walker.nextNode()) && !anchorNode.textContent?.includes('Anchor正文')) {}
+      const at = anchorNode!.textContent!.indexOf('Anchor正文');
+      const anchor = textRect(anchorNode!, at, at + 1).left;
+      return [...host.querySelectorAll<HTMLElement>('.cm-wikilink, .cm-md-link')].map(link => {
+        const box = link.getBoundingClientRect(), text = link.firstChild!;
+        const label = textRect(text, 0, text.textContent!.length);
+        // CM surrounds widgets with cursor-buffer elements; adjacent siblings
+        // therefore need not be the sentence's real text nodes.
+        const texts: Node[] = [], walker = document.createTreeWalker(link.closest('.cm-line')!, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) texts.push(node);
+        const before = texts.find(node => node.textContent?.includes('详细推导参考'));
+        const after = texts.find(node => /之后|交换后/.test(node.textContent ?? ''));
+        const sentenceStart = Boolean(before);
+        return { label: link.textContent, indent: getComputedStyle(link).textIndent,
+          inside: label.left - box.left, body: label.left - anchor, sentenceStart,
+          beforeGap: sentenceStart ? label.left - textRect(before!, 0, before!.textContent!.length).right : null,
+          afterGap: after?.textContent
+            ? textRect(after, 0, 1).left - label.right : null };
+      });
+    }));
+    await info.attach(name + '-link-geometry', { body: JSON.stringify(rows), contentType: 'application/json' });
+    for (const links of rows) {
+      expect(links).toHaveLength(4);
+      for (const link of links) {
+        expect.soft(link.inside, name + ' label stays inside link box').toBeGreaterThanOrEqual(-.75);
+        if (!link.sentenceStart) expect.soft(Math.abs(link.body), name + ' line-start body alignment').toBeLessThanOrEqual(.75);
+        if (link.beforeGap !== null) expect.soft(link.beforeGap, name + ' no preceding-text overlap').toBeGreaterThanOrEqual(-.75);
+        if (link.afterGap !== null) expect.soft(link.afterGap, name + ' no following-text overlap').toBeGreaterThanOrEqual(-.75);
+      }
+    }
+    expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+    expect(await page.evaluate(() => window.renderHarness.source(1))).toBe(source);
+  }
+  await page.screenshot({ path: info.outputPath('quoted-list-links.png'), fullPage: true });
+});
+
+test('elements: quoted links beside formulas retain source reveal, native input, undo and navigation', async ({ page }, info) => {
+  const source = '> [!tip]+ 迭代波函数的理解\n> 每次迭代计算波函数$\\psi_j^{(k)}$,得到$\\psi_j^{(k+1)}$\n' +
+    '> 详细推导参考[[迭代降低能量]]\n> $$\\bar V=\\iint |\\Psi(1,2)|^2 \\frac{1}{r_{12}}\\,d\\tau$$\n' +
+    '> [[#全同粒子]]交换后,波函数的平方不变\n\nTail';
+  await reset(page, source);
+  const live = page.locator('[data-slot="0"]'), reading = page.locator('[data-slot="1"]');
+  await expect(live.locator('.cm-wikilink')).toHaveCount(2);
+  await expect(live.locator('[data-mathjax-version]')).toHaveCount(3);
+  const point = await live.locator('.md-callout-body .cm-line').filter({ hasText: '交换后' }).evaluate(line => {
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const at = node.textContent!.indexOf('交换后'); if (at < 0) continue;
+      const range = document.createRange(); range.setStart(node, at); range.setEnd(node, at + 1);
+      const rect = range.getBoundingClientRect(); return { x: rect.left + 1, y: (rect.top + rect.bottom) / 2 };
+    }
+    throw new Error('Missing native text after the link');
+  });
+  await page.mouse.click(point.x, point.y);
+  await page.keyboard.insertText('新');
+  const at = source.indexOf('交换后');
+  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe(source.slice(0, at) + '新' + source.slice(at));
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+  await page.evaluate(pos => window.renderHarness.cursor(0, pos), source.indexOf('[[迭代降低能量]]') + 3);
+  await expect(live.locator('.cm-wikilink')).toHaveCount(1);
+  await expect(live.locator('.cm-content')).toContainText('[[迭代降低能量]]');
+  await expect(reading.locator('.cm-wikilink')).toHaveCount(2);
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  await expect(live.locator('.cm-wikilink')).toHaveCount(2);
+  await reading.locator('.cm-wikilink').first().click();
+  expect(await page.evaluate(() => window.renderHarness.links)).toEqual(['1:迭代降低能量']);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+  expect(await page.evaluate(() => window.renderHarness.source(1))).toBe(source);
+  await page.screenshot({ path: info.outputPath('formula-callout-links.png'), fullPage: true });
+});
+
+test('elements: one source-line indent rule isolates every nested inline presentation', async ({ page }, info) => {
+  await page.route('**/inline-layout.svg', route => route.fulfill({ contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="24" fill="#557799"/></svg>' }));
+  const source = '> [!tip]+ 行布局归属\n> - **bold text** and *emphasis text*, [[目标|内部链接]], [外部链接](https://example.com), `code`, <kbd>Ctrl</kbd>, $x_i$, ![图](/inline-layout.svg)\n' +
+    '>     后续原生正文\n>     ' + '足够长的续行正文用于检查悬挂换行对齐'.repeat(8) + '\n\nTail';
+  await reset(page, source);
+  await expect(page.locator('.cm-strong')).toHaveCount(2);
+  await expect(page.locator('.cm-em')).toHaveCount(2);
+  await expect(page.locator('.cm-wikilink,.cm-md-link')).toHaveCount(4);
+  await expect(page.locator('img.cm-embed-image')).toHaveCount(2);
+  await page.locator('img.cm-embed-image').evaluateAll(images => Promise.all(images.map(image => (image as HTMLImageElement).decode())));
+  for (const size of [18, 24]) {
+    const style = await page.addStyleTag({ content: `.cm-content{font-size:${size}px!important}` });
+    await expect.poll(() => page.locator('.cm-quote-prefix').first().evaluate(prefix => prefix.getBoundingClientRect().width)).toBeGreaterThan(0);
+    const rows = await page.locator('.cm-line[data-prefix-layout]').evaluateAll(lines => lines.map(line => ({
+      lineIndent: getComputedStyle(line).textIndent,
+      presentations: [...line.querySelectorAll<HTMLElement>('*')]
+        .filter(el => el.closest('.cm-line') === line && !el.closest('svg'))
+        .map(el => ({ class: el.className, indent: getComputedStyle(el).textIndent })),
+    })));
+    await info.attach('all-inline-presentations-' + size, { body: JSON.stringify(rows), contentType: 'application/json' });
+    expect(rows.some(row => parseFloat(row.lineIndent) < 0)).toBe(true);
+    for (const row of rows) for (const presentation of row.presentations) expect(presentation.indent, presentation.class).toBe('0px');
+    const links = await page.locator('.cm-wikilink,.cm-md-link').evaluateAll(links => links.map(link => {
+      const range = document.createRange(); range.setStart(link.firstChild!, 0); range.setEnd(link.firstChild!, link.firstChild!.textContent!.length);
+      return range.getBoundingClientRect().left - link.getBoundingClientRect().left;
+    }));
+    for (const inset of links) expect(inset).toBe(0);
+    await style.evaluate(style => style.remove());
+  }
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+  await page.screenshot({ path: info.outputPath('unified-inline-layout.png'), fullPage: true });
 });
 
 test('elements: table keeps the same native prefix advance as adjacent body text', async ({ page }, info) => {

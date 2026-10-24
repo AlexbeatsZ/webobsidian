@@ -1,21 +1,21 @@
 /* Small, font-independent markers; source markers remain untouched. */
-.cm-s-obsidian .cm-bullet { display: inline-block; width: .55em; height: 1em; vertical-align: -.1em; position: relative; text-indent: 0; }
+.cm-s-obsidian .cm-bullet { display: inline-block; width: .55em; height: 1em; vertical-align: -.1em; position: relative; }
 .cm-s-obsidian .cm-bullet::before { content: ''; position: absolute; width: 5px; height: 5px; border-radius: 50%; background: currentColor; left: 50%; top: 50%; transform: translate(-50%, -50%); }
-.cm-s-obsidian .HyperMD-list-line .cm-indent { text-indent: 0; white-space: pre; }
-.cm-s-obsidian .cm-list-fold-anchor { display: inline-block; position: relative; width: 0; height: 1lh; vertical-align: top; text-indent: 0; }
-.cm-s-obsidian .cm-list-fold { display: inline-flex; align-items: center; justify-content: center; position: absolute; top: 0; right: 3px; width: 18px; height: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text-faint); cursor: pointer; opacity: 0; text-indent: 0; font: inherit; line-height: inherit; }
+.cm-s-obsidian .HyperMD-list-line .cm-indent { white-space: pre; }
+.cm-s-obsidian .cm-list-fold-anchor { display: inline-block; position: relative; width: 0; height: 1lh; vertical-align: top; }
+.cm-s-obsidian .cm-list-fold { display: inline-flex; align-items: center; justify-content: center; position: absolute; top: 0; right: 3px; width: 18px; height: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: var(--text-faint); cursor: pointer; opacity: 0; font: inherit; line-height: inherit; }
 .cm-s-obsidian .cm-list-fold svg { display: block; width: 14px; height: 14px; }
 .cm-s-obsidian .cm-list-fold.is-folded svg { transform: rotate(-90deg); }
 .cm-s-obsidian .cm-list-fold.is-folded, .cm-s-obsidian .cm-line:hover .cm-list-fold, .cm-s-obsidian .cm-list-fold:focus-visible { opacity: 1; }
 .cm-s-obsidian .cm-list-fold:hover, .cm-s-obsidian .cm-callout-fold:hover { color: var(--text-normal); }
 .cm-s-obsidian .cm-list-fold.is-folded, .cm-s-obsidian .cm-list-folded .cm-bullet { color: var(--interactive-accent); }
-.cm-s-obsidian .cm-content .cm-foldPlaceholder { background: transparent; color: var(--text-muted); border: 0; border-radius: var(--radius-s); padding: 0 3px; text-indent: 0; font: inherit; }
+.cm-s-obsidian .cm-content .cm-foldPlaceholder { background: transparent; color: var(--text-muted); border: 0; border-radius: var(--radius-s); padding: 0 3px; font: inherit; }
 .cm-s-obsidian .cm-content .cm-foldPlaceholder:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
 .cm-s-obsidian .cm-list-fold:focus-visible, .cm-s-obsidian .cm-callout-fold:focus-visible { outline: 1px solid var(--text-accent); outline-offset: 2px; }
 .cm-s-obsidian .cm-callout-fold { font: inherit; line-height: inherit; }
 .cm-s-obsidian .cm-callout-fold svg { display: block; }
 /* Native prefix advance is stable: reveal color only, never its source width. */
-.cm-s-obsidian .cm-quote-prefix, .cm-s-obsidian .cm-list-prefix { display: inline-block; white-space: pre; text-indent: 0; }
+.cm-s-obsidian .cm-quote-prefix, .cm-s-obsidian .cm-list-prefix { display: inline-block; white-space: pre; }
 .cm-s-obsidian .cm-quote-prefix { color: transparent; }
 .cm-s-obsidian .cm-quote-prefix.is-revealed { color: var(--text-faint); }
 /* Hanging wraps use the actual source prefix advance. The first line keeps its
@@ -24,3 +24,7 @@
   padding-left: calc(var(--cm-prefix-base-padding, 0px) + var(--cm-quote-prefix-width, 0px) + var(--cm-list-prefix-width, 0px));
   text-indent: calc(0px - var(--cm-quote-prefix-width, 0px) - var(--cm-list-prefix-width, 0px));
 }
+/* A source line owns hanging indent once. Stop inheritance at its children so
+   every inline mark/widget, including nested formatting, lays out its own text
+   normally. Renderers must not each compensate for the parent's Q/L indent. */
+.cm-s-obsidian .cm-line > * { text-indent: 0; }

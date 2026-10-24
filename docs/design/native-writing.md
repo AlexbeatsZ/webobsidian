@@ -159,8 +159,10 @@ Width must not flow back into the editor's own width:
 - An inline formula converts against the content box of `view.contentDOM` (padding
   subtracted once). Its inline-block root contains all inner SVG fragments in one
   CM widget rectangle, so MathJax's internal wrapping does not introduce anonymous
-  inline breaks with an undeclared `WidgetType.lineBreaks` count. The root resets
-  inherited list text-indent and keeps the column-width limit. The host retains
+  inline breaks with an undeclared `WidgetType.lineBreaks` count. The shared
+  source-line rule in `lists.css` stops inherited Q/L indent for every inline
+  presentation; the root has no formula-specific indent reset and keeps the
+  column-width limit. The host retains
   the surrounding text line-height and native baseline. Only its direct MathJax
   SVG container has `line-height: 0`, so a MathJax font-size adjustment cannot
   introduce a second, scaled text strut. SVG height and negative vertical-align
