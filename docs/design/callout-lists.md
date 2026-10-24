@@ -5,8 +5,10 @@
 The 2026-10-22 opinion changes use the existing Markdown model, DocumentSession
 source patches, CodeMirror selection and native folding. No duplicate Markdown
 parser, editable Callout body, note history or persistent fold store is added.
-These changes have received source/diff inspection only. The user explicitly
-prohibited tests, type/build checks and runtime acceptance for this batch.
+The earlier opinion changes received source/diff inspection only. On 2026-10-24
+the user explicitly authorized a focused code-based small-page test of the quote
+fixes. Four isolated Edge cases now pass; see tests/reports/quote-origin-20261024.md.
+That authorization does not imply portable/native/live-Vault or broad acceptance.
 
 ## Callouts
 
@@ -58,7 +60,16 @@ Removed the 12px title inset, 22px fixed icon column and absolute icon positioni
 The icon is an ordinary inline box; custom titles retain their original separator,
 and a default title has a normal text space after its icon. Only existing formula
 source controls reserve space on the right. No custom mouse/Enter handling.
-Source/diff only; nested input, folding, wrapped-title geometry and UI are unverified.
+The original split was source-only; the later focused page result below checks
+prefix geometry/nesting and Enter, while folding/wrapped-title/IME remain unverified.
+
+The later icon-gap feedback adds .3em inline-start padding only inside the existing
+cm-callout-head type-token replacement. No quote prefix, source separator or title
+wrapper gets new spacing. At the tested 18px size, the painted rule-to-icon gap
+was 1.5px before and is 6.8906px after. Native > origin/right-edge geometry remains
+unchanged through reveal. This is presentation of [!type], not widened > source.
+The focused page test covers root and nested custom titles in live/reading modes;
+general wrapped-title/folding/IME/native acceptance is still outside that result.
 
 ### Thematic breaks inside quotes
 
@@ -69,8 +80,9 @@ The old pre-prefix full-raw-line regex was removed because `> ---` never matched
 Syntax ownership also distinguishes actual thematic breaks from setext heading
 underlines and literal code/math. Existing caret-on-line reveal, readonly rendering
 and explicit source-entry policy remain; no Enter special case, parser or cache.
-This follow-up has source/diff evidence only; the screenshot's atomic-unit table
-note was inspected read-only and no runtime check/build/package was performed.
+The original follow-up was source-only. The later authorized small-page test
+checks a quoted table and root/Callout/nested rules against Setext/code exclusions;
+the screenshot's original note remains untouched and no native package is implied.
 
 `[!type]-` starts folded. `[!type]+` and `[!type]` start expanded. Every Callout
 has a fold button, including those without a sign. The user toggle is a view-local

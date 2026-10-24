@@ -649,7 +649,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   color: rgb(var(--callout-color, var(--callout-default))); transition: transform var(--transition); }
 .cm-callout-fold svg { width: 16px; height: 16px; }
 .cm-callout-fold.is-folded { transform: rotate(-90deg); }
-.cm-callout-head { display: inline; }
+/* The type-marker replacement owns icon breathing room; > keeps its raw width. */
+.cm-callout-head { display: inline; padding-inline-start: .3em; }
 .cm-callout-icon { display: inline-flex; align-items: center; vertical-align: middle;
   color: rgb(var(--callout-color, var(--callout-default))); }
 .cm-callout-icon svg { width: 16px; height: 16px; }
