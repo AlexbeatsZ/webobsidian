@@ -2020,6 +2020,10 @@ function buildDecorations(view: EditorView): DecorationSet {
         const from = line.from + list.quoteTo;
         const to = prefix ? bodyFrom + prefix[0].length : line.from + list.indentTo;
         if (to > from) all.push(Decoration.mark({ class: 'cm-list-prefix' }).range(from, to));
+        if (list.header && list.item.parent?.name === 'OrderedList') {
+          const marker = list.item.getChild('ListMark');
+          if (marker) all.push(Decoration.mark({ class: 'cm-list-number' }).range(marker.from, marker.to));
+        }
       }
       // Use the same indentation unit as contextual Tab, not a fixed four spaces.
       if (list) {
@@ -2494,7 +2498,7 @@ export const livePreviewTheme = EditorView.baseTheme({
     padding: '0.5px 4px',
     fontSize: 'var(--font-smaller)',
   },
-  '.cm-bullet': { color: 'var(--text-faint)' },
+  '.cm-bullet, .cm-list-number': { color: 'var(--text-faint)' },
   // Links: accent-coloured and underlined like Obsidian. `inline-block` gives the
   // browser a soft-wrap opportunity after the widget, so text glued to `]]` in the
   // source (e.g. `]]and`) can still wrap onto the next line as it does in Obsidian.

@@ -64,6 +64,13 @@ not a special Backspace or multiple-change heuristic. Reading mode is excluded.
 
 ## Lists
 
+Recognized ordered-list markers (digits and their `.` or `)` delimiter) use the
+same `--text-faint` gray as unordered bullets and reading-mode list markers.
+Live preview decorates only the existing ListItem's `ListMark` source range in an
+OrderedList; ordinary number-like prose stays unchanged. Marker text, body color,
+caret editing and prefix measurements remain native and unchanged. This color
+change has source/diff inspection only, without runtime acceptance or a new build.
+
 Enter continues marker lines through the existing `insertNewlineContinueMarkup`.
 For an unmarked, nonempty paragraph line inside a ListItem, Enter preserves that
 line's exact quote and whitespace prefix. This avoids resetting an extra Tab to
