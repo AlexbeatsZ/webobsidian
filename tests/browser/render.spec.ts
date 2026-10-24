@@ -339,8 +339,8 @@ test('default typography loads bundled fonts and shares callout presentation', a
     await expect(host.locator('.cm-heading-labelled')).toHaveCount(1);
     for (const kind of ['proof', 'think', 'tactic']) {
       const callout = host.locator(`.md-callout[data-callout="${kind}"]`);
-      await expect(callout).toHaveCSS('border-top-style', 'solid');
-      expect(await callout.locator(':scope > .callout-title').evaluate(el => getComputedStyle(el, '::before').width)).toBe('3px');
+      expect(await callout.evaluate(el => getComputedStyle(el).boxShadow)).toContain('inset');
+      expect(await callout.locator(':scope > .md-callout-title').evaluate(el => getComputedStyle(el, '::before').borderRightWidth)).toBe('3px');
     }
   }
   for (const theme of ['light', 'dark']) {
@@ -363,7 +363,7 @@ test('callout title owns its rule and centers the original Lucide icons', async 
   for (const slot of [0, 1]) {
     const host = page.locator(`[data-slot="${slot}"]`);
     for (const [kind, icon] of [['proof', 'check-circle'], ['think', 'lightbulb'], ['tactic', 'file-signature']]) {
-      const title = host.locator(`.md-callout[data-callout="${kind}"] > .callout-title`);
+      const title = host.locator(`.md-callout[data-callout="${kind}"] > .md-callout-title`);
       await expect(title.locator(`svg[data-lucide="${icon}"]`)).toHaveCount(1);
       const geometry = await title.evaluate(el => {
         const rule = getComputedStyle(el, '::before');

@@ -8,7 +8,8 @@ This supersedes the earlier 24px wrapper-gutter formula recorded below. Current
 listLayout still measures intrinsic Q/L boxes; line padding is base + Q + L and
 text-indent is -(Q + L). Quote wrappers add no horizontal padding/border width;
 their continuous rule is absolute, with nested origins supplied by intrinsic
-transparent preceding-prefix text. Removed unused cm-blockquote line borders and
+transparent prefix text through each level's own `>`, excluding its final separator
+space. The rule follows the marker's right edge, never its left. Removed unused cm-blockquote line borders and
 depth-gradient rules; native md-quote is the only quote-rule owner. Math source
 continuations retain the same structural-prefix pass before literal-body exclusion.
 The filename now lives outside contentDOM, so a first-source quote cannot wrap it.
@@ -16,6 +17,11 @@ Callout headers also preserve all quote prefixes: only the core model's exact
 markerFrom..markerTo token becomes the inline icon/default title, with original
 separator whitespace left intact. Removed fixed title/icon offsets; title type
 color is scoped to its own title wrapper, and nested body text remains neutral.
+The native wrapper no longer also carries the generic callout-title class. The
+copied Vault Theme.css applies padding-left12px/flex/a left rule to that class;
+this independent source rule survived removal of native icon offsets. Native
+md-callout-title now owns layout without a competing legacy class or CSS override.
+Actual enabled/computed styles in the user's window have not been inspected.
 The subsequent screenshot exposed retained frame padding: Callout frames now have
 zero horizontal padding and use an inset painted border instead of an in-flow
 border, so no ancestor frame adds a 16px/0.5px source-origin shift. This correction

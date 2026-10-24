@@ -683,14 +683,14 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .md-callout-spacing { padding: 16px 0; width: 100%; min-width: 0; }
 .md-callout { margin: 0; width: 100%; min-width: 0; max-width: 100%; }
 .md-callout-body { padding-top: 8px; }
-.callout-title {
+.md-callout-title, .callout-title {
   display: block;
   font-weight: 600;
   margin-bottom: 8px;
   position: relative;
   color: rgb(var(--callout-color, var(--callout-default)));
 }
-.callout-title::before {
+.md-callout-title::before, .callout-title::before {
   content: attr(data-quote-prefix);
   position: absolute;
   left: 0;

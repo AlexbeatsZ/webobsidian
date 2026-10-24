@@ -30,8 +30,20 @@ an unquoted marker, or code cannot declare one. Nested quotes are classified fro
 their own first logical lines: an inner Callout has its own frame/type/title color;
 an inner ordinary quote remains a quote inside the outer frame. No new recognizer
 or inherited-type state is added; markdown-core's cached blockContainers owns this.
-The colored title rule uses the same intrinsic preceding-prefix text as ordinary
-quote rules, aligning to its own nested `>` rather than the outermost source marker.
+The colored title rule uses the same intrinsic source-prefix text as ordinary
+quote rules, through its own `>` but excluding the final optional separator space.
+The rule is at the right edge of that marker, not before it. Nested rules include
+all preceding levels and their native spaces, plus their own marker. This absolute
+decoration adds no source width; the native `>` and separator remain unchanged.
+
+The native wrapper uses only md-callout-title. It deliberately does not also use
+the legacy callout-title class: the copied Vault Theme.css applies flex, a 12px
+left inset and its own ::before to that generic class. Removing an internal icon
+offset cannot prevent that independent rule from shifting source text. Native
+title styling has one md-callout-title owner; legacy HTML can keep callout-title.
+No specificity override or injected reset and no Vault snippet rewrite is added.
+The copolymer screenshot's source starts directly with `>`; loaded CSS/computed
+geometry remains unverified under the source-only boundary.
 
 Header source is partitioned into native `>`/source-space prefixes, the exact
 `[!type]+/-` token, separating whitespace and custom title. markerFrom/markerTo
@@ -91,8 +103,9 @@ prefix. Ordinary lines have base zero; body-local headings retain their separate
 24px title decoration. No quote-specific 24px gap or widened marker box is added.
 Native .md-quote wrappers own continuous/nested rules as absolute pseudo-elements,
 with no horizontal border/padding in flow. Their transparent pseudo-element text
-is the exact preceding quote-level source prefix (via existing stripQuotePrefix),
-so the rule's intrinsic origin follows native characters rather than a fixed
+is the exact quote-level source prefix through its own `>` (via existing
+stripQuotePrefix, excluding the final separator space), so its right-edge origin
+follows native characters rather than a fixed
 depth offset. Quoted lists retain source whitespace/marker width. There is no
 second rule renderer, observer or fold state.
 Callout title replacement remains its existing icon/title control path; body

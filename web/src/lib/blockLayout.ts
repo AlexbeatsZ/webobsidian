@@ -29,10 +29,10 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
     const rank = Math.max(1, (block.kind === 'code' ? 80 : 100) - block.depth);
     if (block.kind !== 'code') {
       const first = state.doc.lineAt(block.from).text;
-      const own = stripQuotePrefix(first, block.depth - 1);
-      // An absolute rule follows the intrinsic text of preceding quote levels.
-      // The wrapper itself contributes neither a border width nor indentation.
-      attributes['data-quote-prefix'] = first.slice(0, first.length - own.length) + (own.match(/^ {0,3}(?=>)/)?.[0] ?? '');
+      const body = stripQuotePrefix(first, block.depth);
+      // The rule follows this level's own >, before its optional separator.
+      // Its intrinsic source strut adds no width or indentation to native text.
+      attributes['data-quote-prefix'] = first.slice(0, first.length - body.length).replace(/ $/, '');
     }
     if (block.kind === 'callout') {
       attributes['data-callout'] = block.type;
@@ -48,7 +48,7 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
       // Give the title its own box. Its rule must track the complete title,
       // including wrapped text, independently of the gap before the body.
       ranges.push(BlockWrapper.create({ tagName: 'div',
-        attributes: { class: 'callout-title md-callout-title',
+        attributes: { class: 'md-callout-title',
           'data-quote-prefix': attributes['data-quote-prefix'],
           style: `--callout-color: var(--callout-${CALLOUT_SLOT[block.type] ?? 'default'})`,
         }, rank: 0,
