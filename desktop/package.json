@@ -63,13 +63,21 @@
     "win": {
       "icon": "buildResources/icon.png",
       "target": [
-        { "target": "portable", "arch": ["x64"] }
+        { "target": "nsis", "arch": ["x64"] }
       ],
       "artifactName": "${productName}-${version}-win-${arch}.${ext}"
     },
-    "portable": {
-      "unpackDirName": true,
-      "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
+    "nsis": {
+      "include": "buildResources/installer.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": false,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}"
     },
     "linux": {
       "icon": "buildResources/icon.png",

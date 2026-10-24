@@ -158,11 +158,26 @@ remains unverified and existing release outputs are unchanged.
 
 ## Local build retention
 
-Windows builds use only the x64 portable target, producing
-`WebObsidian-<version>-win-x64-portable.exe`. This applies to local npm packaging
-and release CI through desktop/package.json. The NSIS setup target/configuration
-was removed on 2026-10-22 at the user's request. macOS/Linux targets are unchanged.
-Packaging never installs or launches the generated application.
+On 2026-10-24 the user replaced the portable-only preference with a normal
+per-user installation under `%LOCALAPPDATA%/Programs/WebObsidian`. Windows builds
+now use the x64 NSIS target, producing
+`WebObsidian-<version>-win-x64-setup.exe`. Local npm packaging and release CI use
+the same desktop/package.json configuration. The installer permits a custom
+directory, does not elevate or auto-launch, creates only a Start menu shortcut,
+and retains user data when uninstalled. macOS/Linux targets are unchanged.
+Packaging itself never installs or launches the generated application.
+The existing NSIS customCheckAppRunning extension point checks the current
+user's executable name and exits with code 2 while it is running. It does not
+fall through to electron-builder's default taskkill loop, including in silent
+mode. Save and normally close the app before installation or replacement.
+
+Installed business resources retain the existing `resources/server` layout;
+main/preload remain in `resources/app.asar`. A local source fix can rebuild and
+replace the affected complete bundles while the app is closed, without making
+a new installer. Frontend hashed assets and their HTML entry are one update;
+shared core changes must update their affected frontend/server callers together.
+An Electron/native dependency or install-layout change needs a full distribution.
+This is a local maintenance workflow, not a new runtime hot-update mechanism.
 
 Keep only the latest local desktop deliverables. The npm `dist`, `dist:dir`,
 and `dist:publish` commands run `clean:release` first, deleting the entire fixed

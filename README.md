@@ -133,12 +133,12 @@ deployment settings live in **`.env`** (git-ignored) — you never edit the trac
 
 Prefer a native app? Download a desktop package from the
 [**Releases**](https://github.com/AlexbeatsZ/webobsidian/releases) page — available for
-**macOS / Windows / Linux** (Windows: x64 portable; macOS/Linux: arm64 and x64):
+**macOS / Windows / Linux** (Windows: x64 installer; macOS/Linux: arm64 and x64):
 
 | Platform | Download |
 |----------|----------|
 | macOS    | `.dmg` (or `.zip`) — arm64 / x64 |
-| Windows  | Portable `.exe` — x64 |
+| Windows  | Setup `.exe` — x64, per-user installation |
 | Linux    | `.AppImage` or `.deb` — x64 / arm64 |
 
 The desktop app bundles the whole server, picks your vault folder on first launch, and

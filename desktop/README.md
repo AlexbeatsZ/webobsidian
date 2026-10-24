@@ -1,7 +1,7 @@
 # WebObsidian Desktop (Electron)
 
 Packages WebObsidian as a desktop app for **macOS / Windows / Linux**
-(Windows: x64 portable; macOS/Linux: arm64 and x64). It is a thin **Electron shell** around the unchanged
+(Windows: x64 installer; macOS/Linux: arm64 and x64). It is a thin **Electron shell** around the unchanged
 `server/` (Express) + `web/` (SPA): the shell spawns the server as a child process
 bound to `127.0.0.1` on a random free port and loads it in a `BrowserWindow`.
 
@@ -32,10 +32,10 @@ From the **repo root** (builds web + server first, then the desktop app):
 ```bash
 npm install
 npm run desktop          # build everything + launch the app (dev)
-npm run desktop:dist     # build this platform's packages; Windows: portable only
+npm run desktop:dist     # build this platform's packages; Windows: NSIS setup
 ```
 
-To build the Windows x64 portable app without publishing or launching it, run
+To build the Windows x64 installer without publishing or launching it, run
 from the repo root:
 
 ```bash
@@ -50,9 +50,23 @@ through these npm scripts so the cleanup hook is applied; direct
 `electron-builder` invocations bypass it. Desktop `dist/` and `.gen/server/`
 are also regenerated from scratch. This cleanup does not touch vaults or app data.
 
-Windows builds produce only `WebObsidian-<version>-win-x64-portable.exe`.
-The default Windows target is portable for both local builds and release CI;
-no setup installer is generated. Building a package does not install or launch it.
+Windows builds produce `WebObsidian-<version>-win-x64-setup.exe`.
+The default Windows target is a per-user NSIS installer for local builds and
+release CI. It allows choosing the installation directory, creates a Start menu
+shortcut but no desktop shortcut, and does not launch the app automatically.
+Installation refuses to continue while WebObsidian is running; it never uses
+the installer's default process termination behavior. Save and exit first.
+The personal installation directory is `%LOCALAPPDATA%/Programs/WebObsidian`.
+App data and the selected Vault stay outside the installation directory and are
+not deleted by uninstalling. Building a package does not install or launch it.
+
+For later local fixes, rebuild the affected frontend/server/desktop bundle rather
+than the installer. Close the app before replacing installed files. Replace the
+whole frontend asset set and its entry together; keep frontend/server/core
+changes from one source revision together. Desktop main/preload changes require
+regenerating `resources/app.asar`. Electron or native dependency changes require
+a complete distribution update. Do not run the release cleanup against an
+installed app or mix live partial writes with a running app.
 
 Or directly inside `desktop/` (assumes `npm run build` already ran at the root):
 
@@ -60,7 +74,7 @@ Or directly inside `desktop/` (assumes `npm run build` already ran at the root):
 npm run build        # esbuild: dist/ (main+preload) + .gen/server/ (server bundle + SPA)
 npm run check:bundle # static standalone dependency check; does not start the server
 npm start            # launch with the already-built bundle
-npm run dist         # electron-builder → packages; Windows: portable only
+npm run dist         # electron-builder → packages; Windows: NSIS setup
 npm run dist:dir     # fast unpacked build (no installer), for smoke testing
 ```
 
