@@ -117,7 +117,7 @@ test('unfocused live syntax has the same pixels as reading', async ({ page }) =>
   expect(samePixels(live, reading)).toBe(true);
 });
 
-test('the full syntax fixture stays visually equal through multiple scroll positions', async ({ page }) => {
+test('the full syntax fixture stays visually equal through multiple scroll positions', async ({ page }, info) => {
   const source = readFileSync('tests/fixtures/rendering.md', 'utf8');
   await page.evaluate(source => window.renderHarness.reset(source), source);
   await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).replace(/\r\n|\r/g, '\n').length));
@@ -135,6 +135,14 @@ test('the full syntax fixture stays visually equal through multiple scroll posit
       style: '.cm-props-add,.prop-pill-add,.prop-pill-x,.prop-del,.cm-source-toggle{visibility:hidden!important}' };
     const live = await page.locator('[data-slot="0"]').screenshot(options);
     const reading = await page.locator('[data-slot="1"]').screenshot(options);
+    if (!samePixels(live, reading)) {
+      await info.attach('live-' + top, { body: live, contentType: 'image/png' });
+      await info.attach('reading-' + top, { body: reading, contentType: 'image/png' });
+      await info.attach('geometry-' + top, { body: JSON.stringify(await page.locator('[data-slot]').evaluateAll(hosts => hosts.map(host => ({
+        scroll: host.querySelector('.cm-scroller')!.scrollTop,
+        lines: [...host.querySelectorAll('.cm-content .cm-line')].map(el => ({ text: el.textContent, top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height })),
+      })))), contentType: 'application/json' });
+    }
     expect(samePixels(live, reading), 'same pixels at scroll ' + top).toBe(true);
   }
 });
@@ -352,14 +360,14 @@ test('default typography loads bundled fonts and shares callout presentation', a
     await expect(host.locator('.cm-heading-label')).toHaveCount(1);
     for (const kind of ['proof', 'think', 'tactic']) {
       const callout = host.locator(`.md-callout[data-callout="${kind}"]`);
-      expect(await callout.evaluate(el => getComputedStyle(el).boxShadow)).toContain('inset');
+      expect(await callout.evaluate(el => getComputedStyle(el.parentElement!, '::after').boxShadow)).toContain('inset');
       expect(await callout.locator(':scope > .md-callout-title').evaluate(el => getComputedStyle(el, '::before').borderRightWidth)).toBe('3px');
     }
   }
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => { document.querySelector('.theme-light,.theme-dark')!.className = 'theme-' + theme; }, theme);
     const surface = theme === 'dark' ? 'rgb(37, 37, 37)' : 'rgb(250, 250, 250)';
-    await expect(page.locator('[data-slot="0"] .md-callout').first()).toHaveCSS('background-color', surface);
+    expect(await page.locator('[data-slot="0"] .md-callout-spacing').first().evaluate(el => getComputedStyle(el, '::after').backgroundColor)).toBe(surface);
     await expect(page.locator('[data-slot="0"] .cm-highlight').first()).toHaveCSS('background-color', theme === 'dark' ? 'rgb(71, 71, 71)' : 'rgb(224, 224, 224)');
     await page.screenshot({ path: test.info().outputPath('theme-' + theme + '.png') });
   }
@@ -386,7 +394,7 @@ test('callout title owns its rule and centers the original Lucide icons', async 
         const text = [...el.querySelectorAll('.cm-callout-title')].map(node => node.getBoundingClientRect());
         return { top: rule.top, bottom: rule.bottom, width: rule.width, height: parseFloat(rule.height),
           textOffset: (Math.min(...text.map(r => r.top)) + Math.max(...text.map(r => r.bottom)) - rect.top - rect.bottom) / 2,
-          titleHeight: rect.height, iconOffset: (svg.top + svg.bottom) / 2 - rect.top - parseFloat(getComputedStyle(el.querySelector('.cm-line')!).lineHeight) / 2,
+          titleHeight: rect.height, iconOffset: (svg.top + svg.bottom - rect.top - rect.bottom) / 2,
           lineRule: getComputedStyle(el.querySelector('.cm-line')!, '::before').content };
       });
       expect(geometry.top).toBe('0px'); expect(geometry.bottom).toBe('0px');
@@ -398,9 +406,9 @@ test('callout title owns its rule and centers the original Lucide icons', async 
     }
     // The control follows the text rather than sitting between the leading icon and title.
     expect(await host.locator('.md-callout[data-callout="proof"] .cm-line').first().evaluate(el => {
-      const text = el.querySelector('.cm-callout-title')!.getBoundingClientRect();
+      const text = document.createRange(); text.selectNodeContents(el.querySelector('.cm-strong')!);
       const fold = el.querySelector('.cm-callout-fold')!.getBoundingClientRect();
-      return fold.left >= text.right;
+      return fold.left >= text.getBoundingClientRect().right;
     })).toBe(true);
   }
   const reading = page.locator('[data-slot="1"]');

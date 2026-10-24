@@ -68,7 +68,8 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
       // gaps between sibling lines. Keep every pixel in a measured wrapper.
       // All body lines remain CodeMirror text; these wrappers only draw frames.
       ranges.push(BlockWrapper.create({ tagName: 'div',
-        attributes: { class: 'md-callout-spacing' }, rank: rank + 0.25,
+        attributes: { class: 'md-callout-spacing',
+          'data-callout-parent-prefix': prefix.slice(0, prefix.lastIndexOf('>')) }, rank: rank + 0.25,
       }).range(block.from, block.to));
       if (block.bodyFrom < block.to) ranges.push(BlockWrapper.create({ tagName: 'div',
         attributes: { class: 'md-callout-body' }, rank: rank - 0.25,

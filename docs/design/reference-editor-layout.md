@@ -26,8 +26,8 @@ depth-gradient rules; native md-quote is the only quote-rule owner. Math source
 continuations retain the same structural-prefix pass before literal-body exclusion.
 The filename now lives outside contentDOM, so a first-source quote cannot wrap it.
 Callout headers also preserve all quote prefixes: only the core model's exact
-markerFrom..markerTo token becomes the inline icon/default title, with original
-separator whitespace left intact. Removed fixed title/icon offsets; title type
+markerFrom..titleFrom token and separator become the intrinsic icon/default title
+presentation; source bytes remain intact and editable on reveal. Removed fixed title/icon offsets; title type
 color is scoped to its own title wrapper, and nested body text remains neutral.
 The native wrapper no longer also carries the generic callout-title class. The
 copied Vault Theme.css applies padding-left12px/flex/a left rule to that class;

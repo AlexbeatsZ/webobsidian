@@ -21,7 +21,7 @@ async function geometry(page: Page) {
     marker.setStart(node, prefix.textContent!.lastIndexOf('>'));
     marker.setEnd(node, prefix.textContent!.lastIndexOf('>') + 1);
     const rule = getComputedStyle(title, '::before');
-    const icon = title.querySelector<HTMLElement>('.cm-callout-icon');
+    const icon = title.querySelector<SVGElement>('.cm-callout-icon svg');
     const ruleLeft = title.getBoundingClientRect().left + parseFloat(rule.left) + parseFloat(rule.width);
     const own = title.closest<HTMLElement>('.md-callout') ?? title;
     const style = getComputedStyle(title);
@@ -184,7 +184,7 @@ test('quote origin: typing Enter after an empty Tip header renders the default t
   await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe('> [!tip]\n> ');
   for (const slot of [0, 1]) {
     const host = page.locator(`[data-slot="${slot}"]`);
-    await expect(host.locator('.md-callout-title .cm-callout-head')).toHaveText(' Tip');
+    await expect(host.locator('.md-callout-title .cm-callout-head')).toHaveText('Tip');
     await expect(host.locator('.cm-quote-prefix')).toHaveCount(2);
   }
 });

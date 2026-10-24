@@ -37,6 +37,16 @@ instead of the former width:100%/max-width:100% clamp. Wide tables, images and
 unbreakable formulas expand the one frame, including its right inset. Each nested
 Callout owns one level's right inset; ancestors continue to enclose it.
 
+The latest nested-frame correction separates paint from native source origin.
+The existing md-callout-spacing wrapper has an intrinsic parent-prefix column and
+a painted second column. Its Callout spans both columns, retaining every CM source
+position; the neutral background/border begins after the enclosing source prefix.
+Thus the inner painted left edge aligns with the parent's body, and its right edge
+retains the same one-level inset. No extra left text padding, negative displacement,
+second frame DOM, prefix measurement or caret correction is added. The earlier
+direct md-callout background/border is removed; legacy HTML .callout retains its
+own rule. Three nested levels and a quoted table are measured in both views.
+
 Whole-line block replacements all enter sourceBlockReplacement in blockLayout:
 table, block math, Mermaid and HTML have the same intrinsic source-prefix shell.
 The core sourceLinePrefix also replaces the table model's duplicate prefix regex.
@@ -71,32 +81,39 @@ geometry remains unverified under the source-only boundary.
 Header source is partitioned into native `>`/source-space prefixes, the exact
 `[!type]+/-` token, separating whitespace and custom title. markerFrom/markerTo
 exclude every structural quote prefix and all separating whitespace. Only that
-token is replaced with the existing inline icon/default-title widget; source spaces
-and custom title remain native text. The aggregate prefixTo replacement is removed.
+token and its following separator are presented by the existing icon/default-title
+widget; custom title and every `>`/preceding space remain native text. The old
+aggregate prefixTo replacement is removed.
 Both title and body `>` use the same cm-quote-prefix producer, measurement and
 independent caret-reveal predicate. Touching `>` alone does not reveal the type tag.
 The type's visual width may change when rendered, but `>` never gains or loses width.
 
 Removed the 12px title inset, 22px fixed icon column and absolute icon positioning.
-The icon is an ordinary inline box; custom titles retain their original separator,
-and a default title has a normal text space after its icon. Only existing formula
-source controls reserve space on the right. No custom mouse/Enter handling.
-The original split was source-only; the later focused page result below checks
-prefix geometry/nesting and Enter, while folding/wrapped-title/IME remain unverified.
+The later first-line-only `1lh` icon rule was a mistaken interpretation and is
+removed too. A rendered header now has one intrinsic flex pair, cm-callout-heading:
+the icon keeps its natural width, while the native cm-callout-title span wraps in
+its own column. Its inclusive end also contains the existing trailing fold button.
+Thus every title row starts at the first text row's left edge, and align-items:center
+centers the icon against the complete title, including two or more text rows.
+The line's native quote prefix is a separate, nonshrinking flex item; rendered
+headers do not depend on the ordinary paragraph's Q/L hanging-indent measurement.
+Revealing the type removes the pair and restores native source layout. No new
+parser, observer, width cache, coordinate correction or mouse/Enter handler exists.
 
-The later icon-gap feedback adds .3em inline-start padding only inside the existing
-cm-callout-head type-token replacement. No quote prefix, source separator or title
-wrapper gets new spacing. At the tested 18px size, the painted rule-to-icon gap
-was 1.5px before and is 6.8906px after. Native > origin/right-edge geometry remains
-unchanged through reveal. This is presentation of [!type], not widened > source.
-The focused page test covers root and nested custom titles in live/reading modes;
-general wrapped-title/folding/IME/native acceptance is still outside that result.
+The type-token presentation owns equal horizontal breathing room. The icon has
+.3em padding on both sides; its trailing transparent strut mirrors the source
+separator after the current `>`. Half the existing rule width locates the rule's
+center, so the icon center is halfway between that center and the title text edge.
+The same rule-width variable paints the rule and supplies this geometric relation;
+there are no per-type or per-font offsets. Source bytes are unchanged, including
+custom separator whitespace: only presentation of `[!type]+/-` and its separator
+changes. Raw `>` boxes, source origins, body prefixes and nested frame rules keep
+their existing owners. Custom and default titles use the same icon widget.
 
-The element follow-up fixes icon alignment without font-specific transforms:
-cm-callout-icon is an inherited 1lh inline box, top-aligned and internally centered.
-Its SVG remains16px. It aligns to the first title line, not the vertical center
-of a wrapped multi-line header; seven types at18px/24px have0px center error in
-the later suite, which also exercises independent folding.
+The authorized 2026-10-24 follow-up verifies seven types at18px/24px in both views,
+multirow alignment and both center axes, the user's exact two-line title, nested
+and bold titles, default titles, second-row pointer input/Undo and type reveal.
+See tests/reports/callout-titles-20261024.md for results and native/IME boundaries.
 
 ### Thematic breaks inside quotes
 

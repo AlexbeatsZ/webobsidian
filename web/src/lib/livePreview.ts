@@ -388,19 +388,19 @@ class MediaWidget extends WidgetType {
 
 /* ---------------- callouts (§21) — constants shared with Reading view ---------------- */
 
-/** Replaces only the source marker; custom title text stays editable. */
+/** Presents the type token/separator; custom title text stays native and editable. */
 class CalloutHeadWidget extends WidgetType {
-  constructor(readonly slot: string, readonly defaultTitle: string) { super(); }
-  eq(o: CalloutHeadWidget) { return o.slot === this.slot && o.defaultTitle === this.defaultTitle; }
+  constructor(readonly slot: string, readonly defaultTitle: string, readonly quoteGap: string) { super(); }
+  eq(o: CalloutHeadWidget) { return o.slot === this.slot && o.defaultTitle === this.defaultTitle && o.quoteGap === this.quoteGap; }
   toDOM() {
     const span = document.createElement('span');
     span.className = 'cm-callout-head';
     const icon = document.createElement('span');
     icon.className = 'cm-callout-icon';
+    icon.dataset.quoteGap = this.quoteGap;
     icon.innerHTML = calloutIconSvg(this.slot);
     span.appendChild(icon);
     if (this.defaultTitle) {
-      span.appendChild(document.createTextNode(' '));
       const title = document.createElement('span');
       title.className = 'cm-callout-title';
       title.textContent = this.defaultTitle;
@@ -2035,9 +2035,11 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (header && !sourceLine) {
           const slot = CALLOUT_SLOT[header.type] ?? 'default';
           const folded = isCalloutFolded(view.state, header.from, header.fold);
-          if (!touches(header.markerFrom, header.markerTo)) {
-            pushReplace(header.markerFrom, header.markerTo, Decoration.replace({
-              widget: new CalloutHeadWidget(slot, header.title ? '' : calloutDefaultTitle(header.type)),
+          if (!touches(header.markerFrom, header.titleFrom)) {
+            const quoteGap = text.slice(0, header.markerFrom - line.from).split('>').at(-1)!;
+            all.push(Decoration.mark({ class: 'cm-callout-heading', inclusive: true }).range(header.markerFrom, line.to));
+            pushReplace(header.markerFrom, header.titleFrom, Decoration.replace({
+              widget: new CalloutHeadWidget(slot, header.title ? '' : calloutDefaultTitle(header.type), quoteGap),
             }));
           }
           all.push(Decoration.widget({
@@ -2049,7 +2051,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             all.push(Decoration.line({ attributes: { style: `--callout-formula-controls:${formulas.length}` } }).range(line.from));
             all.push(Decoration.widget({ widget: new CalloutMathSourcesWidget(formulas), side: 1 }).range(line.to));
           }
-          if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
+          if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title', inclusiveEnd: true }).range(header.titleFrom, line.to));
           bodyStart = header.titleFrom - line.from;
         }
       }

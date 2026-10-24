@@ -651,10 +651,22 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   color: rgb(var(--callout-color, var(--callout-default))); transition: transform var(--transition); }
 .cm-callout-fold svg { width: 16px; height: 16px; }
 .cm-callout-fold.is-folded { transform: rotate(-90deg); }
-/* The type-marker replacement owns icon breathing room; > keeps its raw width. */
-.cm-callout-head { display: inline; padding-inline-start: .3em; }
-.cm-callout-icon { display: inline-flex; align-items: center; height: 1lh; vertical-align: top;
+/* One intrinsic icon/text pair: native title text wraps inside its own column. */
+.cm-callout-heading { display: inline-flex; align-items: center; vertical-align: top;
+  flex: 0 1 auto; min-width: 0; max-width: 100%; text-indent: 0; }
+.cm-s-obsidian .md-callout-title > .cm-line:has(> .cm-callout-heading) {
+  display: flex; align-items: flex-start; padding-left: 0; text-indent: 0;
+}
+.md-callout-title > .cm-line > .cm-quote-prefix { flex: none; }
+.cm-callout-head { display: inline-flex; align-items: center; min-width: 0; }
+.cm-callout-heading > .cm-callout-head { flex: none; }
+.cm-callout-heading > .cm-callout-title { min-width: 0; }
+.cm-callout-icon { display: inline-flex; align-items: center; flex: none; padding-inline: .3em;
   color: rgb(var(--callout-color, var(--callout-default))); }
+/* Mirror the native separator after > on the text side of the icon. The rule
+   starts at >'s right edge; its center supplies the rectangle's left edge. */
+.cm-callout-icon::after { content: attr(data-quote-gap); white-space: pre;
+  margin-inline-end: calc(var(--callout-rule-width) / -2); }
 .cm-callout-icon svg { display: block; width: 16px; height: 16px; }
 
 /* ---- Reading mode = Live Preview readonly: hide editing affordances ---- */
@@ -680,11 +692,20 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .md-quote { position: relative; }
 .md-quote::before { content: attr(data-quote-prefix); position: absolute; top: 0; bottom: 0; left: -3px;
   width: max-content; white-space: pre; color: transparent; border-right: 3px solid var(--text-normal); pointer-events: none; }
-.md-callout, .callout { width: fit-content; min-width: 100%; max-width: none; background: var(--document-surface);
+.callout { width: fit-content; min-width: 100%; max-width: none; background: var(--document-surface);
   box-shadow: inset 0 0 0 0.5px var(--document-border); border-radius: 4px; padding: 12px 0; margin: 16px 0; }
 /* CM measures wrapper padding, not vertical margins between its text lines. */
-.md-callout-spacing { padding: 16px 0; width: 100%; min-width: 0; }
-.md-callout { margin: 0; width: fit-content; min-width: 100%; max-width: none;
+.md-callout-spacing { padding: 16px 0; width: fit-content; min-width: 100%; max-width: none;
+  display: grid; grid-template-columns: max-content minmax(min-content, 1fr); isolation: isolate; }
+/* Paint begins after the enclosing source prefix; the native CM content spans
+   both columns and retains its original source origin, including revealed >. */
+.md-callout-spacing::before { content: attr(data-callout-parent-prefix); white-space: pre;
+  color: transparent; grid-column: 1; grid-row: 1; pointer-events: none; }
+.md-callout-spacing::after { content: ''; grid-column: 2; grid-row: 1; z-index: -1;
+  background: var(--document-surface); box-shadow: inset 0 0 0 0.5px var(--document-border);
+  border-radius: 4px; pointer-events: none; }
+.md-callout { grid-column: 1 / -1; grid-row: 1; margin: 0; padding: 12px 0;
+  width: fit-content; min-width: 100%; max-width: none;
   display: grid; grid-template-columns: minmax(min-content, 1fr) max-content; }
 .md-callout > * { grid-column: 1; }
 /* The container owns its right source-width inset; native left prefixes stay in place. */
@@ -695,6 +716,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-prefixed-block > :last-child { min-width: 0; flex: 1; }
 .md-callout-body { padding-top: 8px; }
 .md-callout-title, .callout-title {
+  --callout-rule-width: 3px;
   display: block;
   font-weight: 600;
   margin-bottom: 8px;
@@ -710,7 +732,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   width: max-content;
   white-space: pre;
   color: transparent;
-  border-right: 3px solid rgb(var(--callout-color, var(--callout-default)));
+  border-right: var(--callout-rule-width) solid rgb(var(--callout-color, var(--callout-default)));
   border-radius: 2px;
   pointer-events: none;
 }

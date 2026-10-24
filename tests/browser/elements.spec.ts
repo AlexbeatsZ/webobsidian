@@ -61,7 +61,7 @@ test('elements: polymer table retains its quote inset across fold, edit and read
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
 });
 
-test('elements: Callout icons center on the first title line at multiple font sizes', async ({ page }, info) => {
+test('elements: Callout icons center between the rule and aligned multiline title text', async ({ page }, info) => {
   for (const size of [18, 24]) {
     const source = ['info', 'example', 'tip', 'warning', 'proof', 'think', 'tactic'].map((type, i) =>
       `> [!${type}]+ ${i % 2 ? '带格式的长标题 '.repeat(15) : '共聚合反应的意义'}\n> 正文`).join('\n\n') + '\n\nTail';
@@ -70,13 +70,85 @@ test('elements: Callout icons center on the first title line at multiple font si
     const rows = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.md-callout-title')].map(title => {
       const line = title.querySelector<HTMLElement>('.cm-line')!;
       const svg = title.querySelector('.cm-callout-icon svg')!.getBoundingClientRect();
-      const rect = line.getBoundingClientRect(); const height = parseFloat(getComputedStyle(line).lineHeight);
-      return { type: title.parentElement!.dataset.callout, difference: (svg.top + svg.bottom) / 2 - rect.top - height / 2 };
+      const rect = line.getBoundingClientRect();
+      const caption = title.querySelector('.cm-callout-title')!;
+      const text: DOMRect[] = [];
+      const walker = document.createTreeWalker(caption, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.parentElement?.closest('.cm-callout-fold')) continue;
+        for (let i = 0; i < node.textContent!.length; i++) {
+          if (!node.textContent![i].trim()) continue;
+          const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 1);
+          text.push(range.getBoundingClientRect());
+        }
+      }
+      const lefts = new Map<number, number>();
+      for (const rect of text) lefts.set(rect.top, Math.min(lefts.get(rect.top) ?? Infinity, rect.left));
+      const rule = getComputedStyle(title, '::before');
+      const ruleCenter = title.getBoundingClientRect().left + parseFloat(rule.width) + parseFloat(rule.borderRightWidth) / 2;
+      return { type: title.parentElement!.dataset.callout, lines: lefts.size,
+        difference: (svg.top + svg.bottom) / 2 - (rect.top + rect.bottom) / 2,
+        horizontal: (svg.left + svg.right) / 2 - (ruleCenter + text[0].left) / 2,
+        wrapError: Math.max(...lefts.values()) - Math.min(...lefts.values()) };
     }));
     await info.attach('icon-centers-' + size, { body: JSON.stringify(rows), contentType: 'application/json' });
-    for (const row of rows) expect(Math.abs(row.difference), row.type).toBeLessThanOrEqual(.75);
+    await info.attach('title-dom-' + size, { body: await page.locator('[data-slot="0"] .md-callout-title').nth(1).evaluate(el => el.outerHTML), contentType: 'text/html' });
+    for (const row of rows) {
+      expect(Math.abs(row.difference), row.type + ' vertical').toBeLessThanOrEqual(.75);
+      expect(Math.abs(row.horizontal), row.type + ' horizontal').toBeLessThanOrEqual(.75);
+      expect(row.wrapError, row.type + ' wraps').toBeLessThanOrEqual(.75);
+    }
+    expect(rows.some(row => row.lines >= 3)).toBe(true);
   }
   await page.screenshot({ path: info.outputPath('callout-icons.png'), fullPage: true });
+});
+
+test('elements: wrapped Callout titles keep native second-line click, input, reveal and undo', async ({ page }, info) => {
+  const title = '在大聚合度假定下,上述过程的本质是齐次马尔可夫链,Mayo-Lewis 算的齐次马尔科夫链的平稳分布';
+  const source = `> [!tip]+ ${title}\n> 正文\n\n> [!example]+ 外层 **${title}**\n> > [!tip]+   ${title}\n> > 内层正文\n\n> [!think]\n> 默认标题\n\nTail`;
+  await reset(page, source);
+  const live = page.locator('[data-slot="0"]');
+  const point = await live.locator('.md-callout[data-callout="tip"] > .md-callout-title').first().evaluate(el => {
+    const caption = el.querySelector('.cm-callout-title')!;
+    const walker = document.createTreeWalker(caption, NodeFilter.SHOW_TEXT);
+    let firstTop: number | undefined, offset = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.parentElement?.closest('.cm-callout-fold')) continue;
+      for (let i = 0; i < node.textContent!.length; i++) {
+        const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 1);
+        const rect = range.getBoundingClientRect(); firstTop ??= rect.top;
+        if (rect.top > firstTop + 10) return { x: rect.left + 1, y: (rect.top + rect.bottom) / 2, offset: offset + i };
+      }
+      offset += node.textContent!.length;
+    }
+    throw new Error('The actual two-line title must wrap');
+  });
+  await page.screenshot({ path: info.outputPath('two-line-title.png'), fullPage: true });
+  await page.mouse.click(point.x, point.y);
+  await page.keyboard.insertText('新');
+  const at = source.indexOf(title) + point.offset;
+  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe(source.slice(0, at) + '新' + source.slice(at));
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+  await page.evaluate(() => window.renderHarness.cursor(0, 3));
+  await expect(live.locator('.cm-callout-heading')).toHaveCount(3);
+  await expect(live.locator('.cm-callout-icon')).toHaveCount(3);
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  await expect(live.locator('.cm-callout-heading')).toHaveCount(4);
+  await expect(live.locator('.cm-strong')).toHaveCount(1);
+  for (const slot of [0, 1]) {
+    const rows = await page.locator(`[data-slot="${slot}"] .md-callout-title`).evaluateAll(titles => titles.map(title => {
+      const caption = title.querySelector('.cm-callout-title')!.getBoundingClientRect();
+      const svg = title.querySelector('.cm-callout-icon svg')!.getBoundingClientRect();
+      const rule = getComputedStyle(title, '::before');
+      const left = title.getBoundingClientRect().left + parseFloat(rule.width) + parseFloat(rule.borderRightWidth) / 2;
+      return { y: (svg.top + svg.bottom - caption.top - caption.bottom) / 2,
+        x: (svg.left + svg.right - left - caption.left) / 2 };
+    }));
+    await info.attach('nested-formatted-default-' + slot, { body: JSON.stringify(rows), contentType: 'application/json' });
+    for (const row of rows) { expect(Math.abs(row.x)).toBeLessThanOrEqual(.75); expect(Math.abs(row.y)).toBeLessThanOrEqual(.75); }
+  }
+  expect(await page.evaluate(() => window.renderHarness.source(1))).toBe(source);
 });
 
 test('elements: wide table, image and unbreakable formula expand the Callout with symmetric source insets', async ({ page }, info) => {
@@ -109,6 +181,73 @@ test('elements: wide table, image and unbreakable formula expand the Callout wit
     await page.screenshot({ path: info.outputPath('wide-' + name + '.png'), fullPage: true });
     expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
   }
+});
+
+test('elements: nested frames follow enclosing body insets without shifting native text', async ({ page }, info) => {
+  const source = '> [!example]+ 外层\n> Outer正文\n> > [!tip]+ 内层\n> > Inner正文\n> > > [!warning]+ 第三层\n> > > Third正文\n> > >\n> > > | A | B |\n> > > | --- | --- |\n> > > | one | two |\n\nTail';
+  await reset(page, source);
+  const rows = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.md-callout-spacing')].map(frame => {
+    const rect = frame.getBoundingClientRect();
+    const inset = parseFloat(getComputedStyle(frame).gridTemplateColumns);
+    const parent = frame.parentElement!.closest<HTMLElement>('.md-callout-spacing');
+    const parentRect = parent?.getBoundingClientRect();
+    const parentInset = parent ? parseFloat(getComputedStyle(parent).gridTemplateColumns) : 0;
+    const line = frame.querySelector('.md-callout-body .cm-line')!;
+    const prefix = line.querySelector('.cm-quote-prefix')!.getBoundingClientRect();
+    return { prefix: frame.dataset.calloutParentPrefix, inset,
+      left: parentRect ? rect.left + inset - parentRect.left - parentInset : 0,
+      right: parentRect ? parentRect.right - rect.right : 0,
+      textLeft: prefix.right - rect.left - inset,
+      sourceLeft: prefix.left - rect.left };
+  }));
+  await info.attach('nested-frame-insets', { body: JSON.stringify(rows), contentType: 'application/json' });
+  expect(rows).toHaveLength(6);
+  for (const row of rows) {
+    expect(row.sourceLeft).toBeCloseTo(0, 1);
+    expect(row.textLeft).toBeGreaterThan(10);
+    if (row.prefix) { expect(row.left).toBeGreaterThan(10); expect(Math.abs(row.left - row.right)).toBeLessThanOrEqual(.75); }
+    else expect(row.inset).toBe(0);
+  }
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+  await page.screenshot({ path: info.outputPath('nested-frames.png'), fullPage: true });
+});
+
+test('elements: gradual keyboard typing keeps Callout headers, continuation and deletion current', async ({ page }, info) => {
+  const snapshots: { step: string; source: string }[] = [];
+  for (const delay of [25, 0]) {
+    await reset(page, '');
+    await page.evaluate(() => window.renderHarness.focus(0));
+    for (const ch of '> [!tip]') {
+      await page.keyboard.type(ch, { delay });
+      snapshots.push({ step: 'header-' + delay + '-' + ch, source: await page.evaluate(() => window.renderHarness.source(0)) });
+    }
+    await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe('> [!tip]');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe('> [!tip]\n> ');
+    await expect(page.locator('[data-slot="0"] .md-callout-title .cm-callout-icon')).toHaveCount(1);
+    let text = '';
+    for (const ch of 'nnsdfjk') {
+      text += ch; await page.keyboard.type(ch, { delay });
+      await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe('> [!tip]\n> ' + text);
+      await expect(page.locator('[data-slot="0"] .md-callout-body .cm-quote-prefix')).toHaveText('> ');
+    }
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('> [!warning]+ Nested', { delay });
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe('> [!tip]\n> nnsdfjk\n> > [!warning]+ Nested\n> > ');
+    await page.keyboard.type('inside', { delay });
+    await expect(page.locator('[data-slot="0"] .md-callout[data-callout="warning"] .md-callout-body')).toContainText('inside');
+    await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+    snapshots.push({ step: 'leave-inner-' + delay, source: await page.evaluate(() => window.renderHarness.source(0)) });
+    await page.keyboard.type('after', { delay });
+    await page.keyboard.press('Control+a'); await page.keyboard.press('Backspace');
+    await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe('');
+    await expect(page.locator('.md-callout,.md-callout-spacing,.cm-callout-icon')).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('[data-slot="0"] .md-callout[data-callout="tip"]')).toHaveCount(1);
+    await info.attach('typing-' + delay, { body: JSON.stringify(snapshots), contentType: 'application/json' });
+  }
+  await page.screenshot({ path: info.outputPath('gradual-input.png'), fullPage: true });
 });
 
 test('elements: quoted table cell edit, reorder, source restore and undo share the original document', async ({ page }, info) => {
