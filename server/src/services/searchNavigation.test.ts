@@ -3,7 +3,7 @@ const fixture = vi.hoisted(() => ({ raw: '' }));
 vi.mock('./vaultFile.js', () => ({ readFileText: async () => fixture.raw, getVaultRoot: () => '/fixture' }));
 vi.mock('./catalog.js', () => ({ catalog: {}, VaultCatalog: class {}, CORE_LIST_PROPS: [], CATALOG_SCHEMA_VERSION: 1 }));
 import { QmdEngine } from './search.js';
-import { SourceDocument } from '../../../packages/markdown-core/src/source.js';
+import { SourceDocument } from '@webobsidian/markdown-core';
 
 describe('search navigation source coordinates', () => {
   it('keeps match offsets in normalized editor text after BOM and CRLF frontmatter', async () => {
