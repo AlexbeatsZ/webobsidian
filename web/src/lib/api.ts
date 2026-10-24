@@ -76,6 +76,7 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
     try { vaultSwitch = typeof JSON.parse(opts.body)?.vault?.path === 'string'; } catch { /* Invalid JSON is rejected by the server. */ }
   }
   const mutation = !vaultSwitch && !['GET', 'HEAD', 'OPTIONS'].includes((opts.method ?? 'GET').toUpperCase()) &&
+    url !== '/api/settings/debug' &&
     !['/api/attachments/execute', '/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(url.split('?')[0]);
   if (mutation) { mutations++; mutationChanged(); }
   try {
@@ -217,6 +218,9 @@ export const api = {
 
   // settings
   getSettings: () => req<any>('/api/settings/'),
+  appendDebug: (events: unknown[]) => req<{ ok: true }>('/api/settings/debug', { method: 'POST', body: JSON.stringify(events) }),
+  readDebug: () => req<{ text: string }>('/api/settings/debug'),
+  clearDebug: () => req<{ ok: true }>('/api/settings/debug', { method: 'DELETE' }),
   putSettings: (patch: any) => req<any>('/api/settings/', { method: 'PUT', body: JSON.stringify(patch) }),
   browse: (dir?: string) =>
     req<{ dir: string; parent: string; roots: string[]; folders: { name: string; path: string }[] }>(

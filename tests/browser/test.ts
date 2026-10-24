@@ -1,7 +1,8 @@
 import { test as base, expect } from '@playwright/test';
 
-export const test = base.extend<{ runtimeErrors: void }>({
-  runtimeErrors: [async ({ page }, use) => {
+export const test = base.extend<{ runtimeErrors: void; expectedErrors: string[] }>({
+  expectedErrors: [[], { option: true }],
+  runtimeErrors: [async ({ page, expectedErrors }, use) => {
     // Vite's test page has no icon; fulfill the browser's implicit icon request.
     await page.route('**/favicon.ico', route => route.fulfill({ status: 204 }));
     await page.route('**/api/writing', route => route.fulfill({ json: {
@@ -11,7 +12,8 @@ export const test = base.extend<{ runtimeErrors: void }>({
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text() + ' ' + message.location().url); });
     await use();
-    expect(errors, 'No silent renderer/plugin failures').toEqual([]);
+    for (const message of expectedErrors) expect(errors.some(error => error.includes(message)), 'Expected controlled failure: ' + message).toBe(true);
+    expect(errors.filter(error => !expectedErrors.some(message => error.includes(message))), 'No silent renderer/plugin failures').toEqual([]);
   }, { auto: true }],
 });
 export { expect };

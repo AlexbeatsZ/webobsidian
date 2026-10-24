@@ -1,5 +1,6 @@
 import { defaultMathConfiguration, mathRegions, resolveMathPackages, type MarkdownModel } from '@webobsidian/markdown-core';
 import type { MathProfile } from './mathPreamble';
+import { debugEnabled, debugText, recordDebug, debugError } from './debug';
 
 const assetPath = `${import.meta.env.BASE_URL}assets/mathjax-${__MATHJAX_VERSION__}`;
 export interface MathMetrics { em: number; ex: number; containerWidth: number }
@@ -268,6 +269,9 @@ export function readMathMetrics(body: HTMLElement, container = body.closest<HTML
   return { em, ex: em / 2, containerWidth: width && width > 0 ? width : 720 };
 }
 export async function renderMath(body: HTMLElement, tex: string, display: boolean, signal: AbortSignal, options: MathRenderOptions = {}): Promise<void> {
+  const tracing = debugEnabled(), startedAt = tracing ? performance.now() : 0;
+  if (tracing) recordDebug('math.request', { tex: debugText(tex), display, path: options.sourcePath, transient: options.transient, revision, metrics: options.metrics });
+  try {
   while (!signal.aborted) {
     const generation = revision, doc = body.ownerDocument;
     const metrics = options.metrics ?? readMathMetrics(body, options.container);
@@ -282,6 +286,14 @@ export async function renderMath(body: HTMLElement, tex: string, display: boolea
     const output = cloneOutput(template, doc);
     output.setAttribute('data-mathjax-version', __MATHJAX_VERSION__);
     output.setAttribute('data-math-profile-revision', String(revision)); output.setAttribute('aria-label', tex);
-    body.replaceChildren(output); return;
+    body.replaceChildren(output);
+    if (tracing) recordDebug('math.rendered', { path: options.sourcePath, display, duration: performance.now() - startedAt, revision, errorNodes: output.querySelectorAll('[data-mml-node="merror"]').length });
+    return;
+  }
+  } catch (error) {
+    if (tracing) recordDebug('math.error', { ...debugError(error), path: options.sourcePath, display, duration: performance.now() - startedAt });
+    throw error;
+  } finally {
+    if (tracing && signal.aborted) recordDebug('math.aborted', { path: options.sourcePath, display, duration: performance.now() - startedAt });
   }
 }

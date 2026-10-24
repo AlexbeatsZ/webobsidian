@@ -85,6 +85,8 @@ const SettingsSchema = z.object({
     .object({
       theme: z.enum(['obsidian-dark', 'obsidian-light']).default('obsidian-light'),
       defaultView: z.enum(['live', 'source', 'reading']).default('live'),
+      debugRecording: z.boolean().default(false),
+      debugSource: z.boolean().default(true),
     })
     .default({}),
   plugins: z

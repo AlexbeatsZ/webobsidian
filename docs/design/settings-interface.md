@@ -84,3 +84,9 @@ The 2026-10-23 follow-up removes standalone engineering/migration explanations
 outside setting cards, including Plus migration flags and CSS storage details.
 Names, short actionable row descriptions, file-open controls and real errors or
 operation results remain. No replacement tooltip/help UI is added.
+
+The 2026-10-24 debug page reuses SettingGroup/SettingRow and the existing UI settings
+service. It exposes recording/source inclusion, explicit capture, local export and
+clear-after-stop controls. The shared recorder also serves three existing-registry
+commands; Settings owns no log buffer, input handler or alternate diagnostic state.
+See editor-debugging.md for lifecycle, retention and evidence boundaries.

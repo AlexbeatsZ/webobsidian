@@ -18,6 +18,7 @@ import ConfiguredMenuSettings from './ConfiguredMenuSettings';
 import TagSettings from './TagSettings';
 import AutomationSettings from './AutomationSettings';
 import HotkeySettings from './HotkeySettings';
+import DebugSettings from './DebugSettings';
 import ConfigurationFile from './ConfigurationFile';
 import { readCssSnippets, setCssSnippetEnabled, type CssSnippets } from '../lib/cssSnippets';
 import { readNativeFeatures, saveNativeFeatures, type NativeFeaturePreferences } from '../lib/nativeFeatures';
@@ -27,7 +28,7 @@ import { workspaceMaintenanceBlockers } from '../lib/vaultMaintenance';
 import { SettingRow as Row, SettingGroup } from './SettingRow';
 
 type Section =
-  'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about';
+  'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
@@ -168,6 +169,7 @@ export default function Settings() {
             {section === 'interface' && <InterfaceSettings />}
             {section === 'editor' && <EditorSettings />}
             {section === 'about' && <About />}
+            {section === 'debug' && <DebugSettings />}
           </div>
           {pluginTab && <PluginSettingsTab id={pluginTab} />}
         </div>
@@ -220,13 +222,14 @@ const labels: Record<Section, string> = {
   interface: '界面',
   editor: '编辑器',
   about: '关于',
+  debug: '调试',
 };
 const sectionIcons: Record<Section, string> = {
   search: 'search', hotkeys: 'command', automation: 'command', writing: 'code', formatting: 'pencil', userscripts: 'globe', menus: 'list',
-  tags: 'hash', vault: 'folder', git: 'refresh-cw', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'pencil', about: 'info',
+  tags: 'hash', vault: 'folder', git: 'refresh-cw', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'pencil', about: 'info', debug: 'code',
 };
 const NAV_GROUPS: { title: string; sections: Section[] }[] = [
-  { title: '选项', sections: ['about', 'appearance', 'interface', 'editor', 'vault', 'hotkeys', 'plugins'] },
+  { title: '选项', sections: ['about', 'appearance', 'interface', 'editor', 'vault', 'hotkeys', 'plugins', 'debug'] },
   { title: '核心功能', sections: ['search', 'writing', 'formatting', 'tags', 'automation', 'userscripts', 'menus', 'git'] },
 ];
 

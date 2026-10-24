@@ -2,6 +2,7 @@ import { Prec, StateEffect, StateField, type EditorState } from '@codemirror/sta
 import { EditorView, keymap } from '@codemirror/view';
 import type { SourceSpan } from '@webobsidian/markdown-core';
 import { compositionSelection } from './editorSelection';
+import { recordDebug } from './debug';
 
 /** Every source entry is temporary; only source coordinates belong in this state. */
 export const toggleSourceRegion = StateEffect.define<SourceSpan | null>();
@@ -61,6 +62,7 @@ export function sourceButton(view: EditorView, range: SourceSpan | (() => Source
     if (view.state.readOnly) return;
     const current = typeof range === 'function' ? range() : range;
     const selection = options.selection;
+    recordDebug('source.open', { label, range: current, selection });
     view.dispatch({ effects: toggleSourceRegion.of({ from: current.from, to: current.to }),
       selection: { anchor: selection?.from ?? current.from, head: selection?.to ?? current.from }, scrollIntoView: true });
     view.focus();

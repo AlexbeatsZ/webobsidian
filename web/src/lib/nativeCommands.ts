@@ -12,6 +12,7 @@ import { configuredMenuCommands } from './configuredMenus/commands';
 import { attachmentCleanupCommands, attachmentCleanupLegacyCommandIds } from './attachments/commands';
 import { tagCommands } from './tags/commands';
 import { headingLevelCommands } from './headingLevelCommands';
+import { debugStatus, updateDebug, captureDebug, flushDebug, exportDebug } from './debug';
 
 /** Native command definitions shared by the palette and configurable shortcuts. */
 function setMode(mode: 'live' | 'reading' | 'source' | 'toggle-preview' | 'toggle-source') {
@@ -21,6 +22,12 @@ function setMode(mode: 'live' | 'reading' | 'source' | 'toggle-preview' | 'toggl
     : mode === 'toggle-source' ? (state.viewMode === 'source' ? 'live' : 'source') : mode);
 }
 export const nativeCommands: NativeCommand[] = [
+  { id: 'debug:toggle', title: '调试：开启或关闭记录', run: () => { const state = debugStatus(); return updateDebug(!state.enabled, state.source); } },
+  { id: 'debug:capture', title: '调试：记录当前现场', run: async () => {
+    if (!debugStatus().enabled) throw new Error('请先开启调试记录');
+    captureDebug('command'); await flushDebug();
+  } },
+  { id: 'debug:export', title: '调试：导出日志', run: exportDebug },
   { id: 'review-changes', title: '审阅候选修改', run: showReviews },
   ...nativeEditorCommands,
   ...nativeWorkspaceCommands,

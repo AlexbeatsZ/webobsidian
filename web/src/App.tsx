@@ -31,6 +31,7 @@ import { bindOperationWorkspace } from './lib/review/client';
 import { clearNativeFeaturePreferences } from './lib/nativeFeaturePreferences';
 import { documents } from './lib/documents';
 import { initializePropertyTypes } from './lib/propertyTypes';
+import { configureDebug, debugEnabled, recordDebug } from './lib/debug';
 
 export default function App() {
   const loadTree = useStore((s) => s.loadTree);
@@ -44,6 +45,11 @@ export default function App() {
   const save = useStore((s) => s.save);
   const toast = useStore((s) => s.toast);
   const [theme, setTheme] = useState<'theme-dark' | 'theme-light'>('theme-light');
+
+  useEffect(() => documents.subscribe(snapshot => {
+    if (debugEnabled()) recordDebug('document.state', { path: snapshot.id, version: snapshot.version,
+      dirty: snapshot.dirty, saving: snapshot.saving, locked: snapshot.locked, conflict: Boolean(snapshot.conflict), revision: snapshot.revision });
+  }), []);
 
   useLayoutEffect(() => {
     // Plugin modals/notices/suggesters mount outside React's theme wrapper.
@@ -79,7 +85,7 @@ export default function App() {
       .catch(() => {});
     api
       .getSettings()
-      .then((s) => setTheme(s?.ui?.theme === 'obsidian-dark' ? 'theme-dark' : 'theme-light'))
+      .then((s) => { setTheme(s?.ui?.theme === 'obsidian-dark' ? 'theme-dark' : 'theme-light'); configureDebug(Boolean(s?.ui?.debugRecording), s?.ui?.debugSource !== false); })
       .catch(() => {});
     loadPlugins().catch(() => {});
     // websocket live updates

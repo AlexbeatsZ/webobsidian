@@ -5,6 +5,7 @@ import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { editorSelection } from '../lib/editorSelection';
+import { editorDebugging } from '../lib/editorDebug';
 import { bindEditorMode } from '../lib/activeEditor';
 import { editorPhrases } from '../lib/editorPhrases';
 import { bindFragmentNavigation } from '../lib/fragmentNavigation';
@@ -237,7 +238,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       selection: { anchor: initPos },
       extensions: [
         indentUnit.of('    '), EditorState.tabSize.of(4), editorPhrases,
-        editorSelection, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
+        editorSelection, editorDebugging, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
         extraComp.of(p.extensions ?? []),
         readonlyComp.of(readonlyExt(p.mode === 'reading' || !!p.snapshot.locked)),

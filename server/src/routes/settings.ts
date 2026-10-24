@@ -12,12 +12,23 @@ import { selectVaultWorkspace } from '../services/uistate.js';
 import { z } from 'zod';
 import { readCssSnippets, readCssSnippet, setCssSnippetEnabled } from '../services/cssSnippets.js';
 import { readHotkeys, patchHotkeys } from '../services/hotkeySettings.js';
+import { DebugLog } from '../services/debugLog.js';
 
 let switchRuntime = async (_commit: () => Promise<void>): Promise<void> => { throw new Error('Vault switch runtime is not ready'); };
 /** The server owns its existing watcher and index lifecycle. */
 export function configureVaultSwitch(handler: typeof switchRuntime): void { switchRuntime = handler; }
 
 export const settingsRouter = Router();
+const debugLog = new DebugLog(path.join(config.dataDir, 'debug'));
+settingsRouter.post('/debug', asyncHandler(async (req, res) => {
+  if (!(await getSettings()).ui.debugRecording) throw Object.assign(new Error('调试记录未开启'), { status: 409 });
+  const events = z.array(z.object({ session: z.string().max(80), sequence: z.number().int().nonnegative(),
+    time: z.string().max(40), elapsed: z.number(), type: z.string().max(100), data: z.unknown() }).strict()).min(1).max(256).parse(req.body);
+  if (Buffer.byteLength(JSON.stringify(events)) > 2 * 1024 * 1024) throw Object.assign(new Error('调试批次过大'), { status: 413 });
+  await debugLog.append(events); res.json({ ok: true });
+}));
+settingsRouter.get('/debug', asyncHandler(async (_req, res) => { res.json({ text: await debugLog.read() }); }));
+settingsRouter.delete('/debug', asyncHandler(async (_req, res) => { await debugLog.clear(); res.json({ ok: true }); }));
 settingsRouter.get('/css-snippets', asyncHandler(async (_req, res) => { res.json(await readCssSnippets()); }));
 settingsRouter.put('/css-snippets', asyncHandler(async (req, res) => {
   const input = z.object({ source: z.object({ path: z.literal('appearance.json'), content: z.string().max(1024 * 1024),

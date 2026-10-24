@@ -7,6 +7,11 @@ import { preparePrintDocument } from '../lib/printDocument';
 import MarkdownView, { type MarkdownMode } from '../components/MarkdownView';
 import { registerEditor, getActiveEditor, fmtInline } from '../lib/activeEditor';
 import type { RenderContext } from '../lib/renderContext';
+import DebugSettings from '../components/DebugSettings';
+import { api } from '../lib/api';
+import { configureDebug } from '../lib/debug';
+import { StateEffect } from '@codemirror/state';
+import { ViewPlugin } from '@codemirror/view';
 
 export interface RenderHarnessApi {
   reset: (source: string, shared?: boolean) => void;
@@ -27,6 +32,7 @@ export interface RenderHarnessApi {
   preparePrint: () => Promise<void>;
   notes: (notes: Record<string, string>) => void;
   changeNote: (path: string, source: string) => void;
+  crashPlugin: (slot: number) => void;
   links: string[];
   writes: string[];
 }
@@ -45,6 +51,11 @@ function HarnessView({ session, mode, context, ready }: {
 
 /** Dev-only entry. No production vault, authentication, settings or save API. */
 export default function RenderHarness() {
+  const debugging = new URLSearchParams(location.search).has('debug');
+  useEffect(() => {
+    if (debugging) void api.getSettings().then(settings => configureDebug(Boolean(settings.ui?.debugRecording), settings.ui?.debugSource !== false));
+    return () => { if (debugging) configureDebug(false); };
+  }, [debugging]);
   const [config, setConfig] = useState({ source: '# Title\n\n**bold** and plain.\n\nCaret sentinel.', shared: true, generation: 0 });
   const [modes, setModes] = useState<MarkdownMode[]>(['live', 'reading']);
   const [canvas, setCanvas] = useState(false);
@@ -94,6 +105,13 @@ export default function RenderHarness() {
       cursor: (slot, from, to = from) => refs.current[slot]?.dispatch({ selection: { anchor: from, head: to } }),
       edit: (slot, changes) => refs.current[slot]?.dispatch({ changes }),
       source: (slot) => sessions[slot].snapshot.raw,
+      crashPlugin: slot => {
+        const view = refs.current[slot];
+        view?.dispatch({ effects: StateEffect.appendConfig.of(ViewPlugin.fromClass(class {
+          update() { throw new Error('controlled-plugin-fixture'); }
+        })) });
+        view?.dispatch({ selection: { anchor: view.state.selection.main.head } });
+      },
       save: (slot) => sessions[slot].save(),
       undo: (slot) => { sessions[slot].undo(); },
       mode: (slot, mode) => setModes((previous) => previous.map((value, index) => index === slot ? mode : value)),
@@ -108,7 +126,7 @@ export default function RenderHarness() {
     };
   }, [sessions]);
   if (canvas) return <div className="theme-light" style={{ width: 1000, height: 700 }}><CanvasView /></div>;
-  return <div className="theme-light" style={{ minHeight: '100vh', display: 'flex', gap: 12 }}>
+  return <><div className="theme-light" style={{ minHeight: '100vh', display: 'flex', gap: 12 }}>
     {sessions.map((session, slot) => (slot === 0 || secondary) &&
       <section key={config.generation + ':' + slot} data-slot={slot}
         style={{ width: 720, height: 700, display: 'flex', overflow: 'hidden', background: 'var(--background-primary)' }}>
@@ -117,5 +135,5 @@ export default function RenderHarness() {
           removers.current[slot] = view ? registerEditor(view, { undo: () => session.undo(), redo: () => session.redo() }) : () => {};
         }} />
       </section>)}
-  </div>;
+  </div>{debugging && <div data-debug-panel className="theme-light"><DebugSettings /></div>}</>;
 }
