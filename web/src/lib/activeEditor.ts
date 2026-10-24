@@ -29,6 +29,7 @@ const available = (view: EditorView) => view.dom.isConnected && !view.dom.closes
 
 export function registerEditor(view: EditorView, commands: EditorCommands): () => void {
   mounted.set(view, commands);
+  if (view.hasFocus) active = view;
   const focus = (event: FocusEvent) => {
     if ((event.target as Element).closest('.cm-editor') === view.dom) active = view;
   };

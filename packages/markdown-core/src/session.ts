@@ -11,6 +11,7 @@ export interface DocumentSnapshot {
   readonly dirty: boolean;
   readonly saving: boolean;
   readonly conflict: boolean;
+  readonly locked?: boolean;
 }
 export type DocumentWriter = (id: string, raw: string, baseRevision?: string) => Promise<{ revision?: string }>;
 export interface EditHistoryState { owner: string; before: unknown; after: unknown }
@@ -33,9 +34,10 @@ export class DocumentSession {
   private model: MarkdownModel | undefined;
   private historyState: DocumentSnapshot['historyState'];
   private userEdits = 0;
+  private editLocks = 0;
   get userEditVersion(): number { return this.userEdits; }
 
-  constructor(readonly id: string, raw: string, revision: string | undefined, private writer: DocumentWriter) {
+  constructor(private documentId: string, raw: string, revision: string | undefined, private writer: DocumentWriter) {
     this.source = new SourceDocument(raw);
     this.savedRaw = raw;
     this.revision = revision;
@@ -43,6 +45,21 @@ export class DocumentSession {
   }
 
   get snapshot(): DocumentSnapshot { return this.current; }
+  get id(): string { return this.documentId; }
+  /** Explicit file operations freeze edits while saving and changing identity. */
+  holdEdits(): () => void {
+    this.editLocks++;
+    this.emit();
+    let released = false;
+    return () => { if (!released) { released = true; this.editLocks--; this.emit(); } };
+  }
+  relocate(id: string): void {
+    if (this.saving || this.current.dirty || this.conflict) throw new Error('Save the document before changing its path');
+    this.documentId = id;
+    this.model = undefined;
+    this.version++;
+    this.emit();
+  }
   /** Lazy, shared by views/embeds/metadata, unaffected by save-state snapshots. */
   get analysis(): MarkdownModel {
     if (this.model?.version === this.version) return this.model;
@@ -68,6 +85,7 @@ export class DocumentSession {
   };
 
   edit(baseVersion: number, changes: readonly SourceChange[], origin = 'edit', state?: EditHistoryState): void {
+    if (this.editLocks) throw new Error('Document path is changing; editing is temporarily paused');
     if (baseVersion !== this.version) throw new Error('Document changed before edit could be applied');
     if (!changes.length) return;
     this.historyState = undefined;
@@ -138,6 +156,9 @@ export class DocumentSession {
     return this.pending;
   }
 
+  /** Await an existing writer without requesting another save or formatting. */
+  whenSaved(): Promise<void> { return this.pending ?? Promise.resolve(); }
+
   private async persist(): Promise<void> {
     this.saving = true;
     this.emit();
@@ -160,6 +181,7 @@ export class DocumentSession {
   }
 
   private moveHistory(from: UndoGroup[], to: UndoGroup[], redo: boolean): boolean {
+    if (this.editLocks) return false;
     const group = from.pop();
     if (!group) return false;
     const inverse: SourceChange[][] = [];
@@ -175,7 +197,7 @@ export class DocumentSession {
   private createSnapshot(): DocumentSnapshot {
     return Object.freeze({ id: this.id, version: this.version, text: this.source.text, raw: this.source.raw,
       historyState: this.historyState,
-      revision: this.revision, dirty: this.source.raw !== this.savedRaw, saving: this.saving, conflict: this.conflict });
+      revision: this.revision, dirty: this.source.raw !== this.savedRaw, saving: this.saving, conflict: this.conflict, locked: this.editLocks > 0 });
   }
   private emit(): void {
     this.current = this.createSnapshot();

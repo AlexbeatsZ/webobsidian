@@ -30,6 +30,7 @@ import ReviewHost from './components/ReviewHost';
 import { bindOperationWorkspace } from './lib/review/client';
 import { clearNativeFeaturePreferences } from './lib/nativeFeaturePreferences';
 import { documents } from './lib/documents';
+import { initializePropertyTypes } from './lib/propertyTypes';
 
 export default function App() {
   const loadTree = useStore((s) => s.loadTree);
@@ -86,12 +87,17 @@ export default function App() {
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
     const stopMaintenance = bindVaultMaintenance(ws);
     const stopOperations = bindOperationWorkspace(ws);
+    const stopPropertyTypes = initializePropertyTypes(error => useStore.getState().notify(String(error)));
     let treeTimer: number | undefined;
     let indexTimer: number | undefined;
-    ws.onmessage = (ev) => {
+    ws.onmessage = async (ev) => {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'fs') {
+          if (msg.event === 'change' && documents.get(msg.path)) {
+            try { await documents.refresh(msg.path); }
+            catch (error) { useStore.getState().notify(String(error)); }
+          }
           writingFileChanged(msg.path);
           notifyMenuConfigurationFileChanged(msg.path);
           // Content saves update one stat; structure/unknown paths refresh the tree.
@@ -143,6 +149,7 @@ export default function App() {
       stopMaintenance();
       stopOperations();
       stopUserscripts();
+      stopPropertyTypes();
       stopMenus();
       clearNativeFeaturePreferences();
       stopWritingFiles();
@@ -162,11 +169,11 @@ export default function App() {
   useEffect(() => {
     const command = (event: Event) => {
       const id = (event as CustomEvent<unknown>).detail;
-      if (typeof id === 'string' && ['new', 'files', 'save', 'settings'].includes(id)) sharedApp.commands.executeCommandById(id);
+      if (typeof id === 'string' && ['new', 'files', 'save', 'settings', 'vault-switch'].includes(id)) sharedApp.commands.executeCommandById(id);
     };
     const save = () => {
       for (const snapshot of documents.snapshots()) {
-        if (snapshot.dirty && !snapshot.conflict) void documents.get(snapshot.id)?.save().catch(error => useStore.getState().notify(String(error)));
+        if (snapshot.dirty && !snapshot.conflict && !snapshot.locked) void documents.get(snapshot.id)?.save().catch(error => useStore.getState().notify(String(error)));
       }
     };
     const hidden = () => { if (document.visibilityState === 'hidden') save(); };

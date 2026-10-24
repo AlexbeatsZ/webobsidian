@@ -68,19 +68,19 @@ searchRouter.get(
 searchRouter.get(
   '/property-types',
   asyncHandler(async (_req, res) => {
-    res.json({ types: await readPropertyTypes() });
+    res.json(await readPropertyTypes());
   }),
 );
 
 searchRouter.post(
   '/property-types',
   asyncHandler(async (req, res) => {
-    const { key, type } = req.body ?? {};
+    const { key, type, expected } = req.body ?? {};
     if (typeof key !== 'string' || typeof type !== 'string') {
       res.status(400).json({ error: 'key and type required' });
       return;
     }
-    res.json({ types: await setPropertyType(key, type) });
+    res.json(await setPropertyType(key, type, expected));
   }),
 );
 

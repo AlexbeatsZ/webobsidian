@@ -5,7 +5,7 @@ import { pendingMutations } from './api';
 export function workspaceMaintenanceBlockers(): string[] {
   const blockers: string[] = [];
   if (useStore.getState().vaultSessionStale) blockers.push('Vault 已切换，请重新加载应用后扫描');
-  if (documents.snapshots().some(snapshot => snapshot.dirty || snapshot.conflict || snapshot.saving))
+  if (documents.snapshots().some(snapshot => snapshot.dirty || snapshot.conflict || snapshot.saving || snapshot.locked))
     blockers.push('有未保存或冲突的文档，请先保存');
   if (useStore.getState().dirty) blockers.push('当前文件有未保存内容');
   if (useStore.getState().pendingCanvasEdits) blockers.push('Canvas 卡片或连线仍在编辑');

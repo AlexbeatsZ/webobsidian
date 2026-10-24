@@ -21,6 +21,7 @@ import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePr
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, canEditProperties, patchPropertyRows, readPropertyRows, stripQuotePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
+import { followRenderedLink } from './fragmentNavigation';
 import { renderMath, readMathMetrics, type MathMetrics, mathDefinitionContext, subscribeMathConfiguration } from './mathjax';
 import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } from './writing/latex/editor_context/mathPresentation';
 import { decorationInputsChanged } from './decorationDependencies';
@@ -151,9 +152,7 @@ class MdLinkWidget extends WidgetType {
     if (external) a.appendChild(externalLinkIcon());
     a.onmousedown = (e) => {
       e.preventDefault();
-      if (external) window.open(this.href, '_blank', 'noopener');
-      else if (this.href.startsWith('#')) { /* in-note anchor — no-op */ }
-      else contextOf(view).openLink(this.href.replace(/\.(md|markdown)$/i, ''));
+      followRenderedLink(view, this.href);
     };
     return a;
   }
@@ -1113,8 +1112,7 @@ class HtmlBlockWidget extends WidgetType {
       if (!a) return;
       e.preventDefault();
       const href = a.getAttribute('href') || '';
-      if (/^https?:\/\//i.test(href)) window.open(href, '_blank', 'noopener');
-      else if (href && !href.startsWith('#')) contextOf(view).openLink(href.replace(/\.(md|markdown)$/i, ''));
+      followRenderedLink(view, href);
     });
     return div;
   }
@@ -1203,11 +1201,11 @@ function displayTypeOf(p: Prop, registry: Record<string, string>): string {
 
 class FrontmatterWidget extends WidgetType {
   /** `ro` = reading mode: display-only properties. */
-  constructor(readonly yaml: string, readonly ro: boolean) {
+  constructor(readonly yaml: string, readonly ro: boolean, readonly types: Record<string, string>) {
     super();
   }
   eq(o: FrontmatterWidget) {
-    return o.yaml === this.yaml && o.ro === this.ro;
+    return o.yaml === this.yaml && o.ro === this.ro && o.types === this.types;
   }
   ignoreEvent() {
     return true;
@@ -2311,7 +2309,7 @@ function buildFrontmatter(state: EditorState): DecorationSet {
   // in the widget, so the caret no longer reveals raw YAML in Live mode.
   const ro = state.field(livePreviewReadonly, false) ?? false;
   return Decoration.set([
-    Decoration.replace({ widget: new FrontmatterWidget(fm[1], ro), block: true }).range(0, blockEnd),
+    Decoration.replace({ widget: new FrontmatterWidget(fm[1], ro, state.facet(renderContext).propertyTypes()), block: true }).range(0, blockEnd),
   ]);
 }
 

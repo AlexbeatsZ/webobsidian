@@ -1,5 +1,14 @@
 # 快捷键
 
+## Vault identity follow-up (2026-10-23)
+
+Hotkeys uses Vault.vaultPathKey with native features/configuration/workspace.
+Equivalent historical Windows hotkey keys merge only when overlapping command
+values agree; conflicts preserve stored state and report errors. First migration
+also finds old writing hotkeys across equivalent keys without rewriting them.
+Linux casing and existing token/file encodings remain. Format menus call the
+same editorCommands using their captured view. Source/diff evidence only.
+
 ## 唯一命令目录
 
 `CommandManager` 是快捷键、命令面板和设置页共用的目录来源：原生 `NativeCommand` 与运行中

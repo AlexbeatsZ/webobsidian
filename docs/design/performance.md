@@ -1,5 +1,14 @@
 # Editing performance
 
+## Ownership follow-up (2026-10-23)
+
+DocumentRegistry owns one autosave timer per session; Editor and Canvas timers
+are removed. External notifications read only affected opened sessions and merge
+pending refreshes. Selection-only syntax updates retain their early return.
+Startup/switch first await the single watcher ready under rebuildFileIndexes,
+then build/publish and drain queued changes. See architecture-optimization.md.
+Source/diff only: no timings, tests, types, builds or runtime acceptance.
+
 YAML source caches are immutable. yaml Document.clone() retains shared CST token
 objects, so mutable formatting callers must parse their own token tree. Reusing
 the clone can corrupt subsequent key-sorting/property operations despite leaving

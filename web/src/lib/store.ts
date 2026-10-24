@@ -15,10 +15,7 @@ const rightGenerations = new Map<string, number>();
 let rightGeneration = 0;
 
 async function saveLeavingSidebarTab(tab: SidebarTab | undefined): Promise<void> {
-  const session = tab?.type === 'markdown' ? documents.get(tab.state.file) : undefined;
-  if (!session?.snapshot.dirty) return;
-  await session.save();
-  if (session.snapshot.dirty) throw new Error('笔记保存期间又有修改，请保存后重试');
+  await documents.saveLeaving(tab?.type === 'markdown' ? tab.state.file : undefined);
 }
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
@@ -222,7 +219,9 @@ interface AppState {
   openFile: (path: string) => Promise<void>;
   openHomepage: () => Promise<void>;
   openWikilink: (target: string, sourcePath?: string) => Promise<void>;
-  closeTab: (path: string) => void;
+  closeTab: (path: string) => Promise<void>;
+  renamePath: (from: string, to: string) => Promise<void>;
+  removePath: (path: string) => ReturnType<typeof api.remove>;
   setContent: (c: string) => void;
   save: (cause?: 'manual' | 'background') => Promise<void>;
   createNote: (path: string, body?: string) => Promise<void>;
@@ -244,6 +243,34 @@ interface AppState {
 }
 
 const TEXT_RE = /\.(md|markdown|txt|json|csv|canvas|css|js|ya?ml)$/i;
+
+/** All file identities in the existing layout follow one explicit path change. */
+function remapWorkspacePaths(state: AppState, from: string, to?: string): Partial<AppState> {
+  const map = (value: string | null): string | null => value !== null && (value === from || value.startsWith(from + '/'))
+    ? to === undefined ? null : to + value.slice(from.length) : value;
+  const list = (values: string[]) => [...new Set(values.map(map).filter((value): value is string => value !== null))];
+  const tabs = state.tabs.flatMap(tab => {
+    const path = map(tab.path);
+    return path === null ? [] : [{ ...tab, path, title: path === tab.path ? tab.title : path.split('/').pop()! }];
+  });
+  const rightTabs = state.rightTabs.flatMap(tab => {
+    if (tab.type !== 'markdown') return [tab];
+    const file = map(tab.state.file);
+    return file === null ? [] : [{ ...tab, state: { ...tab.state, file }, title: file.split('/').pop()! }];
+  });
+  const activePath = state.activePath === null ? null : map(state.activePath) ?? tabs.at(-1)?.path ?? null, splitPath = map(state.splitPath);
+  const snapshot = activePath ? documents.get(activePath)?.snapshot : undefined;
+  return { tabs, rightTabs, activePath, splitPath, content: snapshot?.raw ?? (activePath === state.activePath ? state.content : ''),
+    dirty: snapshot?.dirty ?? (activePath === state.activePath ? state.dirty : false), splitContent: splitPath ? documents.get(splitPath)?.snapshot.raw ?? state.splitContent : '',
+    rightActiveId: rightTabs.some(tab => tab.id === state.rightActiveId) ? state.rightActiveId : null,
+    leftActiveId: rightTabs.some(tab => tab.id === state.leftActiveId) ? state.leftActiveId : null,
+    recent: list(state.recent), bookmarks: list(state.bookmarks), expanded: list(state.expanded), selected: list(state.selected),
+    history: state.history.map(map).filter((path): path is string => path !== null),
+    histIndex: state.history.slice(0, state.histIndex + 1).map(map).filter(path => path !== null).length - 1,
+    renamingPath: map(state.renamingPath), selectAnchor: map(state.selectAnchor), versionHistoryPath: map(state.versionHistoryPath),
+    clipboard: state.clipboard && map(state.clipboard.path) ? { ...state.clipboard, path: map(state.clipboard.path)! } : null,
+    movePath: Array.isArray(state.movePath) ? list(state.movePath) : map(state.movePath) };
+}
 
 // ---- server-side workspace persistence (shared across browsers/devices) ----
 const PERSIST_KEYS = [
@@ -347,7 +374,12 @@ export const useStore = create<AppState>()(
         return true;
       },
       loadTree: async () => {
-        const tree = await api.tree();
+        let tree: TreeNode, generation: number;
+        do {
+          await documents.pathsSettled();
+          generation = documents.pathVersion;
+          tree = await api.tree();
+        } while (generation !== documents.pathVersion || generation % 2 !== 0);
         const paths = filePaths(tree), prior = get().filePaths;
         set({ tree, filePaths: paths.length === prior.length && paths.every((path, i) => path === prior[i]) ? prior : paths });
       },
@@ -512,7 +544,7 @@ export const useStore = create<AppState>()(
         else get().closeTab(GRAPH_PATH);
       },
       openGraph: async () => {
-        if (get().dirty) await get().save('background');
+        await documents.saveLeaving(get().activePath);
         set((s) => ({
           tabs: s.tabs.some((t) => t.path === GRAPH_PATH)
             ? s.tabs
@@ -568,7 +600,7 @@ export const useStore = create<AppState>()(
       openFile: async (path) => {
         const generation = ++openGeneration;
         if (path === GRAPH_PATH) return get().openGraph();
-        if (get().dirty) await get().save('background');
+        await documents.saveLeaving(get().activePath);
         const home = isHomepagePath(path);
         // A folder path (e.g. deep-link /note/<folder>) opens a folder content
         // view — never read it as a note nor pollute Recent with it.
@@ -613,13 +645,41 @@ export const useStore = create<AppState>()(
         }
       },
 
-      closeTab: (path) =>
+      closeTab: async (path) => {
+        const tab = get().tabs.find(tab => tab.path === path);
+        try { await documents.saveLeaving(path); }
+        catch (error) { get().notify(String(error)); return; }
+        if (get().tabs.find(item => item.path === path) !== tab) return;
         set((s) => {
           const tabs = s.tabs.filter((t) => t.path !== path);
           const wasActive = s.activePath === path;
           const activePath = wasActive ? (tabs.at(-1)?.path ?? null) : s.activePath;
           return { tabs, activePath, ...(wasActive ? { content: '', dirty: false } : {}) };
-        }),
+        });
+      },
+
+      renamePath: async (from, requested) => {
+        const to = requested.replace(/\\/g, '/');
+        if (from === to) return;
+        if (!to || to.split('/').some(part => !part || part === '.' || part === '..')) throw new Error('请输入有效的仓库相对路径');
+        if (to.startsWith(from + '/')) throw new Error('不能将文件夹移入自身');
+        if (get().pendingCanvasEdits) throw new Error('请先完成 Canvas 卡片或连线编辑，再移动文件');
+        openGeneration++; splitGeneration++;
+        await documents.changePath(from, to, () => api.rename(from, to), () => {
+          window.dispatchEvent(new CustomEvent('file-path-changed', { detail: { from, to } }));
+          set(state => remapWorkspacePaths(state, from, to));
+        });
+        await get().loadTree();
+      },
+      removePath: async (path) => {
+        if (get().pendingCanvasEdits) throw new Error('请先完成 Canvas 卡片或连线编辑，再删除文件');
+        openGeneration++; splitGeneration++;
+        const result = await documents.changePath(path, undefined, () => api.remove(path), () => {
+          set(state => remapWorkspacePaths(state, path));
+        });
+        await get().loadTree();
+        return result;
+      },
 
       setContent: (content) => {
         const path = get().activePath;
@@ -735,7 +795,7 @@ export const useStore = create<AppState>()(
         if (originId === CLIENT_ID) return; // ignore echo of our own change
         const prevActive = get().activePath;
         const prevSplit = get().splitPath;
-        if (get().dirty) await get().save('background'); // don't lose local edits when switching
+        await documents.saveLeaving(get().activePath);
         const incoming = restoreSidebarTabs(state.rightTabs);
         for (const tab of get().rightTabs) {
           const next = incoming.find(next => next.id === tab.id);
@@ -755,6 +815,7 @@ export const useStore = create<AppState>()(
 
 // Save durable workspace state to the server (debounced) whenever it changes.
 useStore.subscribe((state, prev) => {
+  if (prev.pendingCanvasEdits && !state.pendingCanvasEdits) documents.flushDeferredRefreshes();
   if (state.activePath !== prev.activePath && state.activePath) {
     const doc = documents.get(state.activePath);
     if (doc) useStore.setState({ content: doc.snapshot.raw, dirty: doc.snapshot.dirty });
@@ -766,6 +827,13 @@ useStore.subscribe((state, prev) => {
 });
 
 // Compatibility mirrors for panels/Canvas; document ownership lives in sessions.
+documents.onError = error => useStore.getState().notify(String(error));
+documents.isOpen = path => {
+  const state = useStore.getState();
+  return state.tabs.some(tab => tab.path === path) || state.splitPath === path || state.rightTabs.some(tab => tab.type === 'markdown' && tab.state.file === path)
+    || [...document.querySelectorAll<HTMLElement>('[data-document-id]')].some(element => element.dataset.documentId === path);
+};
+documents.canRefresh = path => !useStore.getState().vaultSessionStale && (!/\.canvas$/i.test(path) || !useStore.getState().pendingCanvasEdits);
 documents.subscribe((snapshot) => {
   const state = useStore.getState();
   const patch: Partial<AppState> = {};

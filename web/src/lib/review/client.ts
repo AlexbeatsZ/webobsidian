@@ -81,7 +81,7 @@ export function bindOperationWorkspace(socket: WebSocket): () => void {
           cursor: view && !view.state.readOnly ? position(view.state.selection.main.head) : null, selections,
           open: workspace.tabs.map(t => t.path).slice(0, 100), recent: workspace.recent.slice(0, 30),
           document: snapshot ? { path: snapshot.id, raw: snapshot.raw, revision: snapshot.revision, version: snapshot.version,
-            dirty: snapshot.dirty, saving: snapshot.saving, conflict: snapshot.conflict } : null };
+            dirty: snapshot.dirty, saving: snapshot.saving || !!snapshot.locked, conflict: snapshot.conflict } : null };
         if (snapshot && snapshot.raw.length > 1024 * 1024) throw new Error('工作区文档超过 1 Mi 字符上限');
       } else if (msg.kind === 'apply') {
         const expected = msg.args?.expected, raw = msg.args?.raw;
@@ -92,7 +92,7 @@ export function bindOperationWorkspace(socket: WebSocket): () => void {
         const session = documents.get(expected.path);
         const snapshot = session?.snapshot;
         if (!session || !snapshot || snapshot.raw !== expected.raw || snapshot.version !== expected.version ||
-            snapshot.revision !== expected.revision || snapshot.saving || snapshot.conflict) throw new Error('文档已改变，保留当前草稿并停止接受');
+            snapshot.revision !== expected.revision || snapshot.saving || snapshot.conflict || snapshot.locked) throw new Error('文档已改变，保留当前草稿并停止接受');
         // No view reset: setRawText uses the original changesBetween/SourceDocument.
         session.setRawText(raw, 'review.accept');
         await session.save(raw);

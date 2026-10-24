@@ -6,13 +6,12 @@ import { nativeTagMenuItems, openNativeTagPage, searchNativeTag, showNativeTagHo
 import { tagPreferences } from './nativeFeaturePreferences';
 import { menuModifiers } from './configuredMenus/transform';
 import { searchTags } from './search';
+import { propertyTypesSnapshot, setPropertyType } from './propertyTypes';
 
 type Services = Pick<RenderContext, 'openMenu' | 'files' | 'reportError' | 'bindEditor'> & {
   openLink: (target: string, sourcePath?: string) => void;
-  initialPropertyTypes?: Record<string, string>;
 };
 export function createVaultRenderContext(path: string, services: Services): RenderContext {
-  let types = services.initialPropertyTypes ?? {};
   return {
     ...services, sourcePath: path, allowHtmlExecution: true, allowScriptExecution: true, allowBlockEffects: true, allowPlugins: true, openLink: target => services.openLink(target, path),
     tagMenu: (tag, event, source) => {
@@ -30,8 +29,8 @@ export function createVaultRenderContext(path: string, services: Services): Rend
     rawUrl: target => api.rawUrl(target, path),
     tags: async () => searchTags(),
     properties: () => api.properties().then(r => r.properties).catch(() => []),
-    propertyTypes: () => types,
-    setPropertyType: async (key, type) => { types = (await api.setPropertyType(key, type)).types; return types; },
+    propertyTypes: propertyTypesSnapshot,
+    setPropertyType,
     renderEmbed: async (target, signal) => {
       const destination = parseLinkTarget(target);
       const resolved = destination.path ? await api.resolve(target, path) : { path };

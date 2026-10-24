@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useStore } from '../lib/store';
-import { api } from '../lib/api';
 import { useDocumentSession } from '../lib/useDocumentSession';
 import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { registerEditor } from '../lib/activeEditor';
@@ -9,6 +8,7 @@ import { manualSave, bindTimestampUpdates } from '../lib/writing/format';
 import MarkdownView from './MarkdownView';
 import { analyzeMarkdown, fragmentRange, equationContext } from '@webobsidian/markdown-core';
 import { nativeReviewExtension } from '../lib/review/view';
+import { propertyTypesSnapshot, subscribePropertyTypes } from '../lib/propertyTypes';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
 export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment, sidebar = false, onOpenLink, onReady }: {
@@ -29,17 +29,19 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   const setLeftPanel = useStore((s) => s.setLeftPanel);
   const notify = useStore((s) => s.notify);
   const files = useStore((s) => s.filePaths);
-  const [propertyTypes, setPropertyTypes] = useState<Record<string, string>>({});
-  useEffect(() => { let current = true;
-    void api.propertyTypes().then((result) => { if (current) setPropertyTypes(result.types); }).catch(() => {});
-    return () => { current = false; };
-  }, []);
+  const propertyTypes = useSyncExternalStore(subscribePropertyTypes, propertyTypesSnapshot);
   const { session, snapshot, error } = useDocumentSession(path);
   const reviewExtensions = useMemo(() => path && !embedded && !fragment ? nativeReviewExtension(path) : [], [path, embedded, fragment]);
   useEffect(() => session && !reading ? bindTimestampUpdates(session, notify) : undefined, [session, reading, notify]);
-  const unregister = useRef<(() => void) | undefined>(undefined);
+  const [editorView, setEditorView] = useState<import('@codemirror/view').EditorView | null>(null);
+  useEffect(() => {
+    if (!editorView || !session) return;
+    const stopEditor = registerEditor(editorView, { undo: () => session.undo(), redo: () => session.redo() });
+    const stopPlugins = bindPluginEditor(editorView, path ?? '');
+    return () => { stopPlugins(); stopEditor(); };
+  }, [editorView, session]);
   const context = useMemo(() => createVaultRenderContext(path ?? '', {
-    bindEditor: registerEditor, openLink: (target, sourcePath) => { void openLink(target, sourcePath ?? path ?? undefined); }, openMenu, reportError: notify, initialPropertyTypes: propertyTypes,
+    bindEditor: registerEditor, openLink: (target, sourcePath) => { void openLink(target, sourcePath ?? path ?? undefined); }, openMenu, reportError: notify,
     files: () => [...files],
   }), [path, openLink, openMenu, files, propertyTypes, notify]);
   const numberedContext = useMemo(() => {
@@ -48,18 +50,13 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     const from = fragment ? fragmentRange(model, fragment)?.from ?? 0 : 0;
     return { ...context, equations: equationContext(model, from), mathSource: { model, from } };
   }, [context, session, snapshot.version, fragment]);
-  useEffect(() => {
-    if (!session || reading || !snapshot.dirty || snapshot.conflict) return;
-    const timer = window.setTimeout(() => { void session.save().catch((cause) => notify(cause.message)); }, 900);
-    return () => window.clearTimeout(timer);
-  }, [session, reading, snapshot.version, snapshot.dirty, snapshot.conflict, notify]);
   if (error) return <div className="editor-error" role="alert">{error.message}</div>;
   if (!session) return <div className="editor-loading">加载中…</div>;
   const analysis = session.analysis;
   const range = fragment ? fragmentRange(analysis, fragment) : null;
   if (fragment && !range) return <div className="editor-error">未找到章节或块</div>;
   const displayed = range ? { ...snapshot, text: snapshot.text.slice(range.from, range.to), raw: snapshot.text.slice(range.from, range.to) } : snapshot;
-  return <MarkdownView snapshot={displayed} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={numberedContext}
+  return <MarkdownView snapshot={displayed} documentSession={session} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={numberedContext}
     extensions={reviewExtensions}
     autoFocus={!reading} showTitle={!embedded} layout={embedded ? 'embedded' : 'page'}
     onChange={(changes, version, origin, model, history) => { session.edit(version, changes, origin, history); session.acceptAnalysis(model); return session.snapshot; }}
@@ -69,12 +66,7 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     onModeChange={reading ? undefined : setMode}
     onSearch={() => setLeftPanel('search')}
     onReady={(view) => {
-      unregister.current?.();
-      if (view) {
-        const stopEditor = registerEditor(view, { undo: () => session.undo(), redo: () => session.redo() });
-        const stopPlugins = bindPluginEditor(view, path ?? '');
-        unregister.current = () => { stopPlugins(); stopEditor(); };
-      } else unregister.current = undefined;
+      setEditorView(view);
       onReady?.(view);
     }} />;
 }

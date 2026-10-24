@@ -19,6 +19,7 @@ import { forceRendered, sourceIsOpen, sourceButton } from '../sourceControls';
 import { compositionSelection } from '../editorSelection';
 import { contextOf, renderContext, type RenderContext } from '../renderContext';
 import { Component } from './events';
+import { RenderLifetime } from './renderLifetime';
 import { decorationInputsChanged } from '../decorationDependencies';
 import { blockEffectOwns } from '../blocks/model';
 
@@ -52,7 +53,7 @@ export function refreshPluginMarkdown() {
 }
 export function markdownContext(
   path: string,
-  owner: Component,
+  owner: RenderLifetime,
   section?: { lineStart: number; lineEnd: number; text: string }
 ) {
   return {
@@ -61,14 +62,13 @@ export function markdownContext(
     frontmatter: undefined,
     addChild: (child: Component) => {
       owner.addChild(child);
-      void child.load();
       return child;
     },
     getSectionInfo: (_el: HTMLElement) => section ?? null,
   };
 }
 type BlockIdentity = { range: SourceSpan };
-const mounts = new WeakMap<HTMLElement, { child: Component; controller: AbortController }>();
+const mounts = new WeakMap<HTMLElement, RenderLifetime>();
 class CodeWidget extends WidgetType {
   constructor(
     readonly lang: string,
@@ -95,19 +95,15 @@ class CodeWidget extends WidgetType {
     host.dataset.renderPending = 'true';
     const content = document.createElement('div');
     host.append(content);
-    const child = new Component(), controller = new AbortController();
-    mounts.set(host, { child, controller });
+    const child = new RenderLifetime();
+    mounts.set(host, child);
     void child.load();
     const ctx = {
       ...markdownContext(this.sourcePath, child),
       source: this.source,
       get renderContext() { return contextOf(view); },
-      signal: controller.signal,
-      addChild: <T extends Component>(component: T): T => {
-        if (controller.signal.aborted) { component.unload(); return component; }
-        child.addChild(component); void component.load(); return component;
-      },
-      requestMeasure: () => { if (!controller.signal.aborted) view.requestMeasure(); },
+      signal: child.signal,
+      requestMeasure: () => { if (!child.signal.aborted) view.requestMeasure(); },
       getSectionInfo: () => ({
         lineStart: view.state.doc.lineAt(this.identity.range.from).number - 1,
         lineEnd: view.state.doc.lineAt(this.identity.range.to).number - 1,
@@ -115,14 +111,14 @@ class CodeWidget extends WidgetType {
       }),
     };
     Promise.resolve()
-      .then(() => { if (!controller.signal.aborted) return this.processor.callback(content, ctx); })
+      .then(() => { if (!child.signal.aborted) return this.processor.callback(content, ctx); })
       .catch((error) => {
-        if (controller.signal.aborted) return;
+        if (child.signal.aborted) return;
         content.textContent = String(error);
         host.classList.add('mod-error');
       })
       .finally(() => {
-        if (!controller.signal.aborted) { delete host.dataset.renderPending; view.requestMeasure(); }
+        if (!child.signal.aborted) { delete host.dataset.renderPending; view.requestMeasure(); }
       });
     // Code processors receive their fenced body, matching Obsidian's contract.
     if (!view.state.readOnly)
@@ -130,9 +126,7 @@ class CodeWidget extends WidgetType {
     return host;
   }
   destroy(dom: HTMLElement) {
-    const mount = mounts.get(dom);
-    mount?.controller.abort();
-    mount?.child.unload();
+    mounts.get(dom)?.unload();
     mounts.delete(dom);
   }
   ignoreEvent() {
@@ -197,7 +191,7 @@ export const pluginPostProcessing = ViewPlugin.fromClass(
     destroyed = false;
     processed = new Map<
       HTMLElement,
-      { doc: unknown; viewport: string; children: Component[] }
+      { doc: unknown; viewport: string; sourcePath: string; children: RenderLifetime[] }
     >();
     constructor(readonly view: EditorView) {
       this.observer = new MutationObserver(() => this.schedule());
@@ -237,6 +231,7 @@ export const pluginPostProcessing = ViewPlugin.fromClass(
         if (
           !roots.includes(root) ||
           entry.doc !== this.view.state.doc ||
+          entry.sourcePath !== contextOf(this.view).sourcePath ||
           entry.viewport !== viewport
         ) {
           entry.children.forEach((child) => child.unload());
@@ -250,13 +245,14 @@ export const pluginPostProcessing = ViewPlugin.fromClass(
         const entry = {
           doc: this.view.state.doc,
           viewport,
-          children: [] as Component[],
+          sourcePath: contextOf(this.view).sourcePath,
+          children: [] as RenderLifetime[],
         };
         this.processed.set(root, entry);
         for (const processor of [...postProcessors].sort(
           (a, b) => a.sortOrder - b.sortOrder
         )) {
-          const child = new Component();
+          const child = new RenderLifetime();
           void child.load();
           entry.children.push(child);
           try {
@@ -282,7 +278,8 @@ export const pluginPostProcessing = ViewPlugin.fromClass(
           entry.children.forEach((child) => child.unload());
         this.processed.clear();
       }
-      if (update.docChanged || update.viewportChanged || registrationsChanged)
+      if (update.docChanged || update.viewportChanged || registrationsChanged ||
+          update.startState.facet(renderContext).sourcePath !== contextOf(this.view).sourcePath)
         this.schedule();
     }
     destroy() {

@@ -1,10 +1,22 @@
 import { EditorView } from '@codemirror/view';
-import { fragmentRange } from '@webobsidian/markdown-core';
+import { fragmentRange, parseLinkTarget } from '@webobsidian/markdown-core';
 import { syntaxModel } from './syntaxModel';
 import { contextOf } from './renderContext';
 
 const views = new Map<string, Map<EditorView, boolean>>();
 const pending = new Map<string, string>();
+/** Rendered link adapters share protocol policy and the clicked fragment view. */
+export function followRenderedLink(view: EditorView, target: string) {
+  if (/^(?:https?|mailto):/i.test(target)) { window.open(target, '_blank', 'noopener'); return; }
+  if (/^[a-z][a-z\d+.-]*:/i.test(target)) return;
+  if (target.startsWith('#')) {
+    const fragment = parseLinkTarget(target).fragment;
+    if (fragment) {
+      if (views.get(contextOf(view).sourcePath)?.get(view)) openFragment(contextOf(view).sourcePath, fragment, view);
+      else if (!reveal(view, fragment)) contextOf(view).openLink(target);
+    }
+  } else if (target) contextOf(view).openLink(target);
+}
 function reveal(view: EditorView, fragment: string) {
   const source = contextOf(view).mathSource;
   const range = fragmentRange(source?.model ?? view.state.field(syntaxModel), fragment);

@@ -61,6 +61,12 @@ export async function getVaultRoot(): Promise<string> {
   return path.resolve(s.vault.path);
 }
 
+/** One logical Vault identity; persisted encodings remain owned by their callers. */
+export function vaultPathKey(root: string): string {
+  const resolved = path.resolve(root);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
 /** Resolve a vault-relative path to an absolute one, refusing traversal. */
 export async function resolveInVault(relPath: string): Promise<string> {
   const root = await getVaultRoot();
@@ -247,6 +253,8 @@ export async function exists(rel: string): Promise<boolean> {
 export async function rename(from: string, to: string): Promise<void> {
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
+  if (vaultPathKey(absFrom) !== vaultPathKey(absTo) && await pathExists(absTo))
+    throw Object.assign(new Error('目标路径已存在，请选择其他名称'), { status: 409 });
   if ((await fs.stat(absFrom)).isFile() && path.basename(from) !== path.basename(to)) assertFileTitle(to);
   await fs.mkdir(path.dirname(absTo), { recursive: true });
   const children = indexedFilesUnder(from);

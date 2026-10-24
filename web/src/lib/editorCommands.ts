@@ -88,6 +88,7 @@ export const markdownListKeymap: KeyBinding[] = [
 
 /** Smart inline toggle: wrap selection (or word at caret); unwrap if already wrapped. */
 export function toggleInline(view: EditorView, mark: string): boolean {
+  if (view.state.readOnly) return false;
   const tr = view.state.changeByRange((range) => {
     let { from, to } = range;
     if (from === to) {
@@ -134,15 +135,23 @@ export function toggleInline(view: EditorView, mark: string): boolean {
   return true;
 }
 
+/** Explicit surrounding insertion, shared by menus and native code-block insertion. */
+export function surroundSelection(view: EditorView, before: string, after: string): boolean {
+  if (view.state.readOnly) return false;
+  view.dispatch(view.state.changeByRange(range => ({
+    changes: [{ from: range.from, insert: before }, { from: range.to, insert: after }],
+    range: EditorSelection.range(range.from + before.length, range.to + before.length),
+  })), { userEvent: 'input.format' });
+  view.focus();
+  return true;
+}
+
 /** editor:toggle-checklist-status (Mod+L): any non-space status counts as done (§7). */
 export function toggleChecklist(view: EditorView): boolean {
   const { state } = view;
-  const { from, to } = state.selection.main;
-  const a = state.doc.lineAt(from).number;
-  const b = state.doc.lineAt(to).number;
+  if (state.readOnly) return false;
   const changes: ChangeSpec[] = [];
-  for (let n = a; n <= b; n++) {
-    const line = state.doc.line(n);
+  for (const line of selectedMarkdownLines(view).values()) {
     const task = line.text.match(/^(\s*)((?:[-*+]|\d+[.)])\s+)\[(.)\]\s/);
     if (task) {
       const boxPos = line.from + task[1].length + task[2].length + 1;
@@ -239,9 +248,8 @@ export function obsidianKeymap(_h: ObsidianKeymapHandlers): KeyBinding[] {
 }
 
 /** Local source patches over the shared syntax snapshot; no serialization. */
-export function toggleLineStyle(view: EditorView, style: 'bullet' | 'ordered' | 'quote' | number): boolean {
+function selectedMarkdownLines(view: EditorView, bodyHeading = false) {
   const state = view.state;
-  if (state.readOnly) return false;
   const model = state.field(syntaxModel), formulas = mathRegions(model);
   const lines = new Map<number, ReturnType<typeof state.doc.line>>();
   for (const range of state.selection.ranges) {
@@ -251,12 +259,19 @@ export function toggleLineStyle(view: EditorView, style: 'bullet' | 'ordered' | 
       if (model.frontmatter && line.from < model.frontmatter.to || formulas.some(region => line.from < region.to && line.to >= region.from)) continue;
       let excluded = false;
       for (let node = model.tree.resolveInner(line.from + (line.text.match(/^[ \t]*/)?.[0].length ?? 0), 1); node; node = node.parent!) {
-        if (['FencedCode', 'CodeBlock', 'BodyHeading'].includes(node.name)) { excluded = true; break; }
+        if (['FencedCode', 'CodeBlock'].includes(node.name) || !bodyHeading && node.name === 'BodyHeading') { excluded = true; break; }
       }
       if (!excluded && !/^[ \t]*>\s*\[!/.test(line.text)) lines.set(n, line);
     }
   }
-  const marker = style === 'bullet' ? /^(?:[-+*])[ \t]+/ : style === 'ordered' ? /^\d+[.)][ \t]+/ : style === 'quote' ? /^>[ \t]?/ : /^#{1,6}(?:[ \t]+|$)/;
+  return lines;
+}
+
+export function toggleLineStyle(view: EditorView, style: 'bullet' | 'ordered' | 'quote' | number): boolean {
+  const state = view.state;
+  if (state.readOnly) return false;
+  const lines = selectedMarkdownLines(view, style === 7);
+  const marker = style === 'bullet' ? /^(?:[-+*])[ \t]+/ : style === 'ordered' ? /^\d+[.)][ \t]+/ : style === 'quote' ? /^>[ \t]?/ : /^#{1,7}(?:[ \t]+|$)/;
   const rows = [...lines.values()].map(line => {
     const indent = line.text.match(/^[ \t]*/)?.[0].length ?? 0;
     return { line, indent, mark: marker.exec(line.text.slice(indent))?.[0] ?? '' };

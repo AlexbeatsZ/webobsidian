@@ -8,9 +8,10 @@ import {
 import { EditorView } from '@codemirror/view';
 import { livePreviewState } from '../livePreview';
 import { contextOf } from '../renderContext';
+const setEditorInfo = StateEffect.define<any>();
 export const editorInfoField = StateField.define<any>({
   create: () => ({}),
-  update: (value) => value,
+  update: (value, transaction) => transaction.effects.find(effect => effect.is(setEditorInfo))?.value ?? value,
 });
 export const editorLivePreviewField = StateField.define<boolean>({
   create: (state) => state.field(livePreviewState, false) ?? false,
@@ -18,6 +19,7 @@ export const editorLivePreviewField = StateField.define<boolean>({
 });
 const extensions = new Map<object, Extension[]>();
 const mounted = new Map<EditorView, { compartment: Compartment; info: any }>();
+const bindings = new WeakMap<EditorView, Compartment>();
 export function refreshPluginExtensions() {
   // Plugins such as LaTeX Suite mutate the registered array in place and call
   // workspace.updateOptions(). Re-resolve it for every mounted CM instance.
@@ -32,17 +34,23 @@ export function setPluginExtensions(owner: object, value: Extension[]) {
   else extensions.delete(owner);
   refreshPluginExtensions();
 }
-export function attachPluginEditor(view: EditorView, info: any) {
+export function attachPluginEditor(view: EditorView, info: any, onChange?: () => void) {
   const compartment = new Compartment();
+  let binding = bindings.get(view);
+  const installed = !!binding;
+  if (!binding) { binding = new Compartment(); bindings.set(view, binding); }
   mounted.set(view, { compartment, info });
+  const config = [editorInfoField.init(() => info), editorLivePreviewField,
+    compartment.of([...extensions.values()].flat()),
+    EditorView.updateListener.of(update => { if (update.docChanged) onChange?.(); })];
   view.dispatch({
-    effects: StateEffectAppend([
-      editorInfoField.init(() => info),
-      editorLivePreviewField,
-      compartment.of([...extensions.values()].flat()),
-    ]),
+    effects: [installed ? binding.reconfigure(config) : StateEffectAppend(binding.of(config)), setEditorInfo.of(info)],
   });
-  return () => mounted.delete(view);
+  return () => {
+    if (mounted.get(view)?.info !== info) return;
+    mounted.delete(view);
+    if (view.dom.isConnected) view.dispatch({ effects: binding!.reconfigure([]) });
+  };
 }
 const StateEffectAppend = (extension: Extension) =>
   StateEffect.appendConfig.of(extension);

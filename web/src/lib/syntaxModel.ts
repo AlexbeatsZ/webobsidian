@@ -16,10 +16,11 @@ export const adoptSyntaxModel = StateEffect.define<MarkdownModel>();
 export const syntaxModel = StateField.define<MarkdownModel>({
   create: (state) => analyzeMarkdown(state.doc.toString(), state.facet(renderContext).sourcePath),
   update(model, transaction) {
-    if (!transaction.docChanged) return model;
-    const text = transaction.newDoc.toString();
     const provided = transaction.effects.find((e) => e.is(adoptSyntaxModel))?.value as MarkdownModel | undefined;
-    if (provided && provided.id === model.id && provided.text === text) return provided;
+    if (!transaction.docChanged && !provided) return model;
+    const text = transaction.newDoc.toString();
+    if (provided && provided.text === text && (provided.id === model.id || provided.id === transaction.state.facet(renderContext).sourcePath)) return provided;
+    if (!transaction.docChanged) return model;
     const changes: { fromA: number; toA: number; fromB: number; toB: number }[] = [];
     transaction.changes.iterChanges((fromA, toA, fromB, toB) => changes.push({ fromA, toA, fromB, toB }));
     return updateMarkdown(model, text, changes);

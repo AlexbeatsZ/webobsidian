@@ -1,30 +1,21 @@
 import type { App } from '../obsidian/runtime';
-import { Component } from '../obsidian/events';
+import { RenderLifetime } from '../obsidian/renderLifetime';
 import { nonExecutingContext, type RenderContext } from '../renderContext';
 import { documents } from '../documents';
 
 /** One run owns everything it creates, including resources registered after await. */
-export class JavascriptRun extends Component {
-  private disposed = false;
-  private abort = new AbortController();
+export class JavascriptRun extends RenderLifetime {
   private paths = new Set<string>();
   private directories = new Set<string>();
   private observing = false;
   private versions = new Map<string, number>();
-  readonly signal = this.abort.signal;
   readonly component = this;
   get sourcePath() { return this.context.sourcePath; }
   get containerEl() { return this.container; }
   constructor(readonly app: App, readonly container: HTMLElement, readonly context: RenderContext,
     private invalidate: () => void, private measure: () => void) { super(); }
 
-  override register(cleanup: () => any) { if (this.disposed) { try { cleanup(); } catch (error) { console.error(error); } } else super.register(cleanup); }
-  override addChild<T extends Component>(child: T): T {
-    if (this.disposed) { child.unload(); return child; }
-    return super.addChild(child);
-  }
-  onunload() { this.disposed = true; this.abort.abort(); this.container.remove(); }
-  assertActive() { if (this.disposed) throw new DOMException('JavaScript 运行已释放', 'AbortError'); }
+  onunload() { this.container.remove(); }
   onCleanup = (cleanup: () => void) => this.register(cleanup);
   watch = (path: string) => {
     this.assertActive(); path = path.replace(/\\/g, '/').replace(/^\.\//, '');
@@ -48,10 +39,8 @@ export class JavascriptRun extends Component {
     }));
     for (const event of ['modify', 'create', 'delete', 'rename']) this.registerEvent(this.app.vault.on(event, (file: { path: string }, oldPath?: string) => {
       if (!(matches(file.path, event !== 'modify') || (oldPath && matches(oldPath, true)))) return;
-      if (event === 'modify' && this.paths.has(file.path) && documents.get(file.path)) {
-        // Refresh existing sessions once across subscribers; preserve dirty/conflict state.
-        void documents.refresh(file.path).then(this.invalidate, this.invalidate);
-      } else this.invalidate();
+      // Disk synchronization belongs to DocumentRegistry before the Vault event.
+      this.invalidate();
     }));
   }
   async note(path: string) {

@@ -17,9 +17,9 @@ import { search, searchKeymap } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { indentUnit, syntaxHighlighting } from '@codemirror/language';
-import { analyzeMarkdown, bodyHeadingSyntax, changesBetween, type DocumentSnapshot, type SourceChange, type MarkdownModel, type EditHistoryState } from '@webobsidian/markdown-core';
+import { analyzeMarkdown, bodyHeadingSyntax, changesBetween, type DocumentSession, type DocumentSnapshot, type SourceChange, type MarkdownModel, type EditHistoryState } from '@webobsidian/markdown-core';
 import { obsidianHighlightStyle } from '../lib/highlight';
-import { obsidianKeymap, markdownListKeymap } from '../lib/editorCommands';
+import { obsidianKeymap, markdownListKeymap, toggleInline, toggleLineStyle, toggleChecklist, surroundSelection } from '../lib/editorCommands';
 import { suggesterPlugin } from '../lib/suggest';
 import { syntaxModel, adoptSyntaxModel, documentMetadata, blockModel } from '../lib/syntaxModel';
 import { inlineHtml } from '../lib/inlineHtml';
@@ -42,6 +42,7 @@ import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField
 export type MarkdownMode = 'live' | 'reading' | 'source';
 export interface MarkdownViewProps {
   snapshot: DocumentSnapshot;
+  documentSession?: DocumentSession;
   analysis?: MarkdownModel;
   mode: MarkdownMode;
   context: RenderContext;
@@ -90,29 +91,6 @@ export default function MarkdownView(props: MarkdownViewProps) {
     const changes=changesBetween(before,next.text);
     v.dispatch({ changes, ...restored,
       effects: [...(model?.text === next.text ? [adoptSyntaxModel.of(model)] : []),...(restored?.effects??snippetChangeEffects(v.state,changes))], annotations: externalUpdate.of(true) });
-  };
-  // --- editor formatting actions (used by the right-click menu) ---
-  const wrap = (before: string, after = before) => {
-    const v = view.current;
-    if (!v) return;
-    const { from, to } = v.state.selection.main;
-    const sel = v.state.sliceDoc(from, to);
-    v.dispatch({
-      changes: { from, to, insert: before + sel + after },
-      selection: { anchor: from + before.length, head: from + before.length + sel.length },
-    });
-    v.focus();
-  };
-  const prefixLines = (prefix: string) => {
-    const v = view.current;
-    if (!v) return;
-    const { from, to } = v.state.selection.main;
-    const a = v.state.doc.lineAt(from).number;
-    const b = v.state.doc.lineAt(to).number;
-    const changes = [];
-    for (let n = a; n <= b; n++) changes.push({ from: v.state.doc.line(n).from, insert: prefix });
-    v.dispatch({ changes });
-    v.focus();
   };
   const insert = (text: string, caretOffset = text.length) => {
     const v = view.current;
@@ -193,30 +171,30 @@ export default function MarkdownView(props: MarkdownViewProps) {
           { id: 'link:copy', label: "复制链接", onClick: () => { void navigator.clipboard.writeText(link); } }] : []),
         {
           id: 'editor:format', label: "格式", icon: 'pencil', submenu: [
-            { id: 'editor:format:bold', label: "粗体", onClick: () => wrap('**') },
-            { id: 'editor:format:italic', label: "斜体", onClick: () => wrap('*') },
-            { id: 'editor:format:strike', label: "删除线", onClick: () => wrap('~~') },
-            { id: 'editor:format:highlight', label: "高亮", onClick: () => wrap('==') },
-            { id: 'editor:format:code', label: "行内代码", onClick: () => wrap('`') },
+            { id: 'editor:format:bold', label: "粗体", onClick: () => { if (v) toggleInline(v, '**'); } },
+            { id: 'editor:format:italic', label: "斜体", onClick: () => { if (v) toggleInline(v, '*'); } },
+            { id: 'editor:format:strike', label: "删除线", onClick: () => { if (v) toggleInline(v, '~~'); } },
+            { id: 'editor:format:highlight', label: "高亮", onClick: () => { if (v) toggleInline(v, '=='); } },
+            { id: 'editor:format:code', label: "行内代码", onClick: () => { if (v) toggleInline(v, '`'); } },
           ],
         },
         {
           id: 'editor:paragraph', label: "段落", icon: 'file-text', submenu: [
-            { id: 'editor:heading:1', label: "标题 1", onClick: () => prefixLines('# ') },
-            { id: 'editor:heading:2', label: "标题 2", onClick: () => prefixLines('## ') },
-            { id: 'editor:heading:3', label: "标题 3", onClick: () => prefixLines('### ') },
-            { id: 'editor:body-heading', label: '正文内小标题', onClick: () => prefixLines('####### ') },
-            { id: 'editor:list:bullet', label: "无序列表", onClick: () => prefixLines('- ') },
-            { id: 'editor:list:ordered', label: "有序列表", onClick: () => prefixLines('1. ') },
-            { id: 'editor:list:task', label: "任务列表", onClick: () => prefixLines('- [ ] ') },
-            { id: 'editor:quote', label: "引用", onClick: () => prefixLines('> ') },
-            { id: 'editor:code-block', label: "代码块", onClick: () => wrap('```\n', '\n```') },
+            { id: 'editor:heading:1', label: "标题 1", onClick: () => { if (v) toggleLineStyle(v, 1); } },
+            { id: 'editor:heading:2', label: "标题 2", onClick: () => { if (v) toggleLineStyle(v, 2); } },
+            { id: 'editor:heading:3', label: "标题 3", onClick: () => { if (v) toggleLineStyle(v, 3); } },
+            { id: 'editor:body-heading', label: '正文内小标题', onClick: () => { if (v) toggleLineStyle(v, 7); } },
+            { id: 'editor:list:bullet', label: "无序列表", onClick: () => { if (v) toggleLineStyle(v, 'bullet'); } },
+            { id: 'editor:list:ordered', label: "有序列表", onClick: () => { if (v) toggleLineStyle(v, 'ordered'); } },
+            { id: 'editor:list:task', label: "切换任务复选框", onClick: () => { if (v) toggleChecklist(v); } },
+            { id: 'editor:quote', label: "引用", onClick: () => { if (v) toggleLineStyle(v, 'quote'); } },
+            { id: 'editor:code-block', label: "代码块", onClick: () => { if (v) surroundSelection(v, '```\n', '\n```'); } },
           ],
         },
         {
           id: 'editor:insert', label: "插入", icon: 'plus', submenu: [
             { id: 'editor:insert:wiki', label: "内部链接", onClick: () => insert('[[]]', 2) },
-            { id: 'editor:insert:link', label: "外部链接", onClick: () => wrap('[', '](url)') },
+            { id: 'editor:insert:link', label: "外部链接", onClick: () => { if (v) surroundSelection(v, '[', '](url)'); } },
             { id: 'editor:insert:embed', label: "嵌入文件", onClick: () => insert('![[]]', 3) },
             { id: 'editor:insert:callout', label: "标注", onClick: () => insert('> [!note] Title\n> ', 18) },
             { id: 'editor:insert:table', label: "表格", onClick: () => insert('\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n') },
@@ -262,9 +240,9 @@ export default function MarkdownView(props: MarkdownViewProps) {
         editorSelection, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
         extraComp.of(p.extensions ?? []),
-        readonlyComp.of(readonlyExt(p.mode === 'reading')),
+        readonlyComp.of(readonlyExt(p.mode === 'reading' || !!p.snapshot.locked)),
         EditorState.transactionFilter.of((tr) =>
-          tr.docChanged && tr.startState.readOnly && !tr.annotation(externalUpdate) ? [] : tr),
+          tr.docChanged && (tr.startState.readOnly || latest.current.documentSession?.snapshot.locked) && !tr.annotation(externalUpdate) ? [] : tr),
         Prec.high(keymap.of([
           { key: 'Mod-z', run: () => historyAction(false) },
           { key: 'Mod-Shift-z', run: () => historyAction(true) },
@@ -312,13 +290,16 @@ export default function MarkdownView(props: MarkdownViewProps) {
         : request === 'toggle-source' ? (current.mode === 'source' ? 'live' : 'source') : request;
       current.onModeChange?.(mode);
     });
-    const stopNavigation = bindFragmentNavigation(v, p.snapshot.id,
-      !p.context.embedTrail?.length && !p.context.equations?.from);
     view.current = v;
     p.onReady?.(v);
     if (p.autoFocus) v.focus();
-    return () => { stopMode(); stopNavigation(); p.onReady?.(null); view.current = null; v.destroy(); };
-  }, [snapshot.id]);
+    return () => { stopMode(); p.onReady?.(null); view.current = null; v.destroy(); };
+  }, [props.documentSession ?? snapshot.id]);
+
+  useEffect(() => {
+    const v = view.current;
+    if (v) return bindFragmentNavigation(v, snapshot.id, !context.embedTrail?.length && !context.equations?.from);
+  }, [props.documentSession, snapshot.id, context.embedTrail?.length, context.equations?.from]);
 
   useEffect(() => { sync(snapshot); }, [snapshot]);
   useEffect(() => { view.current?.dispatch({ effects: extraComp.reconfigure(props.extensions ?? []) }); }, [props.extensions]);
@@ -328,10 +309,11 @@ export default function MarkdownView(props: MarkdownViewProps) {
       contextComp.reconfigure(renderContext.of(scopedContext)),
       setLivePreviewEnabled.of(isMd && mode !== 'source'),
       setLivePreviewReadonly.of(mode === 'reading'),
-      readonlyComp.reconfigure(readonlyExt(mode === 'reading')),
+      readonlyComp.reconfigure(readonlyExt(mode === 'reading' || !!snapshot.locked)),
       setNoteTitle.of(showTitle ? titleOf(snapshot.id) : ''),
+      ...(props.analysis && view.current?.state.field(syntaxModel).id !== props.analysis.id ? [adoptSyntaxModel.of(props.analysis)] : []),
     ] });
-  }, [mode, context, showTitle, snapshot.id]);
+  }, [mode, context, showTitle, snapshot.id, snapshot.locked]);
 
   const cls = ['cm-host markdown-source-view cm-s-obsidian mod-cm6',
     layout === 'page' ? 'is-readable-line-width' : 'markdown-embedded-view',

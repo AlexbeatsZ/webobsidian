@@ -137,31 +137,32 @@ async function persist(s: Settings): Promise<void> {
   await ensureDataDir();
   const json = JSON.stringify(s, null, 2);
   const tmp = `${SETTINGS_FILE}.tmp-${randomBytes(4).toString('hex')}`;
-  await fs.writeFile(tmp, json, { mode: 0o600 });
   try {
-    await fs.copyFile(SETTINGS_FILE, `${SETTINGS_FILE}.bak`);
-  } catch {
-    /* no previous file */
-  }
-  await fs.rename(tmp, SETTINGS_FILE);
+    await fs.writeFile(tmp, json, { mode: 0o600 });
+    try { await fs.copyFile(SETTINGS_FILE, `${SETTINGS_FILE}.bak`); }
+    catch (error: any) { if (error.code !== 'ENOENT') throw error; }
+    await fs.rename(tmp, SETTINGS_FILE);
+  } finally { await fs.unlink(tmp).catch(() => {}); }
 }
 
 export async function loadSettings(): Promise<Settings> {
   if (cache) return cache;
   await ensureDataDir();
+  let raw: string;
   try {
-    const raw = await fs.readFile(SETTINGS_FILE, 'utf8');
-    const parsed = SettingsSchema.parse(JSON.parse(raw));
-    let dirty = false;
-    // Heal older files whose allowedRoots predate the current vault path.
-    if (ensureVaultBrowsable(parsed)) dirty = true;
-    cache = parsed;
-    if (dirty) await persist(cache);
-  } catch {
-    cache = defaults();
-    await persist(cache);
+    raw = await fs.readFile(SETTINGS_FILE, 'utf8');
+  } catch (error: any) {
+    if (error.code !== 'ENOENT') throw error;
+    const initial = defaults();
+    await persist(initial);
+    cache = initial;
+    return initial;
   }
-  return cache;
+  // Parse, migration and persistence failures preserve the existing file.
+  const parsed = SettingsSchema.parse(JSON.parse(raw));
+  if (ensureVaultBrowsable(parsed)) await persist(parsed);
+  cache = parsed;
+  return parsed;
 }
 
 export async function getSettings(): Promise<Settings> {

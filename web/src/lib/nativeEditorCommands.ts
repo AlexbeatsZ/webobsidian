@@ -1,6 +1,6 @@
 import type { NativeCommand } from './commands';
 import { getActiveEditor, fmtInsert, fmtIndent, fmtOutdent, fmtUndo, fmtRedo, editorFind } from './activeEditor';
-import { toggleInline, toggleChecklist, insertLink, followLink, deleteParagraph, toggleLineStyle } from './editorCommands';
+import { toggleInline, toggleChecklist, insertLink, followLink, deleteParagraph, toggleLineStyle, surroundSelection } from './editorCommands';
 import { contextOf } from './renderContext';
 import type { EditorView } from '@codemirror/view';
 
@@ -22,7 +22,7 @@ export const nativeEditorCommands: NativeCommand[] = [
   ...Array.from({ length: 7 }, (_, level) => edit(`editor:set-heading-${level}`, level ? `设为 ${level} 级标题` : '取消标题', view => toggleLineStyle(view, level))),
   edit('editor:insert-table', '插入表格', () => fmtInsert('\n| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |\n')),
   edit('editor:insert-horizontal-rule', '插入水平分隔线', () => fmtInsert('\n\n---\n\n')),
-  edit('editor:insert-codeblock', '插入代码块', () => fmtInsert('\n```\n\n```\n', 5)),
+  edit('editor:insert-codeblock', '插入代码块', view => surroundSelection(view, '\n```\n', '\n```\n')),
   edit('editor:insert-footnote', '插入脚注', view => {
     // A unique ordinary Markdown footnote, committed as one editor transaction.
     let number = 1; const source = view.state.doc.toString();

@@ -90,12 +90,12 @@ export class FileSystemAdapter {
   async remove(path: string) {
     const file = this.vault.getAbstractFileByPath(path);
     if (file) await this.vault.delete(file);
-    else await api.remove(path);
+    else await useStore.getState().removePath(path);
   }
   async rename(from: string, to: string) {
     const file = this.vault.getAbstractFileByPath(from);
     if (file) await this.vault.rename(file, to);
-    else await api.rename(from, to);
+    else await useStore.getState().renamePath(from, to);
   }
   async copy(from: string, to: string) {
     await api.copy(from, to);
@@ -240,22 +240,27 @@ export class Vault extends Events {
     return this.getFolderByPath(path)!;
   }
   async delete(file: TAbstractFile) {
-    await api.remove(file.path);
-    await useStore.getState().loadTree();
+    await useStore.getState().removePath(file.path);
   }
   async trash(file: TAbstractFile, _system = false) {
     await this.delete(file);
   }
   async rename(file: TAbstractFile, path: string) {
-    const old = file.path;
-    await api.rename(old, path);
-    delete this.fileMap[old];
-    file.path = path;
-    file.name = path.split('/').pop()!;
-    this.fileMap[path] = file;
+    await useStore.getState().renamePath(file.path, path);
+  }
+
+  /** Preserve plugin TFile identities before the shared tree synchronization. */
+  relocate(from: string, to: string) {
+    const moved = Object.values(this.fileMap).filter(file => file.path === from || file.path.startsWith(from + '/'));
+    for (const file of moved) delete this.fileMap[file.path];
+    for (const file of moved) {
+      const old = file.path;
+      file.path = to + old.slice(from.length);
+      file.name = file.path.split('/').pop()!;
+      this.fileMap[file.path] = file;
+      this.trigger('rename', file, old);
+    }
     this.fallbackLinks = undefined;
-    await useStore.getState().loadTree();
-    this.trigger('rename', file, old);
   }
   async copy(file: TFile, path: string) {
     await api.copy(file.path, path);

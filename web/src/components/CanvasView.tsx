@@ -7,6 +7,8 @@ import CanvasMarkdown, { type CanvasTextHandle } from './CanvasMarkdown';
 import Editor from './Editor';
 import CanvasVisible from './CanvasVisible';
 import { patchCanvasSource } from '@webobsidian/markdown-core';
+import { documents } from '../lib/documents';
+import { useDocumentSession } from '../lib/useDocumentSession';
 import {
   parseCanvas,
   resolveColor,
@@ -80,6 +82,7 @@ function FileNodeBody({ file, subpath }: { file: string; subpath?: string }) {
 
 export default function CanvasView() {
   const activePath = useStore((s) => s.activePath);
+  const { snapshot: documentSnapshot } = useDocumentSession(activePath);
   const storeContent = useStore((s) => s.content);
   const setContent = useStore((s) => s.setContent);
   const save = useStore((s) => s.save);
@@ -124,6 +127,9 @@ export default function CanvasView() {
   const [histV, setHistV] = useState(0); // bump to re-render undo/redo button state
 
   const vpRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (vpRef.current) vpRef.current.inert = !!documentSnapshot.locked;
+  }, [documentSnapshot.locked]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const drag = useRef<Drag>(null);
   const undoStack = useRef<string[]>([]);
@@ -292,12 +298,15 @@ export default function CanvasView() {
   }, [editingNode]);
 
   // Apply a canvas state to the store (marks dirty) WITHOUT touching history.
+  const frozen = () => !!documents.get(useStore.getState().activePath ?? '')?.snapshot.locked;
   const applyData = useCallback(
     (next: CanvasData, source?: string) => {
+      const path = useStore.getState().activePath;
+      if (path && documents.get(path)?.snapshot.locked) throw new Error('文件正在移动，请稍后重试');
       const s = source ?? patchCanvasSource(lastWritten.current, next);
+      setContent(s);
       setData(next);
       lastWritten.current = s;
-      setContent(s);
     },
     [setContent],
   );
@@ -305,6 +314,7 @@ export default function CanvasView() {
   // Commit a user edit: record the prior state for undo, then apply.
   const commit = useCallback(
     (next: CanvasData) => {
+      if (frozen()) return;
       undoStack.current.push(lastWritten.current);
       if (undoStack.current.length > 200) undoStack.current.shift();
       redoStack.current = [];
@@ -315,6 +325,7 @@ export default function CanvasView() {
   );
 
   const undo = useCallback(() => {
+    if (frozen()) return;
     if (!undoStack.current.length) return;
     redoStack.current.push(lastWritten.current);
     const raw = undoStack.current.pop()!; applyData(parseCanvas(raw), raw);
@@ -325,6 +336,7 @@ export default function CanvasView() {
   }, [applyData]);
 
   const redo = useCallback(() => {
+    if (frozen()) return;
     if (!redoStack.current.length) return;
     undoStack.current.push(lastWritten.current);
     const raw = redoStack.current.pop()!; applyData(parseCanvas(raw), raw);
@@ -334,16 +346,13 @@ export default function CanvasView() {
     setHistV((v) => v + 1);
   }, [applyData]);
 
-  useEffect(() => {
-    const id = window.setTimeout(() => save(), 900);
-    return () => window.clearTimeout(id);
-  }, [data, save]);
-
   // Track spacebar (hold-to-pan) + delete/escape.
   useEffect(() => {
     const isTyping = (t: EventTarget | null) =>
       t instanceof HTMLElement && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable);
     const down = (e: KeyboardEvent) => {
+      const path = useStore.getState().activePath;
+      if (path && documents.get(path)?.snapshot.locked) return;
       const mod = e.metaKey || e.ctrlKey;
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         // ⌘Z / ⌘⇧Z — undo / redo (only when the canvas is focused / not typing).

@@ -145,13 +145,16 @@ async function main() {
   // Build search index + link graph
   console.log('[boot] indexing vault...');
   await migrateSearchSettings().catch((error) => console.warn('[search migration]', error));
-  await initSearch();
+  enableFileUpdates();
+  await rebuildFileIndexes(async () => {
+    await setupWatcher();
+    await initSearch();
+  });
+  await drainFileUpdates();
   console.log('[boot] index ready');
 
   const server = http.createServer(app);
   setupWebsocket(server);
-  enableFileUpdates();
-  await setupWatcher();
   configureVaultSwitch(async commit => {
     const previousWatcher = vaultWatcher;
     vaultWatcher = undefined;
@@ -159,8 +162,11 @@ async function main() {
     await drainFileUpdates();
     await commit();
     clearVaultStats();
-    await rebuildFileIndexes(() => initSearch());
-    await setupWatcher();
+    await rebuildFileIndexes(async () => {
+      await setupWatcher();
+      await initSearch();
+    });
+    await drainFileUpdates();
   });
   startAutoSync();
 
@@ -229,10 +235,10 @@ async function setupWatcher() {
   // WEBOBSIDIAN_WATCH: 'auto' (default) = native inotify with automatic polling
   // fallback when the host watch limit is exceeded; 'polling' = force polling.
   const forcePolling = (process.env.WEBOBSIDIAN_WATCH ?? 'auto').toLowerCase() === 'polling';
-  startWatcher(root, forcePolling);
+  await startWatcher(root, forcePolling);
 }
 
-function startWatcher(root: string, usePolling: boolean) {
+function startWatcher(root: string, usePolling: boolean): Promise<void> {
   const watcher = chokidar.watch(root, {
     // Keep Obsidian's frequently rewritten workspace/plugin state ignored.
     // Native configuration alone reuses this watcher without touching note indexes.
@@ -250,6 +256,10 @@ function startWatcher(root: string, usePolling: boolean) {
     awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
   });
   vaultWatcher = watcher;
+  let ready = false;
+  let resolveReady!: () => void, rejectReady!: (error: unknown) => void;
+  const readiness = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+  watcher.once('ready', () => { ready = true; resolveReady(); });
 
   // On a fresh VPS the kernel's `fs.inotify.max_user_watches` is often far below
   // the file count of a large vault, so native watching fails with ENOSPC/EMFILE.
@@ -265,11 +275,17 @@ function startWatcher(root: string, usePolling: boolean) {
           `for this vault). Falling back to polling. For lower CPU, raise the limit: ` +
           `sudo sysctl -w fs.inotify.max_user_watches=524288`,
       );
-      watcher.close().catch(() => {});
-      if (vaultWatcher === watcher) startWatcher(root, true);
+      void watcher.close().then(() => {
+        if (vaultWatcher !== watcher) throw new Error('Vault watcher was replaced before becoming ready');
+        return startWatcher(root, true);
+      }).then(resolveReady, error => {
+        rejectReady(error);
+        if (ready) console.error('[watcher] fallback:', error);
+      });
       return;
     }
     console.error('[watcher] error:', err);
+    if (!ready) rejectReady(err);
   });
 
   const onChange = async (absPath: string, type: string) => {
@@ -288,6 +304,7 @@ function startWatcher(root: string, usePolling: boolean) {
     .on('unlink', (p) => onChange(p, 'unlink'))
     .on('addDir', (p) => onChange(p, 'addDir'))
     .on('unlinkDir', (p) => onChange(p, 'unlinkDir'));
+  return readiness;
 }
 
 async function dirExists(p: string): Promise<boolean> {

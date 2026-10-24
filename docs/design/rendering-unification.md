@@ -1,5 +1,15 @@
 # Rendering unification
 
+## Shared ownership follow-up (2026-10-23)
+
+Format menus reuse editorCommands; property types use revision-protected existing
+configuration IO and one frontend Vault snapshot, including widget equality.
+Math ranges exclude formula source from semantic footnote numbering. Rendered
+Markdown/reference/HTML fragment links share fragmentNavigation and the clicked
+view. Markdown processors and JS share terminal RenderLifetime; postprocessors
+invalidate on sourcePath changes. See architecture-optimization.md for migration,
+deletions and pending checks. This follow-up has source/diff evidence only.
+
 ## Accepted contract (2026-10-18)
 
 - Original UTF-8 source is authoritative. Unchanged ranges retain their exact

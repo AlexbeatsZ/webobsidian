@@ -2,7 +2,6 @@ import MatchLabel from './MatchLabel';
 import { matchName, useSearch } from '../lib/search';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
-import { api, type TreeNode } from '../lib/api';
 import { pruneDescendants } from '../lib/tree';
 
 /**
@@ -14,9 +13,7 @@ export default function FolderPicker() {
   const movePath = useStore((s) => s.movePath);
   const setMovePath = useStore((s) => s.setMovePath);
   const { entries, settings: searchConfig } = useSearch();
-  const loadTree = useStore((s) => s.loadTree);
-  const openFile = useStore((s) => s.openFile);
-  const closeTab = useStore((s) => s.closeTab);
+  const renamePath = useStore((s) => s.renamePath);
   const notify = useStore((s) => s.notify);
 
   const [q, setQ] = useState('');
@@ -72,27 +69,21 @@ export default function FolderPicker() {
 
   const move = async (folder: string) => {
     const targetDir = folder.replace(/\/+$/, '');
-    const activePath = useStore.getState().activePath;
     setMovePath(null);
     let moved = 0;
-    let reopen: string | null = null;
     for (const src of froms) {
       const b = src.split('/').pop()!;
       const to = targetDir ? `${targetDir}/${b}` : b;
       if (to === src) continue; // already in the chosen folder
       if (targetDir === src || targetDir.startsWith(`${src}/`)) continue; // into self/descendant
       try {
-        await api.rename(src, to);
-        closeTab(src);
-        if (activePath === src) reopen = to;
+        await renamePath(src, to);
         moved++;
       } catch (e: any) {
         notify(e?.message ?? "移动失败");
       }
     }
-    await loadTree();
     useStore.getState().setSelected([]);
-    if (reopen) await openFile(reopen);
     if (moved) {
       const dest = folder || '仓库根目录';
       notify(moved > 1 ? `已移动 ${moved} 项至 ${dest}` : `已移动至 ${dest}`);

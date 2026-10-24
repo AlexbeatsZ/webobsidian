@@ -1,11 +1,11 @@
 import { StateField, type EditorState, type Range } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
-import { caretTouches, type SourceSpan, type MarkdownModel, type Metadata } from '@webobsidian/markdown-core';
+import { caretTouches, mathRegions, type SourceSpan, type MarkdownModel, type Metadata } from '@webobsidian/markdown-core';
 import { syntaxModel, documentMetadata } from './syntaxModel';
 import { livePreviewState, livePreviewReadonly } from './renderState';
 import { compositionSelection } from './inlineHtml';
 import { sourceIsOpen } from './sourceControls';
-import { contextOf } from './renderContext';
+import { followRenderedLink } from './fragmentNavigation';
 import { decorationInputsChanged } from './decorationDependencies';
 import { overlapIndex } from './rangeIndex';
 import { blockEffectOwns } from './blocks/model';
@@ -18,8 +18,7 @@ class ReferenceLink extends WidgetType {
     anchor.className = 'cm-md-link'; anchor.textContent = this.label; anchor.title = this.target;
     anchor.addEventListener('mousedown', (event) => {
       event.preventDefault(); event.stopPropagation();
-      if (/^(?:https?|mailto):/i.test(this.target)) window.open(this.target, '_blank', 'noopener');
-      else if (!/^[a-z][a-z\d+.-]*:/i.test(this.target)) contextOf(view).openLink(this.target);
+      followRenderedLink(view, this.target);
     });
     return anchor;
   }
@@ -45,7 +44,7 @@ const cache = new WeakMap<MarkdownModel, SemanticItem[]>();
 function items(model: MarkdownModel, meta: Metadata): SemanticItem[] {
   const cached = cache.get(model);
   if (cached) return cached;
-  const excluded = [...model.literal, ...model.html, ...model.htmlBlocks, ...meta.comments,
+  const excluded = [...model.literal, ...model.html, ...model.htmlBlocks, ...meta.comments, ...mathRegions(model),
     ...model.nodes.filter((node) => node.name === 'Table'), ...(model.frontmatter ? [model.frontmatter] : [])];
   const inside = overlapIndex(excluded);
   const result: SemanticItem[] = [];

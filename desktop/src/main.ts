@@ -11,7 +11,7 @@ import { effectiveVaultPath, openExistingPath } from './paths';
 // Paths & persisted desktop config
 // ---------------------------------------------------------------------------
 // Everything user-specific lives under Electron's per-user userData dir:
-//   <userData>/desktop-config.json  — { vaultPath, secret, dataDir }
+//   <userData>/desktop-config.json  — startup Vault hint and trusted-plugin option
 //   <userData>/server-data/         — the server's DATA_DIR (settings.json, index)
 //   <userData>/logs/server.log      — server child stdout/stderr (debugging)
 const CONFIG_FILE = () => path.join(app.getPath('userData'), 'desktop-config.json');
@@ -30,16 +30,18 @@ let serverPort = 0;
 let mainWindow: BrowserWindow | null = null;
 let desktopConfig: DesktopConfig | undefined;
 let userscripts: UserscriptService | undefined;
+let initialVaultChoice: string | undefined;
 
 async function readConfig(): Promise<DesktopConfig> {
   try {
     const raw = await fs.readFile(CONFIG_FILE(), 'utf8');
     const parsed = JSON.parse(raw) as Partial<DesktopConfig>;
-    if (parsed && typeof parsed === 'object') {
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as DesktopConfig;
     }
-  } catch {
-    /* first run / corrupt — fall through to fresh config */
+    throw new Error('桌面配置格式无效，请检查 desktop-config.json');
+  } catch (error: any) {
+    if (error.code !== 'ENOENT') throw error;
   }
   return {};
 }
@@ -96,8 +98,9 @@ async function startServer(cfg: DesktopConfig): Promise<void> {
     PORT: String(serverPort),
     DATA_DIR: DATA_DIR(),
     VAULT_PATH: cfg.vaultPath,
-    // Let the in-app folder browser roam the user's home (single-user desktop).
-    ALLOWED_ROOTS: os.homedir(),
+    WEBOBSIDIAN_INITIAL_VAULT: initialVaultChoice,
+    // The native picker authorizes its selected root, including external disks.
+    ALLOWED_ROOTS: [os.homedir(), cfg.vaultPath].filter(Boolean).join(','),
     PATH: augmentedPath(),
   };
 
@@ -191,45 +194,36 @@ function apiRequest(
 // ---------------------------------------------------------------------------
 // Vault selection
 // ---------------------------------------------------------------------------
-async function ensureVault(cfg: DesktopConfig): Promise<DesktopConfig> {
-  if (cfg.vaultPath) {
+async function ensureVault(cfg: DesktopConfig): Promise<DesktopConfig | undefined> {
+  const persisted = await fs.stat(path.join(DATA_DIR(), 'settings.json')).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT') throw error;
+    return null;
+  });
+  const current = persisted ? await effectiveVaultPath(DATA_DIR()) : cfg.vaultPath;
+  if (current) {
     try {
-      const st = await fs.stat(cfg.vaultPath);
-      if (st.isDirectory()) return cfg;
-    } catch {
-      /* configured vault vanished — re-pick */
+      const st = await fs.stat(current);
+      if (st.isDirectory()) return { ...cfg, vaultPath: current };
+    } catch (error: any) {
+      if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
     }
   }
-  const picked = await pickVaultDialog(true);
+  const picked = await pickVaultDialog();
+  if (!picked) return undefined;
   cfg.vaultPath = picked;
+  initialVaultChoice = picked;
   await writeConfig(cfg);
-  await userscripts?.stop();
   return cfg;
 }
 
-// Prompt for a folder. On first run (no window yet) we also offer a sensible
-// default so the user can get going with one click.
-async function pickVaultDialog(firstRun: boolean): Promise<string> {
+async function pickVaultDialog(): Promise<string | undefined> {
   const result = await dialog.showOpenDialog({
     title: "选择仓库文件夹",
     message: '选择用作 WebObsidian 仓库的文件夹',
     properties: ['openDirectory', 'createDirectory'],
     buttonLabel: '使用此文件夹',
   });
-  if (!result.canceled && result.filePaths[0]) return result.filePaths[0];
-
-  // Cancelled: fall back to (and create) a default vault under Documents.
-  const fallback = path.join(app.getPath('documents'), 'WebObsidianVault');
-  await fs.mkdir(fallback, { recursive: true });
-  if (firstRun) {
-    await dialog.showMessageBox({
-      type: 'info',
-      message: '将使用默认仓库',
-      detail: `未选择文件夹 — 笔记将保存在：\n${fallback}\n\n之后可在菜单中切换仓库。`,
-      buttons: ['确定'],
-    });
-  }
-  return fallback;
+  return result.canceled ? undefined : result.filePaths[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -312,17 +306,6 @@ function createWindow(starting = false): void {
 <body><div class="drag"></div><div class="spinner"></div><div role="status">正在打开笔记库</div><p>正在准备本地服务与索引，首次打开可能需要一些时间。</p></body></html>`)}` : baseUrl(serverPort));
 }
 
-async function switchVault(): Promise<void> {
-  const cfg = await readConfig();
-  const picked = await pickVaultDialog(false);
-  if (picked === cfg.vaultPath) return;
-  cfg.vaultPath = picked;
-  await writeConfig(cfg);
-  // Restart cleanly so the server re-indexes against the new vault.
-  app.relaunch();
-  app.exit(0);
-}
-
 function buildMenu(): void {
   const isMac = process.platform === 'darwin';
   // Native menus dispatch the same registered commands as the palette/hotkeys.
@@ -350,7 +333,7 @@ function buildMenu(): void {
         { type: 'separator' },
         { label: "信任原生插件 (下次启动生效)", type: 'checkbox', checked: !!desktopConfig?.trustedPlugins,
           click: async (item) => { const cfg = await readConfig(); cfg.trustedPlugins = item.checked; await writeConfig(cfg); } },
-        { label: "切换仓库…", click: () => void switchVault() },
+        { label: "切换仓库…", click: command('vault-switch') },
         {
           label: "打开仓库文件夹",
           click: async () => {
@@ -488,10 +471,10 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     try {
-      let cfg = await readConfig();
-      cfg = await ensureVault(cfg);
+      const cfg = await ensureVault(await readConfig());
+      if (!cfg) { app.quit(); return; }
       desktopConfig = cfg;
-      await writeConfig(cfg); // persist freshly-generated secret on first run
+      await writeConfig(cfg);
       createWindow(true);
       await startServer(cfg);
       if (!mainWindow || mainWindow.isDestroyed()) return;

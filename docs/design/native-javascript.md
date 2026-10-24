@@ -1,5 +1,13 @@
 # Native JavaScript blocks
 
+## Render lifetime follow-up (2026-10-23)
+
+JavascriptRun inherits terminal RenderLifetime with existing code-block and
+postprocessor owners. Abort/late-child/cleanup guards live there; public Component
+remains reloadable. DocumentRegistry synchronizes disk before Vault events, so
+JavascriptRun only subscribes/invalidates dependencies. Its special disk refresh
+is deleted. See architecture-optimization.md; source/diff evidence only.
+
 ## Accepted scope (2026-10-22)
 
 Ordinary `js` / `javascript` stays in CodeMirror, including highlighting. The

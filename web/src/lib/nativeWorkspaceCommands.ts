@@ -19,6 +19,10 @@ async function focusPane(direction: number) {
   if (target) { const view = target.view as import('./obsidian/workspace').MarkdownView; view.editor?.focus(); }
 }
 export const nativeWorkspaceCommands: NativeCommand[] = [
+  { id: 'vault-switch', title: '切换仓库', run: () => {
+    useStore.getState().setSettings(true);
+    window.dispatchEvent(new Event('vault-settings-open'));
+  } },
   { id: 'new-tab', title: '新建标签页', hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'N' }], run: () => useStore.getState().openHomepage() },
   { id: 'workspace:close', title: '关闭当前标签页', hotkeys: [{ modifiers: ['Mod'], key: 'W' }], run: async () => {
     const { sharedApp } = await import('./plugins');

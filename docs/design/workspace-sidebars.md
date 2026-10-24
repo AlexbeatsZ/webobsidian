@@ -92,8 +92,18 @@ server/index 持有同一 watcher 引用：先停止旧监听并 drain，再更�
 路径套用另一仓库的标签/书签/最近文件。成功沿既有 vault-changed 使旧页面停止写入，发起页
 重新加载。其他窗口保留原会话直到自行重新加载。没有改真实配置或实际执行切换。
 
-原生 F10 的旧 switchVault 重启路径不是新底栏调用链，本轮未修改 desktop main；可信原生
-插件模式仍按既有维护 blocker 拒绝切换。完整原生切换行为未验收。
+原生菜单切库现分发 vault-switch，打开同一个 VaultSettings，不再只改启动提示后重启。
+启动读取服务端有效 Vault，首次/恢复选择通过既有 initialVault 通路提交；取消不创建
+默认目录。可信原生插件仍按维护 blocker 拒绝切换。完整原生行为未验收。
+
+## Document lifecycle follow-up (2026-10-23)
+
+DocumentRegistry owns one autosave debounce per session; central/sidebar exits
+share saveLeaving. FileTree, FolderPicker, WorkspaceTabs and plugin Vault share
+renamePath/removePath, covering directory descendants and saved session/history.
+Markdown views/sidebar hosts retain stable session/tab identities. Canvas drafts
+block path changes and defer external refresh. See architecture-optimization.md
+for exact rules and deleted branches. Source/diff only; no runtime checks.
 
 ## 浏览器新页面
 

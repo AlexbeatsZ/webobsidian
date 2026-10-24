@@ -1,4 +1,6 @@
 import type { CatalogEntry } from '@webobsidian/search-core';
+import type { VaultConfigurationSource } from '../../../server/src/services/vaultConfiguration';
+import type { PropertyTypeExpectation } from '../../../server/src/services/propertytypes';
 // Thin fetch wrapper around the WebObsidian server API.
 
 export interface TreeNode {
@@ -181,11 +183,11 @@ export const api = {
     }),
   tags: () => req<{ tags: { tag: string; count: number }[] }>('/api/tags'),
   properties: () => req<{ properties: { key: string; type: string; count: number }[] }>('/api/properties'),
-  propertyTypes: () => req<{ types: Record<string, string> }>('/api/property-types'),
-  setPropertyType: (key: string, type: string) =>
-    req<{ types: Record<string, string> }>('/api/property-types', {
+  propertyTypes: () => req<{ types: Record<string, string>; source: VaultConfigurationSource }>('/api/property-types'),
+  setPropertyType: (key: string, type: string, expected: PropertyTypeExpectation) =>
+    req<{ types: Record<string, string>; source: VaultConfigurationSource }>('/api/property-types', {
       method: 'POST',
-      body: JSON.stringify({ key, type }),
+      body: JSON.stringify({ key, type, expected }),
     }),
   backlinks: (path: string, signal?: AbortSignal) =>
     req<{ backlinks: string[] }>(`/api/backlinks?path=${encodeURIComponent(path)}`, { signal }),

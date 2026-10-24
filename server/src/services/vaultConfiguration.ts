@@ -2,13 +2,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse, printParseErrorCode, type ParseError } from 'jsonc-parser';
-import { getVaultRoot } from './vault.js';
+import { getVaultRoot, vaultPathKey } from './vault.js';
 import { readTextFile, writeTextFile } from './textFile.js';
 
 const DIRECTORY = '.obsidian/webobsidian';
 /** Configuration events bypass the note catalog and file tree. */
 export function isVaultConfigurationPath(relative: string): boolean {
-  return relative === DIRECTORY || relative.startsWith(DIRECTORY + '/') || relative === '.obsidian/appearance.json'
+  return relative === DIRECTORY || relative.startsWith(DIRECTORY + '/') || relative === '.obsidian/appearance.json' || relative === '.obsidian/types.json'
     || relative === '.obsidian/snippets' || /^\.obsidian\/snippets\/[^/]+\.css$/i.test(relative);
 }
 const MAX_BYTES = 1024 * 1024;
@@ -43,11 +43,12 @@ async function location(file: string, expectedVault?: string, extensions: readon
 /** Identity shared by scoped preferences and configuration-file operations. */
 export async function vaultConfigurationIdentity() {
   const root = await getVaultRoot();
-  const vault = createHash('sha256').update(process.platform === 'win32' ? root.toLowerCase() : root).digest('base64url');
-  return { root, vault };
+  const key = vaultPathKey(root);
+  const vault = createHash('sha256').update(key).digest('base64url');
+  return { root, key, vault };
 }
 async function assertCurrent(root: string) {
-  if (await getVaultRoot() !== root) throw failure('Vault changed during configuration operation', 409);
+  if (vaultPathKey(await getVaultRoot()) !== vaultPathKey(root)) throw failure('Vault changed during configuration operation', 409);
 }
 export async function readVaultConfiguration(file: string, vault?: string, extensions?: readonly string[]): Promise<VaultConfigurationSource> {
   const target = await location(file, vault, extensions);
@@ -74,7 +75,11 @@ export async function writeVaultConfiguration(input: VaultConfigurationSource, e
   const target = await location(input.path, input.vault, extensions);
   return writeConfiguration(input, target);
 }
-/** Appearance is the only original Obsidian configuration this UI edits. */
+/** Only these two interoperable Obsidian files have native writers. */
+export async function writeObsidianPropertyTypes(input: VaultConfigurationSource): Promise<VaultConfigurationSource> {
+  if (input.path !== 'types.json') throw failure('Invalid property configuration path');
+  return writeConfiguration(input, await location(input.path, input.vault, ['.json'], '.obsidian'));
+}
 export async function writeObsidianAppearance(input: VaultConfigurationSource): Promise<VaultConfigurationSource> {
   if (input.path !== 'appearance.json') throw failure('Invalid appearance configuration path');
   return writeConfiguration(input, await location(input.path, input.vault, ['.json'], '.obsidian'));

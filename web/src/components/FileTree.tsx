@@ -10,8 +10,7 @@ import Icon from './Icon';
 
 /** Inline rename box shown in place of a tree row's name (Obsidian-style). */
 function RenameInput({ node, onDone }: { node: TreeNode; onDone: () => void }) {
-  const loadTree = useStore((s) => s.loadTree);
-  const closeTab = useStore((s) => s.closeTab);
+  const renamePath = useStore((s) => s.renamePath);
   const notify = useStore((s) => s.notify);
   const ref = useRef<HTMLInputElement>(null);
   const done = useRef(false);
@@ -35,12 +34,10 @@ function RenameInput({ node, onDone }: { node: TreeNode; onDone: () => void }) {
     const to = dir ? `${dir}/${name}` : name;
     if (to === node.path) return;
     try {
-      await api.rename(node.path, to);
-      closeTab(node.path);
+      await renamePath(node.path, to);
     } catch (e: any) {
       notify(e?.message ?? "重命名失败");
     }
-    await loadTree();
   };
 
   return (
@@ -88,7 +85,7 @@ function readDragPaths(e: React.DragEvent): string[] {
 
 /** Move every path into targetDir ('' = vault root). Skips no-ops and self/descendant moves. */
 async function moveItemsTo(paths: string[], targetDir: string): Promise<void> {
-  const { closeTab, loadTree, setSelected, notify } = useStore.getState();
+  const { renamePath, setSelected, notify } = useStore.getState();
   let moved = 0;
   for (const from of pruneDescendants(paths)) {
     if (!from) continue;
@@ -97,15 +94,13 @@ async function moveItemsTo(paths: string[], targetDir: string): Promise<void> {
     if (to === from) continue; // already there
     if (targetDir === from || targetDir.startsWith(`${from}/`)) continue; // into self/descendant
     try {
-      await api.rename(from, to);
-      closeTab(from);
+      await renamePath(from, to);
       moved++;
     } catch (err: any) {
       notify(err?.message ?? "移动失败");
     }
   }
   setSelected([]);
-  await loadTree();
   if (moved > 1) notify(`已移动 ${moved} 项`);
 }
 
@@ -141,7 +136,8 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
   const openFile = useStore((s) => s.openFile);
   const openToSide = useStore((s) => s.openToSide);
   const loadTree = useStore((s) => s.loadTree);
-  const closeTab = useStore((s) => s.closeTab);
+  const renamePath = useStore((s) => s.renamePath);
+  const removePath = useStore((s) => s.removePath);
   const openContextMenu = useStore((s) => s.openContextMenu);
   const setMovePath = useStore((s) => s.setMovePath);
   const clipboard = useStore((s) => s.clipboard);
@@ -196,20 +192,17 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     if (!paths.length || !confirm(`删除 ${paths.length} 项${paths.length > 1 ? 's' : ''}？`)) return;
     let n = 0;
     for (const p of paths) {
-      const r = await api.remove(p).catch(() => null);
-      if (r) { closeTab(p); n++; }
+      try { await removePath(p); n++; }
+      catch (error) { notify(String(error)); }
     }
     setSelected([]);
-    await loadTree();
     notify(`已删除 ${n} 项${n > 1 ? 's' : ''}`);
   };
 
   const doRename = () => setRenamingPath(node.path);
   const doDelete = async () => {
     if (confirm(`删除 "${node.name}"？`)) {
-      const r = await api.remove(node.path);
-      closeTab(node.path);
-      await loadTree();
+      const r = await removePath(node.path);
       notify(r.deleted ? "已永久删除" : "已移至回收站");
     }
   };
@@ -245,10 +238,8 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
       if (targetDir === srcDir) { setClipboard(null); return; } // already here — no-op
       const to = targetDir ? `${targetDir}/${base}` : base;
       try {
-        await api.rename(clip.path, to);
-        closeTab(clip.path);
+        await renamePath(clip.path, to);
         setClipboard(null);
-        await loadTree();
         notify("已移动");
       } catch (e: any) {
         notify(e?.message ?? "粘贴失败");
@@ -468,7 +459,6 @@ export default function FileTree() {
   const tree = rawTree ? sortTree(rawTree, treeSort) : rawTree;
   const loadTree = useStore((s) => s.loadTree);
   const notify = useStore((s) => s.notify);
-  const closeTab = useStore((s) => s.closeTab);
   const clipboard = useStore((s) => s.clipboard);
   const setClipboard = useStore((s) => s.setClipboard);
   const openContextMenu = useStore((s) => s.openContextMenu);
@@ -529,10 +519,8 @@ export default function FileTree() {
     if (clip.mode === 'cut') {
       if (!clip.path.includes('/')) { setClipboard(null); return; } // already at root — no-op
       try {
-        await api.rename(clip.path, base);
-        closeTab(clip.path);
+        await useStore.getState().renamePath(clip.path, base);
         setClipboard(null);
-        await loadTree();
         notify("已移动");
       } catch (e: any) {
         notify(e?.message ?? "粘贴失败");

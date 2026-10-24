@@ -188,7 +188,7 @@ export function bindTimestampUpdates(session: DocumentSession, report: (error: s
     const schedule = () => {
       if (timer) clearTimeout(timer);
       timer = undefined;
-      if (!active || running || handled === session.userEditVersion || session.snapshot.conflict) return;
+      if (!active || running || handled === session.userEditVersion || session.snapshot.conflict || session.snapshot.locked) return;
       const settings = formatterSettings(),
         rule = settings.ruleConfigs['yaml-timestamp'];
       const delays: Record<string, number> = {

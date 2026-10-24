@@ -13,12 +13,19 @@ export async function rebuildVaultIndex(restore = false): Promise<void> {
   const root = await getVaultRoot();
   let next = new VaultCatalog();
   async function walk(dir: string, prefix = '') {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return [];
+      throw error;
+    });
     for (const entry of entries) {
       if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.isSymbolicLink()) continue;
       const rel = prefix + entry.name,
         absolute = path.join(dir, entry.name);
-      const stat = await fs.stat(absolute);
+      const stat = await fs.stat(absolute).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
+        throw error;
+      });
+      if (!stat) continue;
       next.putPath(rel, entry.isDirectory(), `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`);
       if (entry.isDirectory()) await walk(absolute, rel + '/');
     }

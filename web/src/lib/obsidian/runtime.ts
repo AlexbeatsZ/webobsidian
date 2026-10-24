@@ -23,6 +23,7 @@ import { api } from '../api';
 import { useStore } from '../store';
 import { mountMarkdownFragment } from '../../components/MarkdownFragment';
 import { createVaultRenderContext } from '../vaultRenderContext';
+import { contextOf } from '../renderContext';
 import { renderMath as renderMathInto, loadMathJax as loadMathJaxRuntime } from '../mathjax';
 import { livePreviewState } from '../livePreview';
 import * as events from './events';
@@ -689,7 +690,7 @@ export async function loadPlugins(): Promise<void> {
     await useStore.getState().loadTree();
     sharedApp.vault.sync(useStore.getState().tree);
     const settings = await api.getSettings();
-    sharedApp.vault.adapter.basePath = (window as any).webobsidianDesktop?.vaultPath ?? settings.vault.path;
+    sharedApp.vault.adapter.basePath = settings.vault.path;
     const stopMenus = bindPluginMenus(sharedApp);
     const stopWebPages = (window as any).webobsidianDesktop?.webviewer?.subscribe((page: { sourceGuestId: number; url: string }) => {
       // Only pages from a still-mounted application guest can create dock tabs.
@@ -730,6 +731,11 @@ export async function loadPlugins(): Promise<void> {
       enabled: true,
       instance: { open: () => useStore.getState().setPalette(true, 'files') },
     };
+    const pathChanged = (event: Event) => {
+      const { from, to } = (event as CustomEvent<{ from: string; to: string }>).detail;
+      sharedApp.vault.relocate(from, to);
+    };
+    window.addEventListener('file-path-changed', pathChanged);
     const unsub = useStore.subscribe((state, prior) => {
       if (state.lastFileChange !== prior.lastFileChange && state.lastFileChange) {
         sharedApp.vault.applyFileStat(state.lastFileChange.path, state.lastFileChange.stat);
@@ -789,6 +795,7 @@ export async function loadPlugins(): Promise<void> {
     const stopBlocks = installBlockEffects(sharedApp);
     const stopCssSnippets = initializeCssSnippets(error => useStore.getState().notify(error));
     stopHost = () => {
+      window.removeEventListener('file-path-changed', pathChanged);
       sharedApp.automation.dispose();
       stopJavascript();
       stopBlocks();
@@ -835,18 +842,10 @@ export async function unloadPlugins() {
 export function bindPluginEditor(view: cmView.EditorView, path: string) {
   const info = {
     get file() {
-      return sharedApp.vault.getFileByPath(path);
+      return sharedApp.vault.getFileByPath(contextOf(view).sourcePath || path);
     },
     editor: new editor.Editor(view),
     app: sharedApp,
   };
-  const detach = editor.attachPluginEditor(view, info);
-  view.dispatch({
-    effects: cmState.StateEffect.appendConfig.of(
-      cmView.EditorView.updateListener.of((update) => {
-        if (update.docChanged) sharedApp.workspace.trigger('editor-change', info.editor, info);
-      }),
-    ),
-  });
-  return detach;
+  return editor.attachPluginEditor(view, info, () => sharedApp.workspace.trigger('editor-change', info.editor, info));
 }

@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { config } from '../config.js';
+import { vaultPathKey } from './vault.js';
 
 /**
  * Persisted UI/workspace state (open tabs, active note, expanded folders, panel
@@ -33,9 +34,7 @@ export async function writeUiState(state: Record<string, unknown>): Promise<void
 export async function selectVaultWorkspace(previous: string, next: string): Promise<void> {
   const directory = path.join(config.dataDir, 'workspaces');
   const fileFor = (root: string) => {
-    const resolved = path.resolve(root);
-    const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-    return path.join(directory, createHash('sha256').update(key).digest('hex') + '.json');
+    return path.join(directory, createHash('sha256').update(vaultPathKey(root)).digest('hex') + '.json');
   };
   await fs.mkdir(directory, { recursive: true });
   await fs.writeFile(fileFor(previous), JSON.stringify(await readUiState(), null, 2));

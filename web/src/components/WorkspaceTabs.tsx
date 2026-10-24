@@ -105,10 +105,7 @@ export default function WorkspaceTabs() {
         onClick: async () => {
           const to = prompt("重命名 / 移动至（仓库相对路径）：", path);
           if (to && to !== path) {
-            await api.rename(path, to);
-            closeTab(path);
-            await loadTree();
-            await openFile(to);
+            await useStore.getState().renamePath(path, to);
           }
         },
       };
@@ -199,9 +196,7 @@ export default function WorkspaceTabs() {
           icon: 'trash',
           onClick: async () => {
             if (confirm(`删除 "${baseName}"？`)) {
-              const r = await api.remove(path);
-              closeTab(path);
-              await loadTree();
+              const r = await useStore.getState().removePath(path);
               notify(r.deleted ? "已永久删除" : "已移至回收站");
             }
           },
