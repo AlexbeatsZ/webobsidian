@@ -1,5 +1,21 @@
 # 链接跳转、位置历史与脚注交互
 
+## 安装后反馈与编号回跳修正
+
+2026-10-24 实读用户指定的安装目录 `C:/Users/Meta/AppData/Local/Programs/WebObsidian`：
+EXE/asar 均为 0.1.23，已安装首页引用的 JS/CSS 不含 cm-navigation-target、cm-footnote-entry、
+cm-link-preview，保留旧 cm-footref。先前安装交付没有包含 1a783ed，不能把源码验证当成安装版验收。
+截图原文确在化学动力学 01 第 1381 行定义，正文引用位于第 1337 行；仅只读查找，未改原笔记。
+
+另修复源码两处遗漏：Live 定义 marker 改为可点击编号，阅读尾注编号 span 改为回跳链接；
+均复用 core footnoteReferenceFragment 和 bindRenderedLink，返回第一处引用，保留逐处回跳箭头。
+替换后的引用 widget 复用 navigationHighlight 投影背景及失效，解决 mark 无法覆盖 widget 的问题。
+没有新增解析器、坐标、滚动、计时器或历史状态。
+
+现有导航浏览器套件增加截图原句的长页双模式往返用例。修复前失败，修复后 17/17 通过，
+24.9 秒，无跳过/重试；确认定义全文高亮、编号回跳、引用 widget 高亮、源文本不变。
+两张落点截图已查看。0.1.24 将从已提交源码的独立快照重新生产构建，安装和实际 EXE 验证待记录。
+
 日期：2026-10-24。研究提交 `4452d77`；实施在共享工作区完成，合入并保留并发的 tags/Vault 提交
 `39df16e`、`73d95ca` 和独立桌面提交。用户批准执行后，本轮实现首轮闭环。
 

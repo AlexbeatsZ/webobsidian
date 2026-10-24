@@ -50,6 +50,20 @@ test('rich footnotes collect at the end and return to each occurrence', async ({
   await page.screenshot({ path: info.outputPath('footnotes.png') });
 });
 
+for (const slot of [0, 1]) test(`footnote definition number returns to a highlighted reference in slot ${slot}`, async ({ page }, info) => {
+  const raw = '# Note\n\n保持 $X_U$不变(外界持续维持一个固定的温度相关驱动力[^1]),允许 $X_n$自由调整.\n\n'
+    + 'padding\n\n'.repeat(45) + '[^1]: 这和前面的假设等价,因为流必然会使得驱动力变小,如果驱动力可以保持不变必然表示有维持此流我外界驱动力\n\nend';
+  await page.evaluate(raw => window.renderHarness.reset(raw), raw);
+  const editor = page.locator(`[data-slot="${slot}"]`);
+  await editor.locator('.cm-footnote-reference').click();
+  await expect(editor.locator(slot ? '.cm-footnote-entry.cm-navigation-target' : '.cm-navigation-target')).toContainText('这和前面的假设等价');
+  await editor.locator(slot ? '.cm-footnote-number' : '.cm-footnote-definition').click();
+  expect(await page.evaluate(slot => window.renderHarness.location(slot)?.anchor, slot)).toBe(raw.indexOf('[^1]'));
+  await expect(editor.locator('.cm-footnote-reference.cm-navigation-target')).toBeVisible();
+  expect(await page.evaluate(slot => window.renderHarness.source(slot), slot)).toBe(raw);
+  await page.screenshot({ path: info.outputPath(`footnote-number-${slot}.png`) });
+});
+
 test('footnote preview uses full-document numbering and rich body without a modifier', async ({ page }, info) => {
   await page.evaluate(() => window.renderHarness.reset('# Title\n\nword[^n]\n\n[^n]: **Preview body** $x$\n\nend'));
   await page.locator('[data-slot="0"] .cm-footnote-reference').hover();

@@ -15,15 +15,17 @@ import { getIcon } from './icons';
 import { mathDefinitionContext } from './mathjax';
 
 class ReferenceLink extends WidgetType {
-  constructor(readonly label: string, readonly target: string, readonly unresolved = false, readonly footnote = false) { super(); }
-  eq(other: ReferenceLink) { return other.label === this.label && other.target === this.target && other.unresolved === this.unresolved && other.footnote === this.footnote; }
+  constructor(readonly label: string, readonly target: string, readonly unresolved = false, readonly footnote: boolean | 'definition' = false, readonly highlighted = false) { super(); }
+  eq(other: ReferenceLink) { return other.label === this.label && other.target === this.target && other.unresolved === this.unresolved && other.footnote === this.footnote && other.highlighted === this.highlighted; }
   toDOM(view: EditorView) {
     const anchor = document.createElement('a');
     const external = /^https?:/i.test(this.target);
-    anchor.className = this.footnote ? 'cm-footref cm-footnote-reference' + (this.unresolved ? ' is-unresolved' : '') : 'cm-md-link ' + (external ? 'external-link' : 'internal-link');
+    anchor.className = this.footnote ? 'cm-footref cm-footnote-' + (this.footnote === 'definition' ? 'definition' : 'reference') + (this.unresolved ? ' is-unresolved' : '') : 'cm-md-link ' + (external ? 'external-link' : 'internal-link');
+    if (this.highlighted) anchor.classList.add('cm-navigation-target');
     anchor.textContent = this.label; anchor.title = this.unresolved ? '脚注定义缺失或重复' : this.target;
     if (external && !this.footnote) { const icon = getIcon('external-link'); icon.classList.add('cm-external-icon'); anchor.append(icon); }
-    bindRenderedLink(anchor, view, this.target, this.footnote); return anchor;
+    if (this.footnote === 'definition') anchor.setAttribute('aria-label', '返回脚注 ' + this.label + ' 的第一处引用');
+    bindRenderedLink(anchor, view, this.target, !!this.footnote); return anchor;
   }
   ignoreEvent() { return true; }
 }
@@ -44,7 +46,9 @@ class FootnoteBody extends WidgetType {
     const context = contextOf(view), entry = document.createElement('section');
     entry.className = 'cm-footnote-entry' + (this.note.number === 1 ? ' is-first' : '') + (this.highlighted ? ' cm-navigation-target' : '');
     entry.dataset.footnoteTarget = footnoteFragment(this.note);
-    const number = document.createElement('span'); number.textContent = String(this.note.number) + '.';
+    const number = document.createElement('a'); number.className = 'cm-footnote-number'; number.textContent = String(this.note.number) + '.';
+    number.setAttribute('aria-label', '返回脚注 ' + this.note.number + ' 的第一处引用');
+    bindRenderedLink(number, view, '#' + footnoteReferenceFragment(this.note, 0), true);
     const body = document.createElement('div'); body.className = 'cm-footnote-body';
     const text = document.createElement('div'); body.append(text); entry.append(number, body);
     const definition = this.note.definitions[0];
@@ -87,23 +91,24 @@ function build(state: EditorState): DecorationSet {
   const visible = (span: SourceSpan) => !blockEffectOwns(state, span) && !sourceIsOpen(state, span)
     && (forceRendered(state, span) || !caretTouches(span, selections, readonly));
   for (const { span, decoration } of items(local)) if (visible(span)) decorations.push(decoration.range(span.from, span.to));
-  const notes = footnotes(full);
+  const notes = footnotes(full), target = navigationHighlight(state);
   for (const note of notes.notes) {
     for (const reference of note.references) {
       const span = { from: reference.from - offset, to: reference.to - offset };
       if (span.from < 0 || span.to > local.text.length || !visible(span)) continue;
-      decorations.push(Decoration.replace({ widget: new ReferenceLink(String(note.number), '#' + footnoteFragment(note), note.status !== 'resolved', true) }).range(span.from, span.to));
+      decorations.push(Decoration.replace({ widget: new ReferenceLink(String(note.number), '#' + footnoteFragment(note), note.status !== 'resolved', true,
+        !!target && target.from === span.from && target.to === span.to) }).range(span.from, span.to));
     }
     for (const definition of note.definitions) {
       if (note.inline) continue;
       const from = definition.from - offset, to = definition.to - offset, markerTo = definition.markerTo - offset;
       if (from < 0 || to > local.text.length) continue;
       if (readonly && !context.footnoteBody) decorations.push(Decoration.replace({ block: true }).range(from, to));
-      else if (readonly || visible({ from, to })) decorations.push(Decoration.replace({}).range(from, markerTo));
+      else if (readonly || visible({ from, to })) decorations.push(Decoration.replace({ widget: !readonly && note.references.length
+        ? new ReferenceLink(String(note.number), '#' + footnoteReferenceFragment(note, 0), false, 'definition') : undefined }).range(from, markerTo));
     }
   }
   if (readonly && !context.footnoteBody && !context.embedTrail?.length && !offset) {
-    const target = navigationHighlight(state);
     let noteContext = footnoteContexts.get(full);
     if (noteContext === undefined) {
       noteContext = JSON.stringify(notes.notes.map(note => [note.id, note.number, note.status, note.references,

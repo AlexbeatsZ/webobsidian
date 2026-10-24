@@ -22,7 +22,10 @@
   MarkdownFragment 和 MathJax。Live 普通链接需 Ctrl/Cmd，阅读视图及脚注直接 hover；支持移入、
   滚动、复制、Esc 和关闭释放订阅。预览使用非执行上下文，缺失目标不会创建笔记。
 - 阅读视图把脚注投影到文末，保留 Markdown/公式、首次引用编号和每一处回跳；Live 保留定义原位编辑，
-  引用可预览并打开定义。片段携带完整模型和绝对范围，包含从零偏移开始的片段；合成页脚不写回源文件。
+  引用可预览并打开定义。Live 定义编号和阅读尾注编号都返回第一处引用，多处回跳箭头仍逐处定位。
+  引用替换 widget 直接投影原 navigationHighlight 的范围与三秒生命周期，避免 CodeMirror mark
+  无法覆盖替换节点造成落点无可见高亮；不增加第二份导航状态。片段携带完整模型和绝对范围，
+  包含从零偏移开始的片段；合成页脚不写回源文件。
 
 旧的前端脚注 regex/私有编号/直接 dispatch、Markdown 和裸 URL widget 重复识别、独立公式 hover、
 path-only pending 和 path-only history 已删除。没有增加文档保存服务、Vault 索引、MathJax 引擎或折叠系统。
