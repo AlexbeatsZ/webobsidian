@@ -16,6 +16,11 @@ Callout headers also preserve all quote prefixes: only the core model's exact
 markerFrom..markerTo token becomes the inline icon/default title, with original
 separator whitespace left intact. Removed fixed title/icon offsets; title type
 color is scoped to its own title wrapper, and nested body text remains neutral.
+The subsequent screenshot exposed retained frame padding: Callout frames now have
+zero horizontal padding and use an inset painted border instead of an in-flow
+border, so no ancestor frame adds a 16px/0.5px source-origin shift. This correction
+does not move individual `>` glyphs. Thematic breaks now use the existing grammar's
+HorizontalRule node rather than a full-raw-line regex, retaining quoted prefixes.
 These corrections have source/diff evidence only; earlier geometry tests below
 did not establish this newly specified native-width behavior.
 

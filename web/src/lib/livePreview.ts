@@ -1822,6 +1822,19 @@ function buildDecorations(view: EditorView): DecorationSet {
         // Don't decorate inside a rendered table/HTML block — their fields own it.
         if (renderedTable(node.from, node.to) || renderedHtml(node.from, node.to)) return;
 
+        // The grammar owns thematic breaks, including quoted/nested rules.
+        // Replace only the rule node; structural > text keeps its own layout.
+        if (name === 'HorizontalRule') {
+          if (!inCode(node.from, node.to)) {
+            const line = doc.lineAt(node.from);
+            all.push(Decoration.line({ class: 'HyperMD-hr' }).range(line.from));
+            if (!lineActive(line.from)) {
+              pushReplace(node.from, node.to, Decoration.replace({ widget: new HrWidget() }));
+            }
+          }
+          return false;
+        }
+
         // Code block lines: HyperMD-codeblock(-begin/-end) like Obsidian.
         // The ``` fences are concealed while the caret is outside the block.
         // Indented code (4 spaces): mono font, NO background — just the indent
@@ -1969,15 +1982,6 @@ function buildDecorations(view: EditorView): DecorationSet {
       // block-level openers as HTMLBlock, so render whole-line inline HTML here.
       if (!sourceLine && /^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from) && !inCode(line.from, line.to) && !view.state.field(syntaxModel).html.some((tag) => tag.from >= line.from && tag.to <= line.to)) {
         pushReplace(line.from, line.to, Decoration.replace({ widget: new HtmlBlockWidget(text, { from: line.from, to: line.to }) }));
-        continue;
-      }
-
-      // Horizontal rule: `---` / `***` / `___` → <hr> when the caret is elsewhere.
-      if (!sourceLine && /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/.test(text) && !inCode(line.from, line.to)) {
-        all.push(Decoration.line({ class: 'HyperMD-hr' }).range(line.from, line.from));
-        if (!lineActive(line.from) && line.to > line.from) {
-          pushReplace(line.from, line.to, Decoration.replace({ widget: new HrWidget() }));
-        }
         continue;
       }
 

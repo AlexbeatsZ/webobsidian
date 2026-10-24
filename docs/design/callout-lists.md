@@ -15,6 +15,13 @@ prohibited tests, type/build checks and runtime acceptance for this batch.
 The neutral gray frame/background belongs to the structural quoted Callout
 container and covers its title, body and quoted blank/new lines. Type color belongs
 only to that container's title wrapper. The body never inherits a title's color.
+Frame decoration must not move native source text: it has zero horizontal padding
+and no in-flow border. The border is an inset box-shadow; vertical 12px frame
+padding and measured outer/body vertical spacing remain. This removes the retained
+16px-per-container offset (plus 0.5px border) that was still displacing `>` after
+the marker split. Outer and nested containers use this same rule; indentation is
+only actual source prefixes, not accumulated frame insets. No negative marker
+offset, compensating margin or separate caret coordinate correction is allowed.
 
 The first logical line of each existing Blockquote node can declare a Callout:
 after stripping exactly that node's structural quote depth, it must start with
@@ -40,6 +47,18 @@ The icon is an ordinary inline box; custom titles retain their original separato
 and a default title has a normal text space after its icon. Only existing formula
 source controls reserve space on the right. No custom mouse/Enter handling.
 Source/diff only; nested input, folding, wrapped-title geometry and UI are unverified.
+
+### Thematic breaks inside quotes
+
+The existing syntax traversal handles HorizontalRule with the existing HrWidget
+for top-level, quoted, Callout and nested quoted rules. Only the grammar's rule
+span is replaced; `>` prefixes continue through the same native prefix path.
+The old pre-prefix full-raw-line regex was removed because `> ---` never matched it.
+Syntax ownership also distinguishes actual thematic breaks from setext heading
+underlines and literal code/math. Existing caret-on-line reveal, readonly rendering
+and explicit source-entry policy remain; no Enter special case, parser or cache.
+This follow-up has source/diff evidence only; the screenshot's atomic-unit table
+note was inspected read-only and no runtime check/build/package was performed.
 
 `[!type]-` starts folded. `[!type]+` and `[!type]` start expanded. Every Callout
 has a fold button, including those without a sign. The user toggle is a view-local
