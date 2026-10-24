@@ -100,6 +100,27 @@ relative `require` calls during the build. See
 
 ## Releasing (GitHub Releases)
 
+For this fork, every new Windows portable delivery must also be published to
+`AlexbeatsZ/webobsidian` as an asset of the matching `v<version>` GitHub Release.
+This is the default delivery workflow: build in an isolated source directory,
+complete the required build/static checks, then upload the exact delivered EXE.
+Record the build commit and verification boundary in the release notes and check
+the remote asset name and byte size after upload. Publishing does not require
+launching the application or running runtime acceptance. Do not overwrite an
+existing asset or move an existing tag to silently replace a published build.
+
+For an already-built portable EXE, publish it without rebuilding:
+
+```powershell
+gh release create v<version> desktop/release/<version>/WebObsidian-<version>-win-x64-portable.exe --repo AlexbeatsZ/webobsidian --target <build-commit> --title "WebObsidian <version>" --notes-file <release-notes.md> --latest
+```
+
+If that version already has a release, upload a missing asset with
+`gh release upload v<version> <portable.exe> --repo AlexbeatsZ/webobsidian`.
+The desktop publisher configuration also targets this fork.
+
+The optional CI build workflow is separate from uploading an existing local EXE:
+
 CI workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml) runs on
 a version tag and builds on three native runners in parallel:
 

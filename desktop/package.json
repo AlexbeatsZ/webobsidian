@@ -85,7 +85,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "xnohat",
+        "owner": "AlexbeatsZ",
         "repo": "webobsidian"
       }
     ]
