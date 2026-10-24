@@ -511,7 +511,7 @@ class MathWidget extends WidgetType {
         const container = this.display ? body : view.contentDOM;
         if (!span.isConnected || !container.clientWidth) return;
         const metrics = readMathMetrics(body, container);
-        if (!invalid && previous?.em === metrics.em && previous.containerWidth === metrics.containerWidth) return;
+        if (!invalid && previous?.em === metrics.em && previous.containerWidth === metrics.containerWidth && previous.family === metrics.family) return;
         return metrics;
       },
       render: metrics => {

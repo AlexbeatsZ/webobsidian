@@ -116,6 +116,41 @@ a state-setting command is not inferred as a cross-formula declaration.
 
 ## Editing and output
 
+### Text fonts and code fallback (2026-10-24)
+
+The original enabled STEM Theme.css uses `MathJax_Main, MathJax_Math,
+Noto Serif SC, serif`. The existing `--font-text` remains the only native
+document-font source. Formula Chinese and ordinary text, including explicit
+tags, use that same fallback; mathematical symbols/variants retain MathJax's
+mathematical typesetting. Native equation numbers remain ordinary inheriting DOM.
+
+The shared SVG output enables MathJax's `mtextInheritFont` and
+`merrorInheritFont`; `unknownFamily` consumes `var(--font-text)` instead of an
+independent `serif` default. Direct Unicode Chinese and `\text{...}` therefore
+reach the same bundled Noto Serif SC as external prose. No SVG glyph rewriting,
+font-specific postprocessing or second renderer is added.
+
+`readMathMetrics` reads the attached body's effective family with the same
+computed-style read used for its size. The existing conversion receives it via
+MathJax's official `family` option, and the existing output/pending key includes
+that family. MathWidget and shared tooltip comparisons also include it. Thus
+two hosts with equal TeX/size/width but different text families cannot reuse the
+wrong SVG metrics. Existing geometry/mount/config lifecycles remain responsible
+for invalidation; this does not introduce a stylesheet watcher or a new live-CSS
+reload feature. Live/Reading/fragments, previews and print call the same service.
+
+Code stays independent through `--font-mono`: Cascadia Code first, bundled
+Noto Sans SC for Chinese, then existing monospace fallbacks. The official Google
+Fonts variable TTF and OFL are project assets, not installed system fonts.
+Inline code and fenced/quoted code in both views use that same stack. Prose and
+formula Chinese continue using Noto Serif SC.
+
+Actual platform-font, monospace-width, two-view/preview/number/print and family
+cache regressions are documented in tests/reports/text-fonts-20261024.md.
+
+References: [MathJax output font options](https://docs.mathjax.org/en/latest/options/output/index.html),
+[Google Fonts Noto Sans SC](https://github.com/google/fonts/tree/main/ofl/notosanssc).
+
 The MathJax context supplies its command names once during configuration
 construction. This replaces the old MathJax 3.2 command-name snapshot. Each
 snippet compilation receives its own `ALL_MACROS` compatibility array, so `.push`

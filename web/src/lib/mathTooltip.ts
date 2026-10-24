@@ -16,7 +16,7 @@ export function createMathTooltip(view: EditorView, tex: string, options: {
     view.requestMeasure({ key: dom, read: () => {
       if (destroyed || !dom.isConnected || !view.contentDOM.clientWidth) return;
       const metrics = readMathMetrics(body, view.contentDOM);
-      if (!invalid && previous?.em === metrics.em && previous.containerWidth === metrics.containerWidth) return;
+      if (!invalid && previous?.em === metrics.em && previous.containerWidth === metrics.containerWidth && previous.family === metrics.family) return;
       return metrics;
     }, write: metrics => {
       if (!metrics || destroyed || !dom.isConnected) return;

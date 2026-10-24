@@ -150,6 +150,12 @@ metrics reader used by conversion and CM hosts; the hosts pass its snapshot to
 the existing conversion queue/cache, so starting conversion in the write phase
 does not read layout again.
 
+That snapshot also carries the effective body font family, read from the same
+computed style as its size. Formula text inheritance, conversion/pending cache
+keys and existing widget/tooltip metric comparisons consume that one value;
+see native-math.md, Text fonts and code fallback. Text/Chinese use the same
+document font source, while code retains its own Cascadia Code/Noto Sans SC stack.
+
 Width must not flow back into the editor's own width:
 
 - A display formula keeps `width: 100%`/`min-width: 0`/`max-width: 100%`; its inner

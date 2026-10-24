@@ -3,7 +3,7 @@ import type { MathProfile } from './mathPreamble';
 import { debugEnabled, debugText, recordDebug, debugError } from './debug';
 
 const assetPath = `${import.meta.env.BASE_URL}assets/mathjax-${__MATHJAX_VERSION__}`;
-export interface MathMetrics { em: number; ex: number; containerWidth: number }
+export interface MathMetrics { em: number; ex: number; containerWidth: number; family: string }
 interface MathOptions extends MathMetrics { display: boolean }
 interface MathDocument {
   convertPromise(tex: string, options?: Record<string, unknown>): Promise<HTMLElement>;
@@ -96,7 +96,8 @@ export function loadMathJax(): Promise<MathJaxRuntime> {
         failed: (error: { message: string }) => reject(new Error(error.message)),
       },
       startup: { typeset: false }, tex: { tags: 'none' },
-      svg: { font: 'mathjax-newcm', fontCache: 'local', fontPath: '[fonts]/%%FONT%%' },
+      svg: { font: 'mathjax-newcm', fontCache: 'local', fontPath: '[fonts]/%%FONT%%',
+        mtextInheritFont: true, merrorInheritFont: true, unknownFamily: 'var(--font-text)' },
       options: { safeOptions: {
         safeProtocols: { http: true, https: true, file: false, javascript: false, data: false },
         classPattern: /^(?:mjx-[-a-zA-Z0-9_.]+|MathML-Unit)$/,
@@ -210,7 +211,7 @@ function engineCommandNames(engine: Pick<Engine, 'input'>): string[] {
 async function convertFormula(tex: string, options: MathOptions, signal: AbortSignal, render: MathRenderOptions) {
   const generation = revision, profile = active, definitions = render.definitions ?? [];
   const contextKey = JSON.stringify([profile.key, definitions]);
-  const key = JSON.stringify([generation, contextKey, render.transient ?? false, tex, options.display, options.em, options.ex, options.containerWidth]);
+  const key = JSON.stringify([generation, contextKey, render.transient ?? false, tex, options.display, options.em, options.ex, options.containerWidth, options.family]);
   const definition = hasMathDefinitions(tex), cached = !definition && !render.transient && cache.get(key);
   if (cached) { cache.delete(key); cache.set(key, cached); return cached; }
   let job = !definition ? pending.get(key) : undefined;
@@ -263,10 +264,11 @@ function cloneOutput(template: HTMLElement, doc: Document): HTMLElement {
 /** CM hosts call this in their layout-read phase and pass the snapshot to conversion. */
 export function readMathMetrics(body: HTMLElement, container = body.closest<HTMLElement>('.cm-content') ?? body.parentElement): MathMetrics {
   const win = body.ownerDocument.defaultView!;
-  const em = parseFloat(win.getComputedStyle(body).fontSize) || 18;
+  const bodyStyle = win.getComputedStyle(body);
+  const em = parseFloat(bodyStyle.fontSize) || 18;
   const style = container && win.getComputedStyle(container);
   const width = container && container.clientWidth - (parseFloat(style!.paddingLeft) || 0) - (parseFloat(style!.paddingRight) || 0);
-  return { em, ex: em / 2, containerWidth: width && width > 0 ? width : 720 };
+  return { em, ex: em / 2, containerWidth: width && width > 0 ? width : 720, family: bodyStyle.fontFamily };
 }
 export async function renderMath(body: HTMLElement, tex: string, display: boolean, signal: AbortSignal, options: MathRenderOptions = {}): Promise<void> {
   const tracing = debugEnabled(), startedAt = tracing ? performance.now() : 0;

@@ -7,7 +7,7 @@
     'DejaVu Sans Mono', 'Liberation Mono', Menlo, Monaco, 'Consolas', 'Source Code Pro', monospace;
   --font-ui: var(--font-default);
   --font-text: "MathJax_Main", "MathJax_Math", "Noto Serif SC", serif;
-  --font-mono: "Cascadia Code", var(--font-monospace-default);
+  --font-mono: "Cascadia Code", "Noto Sans SC", var(--font-monospace-default);
   --font-text-size: 18px;
   --font-smallest: 0.8em;
   --font-smaller: 0.875em;
