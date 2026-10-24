@@ -1,7 +1,7 @@
 import type { MarkdownModel, SourceSpan } from './syntax.js';
 import { extractMetadata } from './metadata.js';
 import { legacySubheadings } from './legacySubheadings.js';
-import { equationContext, equationTarget } from './equations.js';
+import { equationContext, equationTarget, equationReferenceName } from './equations.js';
 
 function formulaRange(model: MarkdownModel, formula: SourceSpan & { anchor?: SourceSpan }): SourceSpan {
   const start = model.text.lastIndexOf('\n', formula.from - 1) + 1;
@@ -14,15 +14,12 @@ export function fragmentRange(model: MarkdownModel, fragment: string): SourceSpa
   const meta = extractMetadata(model);
   let decoded = fragment;
   try { decoded = decodeURIComponent(fragment); } catch { /* literal percent */ }
-  if (decoded.startsWith('=')) {
-    const formula = equationTarget(equationContext(model), decoded);
-    return formula ? formulaRange(model, formula) : null;
-  }
   if (decoded.startsWith('^')) {
     const matches = meta.blockIds.filter(candidate => candidate.id === decoded.slice(1));
     if (matches.length !== 1) return null;
     const formula = equationTarget(equationContext(model), decoded);
     if (formula) return formulaRange(model, formula);
+    if (equationReferenceName(decoded) !== undefined) return null;
     const block = matches[0];
     if (!block) return null;
     const paragraph = model.nodes.filter((node) => ['Paragraph', 'ListItem', 'Blockquote'].includes(node.name) && node.from <= block.from && node.to >= block.to)

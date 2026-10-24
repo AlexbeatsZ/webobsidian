@@ -1,6 +1,6 @@
 import { searchEntries, searchSettings, subscribeSearch, matchName, fileCandidates } from './search';
 import { documents } from './documents';
-import { extractMetadata, mathRegions, equations, equationAnchor, equationLabel, type MarkdownModel, type Equation } from '@webobsidian/markdown-core';
+import { extractMetadata, mathRegions, equations, equationAnchor, equationLabel, equationReferenceName, type MarkdownModel, type Equation } from '@webobsidian/markdown-core';
 import { syntaxModel } from './syntaxModel';
 import { api } from './api';
 import { renderMath, mathDefinitionContext } from './mathjax';
@@ -237,7 +237,7 @@ class SuggestState {
     this.hide(); this.ctx = ctx;
     const generation = this.generation, captured = this.view.state;
     const [target, query = ''] = ctx.query.split('#^');
-    const formulaMode = query.startsWith('eq');
+    const formulaMode = query === 'eq' || query.startsWith('eq-');
     try {
       let model = captured.field(syntaxModel), path = contextOf(this.view).sourcePath;
       if (target) {
@@ -257,7 +257,8 @@ class SuggestState {
       const formulas = equations(model);
       const blocks = extractMetadata(model).blockIds, counts = new Map<string, number>();
       for (const block of blocks) counts.set(block.id, (counts.get(block.id) ?? 0) + 1);
-      this.items = formulaMode ? formulas.filter(e => !e.ambiguous && e.referenceable).flatMap(value => {
+      this.items = formulaMode ? formulas.filter(e => !e.ambiguous && e.referenceable &&
+        (!e.id || equationReferenceName('^' + e.id) !== undefined)).flatMap(value => {
         const label = `${equationLabel(value) ?? '未编号'} ${value.id ?? value.tex.replace(/\s+/g, ' ').slice(0, 80)}`;
         const match = matchName(search, `${label} ${value.heading} ${value.tex}`);
         return match ? [{ label, note: value.heading || path, insert: '', match: { score: match.score, matches: [] },
@@ -267,13 +268,6 @@ class SuggestState {
           const match = matchName(query, block.id);
           return match ? [{ label: block.id, insert: `${target}#^${block.id}`, match }] : [];
         });
-      if (formulaMode) {
-        const formulaIds = new Set(formulas.map(e => e.id));
-        this.items.push(...blocks.filter(b => !formulaIds.has(b.id) && counts.get(b.id) === 1).flatMap(block => {
-          const match = matchName(query, block.id);
-          return match ? [{ label: block.id, note: '块引用', insert: `${target}#^${block.id}`, match }] : [];
-        }));
-      }
       this.items.sort((a,b) => b.match.score - a.match.score);
       this.items = this.items.slice(0, 20);
       this.selected = 0;

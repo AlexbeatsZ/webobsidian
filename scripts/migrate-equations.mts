@@ -5,8 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createTwoFilesPatch } from 'diff';
 import {
-  SourceDocument, analyzeMarkdown, equations, equationAnchor, equationContext,
-  equationTarget, extractMetadata, mathRegions, markdownComments, isEscaped,
+  SourceDocument, analyzeMarkdown, equations, equationAnchor, equationReferenceName,
+  extractMetadata, mathRegions, markdownComments, isEscaped,
   TargetIndex, parseLinkTarget, mathBodyOffset, tableModels,
   type Equation, type SourceChange, type SourceSpan,
 } from '../packages/markdown-core/src/index.ts';
@@ -31,7 +31,7 @@ export function planMigration(input: Map<string, string>, options: Options = {})
   }));
   const issues: Issue[] = [], references: { file: string; line: number; before: string; after: string; target: string }[] = [];
   const numbered: { file: string; id: string; old: string | null; current: string | null }[] = [];
-  let anchorsAdded = 0, tagsRemoved = 0;
+  let anchorsAdded = 0, anchorsRenamed = 0, tagsRemoved = 0;
   const issue = (file: string, range: SourceSpan, reason: string) => {
     const text = notes.get(file)!.model.text;
     issues.push({ file, line: text.slice(0, range.from).split('\n').length, reason, source: text.slice(range.from, range.to) });
@@ -42,11 +42,17 @@ export function planMigration(input: Map<string, string>, options: Options = {})
     const used = new Set(extractMetadata(note.model).blockIds.map(b => b.id));
     for (const [ordinal, eq] of note.formulas.entries()) {
       // Untagged formulas already use native numbering; migrate legacy targets only.
-      if (eq.tag === undefined) continue;
+      if (eq.tag === undefined && (!eq.id || equationReferenceName('^' + eq.id) !== undefined)) continue;
       if (eq.ambiguous || !eq.referenceable) {
         note.blocked.add(eq);
         issue(file, eq, eq.ambiguous ? 'Duplicate block ID' : 'Formula needs its own closing line (or is inside a table)');
         continue;
+      }
+      if (eq.id && equationReferenceName('^' + eq.id) === undefined) {
+        const base = `eq-${eq.id}`; let id = base, suffix = 1;
+        while (used.has(id)) id = `${base}-${suffix++}`;
+        note.changes.push({ from: eq.anchor!.from + 1, to: eq.anchor!.to, insert: id });
+        used.add(id); note.anchors.set(eq, id); anchorsRenamed++; continue;
       }
       const prepared = equationAnchor(note.model, eq.from, `migrated${ordinal + 1}`);
       let id = prepared.id;
@@ -61,7 +67,11 @@ export function planMigration(input: Map<string, string>, options: Options = {})
   }
   function lookup(file: string, fragment: string, sourceFile: string, range: SourceSpan) {
     const note = notes.get(file)!;
-    const eq = equationTarget(equationContext(note.model), fragment);
+    // Legacy interpretation belongs only to this explicit offline boundary.
+    const key = decode(fragment), legacy = key.match(/^=\((.+)\)(?:§([1-9]\d*))?$/);
+    const candidates = key.startsWith('^') ? note.formulas.filter(e => e.id === key.slice(1)) : legacy
+      ? note.formulas.filter(e => e.tag !== undefined && normalize(e.tag) === normalize(legacy[1])) : [];
+    const eq = legacy?.[2] ? candidates[Number(legacy[2]) - 1] : candidates.length === 1 ? candidates[0] : undefined;
     if (!eq || eq.ambiguous || !note.anchors.has(eq)) {
       // Keep tags needed by an unresolved/ambiguous old reference.
       const label = decode(fragment).match(/^=\((.+)\)(?:§\d+)?$/)?.[1];
@@ -89,16 +99,18 @@ export function planMigration(input: Map<string, string>, options: Options = {})
       linkRanges.push(span);
       const tableAlias = tableModels(model).some(t => span.from >= t.from && span.to <= t.to) ? match[0].indexOf('\\|') : -1;
       const target = parseLinkTarget(tableAlias < 0 ? match[1] : match[1].replace(/\\\|/g, '|'));
-      if (!/^=\(.+\)(?:§[1-9]\d*)?$/.test(decode(target.fragment))) continue;
+      const key = decode(target.fragment), legacy = /^=\(.+\)(?:§[1-9]\d*)?$/.test(key);
+      if (!legacy && !key.startsWith('^')) continue;
       const resolved = index.resolve(`${target.path}#${target.fragment}`, file);
       if (resolved.status !== 'resolved') {
-        if (selected.has(file)) issue(file, span, `Target note ${resolved.status}: ${target.path}`);
+        if (legacy && selected.has(file)) issue(file, span, `Target note ${resolved.status}: ${target.path}`);
         continue;
       }
       if (!selected.has(resolved.path)) {
-        if (selected.has(file)) issue(file, span, `Target outside --file selection: ${resolved.path}`);
+        if (legacy && selected.has(file)) issue(file, span, `Target outside --file selection: ${resolved.path}`);
         continue;
       }
+      if (!legacy && !notes.get(resolved.path)!.formulas.some(eq => eq.id === key.slice(1) && notes.get(resolved.path)!.anchors.has(eq) && notes.get(resolved.path)!.anchors.get(eq) !== eq.id)) continue;
       const found = lookup(resolved.path, target.fragment, file, span); if (!found) continue;
       // Patch the destination, preserving !, path spelling, whitespace and custom aliases.
       const hash = match[0].indexOf('#'), plainAlias = match[0].search(/(?<!\\)\|/);
@@ -117,12 +129,14 @@ export function planMigration(input: Map<string, string>, options: Options = {})
     for (const url of model.nodes.filter(n => n.name === 'URL')) {
       if (inside(url) || math.some(r => overlaps(r, url)) || linkRanges.some(r => overlaps(r, url))) continue;
       const raw = text.slice(url.from, url.to), target = parseLinkTarget(raw);
-      if (!/^=\(.+\)(?:§[1-9]\d*)?$/.test(decode(target.fragment))) continue;
+      const key = decode(target.fragment), legacy = /^=\(.+\)(?:§[1-9]\d*)?$/.test(key);
+      if (!legacy && !key.startsWith('^')) continue;
       const resolved = index.resolve(raw, file);
       if (resolved.status !== 'resolved' || !selected.has(resolved.path)) {
-        if (selected.has(file)) issue(file, url, `Markdown target ${resolved.status === 'resolved' ? 'outside --file selection' : resolved.status}: ${raw}`);
+        if (legacy && selected.has(file)) issue(file, url, `Markdown target ${resolved.status === 'resolved' ? 'outside --file selection' : resolved.status}: ${raw}`);
         continue;
       }
+      if (!legacy && !notes.get(resolved.path)!.formulas.some(eq => eq.id === key.slice(1) && notes.get(resolved.path)!.anchors.has(eq) && notes.get(resolved.path)!.anchors.get(eq) !== eq.id)) continue;
       const found = lookup(resolved.path, target.fragment, file, url); if (!found) continue;
       record(file, url, `${raw.slice(0, raw.indexOf('#') + 1)}^${found.id}`, `${resolved.path}#^${found.id}`);
     }
@@ -182,7 +196,7 @@ export function planMigration(input: Map<string, string>, options: Options = {})
   }
   const tagged = [...selected].reduce((count, file) => count + notes.get(file)!.formulas.filter(eq => eq.tag !== undefined).length, 0);
   return { entries, issues, references, numbered, summary: { scanned: input.size, selected: selected.size,
-    changedFiles: entries.length, anchorsAdded, tagsRemoved, tagsRetained: tagged - tagsRemoved,
+    changedFiles: entries.length, anchorsAdded, anchorsRenamed, tagsRemoved, tagsRetained: tagged - tagsRemoved,
     referencesConverted: references.length, unresolved: issues.length } };
 }
 

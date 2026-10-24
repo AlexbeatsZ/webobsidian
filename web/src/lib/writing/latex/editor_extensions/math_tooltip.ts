@@ -1,8 +1,9 @@
-import { type Tooltip, type ViewUpdate, showTooltip, EditorView } from '@codemirror/view';
+import { type Tooltip, showTooltip, EditorView } from '@codemirror/view';
 import { StateField, type EditorState } from '@codemirror/state';
-import { renderMath, readMathMetrics, type MathMetrics, mathDefinitionContext, subscribeMathConfiguration } from '../../../mathjax';
+import { mathDefinitionContext } from '../../../mathjax';
+import { createMathTooltip } from '../../../mathTooltip';
 import { syntaxModel } from '../../../syntaxModel';
-import { contextOf, renderContext } from '../../../renderContext';
+import { renderContext } from '../../../renderContext';
 import { decorationInputsChanged } from '../../../decorationDependencies';
 import { mathPreview, mathPreviewTex, PREVIEW_HIGHLIGHT_CLASS as HIGHLIGHT_CLASS } from '../editor_context/mathPresentation';
 import { getLatexSuiteConfig } from '../snippets/codemirror/config';
@@ -34,41 +35,13 @@ function inlineTooltip(state: EditorState): MathTooltip | undefined {
   const above = getLatexSuiteConfig(state).mathPreviewPositionIsAbove;
   return { equation, from: region.from, to: region.to, definitions, sourcePath: context.sourcePath, tooltip: {
     pos: above ? region.from : region.to, above, strictSide: true, arrow: true,
-    create(view) {
-      const dom = document.createElement('div');
-      dom.className = 'cm-tooltip-cursor ' + (above ? 'cm-tooltip-above' : 'cm-tooltip-below');
-      const body = document.createElement('div'); body.className = 'cm-math-tooltip-body';
-      body.textContent = region.tex; dom.appendChild(body);
-      let controller = new AbortController();
-      let previous: MathMetrics | undefined, invalid = true, destroyed = false;
-      const render = (force = false) => {
-        invalid ||= force;
-        view.requestMeasure({ key: dom, read: () => {
-          if (destroyed || !dom.isConnected || !view.contentDOM.clientWidth) return;
-          const metrics = readMathMetrics(body, view.contentDOM);
-          if (!invalid && previous?.em === metrics.em && previous.containerWidth === metrics.containerWidth) return;
-          return metrics;
-        }, write: metrics => {
-          if (!metrics || destroyed || !dom.isConnected) return;
-          previous = metrics; invalid = false;
-          controller.abort(); controller = new AbortController();
-          const signal = controller.signal;
-          // Keep the CM-owned arrow/positioning root intact when SVG is adopted.
-          void renderMath(body, equation, false, signal, {
-            transient: true, sourcePath: contextOf(view).sourcePath, definitions, metrics,
-          }).catch(error => { if (!signal.aborted) { body.textContent = region.tex; dom.title = String(error); } });
-        } });
-      };
-      let stop = () => {};
-      return { dom, mount() { stop = subscribeMathConfiguration(() => render(true)); render(); },
-        update(update: ViewUpdate) { if (update.geometryChanged) render(); },
-        destroy() { destroyed = true; controller.abort(); stop(); } };
-    },
+    create: view => createMathTooltip(view, equation, { display: false, sourcePath: context.sourcePath, definitions, above }),
   } };
 }
 
+const tooltipSelector = '.cm-tooltip.cm-tooltip-cursor, .cm-tooltip.cm-tooltip-hover:has(> .cm-tooltip-cursor)';
 export const cursorTooltipBaseTheme = EditorView.baseTheme({
-	".cm-tooltip.cm-tooltip-cursor": {
+	[tooltipSelector]: {
 		backgroundColor: "var(--background-secondary)",
 		color: "var(--text-normal)",
 		border: "1px solid var(--background-modifier-border-hover)",
@@ -97,7 +70,7 @@ export const cursorTooltipBaseTheme = EditorView.baseTheme({
 		"& mjx-container[jax=SVG]": {
 			padding: "2px !important",
 		},
-		"& > .cm-math-tooltip-body": {
+		"& .cm-math-tooltip-body": {
 			minWidth: "0",
 			minHeight: "0",
 			maxHeight: "min(20em, 50vh)",
@@ -107,10 +80,10 @@ export const cursorTooltipBaseTheme = EditorView.baseTheme({
 	[`.${HIGHLIGHT_CLASS}`]: {
 		backgroundColor: "var(--text-selection)",
 	},
-	[`${cmDarkClass} .cm-tooltip.cm-tooltip-cursor`]: {
+	[`${cmDarkClass} .cm-tooltip.cm-tooltip-cursor, ${cmDarkClass} .cm-tooltip.cm-tooltip-hover:has(> .cm-tooltip-cursor)`]: {
 		boxShadow: "0 1px 2px rgb(0 0 0 / 10%), 0 3.4px 6.7px rgb(0 0 0 / 15%), 0 0 30px rgb(0 0 0 / 27%)"
 	},
-	[`${cmLightClass} .cm-tooltip.cm-tooltip-cursor`]: {
+	[`${cmLightClass} .cm-tooltip.cm-tooltip-cursor, ${cmLightClass} .cm-tooltip.cm-tooltip-hover:has(> .cm-tooltip-cursor)`]: {
 		boxShadow: "0 1px 2px rgb(0 0 0 / 2.8%), 0 3.4px 6.7px rgb(0 0 0 / 4.2%), 0 5px 20px rgb(0 0 0 / 7%)",
 	},
 

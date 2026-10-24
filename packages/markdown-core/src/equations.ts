@@ -19,11 +19,9 @@ export interface EquationContext {
   equations: readonly Equation[];
   from: number;
   revision: string;
-  prefix?: string;
 }
 const cache = new WeakMap<MarkdownModel, Equation[]>();
-const targetCache = new WeakMap<readonly Equation[], { ids: Map<string, Equation[]>; tags: Map<string, Equation[]> }>();
-const normalizeTag = (value: string) => value.replace(/[\u2010-\u2014\u2212]/g, '-').replace(/\s*-\s*/g, '-').trim();
+const targetCache = new WeakMap<readonly Equation[], Map<string, Equation[]>>();
 
 export function equations(model: MarkdownModel): Equation[] {
   const cached = cache.get(model); if (cached) return cached;
@@ -82,25 +80,33 @@ function explicitTag(tex: string): string | undefined {
   return undefined;
 }
 
-export function equationContext(model: MarkdownModel, from = 0, prefix?: string): EquationContext {
-  return { equations: equations(model), from, revision: `${model.id}:${model.version}`, prefix };
+export function equationContext(model: MarkdownModel, from = 0): EquationContext {
+  return { equations: equations(model), from, revision: `${model.id}:${model.version}` };
 }
-export function equationLabel(equation: Equation, context?: EquationContext): string | null {
-  return equation.number === null ? null : `(${context?.prefix ? context.prefix + '-' : ''}${equation.number})`;
+export function equationLabel(equation: Equation): string | null {
+  return equation.number === null ? null : `(${equation.number})`;
+}
+/** The only formula-reference namespace; other IDs remain ordinary block links. */
+export function equationReferenceName(fragment: string): string | undefined {
+  let key = fragment; try { key = decodeURIComponent(key); } catch { /* literal percent */ }
+  return key.match(/^\^eq-([\p{L}\p{N}-]+)$/u)?.[1];
+}
+export function equationReferenceLabel(equation: Equation, alias: string | null): string {
+  const name = equation.id!.slice(3);
+  return alias === null ? equationLabel(equation) ?? name : alias || name;
 }
 export function equationTarget(context: EquationContext, fragment: string): Equation | undefined {
-  let key = fragment; try { key = decodeURIComponent(key); } catch { /* literal percent */ }
-  const legacy = key.match(/^=\((.+)\)(?:§([1-9]\d*))?$/);
+  const name = equationReferenceName(fragment);
+  if (name === undefined) return;
   let targets = targetCache.get(context.equations);
   if (!targets) {
-    targets = { ids: new Map(), tags: new Map() };
-    for (const e of context.equations) for (const [map, name] of [[targets.ids, e.id], [targets.tags, e.tag === undefined ? undefined : normalizeTag(e.tag)]] as const) {
-      if (name !== undefined) { const values = map.get(name) ?? []; values.push(e); map.set(name, values); }
+    targets = new Map();
+    for (const e of context.equations) if (e.id && equationReferenceName('^' + e.id) !== undefined) {
+      const values = targets.get(e.id) ?? []; values.push(e); targets.set(e.id, values);
     }
     targetCache.set(context.equations, targets);
   }
-  const candidates = key.startsWith('^') ? targets.ids.get(key.slice(1)) ?? [] : legacy ? targets.tags.get(normalizeTag(legacy[1])) ?? [] : [];
-  if (legacy?.[2]) return candidates[Number(legacy[2]) - 1];
+  const candidates = targets.get('eq-' + name) ?? [];
   return candidates.length === 1 && !candidates[0].ambiguous ? candidates[0] : undefined;
 }
 
@@ -116,7 +122,10 @@ export function equationAnchor(model: MarkdownModel, from: number, seed: string)
   const equation = equations(model).find(e => e.from === from);
   if (!equation) throw new Error('Formula changed; select it again');
   if (equation.ambiguous) throw new Error('Duplicate block ID; rename it before referencing this formula');
-  if (equation.id) return { id: equation.id };
+  if (equation.id) {
+    if (equationReferenceName('^' + equation.id) === undefined) throw new Error('Formula block ID must start with eq-');
+    return { id: equation.id };
+  }
   if (!equation.referenceable) throw new Error('Put the formula on its own line before adding a block reference');
   const used = new Set(extractMetadata(model).blockIds.map(b => b.id));
   const base = `eq-${seed.replace(/[^a-z0-9]/gi, '').slice(0, 16) || 'formula'}`;

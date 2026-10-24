@@ -57,6 +57,12 @@ test('preserves and reuses an existing anchor, handles generated ID collisions',
   assert.equal(result.issues.length, 0);
   assert.ok(result.entries[0].after.includes('$$x $$ ^eq-migrated1-2'));
   assert.ok(result.entries[0].after.includes('[[#^eq-migrated1-1]]'));
+  const renamed = plan('$$x$$ ^old\n[[#^old|]]\n[old](#^old)\n');
+  assert.equal(renamed.summary.anchorsRenamed, 1);
+  assert.ok(renamed.entries[0].after.includes('$$x$$ ^eq-old'));
+  assert.ok(renamed.entries[0].after.includes('[[#^eq-old|]]'));
+  assert.ok(renamed.entries[0].after.includes('[old](#^eq-old)'));
+  assert.equal(plan(renamed.entries[0].after).entries.length, 0);
 });
 test('duplicate tags require an occurrence; unresolved references are retained and reported', () => {
   const source = '$$x \\tag{1-1}$$\n$$y \\tag{1-1}$$\n[[#=(1-1)§2]] [[#=(1-1)]] $\\text{(8-8)}$';

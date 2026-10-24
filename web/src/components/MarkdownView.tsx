@@ -34,7 +34,7 @@ import { renderContext, type RenderContext } from '../lib/renderContext';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import { attachMenuContext } from '../lib/configuredMenus/transform';
 import type { RenderMenuItem } from '../lib/renderContext';
-import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField,
+import { livePreviewPlugin, livePreviewState, livePreviewTheme, equationReferenceHover, frontmatterField,
   tableField, htmlBlockField, mermaidField, htmlRenderedState, htmlPreviewField,
   calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitle,
   livePreviewReadonly, setLivePreviewReadonly, setLivePreviewEnabled, setNoteTitle } from '../lib/livePreview';
@@ -268,7 +268,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         codeBlocks,
         ...(p.context.allowPlugins ? [pluginPostProcessing] : []),
         htmlRenderedState, htmlPreviewField, calloutFoldState, calloutFoldDeco,
-        inlineHtml, semanticDecorations, mathBlockField, blockLayout, listFolding, livePreviewPlugin, livePreviewTheme, prefixWidths, listLayout,
+        inlineHtml, semanticDecorations, mathBlockField, blockLayout, listFolding, livePreviewPlugin, livePreviewTheme, equationReferenceHover, prefixWidths, listLayout,
         EditorView.updateListener.of((u) => {
           if (!u.docChanged || u.transactions.every((tr) => tr.annotation(externalUpdate))) return;
           const changes: SourceChange[] = [];

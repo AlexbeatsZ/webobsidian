@@ -5,6 +5,7 @@ import {
   ViewPlugin,
   ViewUpdate,
   WidgetType,
+  hoverTooltip,
 } from '@codemirror/view';
 import { StateField, StateEffect, type EditorState, type Range } from '@codemirror/state';
 import { getIndentUnit, foldedRanges } from '@codemirror/language';
@@ -26,7 +27,8 @@ import { renderMath, readMathMetrics, type MathMetrics, mathDefinitionContext, s
 import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } from './writing/latex/editor_context/mathPresentation';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
-import { equationLabel, equationTarget, equationAt, fragmentRange, parseLinkTarget, type Equation } from '@webobsidian/markdown-core';
+import { equationLabel, equationReferenceLabel, equationReferenceName, equationTarget, equationAt, parseLinkTarget, type Equation, type MarkdownModel } from '@webobsidian/markdown-core';
+import { createMathTooltip } from './mathTooltip';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -86,15 +88,37 @@ function externalLinkIcon(): SVGElement {
   return svg;
 }
 
+interface EquationLinkMount {
+  controller: AbortController; stop?: () => void;
+  read: () => { equation: Equation; model: MarkdownModel; path: string; length: number } | undefined;
+}
+const equationLinkMounts = new WeakMap<HTMLElement, EquationLinkMount>();
+export const equationReferenceHover = hoverTooltip((view, pos, side) => {
+  for (const link of view.contentDOM.querySelectorAll<HTMLElement>('[data-equation-reference]')) {
+    if (link.closest('.cm-editor') !== view.dom) continue;
+    const preview = equationLinkMounts.get(link)?.read();
+    if (!preview) continue;
+    const from = view.posAtDOM(link), to = from + preview.length;
+    if (pos < from || pos > to || (pos === from && side < 0) || (pos === to && side > 0)) continue;
+    const { equation, model, path } = preview;
+    return { pos: from, end: to, above: true, arrow: true,
+      create: () => createMathTooltip(view, equation.tex, { display: true, sourcePath: path,
+        definitions: mathDefinitionContext(model, equation.from) }) };
+  }
+  return null;
+}, { hideOnChange: true, hideOn: tr => tr.startState.facet(renderContext) !== tr.state.facet(renderContext) });
+
 class WikilinkWidget extends WidgetType {
-  private cleanup = new WeakMap<HTMLElement, () => void>();
-  destroy(dom: HTMLElement) { this.cleanup.get(dom)?.(); }
+  destroy(dom: HTMLElement) {
+    const mount = equationLinkMounts.get(dom); equationLinkMounts.delete(dom);
+    mount?.controller.abort(); mount?.stop?.();
+  }
   /** `aria` = default display text, set when an alias overrides it (like Obsidian). */
-  constructor(readonly target: string, readonly label: string, readonly embed: boolean, readonly aria?: string, readonly numberReference = false, readonly revision?: string) {
+  constructor(readonly target: string, readonly label: string, readonly embed: boolean, readonly aria: string | undefined, readonly alias: string | null, readonly sourceLength: number, readonly sourcePath?: string) {
     super();
   }
   eq(o: WikilinkWidget) {
-    return o.target === this.target && o.label === this.label && o.embed === this.embed && o.aria === this.aria && o.numberReference === this.numberReference && o.revision === this.revision;
+    return o.target === this.target && o.label === this.label && o.embed === this.embed && o.aria === this.aria && o.alias === this.alias && o.sourceLength === this.sourceLength && o.sourcePath === this.sourcePath;
   }
   toDOM(view: EditorView) {
     const a = document.createElement('a');
@@ -102,28 +126,36 @@ class WikilinkWidget extends WidgetType {
     a.dataset.menuLink = this.target;
     a.textContent = this.label;
     const destination = parseLinkTarget(this.target);
-    if (this.numberReference && /^[\^=]/.test(destination.fragment)) {
+    if (equationReferenceName(destination.fragment) !== undefined) {
+      a.dataset.equationReference = '';
       const context = contextOf(view), controller = new AbortController();
-      let unsubscribe: (() => void) | undefined;
-      this.cleanup.set(a, () => { controller.abort(); unsubscribe?.(); });
-      const paint = (equation?: Equation, missing = false) => {
+      const mount: EquationLinkMount = { controller, read: () => undefined }; equationLinkMounts.set(a, mount);
+      const paint = () => {
         if (controller.signal.aborted) return;
-        if (equation) {
-          a.textContent = equationLabel(equation, !destination.path ? equationsOf(view.state) : undefined) ?? this.label;
-          a.title = `${this.target}\n${equation.tex}`;
-          a.classList.toggle('is-unresolved', !!equation.ambiguous);
-        } else { a.textContent = this.label; a.classList.toggle('is-unresolved', missing); a.title = this.target; }
+        const preview = mount.read();
+        a.textContent = preview ? equationReferenceLabel(preview.equation, this.alias) : this.label;
+        a.classList.toggle('is-unresolved', !preview);
       };
-      if (!destination.path) paint(equationTarget(equationsOf(view.state), destination.fragment),
-        !fragmentRange(context.mathSource?.model ?? view.state.field(syntaxModel), destination.fragment));
+      if (!destination.path) {
+        mount.read = () => {
+          const context = contextOf(view), formulas = equationsOf(view.state);
+          const equation = equationTarget(formulas, destination.fragment);
+          const model = (formulas === context.equations ? context.mathSource?.model : undefined) ?? view.state.field(syntaxModel);
+          return equation ? { equation, model, path: context.sourcePath, length: this.sourceLength } : undefined;
+        };
+        paint();
+      }
       else void context.renderEmbed(this.target, controller.signal).then(note => {
         if (controller.signal.aborted) return;
-        if (!note) { paint(undefined, true); return; }
-        const refresh = () => { const data = note.read(); paint(data?.equations ? equationTarget(data.equations, destination.fragment) : undefined, !data); };
-        unsubscribe = note.subscribe(refresh); refresh();
-      }).catch(() => {});
+        if (!note) { paint(); return; }
+        mount.read = () => {
+          const data = note.read(), equation = data?.equations ? equationTarget(data.equations, destination.fragment) : undefined;
+          return equation && data?.mathSource ? { equation, model: data.mathSource.model, path: note.path, length: this.sourceLength } : undefined;
+        };
+        mount.stop = note.subscribe(paint); paint();
+      }).catch(paint);
     }
-    if (this.aria) a.setAttribute('aria-label', this.aria);
+    if (this.aria && equationReferenceName(destination.fragment) === undefined) a.setAttribute('aria-label', this.aria);
     a.onmousedown = (e) => {
       e.preventDefault();
       contextOf(view).openLink(this.target);
@@ -681,7 +713,7 @@ function numberedMath(state: EditorState, tex: string, display: boolean, range: 
   const equation = display ? equationAt(context, range.from) : undefined;
   const source = state.facet(renderContext).mathSource;
   const definitions = mathDefinitionContext(source?.model ?? state.field(syntaxModel), range.from + (source?.from ?? 0));
-  return new MathWidget(tex, display, range, equation && !equation.tag ? equationLabel(equation, context) ?? undefined : undefined,
+  return new MathWidget(tex, display, range, equation && !equation.tag ? equationLabel(equation) ?? undefined : undefined,
     preview || equation?.ambiguous ? undefined : equation?.id, definitions, preview, state.field(blockModel).mathCallout.has(range.from));
 }
 export const mathBlockField = StateField.define<DecorationSet>({
@@ -2232,11 +2264,13 @@ function buildDecorations(view: EditorView): DecorationSet {
         } else {
           // LP shows the raw target text (`Note#Head`); the `Note > Head` display
           // form is reading-view behaviour and goes into aria-label like Obsidian.
-          const label = alias || href;
+          const destination = parseLinkTarget(href), referenceName = equationReferenceName(destination.fragment);
+          const equation = referenceName !== undefined && !destination.path ? equationTarget(equationsOf(view.state), destination.fragment) : undefined;
+          const label = equation ? equationReferenceLabel(equation, alias) : alias || (alias === '' && referenceName !== undefined ? referenceName : href);
           pushReplace(
             s,
             e,
-            Decoration.replace({ widget: new WikilinkWidget(href, label, isEmbed, defaultDisplay !== label ? defaultDisplay : undefined, alias === null, alias === null && /#[\^=]/.test(href) ? equationsOf(view.state).revision : undefined) }),
+            Decoration.replace({ widget: new WikilinkWidget(href, label, isEmbed, defaultDisplay !== label ? defaultDisplay : undefined, alias, e - s, referenceName !== undefined ? contextOf(view).sourcePath : undefined) }),
           );
         }
       }
@@ -2415,8 +2449,8 @@ function buildTables(state: EditorState): DecorationSet {
   const equations = equationsOf(state);
   // Source version alone changes on every keystroke. Cells depend on prior
   // definitions and reference presentation, not unrelated paragraph edits.
-  const referenceKey = tables.some(t => t.key.includes('[[')) ? JSON.stringify([equations.prefix,
-    equations.equations.map(e => [e.id, e.tag, e.number, e.ambiguous, e.tex])]) : '';
+  const referenceKey = tables.some(t => t.key.includes('[[')) ? JSON.stringify(
+    equations.equations.map(e => [e.id, e.number, e.ambiguous, e.tex])) : '';
   // Like Obsidian, tables are ALWAYS shown as the interactive widget (never as raw
   // pipes) — editing happens in-cell, so the selection no longer reveals raw.
   const ranges: Range<Decoration>[] = tables.map((t) =>

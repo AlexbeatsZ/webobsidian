@@ -2,7 +2,7 @@
 
 ## Source contract
 
-New equation references reuse ordinary Markdown block IDs and wiki links:
+Formula references use the `eq-` block-ID namespace and ordinary wiki links:
 
 ```markdown
 $$
@@ -12,10 +12,19 @@ $$ ^eq-mass-energy
 由 [[#^eq-mass-energy]] 可得……
 ```
 
-The source name on the equation and in the link must visibly match. The rendered
-link without an alias displays the current equation number; a handwritten alias
-is preserved. A name need not start with `eq-`. Generated names use `eq-` plus a
-short random token, checked against **all** block IDs in the target document.
+The source name on the equation and in the link must visibly match. The three
+display forms are distinct:
+
+| Source | Display |
+| --- | --- |
+| `[[#^eq-migrated17]]` | Current equation number, e.g. `(1-17)` |
+| `[[#^eq-migrated17\|]]` | `migrated17`, the text after `eq-` |
+| `[[#^eq-migrated17\|energy]]` | `energy`, the explicit alias |
+
+Whitespace-only aliases count as empty. `equationReferenceName` owns the allowed
+namespace, `equationReferenceLabel` owns this display rule, and `equationTarget`
+resolves only canonical IDs. Generated names use `eq-` plus a short random token,
+checked against **all** block IDs in the target document.
 The name is assigned once; changing the formula never regenerates a content hash.
 Duplicate IDs are ambiguous, including duplicates on ordinary blocks.
 
@@ -23,11 +32,12 @@ Typing `[[#^eq` or `[[note#^eq` in the existing link suggester lists referenceab
 display formulas, whether or not they have IDs. Search includes number, name,
 TeX and H1 context. The selected candidate alone uses the shared MathJax preview;
 the list does not convert every formula. Results use the existing 20-item limit;
-searching narrows the complete candidate set. Ordinary blocks whose names start
-with eq remain available as block candidates. Selecting a formula reuses its name or
-adds an ID at its closing delimiter. Browsing never modifies source. Generic
-`#^` completion lists existing block IDs; `#^eq` is a completion convention, not
-a second link syntax or a reserved target namespace.
+searching narrows the complete candidate set. Formula-mode completion contains
+only referenceable formulas with a canonical ID or no ID yet; it never mixes in
+ordinary blocks. Selecting a formula reuses its canonical name or adds an ID at
+its closing delimiter. Browsing never modifies source. Generic `#^` completion
+continues to serve ordinary block links. A noncanonical formula ID must be
+normalized explicitly; the application does not rename IDs or revive old formats.
 
 The candidate retains the exact source model used to show it. Selection rejects
 a changed model, a conflicting target session and an ambiguous target file.
@@ -79,10 +89,21 @@ EquationContext carries absolute source positions, source revision and computed
 numbers. Editor, MarkdownFragment, note embeds, Canvas and print use the same
 widget. A fragment receives the original note's complete semantic context rather
 than counting from one. Embed invalidation includes the context revision even
-when the selected source slice is unchanged. The optional context prefix is a
-display-only mapping; the default uses original source numbers. This delivery
-does not add the old plugin's automatic embed-ordinal prefix policy or editable
-note-embed controllers.
+when the selected source slice is unchanged. Labels use original source numbers;
+there is no unused embed-ordinal prefix option.
+
+Every canonical formula link, including links with empty/custom aliases, exposes
+a rendered hover preview. The existing CodeMirror hoverTooltip owns positioning
+and lifetime. `mathTooltip.ts` shares the render/measurement/configuration-change/
+abort lifecycle with inline cursor previews; both call the existing MathJax
+queue/cache. Reference previews use the target's complete model and absolute
+formula position for macro definitions. Widget-owned weak DOM metadata is only
+read on hover; no source scan, MathJax conversion or new watcher runs per mouse
+move or ordinary text input. Local labels participate in normal widget equality;
+hover reads the current semantic model lazily, so an unrelated document revision
+does not recreate every link or restart cross-note subscriptions. Unmount clears
+metadata/subscriptions. Loading or
+render failure uses a status message; no TeX source is written into `title`.
 
 Table cells compare preceding macro definitions and equation reference display
 data, not the whole source revision. Their existing table source/position checks
@@ -96,21 +117,15 @@ renders and pass sourcePath / ordered preceding definitions. Private fragments
 carry an in-memory original source model for these definitions. No second
 MathJax runtime, output cache, DOM observer or formula-source fallback is added.
 
-Public sharing computes numbers on the server's full model, then emits only
-formulas within the granted range. Unshared TeX, chapter titles and full source
-models are never sent to restore numbering. Reference links grant no extra read
-permission. Cross-document display can reuse an already granted whole-note
-embed; unavailable targets retain their readable source label.
-
 ## Legacy and migration
 
-Existing `\tag`, `#=(number)` / occurrence-suffixed targets, ordinary block
-references, custom aliases and original plugin files are retained. The shared
-fragment resolver reads tagged-formula fragments; native new references use IDs.
-The existing legacy Plus formula/live-reference modules remain enabled for their
-remaining old synchronization and editable-embed behaviors. New ID references
-do not depend on them. No real-Vault migration, automatic old-tag removal, bulk
-reference rewrite or formatting-template execution occurs during startup/build.
+The application has no `#=(number)` / occurrence-suffixed formula resolver,
+tag-to-reference index, arbitrary-ID formula-reference branch or unused numbering
+prefix. Legacy source interpretation belongs exclusively to the offline migration
+script. Generic Markdown links, headings and ordinary block navigation remain
+their own existing capabilities. Explicit TeX `\tag` is still ordinary formula
+presentation, independent of link identity. The application never migrates a
+Vault or changes external plugin files/configuration on startup.
 
 Cross-file formula discovery reads only the selected target through the existing
 resolver and DocumentRegistry. There is no extra full-Vault equation index,
@@ -121,9 +136,12 @@ catalog cache schema, watcher, database or API endpoint.
 `scripts/migrate-equations.mts` provides an opt-in, offline vault migration;
 [usage and recovery](../examples/equation-migration.md) document its CLI. It imports
 current markdown-core source through the existing project-local tsx dependency,
-reusing SourceDocument, mathRegions, equations/equationAnchor/equationTarget,
+reusing SourceDocument, mathRegions, equations/equationAnchor,
 metadata, comments and TargetIndex. No application startup, automatic migration,
-second parser, watcher, render engine or live editing path is added.
+second Markdown parser, watcher, render engine or live editing path is added.
+The removed legacy tag/occurrence lookup now lives only in this offline script.
+Noncanonical formula block IDs are renamed into the `eq-` namespace and their
+incoming block links are updated in the same migration plan.
 
 The planner allocates stable IDs for legacy tagged formulas, resolves references
 against the original snapshot before removing numeric tags, then applies source
@@ -147,8 +165,13 @@ execution on copies; application/UI/MathJax acceptance is separate.
 
 ## Verification boundary
 
-User authorization is static checks only: source/type checks and isolated
-production builds. Regression sources cover identity after renumbering, H1 rules,
+2026-10-24 canonical-reference/hover follow-up is source/diff review only under
+the existing no-acceptance boundary: no tests, typechecks, builds, application,
+server or browser launches. Existing unit sources were updated for the canonical
+namespace and the three alias states but were not executed. The earlier migration
+script's 14 executed checks predate this follow-up and do not verify it.
+
+Earlier regression sources cover identity after renumbering, H1 rules,
 literal/comment/table exclusions, mhchem internal dollars, explicit tags, exact
 fragments, duplicate IDs, ordinary-block collision, Callout segments and exact
 BOM/CRLF undo. They are prepared and type-checked, **not executed**.
