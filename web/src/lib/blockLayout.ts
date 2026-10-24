@@ -27,7 +27,7 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
       'data-source-from': String(block.from), 'data-source-to': String(block.to),
     };
     const rank = Math.max(1, (block.kind === 'code' ? 80 : 100) - block.depth);
-    if (block.kind === 'quote') {
+    if (block.kind !== 'code') {
       const first = state.doc.lineAt(block.from).text;
       const own = stripQuotePrefix(first, block.depth - 1);
       // An absolute rule follows the intrinsic text of preceding quote levels.
@@ -36,7 +36,6 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
     }
     if (block.kind === 'callout') {
       attributes['data-callout'] = block.type;
-      attributes.style = `--callout-color: var(--callout-${CALLOUT_SLOT[block.type] ?? 'default'})`;
       // BlockWrapper measurement includes padding, but not collapsed margins or
       // gaps between sibling lines. Keep every pixel in a measured wrapper.
       // All body lines remain CodeMirror text; these wrappers only draw frames.
@@ -49,7 +48,10 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
       // Give the title its own box. Its rule must track the complete title,
       // including wrapped text, independently of the gap before the body.
       ranges.push(BlockWrapper.create({ tagName: 'div',
-        attributes: { class: 'callout-title md-callout-title' }, rank: 0,
+        attributes: { class: 'callout-title md-callout-title',
+          'data-quote-prefix': attributes['data-quote-prefix'],
+          style: `--callout-color: var(--callout-${CALLOUT_SLOT[block.type] ?? 'default'})`,
+        }, rank: 0,
       }).range(block.from, state.doc.lineAt(block.from).to));
     }
     if (block.kind === 'code') attributes['data-lang'] = block.language;

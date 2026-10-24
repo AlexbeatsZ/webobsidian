@@ -10,6 +10,37 @@ prohibited tests, type/build checks and runtime acceptance for this batch.
 
 ## Callouts
 
+### Container, quote prefix and title marker
+
+The neutral gray frame/background belongs to the structural quoted Callout
+container and covers its title, body and quoted blank/new lines. Type color belongs
+only to that container's title wrapper. The body never inherits a title's color.
+
+The first logical line of each existing Blockquote node can declare a Callout:
+after stripping exactly that node's structural quote depth, it must start with
+`[!type]` and its optional fold sign. A later body occurrence, an inline occurrence,
+an unquoted marker, or code cannot declare one. Nested quotes are classified from
+their own first logical lines: an inner Callout has its own frame/type/title color;
+an inner ordinary quote remains a quote inside the outer frame. No new recognizer
+or inherited-type state is added; markdown-core's cached blockContainers owns this.
+The colored title rule uses the same intrinsic preceding-prefix text as ordinary
+quote rules, aligning to its own nested `>` rather than the outermost source marker.
+
+Header source is partitioned into native `>`/source-space prefixes, the exact
+`[!type]+/-` token, separating whitespace and custom title. markerFrom/markerTo
+exclude every structural quote prefix and all separating whitespace. Only that
+token is replaced with the existing inline icon/default-title widget; source spaces
+and custom title remain native text. The aggregate prefixTo replacement is removed.
+Both title and body `>` use the same cm-quote-prefix producer, measurement and
+independent caret-reveal predicate. Touching `>` alone does not reveal the type tag.
+The type's visual width may change when rendered, but `>` never gains or loses width.
+
+Removed the 12px title inset, 22px fixed icon column and absolute icon positioning.
+The icon is an ordinary inline box; custom titles retain their original separator,
+and a default title has a normal text space after its icon. Only existing formula
+source controls reserve space on the right. No custom mouse/Enter handling.
+Source/diff only; nested input, folding, wrapped-title geometry and UI are unverified.
+
 `[!type]-` starts folded. `[!type]+` and `[!type]` start expanded. Every Callout
 has a fold button, including those without a sign. The user toggle is a view-local
 override of the source default; clicking it never inserts or changes `+`/`-`.
@@ -50,9 +81,8 @@ prefixes and display-math source use the same native-text layout. Math owns its
 literal body, not the structural quote prefixes of continuation lines. Explicit
 source entry also retains the prefix path when an enclosing quote remains styled;
 opening a whole owning quote as source retains normal raw-source behavior.
-A Callout title is excluded from list
-prefix measurement even when it is nested in a parent ListItem, so its own icon
-padding stays authoritative. Full source mode retains literal text.
+A Callout title uses shared quote-prefix measurement while excluding list-specific
+marker handling, even when nested in a parent ListItem. Full source mode retains literal text.
 See reference-editor-layout.md for the local Obsidian package evidence and limits.
 
 `calloutFoldState` keeps its identity for unrelated transactions. Fold decorations

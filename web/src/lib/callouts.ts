@@ -3,8 +3,8 @@ import lightbulb from '../assets/icons/lucide/lightbulb.svg?raw';
 import fileSignature from '../assets/icons/lucide/file-signature.svg?raw';
 
 /**
- * Callout constants (docs §7/§21) shared by Live Preview (livePreview.ts) and
- * Reading view (markdown.ts) so both modes render callouts identically.
+ * Callout icon/color presentation shared by live and reading MarkdownView.
+ * Structural marker recognition and source ranges belong to markdown-core.
  */
 
 // data-callout type → color/icon slot.
@@ -43,9 +43,6 @@ export const CALLOUT_ICON: Record<string, string> = {
   example: '<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>',
   quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
 };
-
-// Callout first-line regex — exact (§7).
-export const CALLOUT_RE = /^\[!([^\]]+)\]([+-]?)(?:\s|$)/;
 
 /** Default title: type with `-`→space, first letter capitalized (§7). */
 export function calloutDefaultTitle(type: string): string {

@@ -9,7 +9,7 @@ import {
 import { StateField, StateEffect, type EditorState, type Range } from '@codemirror/state';
 import { getIndentUnit, foldedRanges } from '@codemirror/language';
 import { markdownListLine } from './listLayout';
-import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
+import { CALLOUT_SLOT, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { iconPaths, setIcon } from './icons';
 import { openLightbox } from './imageLightbox';
 import { applyImagePresentation, presentHtmlImages, markdownImageAt } from './imagePresentation';
@@ -367,6 +367,7 @@ class CalloutHeadWidget extends WidgetType {
     icon.innerHTML = calloutIconSvg(this.slot);
     span.appendChild(icon);
     if (this.defaultTitle) {
+      span.appendChild(document.createTextNode(' '));
       const title = document.createElement('span');
       title.className = 'cm-callout-title';
       title.textContent = this.defaultTitle;
@@ -1989,11 +1990,16 @@ function buildDecorations(view: EditorView): DecorationSet {
       if (quotePrefix) {
         const prefix = quotePrefix[0];
         bodyStart = prefix.length;
+        // Every structural quote prefix, including a Callout title, retains its
+        // own native width and reveal policy independently of the type marker.
+        all.push(Decoration.line({ attributes: { 'data-prefix-layout': String(line.from) } }).range(line.from));
+        all.push(Decoration.mark({ class: 'cm-quote-prefix' +
+          (touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
         if (header && !sourceLine) {
           const slot = CALLOUT_SLOT[header.type] ?? 'default';
           const folded = isCalloutFolded(view.state, header.from, header.fold);
-          if (!touches(line.from, header.prefixTo)) {
-            pushReplace(line.from, header.prefixTo, Decoration.replace({
+          if (!touches(header.markerFrom, header.markerTo)) {
+            pushReplace(header.markerFrom, header.markerTo, Decoration.replace({
               widget: new CalloutHeadWidget(slot, header.title ? '' : calloutDefaultTitle(header.type)),
             }));
           }
@@ -2007,13 +2013,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             all.push(Decoration.widget({ widget: new CalloutMathSourcesWidget(formulas), side: 1 }).range(line.to));
           }
           if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title' }).range(header.titleFrom, line.to));
-          bodyStart = header.prefixTo - line.from;
-        } else {
-          // Preserve only the native source advance in both reveal states.
-          // Quotes, Callout bodies and math source use this same prefix path.
-          all.push(Decoration.line({ attributes: { 'data-prefix-layout': String(line.from) } }).range(line.from));
-          all.push(Decoration.mark({ class: 'cm-quote-prefix' +
-            (touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
+          bodyStart = header.titleFrom - line.from;
         }
       }
 
@@ -2024,8 +2024,8 @@ function buildDecorations(view: EditorView): DecorationSet {
       // non-space status counts as checked (no hard-coded custom-state list).
       const body = bodyStart ? text.slice(bodyStart) : text;
       const bodyFrom = line.from + bodyStart;
-      // Callout title padding/icon replacement belongs to its title wrapper,
-      // even when the entire Callout is nested in a parent list item.
+      // A Callout header isn't a list marker, even inside a parent ListItem.
+      // Its quote prefix above still follows the shared native layout.
       const list = header ? null : markdownListLine(view.state, line);
       const prefix = list?.header ? body.match(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[.\][ \t]+)?/) : null;
       if (list) {
