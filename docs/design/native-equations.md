@@ -116,6 +116,35 @@ Cross-file formula discovery reads only the selected target through the existing
 resolver and DocumentRegistry. There is no extra full-Vault equation index,
 catalog cache schema, watcher, database or API endpoint.
 
+### Explicit offline migration (2026-10-24)
+
+`scripts/migrate-equations.mts` provides an opt-in, offline vault migration;
+[usage and recovery](../examples/equation-migration.md) document its CLI. It imports
+current markdown-core source through the existing project-local tsx dependency,
+reusing SourceDocument, mathRegions, equations/equationAnchor/equationTarget,
+metadata, comments and TargetIndex. No application startup, automatic migration,
+second parser, watcher, render engine or live editing path is added.
+
+The planner allocates stable IDs for legacy tagged formulas, resolves references
+against the original snapshot before removing numeric tags, then applies source
+range patches. Existing untagged formulas are already native and are untouched.
+Wiki links/embeds, independent inline number references and parser-owned Markdown
+URL ranges migrate together; file selection includes inbound links from other
+notes. Custom aliases remain literal unless removal of matching numeric aliases
+is explicitly requested. Custom tags and numbering exemptions remain explicit.
+
+Preview is the default and outputs original/result copies, a diff, a report and
+a self-contained HTML source comparison outside the source Vault. Explicit apply
+requires zero unresolved issues and a still-current whole-Vault snapshot. It
+backs up all original bytes before any per-file atomic replacement. Restore
+checks current bytes against original/result copies and refuses to overwrite
+later edits; journal states support recovery after an interrupted partial apply.
+The CLI requires a new output directory and rejects symlinks and invalid UTF-8.
+Unresolvable references/duplicate IDs/unsafe formula closings are reported rather
+than guessed. There is no claim that arbitrary damaged old notes can be fully
+migrated automatically. This user request authorizes targeted migration-script
+execution on copies; application/UI/MathJax acceptance is separate.
+
 ## Verification boundary
 
 User authorization is static checks only: source/type checks and isolated
