@@ -5,6 +5,7 @@ import { WorkspaceDocumentSession } from './tags/folderSession';
 /** Workspace service, deliberately outside the renderer. */
 export class DocumentRegistry {
   private sessions = new Map<string, DocumentSession>();
+  private vaults = new WeakMap<DocumentSession, string>();
   private pending = new Map<string, Promise<DocumentSession>>();
   private refreshAgain = new Set<string>();
   private deferredRefreshes = new Set<string>();
@@ -34,7 +35,8 @@ export class DocumentRegistry {
     const pending = this.pending.get(path);
     if (pending) return pending;
     const loading = api.read(path).then((file) => {
-      const session = new WorkspaceDocumentSession(path, file.content, file.revision, (id, raw, revision) => api.write(id, raw, revision));
+      const session = new WorkspaceDocumentSession(path, file.content, file.revision, (id, raw, revision) => api.write(id, raw, revision, file.vault));
+      this.vaults.set(session, file.vault);
       this.sessions.set(path, session);
       let version = session.snapshot.version, locked = !!session.snapshot.locked;
       this.stops.set(session, session.subscribe(() => {
@@ -79,7 +81,7 @@ export class DocumentRegistry {
       do {
         this.refreshAgain.delete(path);
         const revision = existing.snapshot.revision;
-        const file = await api.read(path);
+        const file = await api.read(path, this.vaults.get(existing));
         await existing.whenSaved().catch(() => {});
         if (this.sessions.get(path) !== existing) return existing;
         // A save completed during the read: its response may acknowledge bytes

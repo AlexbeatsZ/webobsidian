@@ -8,7 +8,8 @@ import {
 	ViewPlugin,
 	ViewUpdate,
 } from "@codemirror/view";
-import { type Bounds, MathMode } from "../editor_context/context";
+import type { Bounds } from "../editor_context/context";
+import { MathMode } from "../editor_context/mathbounds";
 import { getMathBoundsPlugin } from "../editor_context/mathbounds";
 import { latex } from "../parser/latex-terms";
 import { EquationText, iterateTreeCursor } from "../utils/tokenizer";

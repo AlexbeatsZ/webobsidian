@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { resolveInVault } from './vaultFile.js';
 import { getSettings, updateSettings } from './settings.js';
-import { writeTextFile } from './textFile.js';
+import { writeBinaryFile, writeTextFile } from './textFile.js';
 
 /**
  * Obsidian community plugin support (PRD FR-8).
@@ -122,18 +122,10 @@ export async function readPluginData(id: string): Promise<unknown> {
   try { return JSON.parse(await fs.readFile(await resolveInVault(`.obsidian/plugins/${id}/data.json`), 'utf8')); }
   catch (e: any) { if (e.code === 'ENOENT') return null; throw e; }
 }
-const dataWrites = new Map<string, Promise<void>>();
 export async function writePluginData(id: string, data: unknown): Promise<void> {
   assertSafeId(id);
   const target = await resolveInVault(`.obsidian/plugins/${id}/data.json`);
-  const operation = (dataWrites.get(target) ?? Promise.resolve()).catch(() => {}).then(async () => {
-    const tmp = target + '.webobsidian-tmp';
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.writeFile(tmp, JSON.stringify(data, null, 2));
-    await fs.rename(tmp, target);
-  });
-  dataWrites.set(target, operation);
-  try { await operation; } finally { if (dataWrites.get(target) === operation) dataWrites.delete(target); }
+  await writeTextFile(target, JSON.stringify(data, null, 2));
 }
 
 /** Adapter operations remain vault-scoped, including hidden plugin/config files. */
@@ -144,8 +136,9 @@ export async function adapterOperation(op: string, rel: string, body: any = {}) 
     case 'read': return { content: await fs.readFile(target, 'utf8') };
     case 'readBinary': return { base64: (await fs.readFile(target)).toString('base64') };
     case 'write': case 'writeBinary': {
-      await fs.mkdir(path.dirname(target), { recursive: true });
-      await fs.writeFile(target, op === 'writeBinary' ? Buffer.from(body.base64, 'base64') : String(body.content)); return { ok: true };
+      if (op === 'writeBinary') await writeBinaryFile(target, Buffer.from(body.base64, 'base64'));
+      else await writeTextFile(target, String(body.content));
+      return { ok: true };
     }
     case 'exists': return { exists: await fs.access(target).then(() => true, () => false) };
     case 'stat': {

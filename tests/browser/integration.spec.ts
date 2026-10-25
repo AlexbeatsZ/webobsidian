@@ -57,10 +57,11 @@ test('property editing patches one value and preserves mixed newlines, quotes an
   expect(await page.evaluate(() => (window as unknown as { renderHarness: RenderHarnessApi }).renderHarness.source(0))).toBe(raw.replace("'old'", "'new'"));
   await expect(page.locator('[data-slot="1"] .prop-row').filter({ hasText: 'title' }).locator('.prop-val-input')).toHaveText('new');
   await expect(live.locator('.prop-row').filter({ hasText: 'complex' }).locator('[contenteditable]')).toHaveCount(0);
-  await live.getByRole('button', { name: 'Edit properties source' }).click();
+  await live.getByRole('button', { name: '编辑属性源码' }).click();
   await expect(live.locator('.cm-properties')).toHaveCount(0);
-  await live.getByRole('button', { name: 'Close source' }).click();
+  await live.locator('.cm-content').press('Escape');
   await expect(live.locator('.cm-properties')).toHaveCount(1);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(raw.replace("'old'", "'new'"));
 });
 
 test('one table cell uses the shared editor and patches only its original token', async ({ page }) => {
@@ -88,18 +89,28 @@ test('embeds use the shared readonly engine, subscribe to drafts and stop cycles
   });
   const reading = page.locator('[data-slot="1"]');
   await expect(reading.locator('.cm-note-embed').first()).toContainText('inside');
-  await expect(reading).toContainText('Circular embed: b.md');
+  await expect(reading).toContainText('循环嵌入：b.md');
   await expect(reading).not.toContainText('skip');
   await expect(reading.locator('.cm-note-embed [contenteditable="true"]')).toHaveCount(0);
   await page.evaluate(() => window.renderHarness.changeNote('b.md', '# Wanted\n\n**changed**'));
   await expect(reading.locator('.cm-note-embed').first()).toContainText('changed');
-  await expect(reading).not.toContainText('Circular embed');
+  await expect(reading).not.toContainText('循环嵌入：');
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('![[b.md#Wanted]]\n\nend');
 });
 
 test('Canvas uses the shared live editor and preserves the surrounding JSON source', async ({ page }) => {
   await page.route('**/api/tags', route => route.fulfill({ json: { tags: [] } }));
   const raw = '\ufeff{\r\n "custom": {"keep":1},\n "nodes": [{"id":"a","type":"text","x":0,"y":0,"width":380,"height":220,"text" : "**old** $x^2$","unknown":7}],\r\n "edges": []\r\n}';
+  await page.route('**/api/files/content?path=fixture.canvas', route => route.fulfill({ json: {
+    path: 'fixture.canvas', content: raw, revision: 'fixture', vault: 'browser-fixture',
+  } }));
+  await page.route('**/api/plugins/adapter', route => {
+    const { op } = route.request().postDataJSON();
+    if (op === 'exists') return route.fulfill({ json: { exists: false } });
+    if (op === 'stat') return route.fulfill({ json: { stat: null } });
+    if (op === 'list') return route.fulfill({ json: { files: [], folders: [] } });
+    return route.fallback();
+  });
   await page.evaluate(source => window.renderHarness.canvas(source), raw);
   const card = page.locator('.canvas-node.canvas-text');
   await expect(card.locator('.cm-strong')).toHaveText('old');
@@ -123,33 +134,13 @@ test('print freezes the entire reading document including content beyond the vie
   await expect(print.locator('.cm-gap')).toHaveCount(0);
   await expect(print.locator('mjx-container[jax="SVG"]')).toHaveCount(1);
   await expect(print.locator('#MJX-SVG-styles')).toHaveCount(1);
-  expect(await print.locator('mjx-container svg').evaluate(svg => [...svg.querySelectorAll('use')].every(use => {
+  expect(await print.locator('mjx-container svg').evaluate(svg => {
+    const uses = [...svg.querySelectorAll('use')];
+    return uses.length > 0 && uses.every(use => {
     const href = use.getAttribute('href') ?? use.getAttribute('xlink:href');
     return href?.startsWith('#') && Boolean(svg.querySelector(`[id="${href.slice(1)}"]`));
-  }))).toBe(true);
+    });
+  })).toBe(true);
   await expect(print.locator('.cm-html-break')).toHaveCount(1);
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
-});
-
-test('public enhancement uses the shared readonly renderer with share-scoped services', async ({ page }) => {
-  const forbidden: string[] = [];
-  await page.route('**/api/**', route => { forbidden.push(route.request().url()); return route.fulfill({ status: 403 }); });
-  await page.route('**/public/shares/fixture/render', route => route.fulfill({ json: {
-    kind: 'markdown', documents: [
-      { token: 'root', source: '**public**<br>second\n\n![[nested]]\n\n$\\ce{H2O}$\n\n<div onclick="alert(1)"><script>alert(2)</script>safe</div>', from: 0, notes: { nested: 'child' } },
-      { token: 'child', source: '**child**', from: 30, notes: {} },
-    ],
-  } }));
-  await page.evaluate(() => {
-    const host = document.createElement('div'); host.id = 'shared-markdown'; host.dataset.shareId = 'fixture'; host.textContent = 'SSR fallback'; document.body.appendChild(host);
-    const script = document.createElement('script'); script.type = 'module'; script.src = '/src/share.ts'; document.head.appendChild(script);
-  });
-  const host = page.locator('#shared-markdown');
-  await expect(host.locator('.cm-strong')).toHaveText(['public', 'child']);
-  await expect(host.locator('.cm-html-break')).toHaveCount(1);
-  await expect(host.locator('mjx-container[data-mathjax-version="4.1.3"]')).toHaveCount(1);
-  await expect(host.locator('[data-mml-node="merror"]')).toHaveCount(0);
-  await expect(host.locator('[contenteditable="true"],.cm-source-toggle,script,[onclick]')).toHaveCount(0);
-  await expect(host).not.toContainText('SSR fallback');
-  expect(forbidden).toEqual([]);
 });

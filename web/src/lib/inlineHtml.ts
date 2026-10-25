@@ -41,13 +41,13 @@ function build(state: EditorState): DecorationSet {
   const model = state.field(syntaxModel);
   const selections = state.field(compositionSelection).selection.ranges;
   const readonly = state.field(livePreviewReadonly, false) ?? false;
-  const tables = [...model.nodes.filter((node) => node.name === 'Table'), ...state.field(blockModel).math];
-  const ownedByTable = (span: SourceSpan) => tables.some((table) => span.from >= table.from && span.to <= table.to);
+  const ownedRanges = [...model.nodes.filter((node) => node.name === 'Table'), ...state.field(blockModel).mathRanges];
+  const ownedByBlock = (span: SourceSpan) => ownedRanges.some((range) => span.from < range.to && span.to > range.from);
   const reveal = (span: SourceSpan) => !forceRendered(state, span) && caretTouches(span, selections, readonly);
   const ranges: Range<Decoration>[] = [];
   const stack: HtmlToken[] = [];
   for (const token of model.html) {
-    if (ownedByTable(token) || blockEffectOwns(state, token) || sourceIsOpen(state, token)) continue;
+    if (ownedByBlock(token) || blockEffectOwns(state, token) || sourceIsOpen(state, token)) continue;
     if (token.tag === 'br' && !token.closing) {
       if (!reveal(token)) ranges.push(Decoration.replace({ widget: new BreakWidget(token.from, token.to) }).range(token.from, token.to));
     } else if (simpleHtmlTags.has(token.tag)) {
@@ -63,7 +63,7 @@ function build(state: EditorState): DecorationSet {
     }
   }
   for (const entity of model.entities) {
-    if (!ownedByTable(entity) && !blockEffectOwns(state, entity) && !sourceIsOpen(state, entity) && !reveal(entity)) ranges.push(Decoration.replace({
+    if (!ownedByBlock(entity) && !blockEffectOwns(state, entity) && !sourceIsOpen(state, entity) && !reveal(entity)) ranges.push(Decoration.replace({
       widget: new EntityWidget(decodeHtmlEntity(model.text.slice(entity.from, entity.to))),
     }).range(entity.from, entity.to));
   }
@@ -73,7 +73,7 @@ function build(state: EditorState): DecorationSet {
 const htmlField = StateField.define<DecorationSet>({
   create: build,
   update(value, transaction) {
-    return decorationInputsChanged(transaction) ? build(transaction.state) : value;
+    return decorationInputsChanged(transaction, { selection: true, context: ['allowBlockEffects', 'allowScriptExecution'], latex: false }) ? build(transaction.state) : value;
   },
   provide: (field) => EditorView.decorations.from(field),
 });

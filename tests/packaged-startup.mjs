@@ -5,9 +5,10 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { chromium } from '@playwright/test';
+import { chromium, request } from '@playwright/test';
 
 const resources = path.resolve(process.argv[2] ?? 'desktop/.gen');
+const started = Date.now();
 const entry = path.join(resources, 'server/dist/index.mjs');
 await fs.access(entry);
 const fixture = await fs.mkdtemp(path.join(os.tmpdir(), '.agents/meta-obsidian-startup-'));
@@ -20,9 +21,11 @@ await fs.writeFile(path.join(vault, 'tag-old.md'), '---\ntags: [化学, 笔记, 
 const native = path.join(vault, '.obsidian/webobsidian');
 await fs.mkdir(path.join(native, 'blocks'), { recursive: true });
 await fs.mkdir(path.join(native, 'menus'), { recursive: true });
-await fs.mkdir(path.join(vault, '.obsidian/plugins/obsidian-latex-suite'), { recursive: true });
-await fs.writeFile(path.join(vault, '.obsidian/plugins/obsidian-latex-suite/data.json'), JSON.stringify({
-  snippets: 'export default [{trigger:"zzfixture", replacement:"SNIPPET-OK", options:"tA"}]',
+await fs.mkdir(path.join(native, 'snippets'), { recursive: true });
+await fs.writeFile(path.join(native, 'snippets/acceptance.js'), 'export default [{trigger:"zzfixture", replacement:"SNIPPET-OK", options:"tA"}];\n');
+await fs.writeFile(path.join(native, 'writing.jsonc'), JSON.stringify({
+  version: 1, latex: { snippetsEnabled: true, loadSnippetsFromFile: true,
+    snippetsFileLocation: '.obsidian/webobsidian/snippets/acceptance.js' }, linter: {}, hotkeys: {},
 }));
 await fs.writeFile(path.join(native, 'menus/menu.jsonc'), JSON.stringify({ version: 1,
   items: [{ id: 'custom:acceptance', title: 'Acceptance menu', when: { contexts: ['tab'] }, command: 'source' }],
@@ -53,11 +56,14 @@ await new Promise(resolve => probe.close(resolve));
 const child = spawn(process.execPath, [entry], {
   cwd: fixture, windowsHide: true,
   env: { ...process.env, HOST: '127.0.0.1', PORT: String(port), DATA_DIR: data,
-    VAULT_PATH: vault, ALLOWED_ROOTS: vault, COOKIE_SECURE: 'false',
-    NODE_ENV: 'production', WEBOBSIDIAN_PASSWORD: '' },
+    VAULT_PATH: vault, ALLOWED_ROOTS: vault, NODE_ENV: 'production' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
-let logs = '', browser;
+const artifacts = process.env.PACKAGED_STARTUP_OUTPUT ? path.resolve(process.env.PACKAGED_STARTUP_OUTPUT) : fixture;
+await fs.mkdir(artifacts, { recursive: true });
+let logs = '', browser, api, page, browserVersion, passed = false;
+const errors = [], completed = [];
+const checkpoint = name => { completed.push(name); console.log('[packaged-startup] ' + name); };
 child.stdout.on('data', chunk => { logs += chunk; });
 child.stderr.on('data', chunk => { logs += chunk; });
 try {
@@ -73,26 +79,35 @@ try {
     executablePath: process.env.RENDER_TEST_BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     headless: true,
   });
-  const page = await browser.newPage();
-  const errors = [];
+  browserVersion = browser.version();
+  page = await browser.newPage();
   page.on('pageerror', error => errors.push(error.stack));
   await page.goto(base, { waitUntil: 'networkidle' });
   assert.deepEqual(errors, [], 'The real production entry must evaluate without initialization errors');
-  assert(await page.locator('#root').innerText(), 'React must mount a visible login/workspace');
-  const login = await page.request.post(base + '/auth/login', { data: { password: '123456' } });
-  assert.equal(login.status(), 200);
-  const change = await page.request.post(base + '/auth/change-password', {
-    data: { currentPassword: '123456', newPassword: 'fixture-only-password' },
-  });
-  assert.equal(change.status(), 200);
+  assert(await page.locator('#root').innerText(), 'React must mount a visible workspace');
+  await page.locator('.workspace-launcher').waitFor();
+  for (const route of ['/auth/login', '/auth/change-password'])
+    assert.equal((await page.request.post(base + route, { data: {} })).status(), 404, 'Retired authentication route: ' + route);
+  const identityResponse = await page.request.get(base + '/api/vault-identity');
+  assert.equal(identityResponse.status(), 200);
+  const identity = await identityResponse.json();
+  assert.equal(typeof identity.vault, 'string');
+  assert(identity.vault, 'Production server must identify the disposable Vault');
+  api = await request.newContext({ baseURL: base, extraHTTPHeaders: { 'X-Vault-Identity': identity.vault } });
+  assert.equal((await page.request.get(base + '/api/files/content?path=acceptance.md')).status(), 409, 'Unbound file requests must be rejected');
+  assert.equal((await api.get('/api/files/content?path=acceptance.md', { headers: { 'X-Vault-Identity': identity.vault + '-stale' } })).status(), 409, 'Stale Vault identity must be rejected');
+  checkpoint('production entry, local workspace and Vault identity');
   for (const query of ['#化学 #笔记 -#旧版', 'tag:#化学 tags:笔记 -tag:旧版']) {
-    const response = await page.request.get(base + '/api/search?q=' + encodeURIComponent(query));
+    const response = await api.get('/api/search?q=' + encodeURIComponent(query));
+    assert.equal(response.status(), 200);
     assert.deepEqual((await response.json()).hits.map(hit => hit.path), ['tag-filter.md']);
   }
-  assert.equal((await page.request.put(base + '/api/files/content', { data: { path: 'bad#title.md', content: '# New\n', createOnly: true } })).status(), 400);
-  assert.equal((await page.request.patch(base + '/api/files/rename', { data: { from: 'acceptance.md', to: 'bad#rename.md' } })).status(), 400);
-  assert.equal((await page.request.post(base + '/api/files/copy', { data: { from: 'acceptance.md', to: 'bad#copy.md' } })).status(), 400);
-  assert.equal((await page.request.put(base + '/api/files/content', { data: { path: 'legacy#title.md', content: '# Existing external file\n\nStill editable.\n' } })).status(), 200);
+  assert.equal((await api.put('/api/files/content', { data: { path: 'bad#title.md', content: '# New\n', createOnly: true } })).status(), 400);
+  assert.equal((await api.patch('/api/files/rename', { data: { from: 'acceptance.md', to: 'bad#rename.md' } })).status(), 400);
+  assert.equal((await api.post('/api/files/copy', { data: { from: 'acceptance.md', to: 'bad#copy.md' } })).status(), 400);
+  assert.equal((await api.put('/api/files/content', { data: { path: 'legacy#title.md', content: '# Existing external file\n\nStill editable.\n' } })).status(), 200);
+  assert.equal(await fs.readFile(path.join(vault, 'legacy#title.md'), 'utf8'), '# Existing external file\n\nStill editable.\n');
+  checkpoint('tag queries and filename validation with scoped file writes');
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('.workspace-launcher').waitFor();
   await page.keyboard.press('Control+o');
@@ -108,6 +123,7 @@ try {
   await page.keyboard.press('Enter');
   await page.keyboard.type('zzfixture');
   await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent.includes('SNIPPET-OK'));
+  checkpoint('real editor input, disk save and explicitly configured native snippet');
   const runCommand = async name => {
     await page.keyboard.press('Control+p');
     await page.locator('.palette-input').fill(name);
@@ -116,6 +132,7 @@ try {
   await runCommand('Acceptance template');
   await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent.includes('TEMPLATE-OK COMMAND-OK'));
   await page.keyboard.press('Control+s');
+  checkpoint('command-backed template');
   await page.keyboard.press('Control+o');
   await page.locator('.palette-input').fill('features');
   await page.keyboard.press('Enter');
@@ -124,6 +141,7 @@ try {
   await page.locator('.acceptance-card').waitFor();
   await page.locator('.cm-equation-number').first().waitFor();
   assert.equal(await page.locator('.cm-wikilink').filter({ hasText: '(1-1)' }).count(), 1);
+  checkpoint('body title, executable widget, native block and equation reference');
   await page.locator('.view-mode-trigger').click();
   await page.getByRole('menuitemcheckbox', { name: '阅读视图', exact: true }).click();
   assert.equal(await page.locator('.cm-content').first().getAttribute('contenteditable'), 'false');
@@ -131,26 +149,40 @@ try {
   await page.getByRole('menuitemcheckbox', { name: '源码模式', exact: true }).click();
   assert.match(await page.locator('.cm-content').first().innerText(), /\^eq-fixture/);
   assert.equal(await page.locator('.interactive-js-render').count(), 0);
-  const search = await page.request.get(base + '/api/search?q=huaxue&mode=pinyin');
+  const search = await api.get('/api/search?q=huaxue&mode=pinyin');
+  assert.equal(search.status(), 200);
   assert((await search.json()).hits.some(hit => hit.path === '化学实验.md'), 'Native pinyin search');
   await page.locator('.tab-bar [role="tab"][aria-selected="true"]').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Acceptance menu', exact: true }).waitFor();
   await page.keyboard.press('Escape');
-  const scan = await page.request.post(base + '/api/attachments/scan', { data: { excludeDirectories: [], excludeExtensions: [] } });
+  const scan = await api.post('/api/attachments/scan', { data: { excludeDirectories: [], excludeExtensions: [] } });
   assert.equal(scan.status(), 200);
   const preview = await scan.json();
   assert(preview.candidates.some(item => item.path === 'unused.png'), 'Unused attachment is a scan candidate');
   assert(!preview.candidates.some(item => item.path === 'used.png'), 'Referenced attachment is protected');
   await fs.access(path.join(vault, 'unused.png')); // Preview alone must not delete anything.
+  checkpoint('reading/source modes, pinyin search, configured menu and attachment protection');
   await page.getByRole('button', { name: '新建右侧标签页' }).click();
-  await page.getByRole('tab', { name: '新标签页', exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'Homepage', exact: true }).waitFor();
   assert.equal(await page.locator('.ribbon-fixed button').count(), 4);
   assert.equal(await page.getByRole('button', { name: /Daily note/i }).count(), 0);
   assert.deepEqual(errors, [], 'No renderer errors during production load/edit/save');
-  console.log('Packaged startup passed: production entry/login/edit/save, native snippet, command-backed template, JS widget, custom block, equation reference, body title, reading/source modes, pinyin search, configured menu, attachment preview/protection and right tabs.');
+  checkpoint('right Homepage tab, fixed ribbon and zero renderer errors');
+  passed = true;
+  console.log('Packaged startup passed: production entry/local access/Vault identity/edit/save, native snippet, command-backed template, JS widget, custom block, equation reference, body title, reading/source modes, pinyin search, configured menu, attachment preview/protection and right tabs.');
+} catch (error) {
+  await page?.screenshot({ path: path.join(artifacts, 'failure.png'), fullPage: true }).catch(() => {});
+  await fs.writeFile(path.join(artifacts, 'failure.txt'), String(error.stack ?? error));
+  console.error('Packaged startup failed; evidence and disposable fixture retained:', artifacts, fixture);
+  throw error;
 } finally {
+  await fs.writeFile(path.join(artifacts, 'server.log'), logs);
+  await fs.writeFile(path.join(artifacts, 'result.json'), JSON.stringify({ passed, resources, fixture, port,
+    started: new Date(started).toISOString(), elapsedMs: Date.now() - started,
+    nodeVersion: process.version, browserVersion, completed, errors }, null, 2));
+  await api?.dispose();
   await browser?.close();
   child.kill();
   if (child.exitCode === null) await new Promise(resolve => child.once('exit', resolve));
-  await fs.rm(fixture, { recursive: true, force: true });
+  if (passed) await fs.rm(fixture, { recursive: true, force: true });
 }

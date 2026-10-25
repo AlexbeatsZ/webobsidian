@@ -1,9 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { queueFileUpdate } from './fileupdates.js';
+import { queueFileUpdate, type FileUpdateResult } from './fileupdates.js';
 import { indexedFilesUnder } from './fileindex.js';
 import { getSettings } from './settings.js';
-import { writeTextFile } from './textFile.js';
+import { writeBinaryFile, writeTextFile } from './textFile.js';
 import { getVaultRoot, resolveInVault, vaultPathKey, toRel, exists, ignoredVaultNames } from './vaultFile.js';
 import { planFolderTags } from '@webobsidian/markdown-core';
 import { fileTitleError } from '@webobsidian/search-core';
@@ -33,7 +33,7 @@ export async function prepareNoteSave(rel: string, content: string): Promise<str
 }
 
 export async function writeFileText(rel: string, content: string, baseRevision?: string,
-  options: { createOnly?: boolean; prepared?: boolean; waitForIndex?: boolean } = {}): Promise<{ revision: string }> {
+  options: { createOnly?: boolean; prepared?: boolean; waitForIndex?: boolean } = {}): Promise<{ revision: string; indexing?: FileUpdateResult }> {
   const { createOnly = false, prepared = false, waitForIndex = false } = options;
   const abs = await resolveInVault(rel);
   const creating = createOnly || (baseRevision === undefined && !await exists(rel));
@@ -45,16 +45,15 @@ export async function writeFileText(rel: string, content: string, baseRevision?:
   }
   const result = await writeTextFile(abs, content, baseRevision, createOnly);
   const indexed = queueFileUpdate(rel, createOnly ? 'add' : 'change');
-  if (waitForIndex) await indexed;
+  const indexing = waitForIndex ? await indexed : undefined;
   scheduleAutoCommitOnSave();
-  return result;
+  return { ...result, ...(indexing && indexing.status !== 'indexed' ? { indexing } : {}) };
 }
 
 export async function writeFileBuffer(rel: string, buf: Buffer): Promise<void> {
   const abs = await resolveInVault(rel);
   if (!await exists(rel)) assertFileTitle(rel);
-  await fs.mkdir(path.dirname(abs), { recursive: true });
-  await fs.writeFile(abs, buf);
+  await writeBinaryFile(abs, buf);
   void queueFileUpdate(rel);
 }
 

@@ -60,6 +60,9 @@ export function markdownContext(
     sourcePath: path,
     docId: path,
     frontmatter: undefined,
+    signal: owner.signal,
+    isCurrent: () => !owner.signal.aborted,
+    assertActive: () => owner.assertActive(),
     addChild: (child: Component) => {
       owner.addChild(child);
       return child;
@@ -188,6 +191,7 @@ export const pluginPostProcessing = ViewPlugin.fromClass(
   class {
     observer: MutationObserver;
     pending = false;
+    timer?: number;
     destroyed = false;
     processed = new Map<
       HTMLElement,
@@ -208,7 +212,8 @@ export const pluginPostProcessing = ViewPlugin.fromClass(
     schedule() {
       if (this.pending || this.destroyed || !postProcessors.size) return;
       this.pending = true;
-      window.setTimeout(() => {
+      this.timer = this.view.dom.ownerDocument.defaultView!.setTimeout(() => {
+        this.timer = undefined;
         this.pending = false;
         this.run();
       }, 0);
@@ -261,9 +266,9 @@ export const pluginPostProcessing = ViewPlugin.fromClass(
                 root,
                 markdownContext(contextOf(this.view).sourcePath, child)
               )
-            ).catch(console.error);
+            ).catch(error => { if (!child.signal.aborted) console.error(error); });
           } catch (error) {
-            console.error(error);
+            if (!child.signal.aborted) console.error(error);
           }
         }
       }
@@ -273,17 +278,19 @@ export const pluginPostProcessing = ViewPlugin.fromClass(
       const registrationsChanged = update.transactions.some((tr: any) =>
         tr.effects.some((e: any) => e.is(refresh))
       );
-      if (registrationsChanged) {
+      const invalidated = update.docChanged || update.viewportChanged || registrationsChanged ||
+        update.startState.facet(renderContext).sourcePath !== contextOf(this.view).sourcePath ||
+        update.startState.field(livePreviewState, false) !== update.state.field(livePreviewState, false);
+      if (invalidated) {
         for (const entry of this.processed.values())
           entry.children.forEach((child) => child.unload());
         this.processed.clear();
       }
-      if (update.docChanged || update.viewportChanged || registrationsChanged ||
-          update.startState.facet(renderContext).sourcePath !== contextOf(this.view).sourcePath)
-        this.schedule();
+      if (invalidated) this.schedule();
     }
     destroy() {
       this.destroyed = true;
+      if (this.timer !== undefined) this.view.dom.ownerDocument.defaultView!.clearTimeout(this.timer);
       this.observer.disconnect();
       for (const entry of this.processed.values())
         entry.children.forEach((child) => child.unload());

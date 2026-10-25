@@ -5,7 +5,7 @@ import { DEFAULT_SNIPPET_VARIABLES } from "../utils/default_snippet_variables";
 import * as v from "valibot";
 import type { SnippetVariables } from "../snippets/parse";
 import { EMPTY_MAPPING, fullMappingSchema, MappingSchema, type RawConcealMapping } from "../editor_extensions/conceal_maps";
-import { createMacroMap, type MappingInfo } from "../editor_extensions/conceal_fns";
+import { createMacroMap, type MappingInfo } from "../editor_extensions/concealMacros";
 import { DEFAULT_MATHLESS_ARGS, EMPTY_MATHLESS_ARGS, mathlessArgsSchema, restrictedMacroArgs, textMacroArgs, type MacroArgs } from "../editor_context/default_text_areas";
 import type { UpdateHandler } from "../api";
 

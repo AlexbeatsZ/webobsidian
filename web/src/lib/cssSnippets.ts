@@ -1,5 +1,5 @@
 import { request } from './api';
-import type { VaultConfigurationSource } from '../../../server/src/services/vaultConfiguration';
+import type { VaultConfigurationSource } from '../../../server/src/contracts';
 
 export interface CssSnippets {
   source: VaultConfigurationSource; enabled: string[];

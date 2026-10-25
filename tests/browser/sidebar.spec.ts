@@ -1,17 +1,17 @@
 import { expect, test } from './test';
 
-// Prepared regressions only: run when browser acceptance is authorized again.
 test.beforeEach(async ({ page }) => {
   const contents: Record<string, string> = { 'a.md': '# Main\n\nmain', 'b.md': '# Side\n\nside' };
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
+    if (url.pathname === '/api/vault-identity') return route.fallback();
     if (url.pathname === '/api/files/content') {
       if (route.request().method() === 'PUT') {
         const body = route.request().postDataJSON(); contents[body.path] = body.content;
         return route.fulfill({ json: { ok: true, revision: 'saved' } });
       }
       const path = url.searchParams.get('path')!;
-      return route.fulfill({ json: { path, content: contents[path] ?? '', revision: 'initial' } });
+      return route.fulfill({ json: { path, content: contents[path] ?? '', revision: 'initial', vault: 'browser-fixture' } });
     }
     if (url.pathname === '/api/property-types') return route.fulfill({ json: { types: {} } });
     if (url.pathname === '/api/backlinks') return route.fulfill({ json: { backlinks: [] } });
@@ -59,7 +59,7 @@ test('floating right dock adds tabs without resizing the document or changing th
   const before = (await page.locator('.workspace').boundingBox())!.width;
   await expect(page.locator('.ribbon-fixed button')).toHaveCount(4);
   await page.getByRole('button', { name: '新建右侧标签页' }).click();
-  await expect(page.getByRole('tab', { name: '新标签页' })).toHaveCount(1);
+  await expect(page.getByRole('tab', { name: 'Homepage' })).toHaveCount(1);
   await page.evaluate(() => (window as any).sidebarFixture.store.getState().toggleRight());
   expect((await page.locator('.workspace').boundingBox())!.width).toBe(before);
   expect(await page.evaluate(() => (window as any).sidebarFixture.store.getState().activePath)).toBe('a.md');

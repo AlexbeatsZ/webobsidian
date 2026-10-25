@@ -17,6 +17,8 @@ export function workspaceMaintenanceBlockers(): string[] {
 
 /** Coordinate the existing document registry over the existing application socket. */
 export function bindVaultMaintenance(socket: WebSocket): () => void {
+  const stale = () => useStore.setState({ vaultSessionStale: true });
+  window.addEventListener('vault-identity-invalidated', stale);
   let token: string | undefined;
   let originalInert = false;
   let banner: HTMLDivElement | undefined;
@@ -65,6 +67,7 @@ export function bindVaultMaintenance(socket: WebSocket): () => void {
   window.addEventListener('keydown', blockInput, true);
   window.addEventListener('beforeinput', blockInput, true);
   return () => {
+    window.removeEventListener('vault-identity-invalidated', stale);
     socket.removeEventListener('message', receive); socket.removeEventListener('close', release);
     window.removeEventListener('keydown', blockInput, true); window.removeEventListener('beforeinput', blockInput, true);
     release();

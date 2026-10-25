@@ -7,7 +7,16 @@ import { contextOf } from './renderContext';
 import { renderSourceRegion } from './sourceControls';
 import '../styles/navigation.css';
 import { livePreviewReadonly } from './renderState';
-import { setEditorMode } from './activeEditor';
+
+export type ModeRequest = 'live' | 'reading' | 'source' | 'toggle-preview' | 'toggle-source';
+const modeHandlers = new Map<EditorView, (mode: ModeRequest) => void>();
+export function bindEditorMode(view: EditorView, handler: (mode: ModeRequest) => void): () => void {
+  modeHandlers.set(view, handler);
+  return () => { if (modeHandlers.get(view) === handler) modeHandlers.delete(view); };
+}
+export function setEditorMode(view: EditorView, mode: ModeRequest): boolean {
+  const handler = modeHandlers.get(view); handler?.(mode); return !!handler;
+}
 
 export interface NavigationLocation {
   path: string; viewId: string; anchor?: number; head?: number;

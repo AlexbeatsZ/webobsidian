@@ -16,6 +16,17 @@ export async function readTextFile(absolutePath: string): Promise<{ content: str
 }
 
 export async function writeTextFile(absolutePath: string, content: string, baseRevision?: string, createOnly = false): Promise<{ revision: string }> {
+  const bytes = Buffer.from(content, 'utf8');
+  await writeBytes(absolutePath, bytes, baseRevision, createOnly);
+  return { revision: revisionOf(bytes) };
+}
+
+export async function writeBinaryFile(absolutePath: string, bytes: Buffer): Promise<void> {
+  await writeBytes(absolutePath, bytes, undefined, false, false);
+}
+
+async function writeBytes(absolutePath: string, bytes: Buffer, baseRevision?: string, createOnly = false, compareExisting = true): Promise<void> {
+  absolutePath = path.resolve(absolutePath);
   const key = process.platform === 'win32' ? absolutePath.toLowerCase() : absolutePath;
   const previous = queues.get(key) ?? Promise.resolve();
   let release!: () => void;
@@ -24,29 +35,23 @@ export async function writeTextFile(absolutePath: string, content: string, baseR
   queues.set(key, queued);
   await previous.catch(() => {});
   try {
-    if (createOnly) {
-      const bytes = Buffer.from(content, 'utf8');
-      await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-      try { await fs.writeFile(absolutePath, bytes, { flag: 'wx' }); }
-      catch (error: any) { if (error.code === 'EEXIST') throw Object.assign(new Error('File already exists; existing content preserved'), { status: 409 }); throw error; }
-      return { revision: revisionOf(bytes) };
-    }
-    const existing = await fs.readFile(absolutePath).catch((error: NodeJS.ErrnoException) => {
+    const existing = !createOnly && compareExisting ? await fs.readFile(absolutePath).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return null;
       throw error;
-    });
+    }) : null;
     if (baseRevision !== undefined && (!existing || revisionOf(existing) !== baseRevision)) {
       throw Object.assign(new Error('File changed outside this session; local edits were preserved'), { status: 409 });
     }
-    const bytes = Buffer.from(content, 'utf8');
-    if (existing?.equals(bytes)) return { revision: revisionOf(bytes) };
+    if (existing?.equals(bytes)) return;
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     const temporary = `${absolutePath}.tmp-${randomUUID()}`;
     try {
       await fs.writeFile(temporary, bytes);
-      await fs.rename(temporary, absolutePath);
+      if (createOnly) {
+        try { await fs.link(temporary, absolutePath); }
+        catch (error: any) { if (error.code === 'EEXIST') throw Object.assign(new Error('File already exists; existing content preserved'), { status: 409 }); throw error; }
+      } else await fs.rename(temporary, absolutePath);
     } finally { await fs.unlink(temporary).catch(() => {}); }
-    return { revision: revisionOf(bytes) };
   } finally {
     release();
     if (queues.get(key) === queued) queues.delete(key);

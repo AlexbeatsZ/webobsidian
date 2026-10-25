@@ -18,7 +18,7 @@ import { syntaxModel } from "../../../syntaxModel";
 import { blockContainers } from "@webobsidian/markdown-core";
 import type { SyntaxNode } from "@lezer/common";
 import { type MacroArgs } from "./default_text_areas";
-import { getMathBoundsPlugin, type MathBounds } from "./mathbounds";
+import { getMathBoundsPlugin, MathMode, type MathBounds } from "./mathbounds";
 
 export type StackOutput = (
 	| {
@@ -436,12 +436,6 @@ export function isMacroArgumentCount<T extends MacroArgs>(stack: Readonly<MacroS
 		}
 	}
 	return null;
-}
-
-export enum MathMode {
-	InlineMath,
-	BlockMath,
-	CodeMath
 }
 
 // Accounts for equations within text environments, e.g. $$\text{... $...$}$$

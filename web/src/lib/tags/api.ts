@@ -1,4 +1,5 @@
 import { request } from '../api';
+import type { FileUpdateResult } from '../../../../server/src/contracts';
 import { useStore } from '../store';
 import type { TagApplyResult, TagPreview, TagPreviewRequest, TagSummary, TagPreferences } from '@webobsidian/markdown-core';
 
@@ -17,7 +18,7 @@ export const tagsApi = {
     '/api/tags/page?tag=' + encodeURIComponent(tag), { signal }),
   createPage: (tag: string, path: string) => {
     assertTagVaultCurrent();
-    return request<{ path: string }>('/api/tags/page', { method: 'POST', body: JSON.stringify({ tag, path }) });
+    return request<{ path: string; indexing?: FileUpdateResult }>('/api/tags/page', { method: 'POST', body: JSON.stringify({ tag, path }) });
   },
 };
 export function assertTagVaultCurrent() {

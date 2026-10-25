@@ -1,5 +1,34 @@
 # Rendering unification
 
+## Lifecycle and complex rendering (2026-10-24)
+
+The mounted DOM owns footnote cleanup in a WeakMap, so CodeMirror replacing an
+equal WidgetType instance does not lose the disposer. Mermaid owns its render
+identifier and temporary stage; cancellation is checked after fonts and render
+settle, and only that stage is removed. Existing RenderLifetime remains the
+terminal owner; Component itself remains reloadable and cleans registrations
+arriving after an in-flight load was unloaded. A reload waits for that load.
+
+Public MarkdownRenderer settles on unload or fragment render error instead of
+leaving callers waiting forever. Fragment focus, Mermaid fonts, image resize
+and table interaction use their owner document. Inline HTML/entity decoration
+excludes every existing math range, including unfinished formulas; no parallel
+math parser is added.
+
+Postprocessor contexts expose signal/isCurrent/assertActive from the existing
+lifetime. Invalidating a document/path/viewport/source mode cancels the current
+batch synchronously before scheduling its successor. Cooperative processors
+must check this context before late writes. Arbitrary third-party code retaining
+DOM references cannot be forcibly cancelled by this contract.
+
+Printing starts one deadline before initial stylesheets, accepts cancellation,
+checks styles/images/fonts and fully materializes the same non-executing renderer
+before freezing its output. Failure disposes the iframe and mounted fragment.
+The operating system print dialog and cross-platform after-print behavior need
+native acceptance; DOM preparation tests alone do not establish them.
+
+Evidence and limits: `tests/reports/architecture-20261024.md`.
+
 ## Shared ownership follow-up (2026-10-23)
 
 Format menus reuse editorCommands; property types use revision-protected existing

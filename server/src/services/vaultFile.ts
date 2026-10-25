@@ -2,17 +2,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getSettings } from './settings.js';
 import { readTextFile } from './textFile.js';
-
-export interface TreeNode {
-  name: string;
-  path: string; // vault-relative, posix style
-  type: 'file' | 'folder';
-  ext?: string;
-  size?: number;
-  mtime?: number; // last-modified (ms) — for sort-by-modified-time
-  ctime?: number; // created/birth (ms) — for sort-by-created-time
-  children?: TreeNode[];
-}
+import type { TreeNode } from '../contracts.js';
+export type { TreeNode } from '../contracts.js';
 
 /**
  * In-memory mtime/ctime cache so sort-by-time costs ONE stat per file total,

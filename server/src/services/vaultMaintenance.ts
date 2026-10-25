@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { RequestHandler } from 'express';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Request, RequestHandler } from 'express';
 import type { WebSocket } from 'ws';
+import { vaultConfigurationIdentity } from './vaultConfiguration.js';
 
 let epoch = 0;
 let activeWrites = 0;
@@ -9,6 +11,35 @@ type Lease = { token: string; failure?: string; checks: Map<WebSocket, { id: str
 let lease: Lease | undefined;
 let inspection: Lease | undefined;
 const conflict = (message: string) => Object.assign(new Error(message), { status: 409 });
+const operations = new AsyncLocalStorage<{ active: boolean; vault?: string }>();
+const requestPath = (req: Request) => (req.originalUrl || req.url).split('?')[0].replace(/\/$/, '');
+const readOnlyRequest = (req: Request) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
+  req.method === 'POST' && ['/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(requestPath(req));
+const exclusiveRequest = (req: Request) => req.method === 'POST' && requestPath(req) === '/api/attachments/execute' ||
+  req.method === 'PUT' && requestPath(req) === '/api/settings' && typeof req.body?.vault?.path === 'string';
+
+export async function assertVaultIdentity(expected: string): Promise<void> {
+  if (expected !== (await vaultConfigurationIdentity()).vault)
+    throw Object.assign(conflict('Vault 已切换，请重新加载应用；旧文档会话保留'), { code: 'VAULT_CHANGED' });
+}
+
+export async function withVaultRequest<T>(req: Request, work: () => Promise<T>): Promise<T> {
+  if (!requestPath(req).startsWith('/api/')) return work();
+  const supplied = req.get('X-Vault-Identity') ?? req.query.vault;
+  const expected = typeof supplied === 'string' ? supplied : undefined;
+  if (requestPath(req).startsWith('/api/files') && !expected)
+    throw Object.assign(conflict('缺少 Vault 身份，请重新加载应用'), { code: 'VAULT_CHANGED' });
+  const exclusive = exclusiveRequest(req);
+  if (lease) throw conflict('正在维护仓库，请稍后重试');
+  const release = exclusive ? () => {} : beginOperation(!readOnlyRequest(req));
+  const operation = { active: !exclusive, vault: expected };
+  try {
+    return await operations.run(operation, async () => {
+      if (expected !== undefined) await assertVaultIdentity(expected);
+      return work();
+    });
+  } finally { operation.active = false; release(); }
+}
 
 export const vaultGeneration = () => String(epoch);
 export function noteVaultMutation(): void { epoch++; }
@@ -25,38 +56,27 @@ export function maintenanceClientMessage(client: WebSocket, message: unknown): v
   pending.blockers = msg.blockers.slice(0, 30).map(value => String(value).slice(0, 300));
 }
 
-/** The existing HTTP stream is the writer registry; no second Vault writer queue. */
 export const guardVaultMutations: RequestHandler = (req, res, next) => {
   const readOnlyPost = req.method === 'POST' && ['/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(req.path);
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || readOnlyPost || req.path === '/api/attachments/execute') {
     next(); return;
   }
   if (lease) { res.status(409).json({ error: '正在复查和清理附件，请稍后保存' }); return; }
-  // This request acquires the same lease in settingsRouter. Do not wait on
-  // its own response before it can confirm the connected editors are safe.
-  if (req.method === 'PUT' && /^\/api\/settings\/?$/.test(req.path) && typeof req.body?.vault?.path === 'string') {
-    next(); return;
-  }
-  activeWrites++;
-  noteVaultMutation();
-  let released = false;
-  const release = () => {
-    if (released) return;
-    released = true;
-    activeWrites--;
-    noteVaultMutation();
-  };
-  res.once('finish', release);
-  res.once('close', release);
   next();
 };
 
 /** Background Git shares the maintenance writer gate with incoming HTTP writes. */
 export function beginBackgroundVaultWrite(): () => void {
-  if (lease) throw conflict('正在复查和清理附件，后台同步稍后重试');
+  const operation = operations.getStore();
+  return beginOperation(true, !!operation?.active);
+}
+
+function beginOperation(mutates: boolean, admitted = false): () => void {
+  if (lease && !admitted) throw conflict('正在复查和清理附件，后台同步稍后重试');
   activeWrites++;
-  noteVaultMutation();
-  return () => { activeWrites--; noteVaultMutation(); };
+  if (mutates) noteVaultMutation();
+  let released = false;
+  return () => { if (!released) { released = true; activeWrites--; if (mutates) noteVaultMutation(); } };
 }
 
 const pause = () => new Promise<void>(resolve => setTimeout(resolve, 20));
@@ -107,6 +127,8 @@ export async function withVaultMaintenance<T>(drainUpdates: () => Promise<void>,
       if (Date.now() > deadline) throw conflict('仍有写入请求未完成，请稍后重新扫描');
       await pause();
     }
+    const expected = operations.getStore()?.vault;
+    if (expected !== undefined) await assertVaultIdentity(expected);
     await drainUpdates();
     await assertMaintenanceWorkspaceSafe();
     return await work();

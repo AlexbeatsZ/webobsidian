@@ -3,7 +3,7 @@ import { bindWritingNavigation } from './lib/writing/commands';
 import { refreshSearch, searchSettings } from './lib/search';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { api, invalidateVaultRequests } from './lib/api';
-import { useStore } from './lib/store';
+import { useStore, flushWorkspaceState, saveWorkspaceBeforeExit, workspaceHasUnsavedChanges } from './lib/store';
 import Ribbon from './components/Ribbon';
 import Sidebar from './components/Sidebar';
 import RightSidebar from './components/RightSidebar';
@@ -140,6 +140,8 @@ export default function App() {
         } else if (msg.type === 'index') {
           window.clearTimeout(indexTimer);
           indexTimer = window.setTimeout(notifyIndexChanged, 800);
+        } else if (msg.type === 'index-error') {
+          useStore.getState().notify(`文件索引失败：${msg.path}；已保存内容保留。${msg.error}`, 0);
         } else if (msg.type === 'uistate') {
           // another tab/device changed the workspace → sync live
           useStore.getState().applyRemoteState(msg.state, msg.originId);
@@ -181,16 +183,51 @@ export default function App() {
       for (const snapshot of documents.snapshots()) {
         if (snapshot.dirty && !snapshot.conflict && !snapshot.locked) void documents.get(snapshot.id)?.save().catch(error => useStore.getState().notify(String(error)));
       }
+      void flushWorkspaceState().catch(() => {});
     };
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      const state = useStore.getState();
+      if (workspaceHasUnsavedChanges() || state.pendingCanvasEdits || state.dirty ||
+          documents.snapshots().some(snapshot => snapshot.dirty || snapshot.saving || snapshot.conflict || snapshot.locked)) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    let closeGeneration = 0;
+    let releaseClose: (() => void) | undefined;
+    const cancelClose = () => { closeGeneration++; releaseClose?.(); releaseClose = undefined; };
+    const stopClose = window.webobsidianDesktop?.onBeforeClose?.(async () => {
+      const generation = ++closeGeneration;
+      const root = document.getElementById('root');
+      const previousInert = root?.inert ?? false;
+      if (root) root.inert = true;
+      releaseClose = () => { if (root) root.inert = previousInert; };
+      try {
+        await saveWorkspaceBeforeExit();
+        if (generation !== closeGeneration) throw new Error('关闭请求已取消');
+      } catch (error) {
+        if (generation === closeGeneration) {
+          cancelClose();
+          useStore.getState().notify(`关闭已取消：${String(error)}`, 0);
+        }
+        throw error;
+      }
+    });
     const hidden = () => { if (document.visibilityState === 'hidden') save(); };
     window.addEventListener('desktop-command', command);
     window.addEventListener('webobsidian-background', save);
     window.addEventListener('pagehide', save);
+    window.addEventListener('beforeunload', beforeUnload);
+    window.addEventListener('desktop-close-cancelled', cancelClose);
     document.addEventListener('visibilitychange', hidden);
     return () => {
       window.removeEventListener('desktop-command', command);
       window.removeEventListener('webobsidian-background', save);
       window.removeEventListener('pagehide', save);
+      window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('desktop-close-cancelled', cancelClose);
+      stopClose?.();
+      cancelClose();
       document.removeEventListener('visibilitychange', hidden);
     };
   }, []);

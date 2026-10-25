@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { UserscriptService } from './userscripts/service';
 import { effectiveVaultPath, openExistingPath } from './paths';
 
@@ -31,6 +32,57 @@ let mainWindow: BrowserWindow | null = null;
 let desktopConfig: DesktopConfig | undefined;
 let userscripts: UserscriptService | undefined;
 let initialVaultChoice: string | undefined;
+let finishingQuit = false;
+let quitRequest: Promise<void> | undefined;
+let quitRequested = false;
+const approvedClosures = new WeakSet<BrowserWindow>();
+let pendingClose: { window: BrowserWindow; token: string; resolve: () => void; reject: (error: Error) => void } | undefined;
+
+function prepareWindowClose(window: BrowserWindow): Promise<void> {
+  if (window.isDestroyed()) return Promise.resolve();
+  try {
+    if (new URL(window.webContents.getURL()).origin !== baseUrl(serverPort)) return Promise.resolve();
+  } catch { return Promise.resolve(); }
+  return new Promise<void>((resolve, reject) => {
+    const token = randomUUID();
+    const timeout = setTimeout(() => finish(new Error('保存确认超时，窗口保持打开；请检查保存结果后再关闭')), 30_000);
+    const finish = (error?: Error) => {
+      clearTimeout(timeout);
+      if (pendingClose?.token === token) pendingClose = undefined;
+      if (error) {
+        if (!window.isDestroyed()) window.webContents.send('desktop:close-cancelled', token);
+        reject(error);
+      } else resolve();
+    };
+    pendingClose = { window, token, resolve: () => finish(), reject: error => finish(error) };
+    window.webContents.send('desktop:prepare-close', token);
+  });
+}
+
+function requestWindowClose(window: BrowserWindow, quit: boolean): Promise<void> {
+  quitRequested ||= quit;
+  if (quitRequest) return quitRequest;
+  quitRequest = (async () => {
+    try {
+      await prepareWindowClose(window);
+      if (quitRequested) {
+        await userscripts?.stop();
+        finishingQuit = true;
+        app.quit();
+      } else if (!window.isDestroyed()) {
+        approvedClosures.add(window);
+        window.close();
+      }
+    } catch (error) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('desktop:close-cancelled');
+        window.show();
+        dialog.showErrorBox('无法关闭 WebObsidian', String(error));
+      }
+    } finally { quitRequested = false; quitRequest = undefined; }
+  })();
+  return quitRequest;
+}
 
 async function readConfig(): Promise<DesktopConfig> {
   try {
@@ -297,6 +349,18 @@ function createWindow(starting = false): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  const window = mainWindow;
+  window.on('close', event => {
+    if (finishingQuit || approvedClosures.has(window)) return;
+    event.preventDefault();
+    void requestWindowClose(window, process.platform !== 'darwin');
+  });
+  window.webContents.on('will-prevent-unload', () => {
+    approvedClosures.delete(window);
+    finishingQuit = false;
+    window.webContents.send('desktop:close-cancelled');
+    dialog.showErrorBox('关闭已取消', '页面仍有未保存内容，请处理后再关闭');
+  });
 
   // Show a real window before cold Vault indexing. A second click must focus
   // this window rather than looking as though the first launch did nothing.
@@ -436,6 +500,13 @@ function registerTitleBar(): void {
 // App lifecycle
 // ---------------------------------------------------------------------------
 function registerDesktopRequests(): void {
+  ipcMain.on('desktop:close-result', (event, token: unknown, result: unknown) => {
+    const window = desktopWindow(event);
+    if (!window || !pendingClose || pendingClose.window !== window || pendingClose.token !== token) return;
+    const answer = result as { ok?: unknown; error?: unknown } | null;
+    if (answer?.ok === true) pendingClose.resolve();
+    else pendingClose.reject(new Error(typeof answer?.error === 'string' ? answer.error : '保存未完成'));
+  });
   ipcMain.handle('desktop:open-vault-path', async (event, requested: unknown) => {
     if (!desktopWindow(event)) throw new Error('Local application frame required');
     if (typeof requested !== 'string' || !requested.trim() || requested.length > 32768 || requested.includes('\0')) throw new Error('文件路径无效');
@@ -499,13 +570,20 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') app.quit();
   });
 
-  let finishingQuit = false;
   app.on('before-quit', (event) => {
-    if (!finishingQuit && userscripts) {
-      event.preventDefault(); finishingQuit = true;
-      void userscripts.stop().catch(error => console.error('Userscript shutdown:', error)).finally(() => app.quit());
+    if (!finishingQuit && mainWindow && !mainWindow.isDestroyed()) {
+      event.preventDefault();
+      void requestWindowClose(mainWindow, true);
       return;
     }
+    if (!finishingQuit && userscripts) {
+      event.preventDefault();
+      if (!quitRequest) quitRequest = userscripts.stop().then(() => { finishingQuit = true; app.quit(); })
+        .catch(error => dialog.showErrorBox('无法退出 WebObsidian', String(error))).finally(() => { quitRequest = undefined; });
+      return;
+    }
+  });
+  app.on('will-quit', () => {
     if (serverProc) {
       serverProc.kill();
       serverProc = null;

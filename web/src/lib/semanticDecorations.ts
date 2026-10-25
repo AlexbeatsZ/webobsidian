@@ -13,6 +13,7 @@ import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
 import { getIcon } from './icons';
 import { mathDefinitionContext } from './mathjax';
+import { RenderLifetime } from './obsidian/renderLifetime';
 
 class ReferenceLink extends WidgetType {
   constructor(readonly label: string, readonly target: string, readonly unresolved = false, readonly footnote: boolean | 'definition' = false, readonly highlighted = false) { super(); }
@@ -29,8 +30,8 @@ class ReferenceLink extends WidgetType {
   }
   ignoreEvent() { return true; }
 }
+const footnoteMounts = new WeakMap<HTMLElement, RenderLifetime>();
 class FootnoteBody extends WidgetType {
-  stops: (() => void)[] = [];
   readonly content: string;
   readonly dependencies: string;
   constructor(readonly note: Footnote, readonly model: MarkdownModel, readonly highlighted: boolean, readonly noteContext: string) {
@@ -43,14 +44,16 @@ class FootnoteBody extends WidgetType {
       && this.note.references.length === other.note.references.length && this.highlighted === other.highlighted && this.dependencies === other.dependencies;
   }
   toDOM(view: EditorView) {
-    const context = contextOf(view), entry = document.createElement('section');
+    const context = contextOf(view), doc = view.dom.ownerDocument, entry = doc.createElement('section');
+    const lifetime = new RenderLifetime();
+    void lifetime.load(); footnoteMounts.set(entry, lifetime);
     entry.className = 'cm-footnote-entry' + (this.note.number === 1 ? ' is-first' : '') + (this.highlighted ? ' cm-navigation-target' : '');
     entry.dataset.footnoteTarget = footnoteFragment(this.note);
-    const number = document.createElement('a'); number.className = 'cm-footnote-number'; number.textContent = String(this.note.number) + '.';
+    const number = doc.createElement('a'); number.className = 'cm-footnote-number'; number.textContent = String(this.note.number) + '.';
     number.setAttribute('aria-label', '返回脚注 ' + this.note.number + ' 的第一处引用');
     bindRenderedLink(number, view, '#' + footnoteReferenceFragment(this.note, 0), true);
-    const body = document.createElement('div'); body.className = 'cm-footnote-body';
-    const text = document.createElement('div'); body.append(text); entry.append(number, body);
+    const body = doc.createElement('div'); body.className = 'cm-footnote-body';
+    const text = doc.createElement('div'); body.append(text); entry.append(number, body);
     const definition = this.note.definitions[0];
     if (definition && this.note.status === 'resolved') {
       const from = this.note.inline ? definition.bodyFrom : definition.from;
@@ -58,17 +61,19 @@ class FootnoteBody extends WidgetType {
       const stop = context.mountFragment?.(text, this.model.text.slice(from, to), { id: context.sourcePath + '#footnote-' + this.note.number,
         mode: 'reading', sourceFrom: from, equations: equationContext(this.model, from), mathSource: { model: this.model, from },
         context: { ...nonExecutingContext(context), footnoteBody: true, navigationId: undefined, recordNavigation: undefined } });
-      if (stop) this.stops.push(stop);
+      if (stop) lifetime.register(stop);
     } else text.textContent = this.note.status === 'missing' ? '未找到脚注定义：' + this.note.id : '脚注定义重复：' + this.note.id;
-    const returns = document.createElement('nav'); returns.className = 'cm-footnote-returns'; returns.setAttribute('aria-label', '返回脚注引用');
+    const returns = doc.createElement('nav'); returns.className = 'cm-footnote-returns'; returns.setAttribute('aria-label', '返回脚注引用');
     this.note.references.forEach((_, index) => {
-      const anchor = document.createElement('a'); anchor.textContent = this.note.references.length > 1 ? '↩' + (index + 1) : '↩';
+      const anchor = doc.createElement('a'); anchor.textContent = this.note.references.length > 1 ? '↩' + (index + 1) : '↩';
       anchor.setAttribute('aria-label', '返回第 ' + (index + 1) + ' 处引用');
       bindRenderedLink(anchor, view, '#' + footnoteReferenceFragment(this.note, index), true); returns.append(anchor);
     });
     body.append(returns); return entry;
   }
-  destroy() { for (const stop of this.stops) stop(); this.stops = []; }
+  destroy(dom: HTMLElement) {
+    const lifetime = footnoteMounts.get(dom); footnoteMounts.delete(dom); lifetime?.unload();
+  }
   ignoreEvent() { return true; }
 }
 type SemanticItem = { span: SourceSpan; decoration: Decoration };

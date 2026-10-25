@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { api } from '../api';
+import { api, request } from '../api';
 import {
   DEFAULT_SETTINGS,
   NATIVE_SNIPPETS_DIRECTORY,
@@ -11,7 +11,7 @@ import { parse } from 'valibot';
 import { MappingSchema } from './latex/editor_extensions/conceal_maps';
 import { mathlessArgsSchema } from './latex/editor_context/default_text_areas';
 import { mathArgumentInfo, mathBaseArguments, defaultMathConfiguration, type MathConfiguration } from '@webobsidian/markdown-core';
-import type { VaultConfigurationSource } from '../../../../server/src/services/vaultConfiguration';
+import type { VaultConfigurationSource } from '../../../../server/src/contracts';
 import { prepareMathProfile } from '../mathPreamble';
 import { validateMathProfile, type MathCandidate } from '../mathjax';
 
@@ -51,16 +51,6 @@ export const writingCMSettings = (): LatexSuiteCMSettings => cm;
 export function useWriting() {
   useSyncExternalStore(subscribeWriting, () => revision);
   return { settings, error };
-}
-async function request<T>(url: string, body?: unknown): Promise<T> {
-  const res = await fetch('/api/writing' + url, {
-    credentials: 'include',
-    ...(body
-      ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      : {}),
-  });
-  if (!res.ok) throw new Error((await res.json()).error ?? `Writing settings: ${res.status}`);
-  return res.json();
 }
 async function sources(
   kind: 'snippets' | 'variables',
@@ -172,7 +162,7 @@ export async function refreshWriting(forceRules = false) {
   const current = ++generation;
   let candidate: MathCandidate | undefined;
   try {
-    const next = await request<WritingSettings>('');
+    const next = await request<WritingSettings>('/api/writing');
     candidate = await validateMathProfile(await prepareMathProfile(next.math));
     // JSON responses create new objects. Reuse unchanged slices to avoid running
     // snippet modules again when only Linter or math source metadata changed.
@@ -219,7 +209,10 @@ export function updateWriting(patch: Partial<WritingSettings>) {
         let persisted: WritingSettings, compiled: LatexSuiteCMSettings;
         try {
           compiled = await compile(next, candidate.commands);
-          persisted = await request<WritingSettings>('', patch.math ? { math: patch.math, mathSource: settings.mathSource } : { ...patch, source: settings.source });
+          persisted = await request<WritingSettings>('/api/writing', {
+            method: 'PUT',
+            body: JSON.stringify(patch.math ? { math: patch.math, mathSource: settings.mathSource } : { ...patch, source: settings.source }),
+          });
         } catch (cause) { candidate.dispose(); throw cause; }
         if (generation !== startingGeneration) {
           candidate.dispose();

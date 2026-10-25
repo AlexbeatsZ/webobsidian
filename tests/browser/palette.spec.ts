@@ -1,4 +1,5 @@
 import { expect, test } from './test';
+import { emptyHotkeys } from '../../packages/search-core/src/hotkeys';
 
 test.beforeEach(async ({ page }) => {
   const entries = [
@@ -9,6 +10,8 @@ test.beforeEach(async ({ page }) => {
   ].map(entry => ({ ...entry, kind: 'file', aliases: [], headings: ['反应记录'] }));
   await page.route('**/api/**', async route => {
     const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/api/vault-identity') return route.fallback();
+    if (pathname === '/api/settings/hotkeys') return route.fulfill({ json: { ...emptyHotkeys(), vault: 'browser-fixture' } });
     return route.fulfill({ json: pathname === '/api/catalog' ? { entries }
       : pathname === '/api/settings/' ? { search: { chinese: {} } }
       : pathname === '/api/writing' ? { version: 1, latex: { snippets: '[]' }, linter: {}, hotkeys: {} }

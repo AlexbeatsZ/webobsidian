@@ -20,7 +20,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm ci
+
+      - name: Build shared core for unit tests
+        run: npm run build:core
+
+      - name: Unit tests
+        run: npm run test:unit
 
       - name: Typecheck
         run: npm run typecheck
@@ -33,6 +39,46 @@ jobs:
 
       - name: Build desktop bundle
         run: npm --workspace desktop run build
+
+  browser:
+    name: Browser contracts (Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium and system libraries
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Build shared core
+        run: npm run build:core
+
+      - name: Browser contracts
+        run: npx --no-install playwright test --project=render --project=integration --project=workspace --project=palette
+        env:
+          RENDER_TEST_SKIP_CORE_BUILD: '1'
+          RENDER_TEST_OUTPUT_DIR: test-results/browser
+
+      - name: Plugin fixture lifecycle
+        run: npx --no-install playwright test --project=plugins --grep 'real command, settings, metadata, CM extension, fenced renderer and unload'
+        env:
+          RENDER_TEST_SKIP_CORE_BUILD: '1'
+          RENDER_TEST_OUTPUT_DIR: test-results/plugins
+
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failures
+          path: test-results/
+          if-no-files-found: ignore
 
   docker:
     name: Docker image builds

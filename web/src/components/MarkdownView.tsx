@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import '../styles/equations.css';
 import { codeBlocks, pluginPostProcessing } from '../lib/obsidian/markdown';
 import { mountMarkdownFragment } from './MarkdownFragment';
@@ -32,7 +32,7 @@ import { listFolding } from '../lib/listFolding';
 import { blockLayout } from '../lib/blockLayout';
 import { blockEffects } from '../lib/blocks/view';
 import { blockEffectSyntax, footnoteSyntax } from '@webobsidian/markdown-core';
-import { renderContext, type RenderContext } from '../lib/renderContext';
+import { renderContext, type FragmentOptions, type RenderContext } from '../lib/renderContext';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import { attachMenuContext } from '../lib/configuredMenus/transform';
 import type { RenderMenuItem } from '../lib/renderContext';
@@ -67,14 +67,16 @@ const titleOf = (path: string) => (path.split('/').pop() ?? path).replace(/\.(md
 
 export default function MarkdownView(props: MarkdownViewProps) {
   const { snapshot, mode, context, showTitle = true, layout = 'page' } = props;
+  const latest = useRef(props);
+  latest.current = props;
+  const mountFragment = useCallback((host: HTMLElement, source: string, options: FragmentOptions) =>
+    mountMarkdownFragment(host, source, { ...options, context: options.context ?? latest.current.context }), []);
   const scopedContext = useMemo<RenderContext>(() => ({ ...context,
-    mountFragment: (host, source, options) => mountMarkdownFragment(host, source, { ...options, context: options.context ?? context }),
-  }), [context]);
+    mountFragment,
+  }), [context, mountFragment]);
   const instanceId = useId();
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const latest = useRef(props);
-  latest.current = props;
   const version = useRef(snapshot.version);
   const readonlyComp = useRef(new Compartment()).current;
   const contextComp = useRef(new Compartment()).current;

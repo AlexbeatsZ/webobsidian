@@ -1,18 +1,7 @@
 import type { CatalogEntry } from '@webobsidian/search-core';
-import type { VaultConfigurationSource } from '../../../server/src/services/vaultConfiguration';
-import type { PropertyTypeExpectation } from '../../../server/src/services/propertytypes';
+import type { VaultConfigurationSource, PropertyTypeExpectation, TreeNode, SearchHit, MatchContext, NoteMatches } from '../../../server/src/contracts';
+export type { VaultConfigurationSource, PropertyTypeExpectation, TreeNode, SearchHit, MatchContext, NoteMatches } from '../../../server/src/contracts';
 // Thin fetch wrapper around the WebObsidian server API.
-
-export interface TreeNode {
-  name: string;
-  path: string;
-  type: 'file' | 'folder';
-  ext?: string;
-  size?: number;
-  mtime?: number;
-  ctime?: number;
-  children?: TreeNode[];
-}
 
 export interface TrashItem {
   name: string;
@@ -21,30 +10,6 @@ export interface TrashItem {
   ext: string;
   size: number;
   mtime: number;
-}
-
-export interface SearchHit {
-  path: string;
-  title: string;
-  score: number;
-  tags: string[];
-  snippet: string;
-  matchedField?: string;
-  matchKind?: string;
-}
-
-export interface MatchContext {
-  text: string;
-  source?: { from: number; to: number; text: string };
-  ranges: [number, number][];
-  pre: boolean;
-  post: boolean;
-}
-
-export interface NoteMatches {
-  path: string;
-  count: number;
-  contexts: MatchContext[];
 }
 
 export interface GitCommit {
@@ -56,7 +21,22 @@ export interface GitCommit {
 
 let mutations = 0;
 let vaultSessionStale = false;
-export function invalidateVaultRequests() { vaultSessionStale = true; }
+let vaultIdentity: string | undefined;
+let identityRequest: Promise<string> | undefined;
+export function invalidateVaultRequests() {
+  vaultSessionStale = true;
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('vault-identity-invalidated'));
+}
+export async function vaultRequestIdentity(): Promise<string> {
+  if (vaultIdentity) return vaultIdentity;
+  identityRequest ??= req<{ vault: string }>('/api/vault-identity').then(result => {
+    if (vaultSessionStale) throw new ApiError('Vault 已切换，已忽略旧身份请求', 409);
+    if (typeof result.vault !== 'string' || !result.vault) throw new ApiError('无效的 Vault 身份', 502);
+    vaultIdentity = result.vault;
+    return result.vault;
+  }).finally(() => { identityRequest = undefined; });
+  return identityRequest;
+}
 export const pendingMutations = () => mutations;
 const mutationListeners = new Set<() => void>();
 export function subscribeMutations(listener: () => void) {
@@ -65,9 +45,12 @@ export function subscribeMutations(listener: () => void) {
 }
 const mutationChanged = () => { for (const listener of mutationListeners) listener(); };
 
-async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
-  if (vaultSessionStale && !['GET', 'HEAD', 'OPTIONS'].includes((opts.method ?? 'GET').toUpperCase()) &&
-    !url.startsWith('/api/settings')) {
+async function req<T>(url: string, opts: RequestInit & { vault?: string } = {}): Promise<T> {
+  const scoped = url.startsWith('/api/') && url !== '/api/vault-identity';
+  if (vaultSessionStale && scoped && !url.startsWith('/api/settings'))
+    throw new ApiError('Vault 已切换，请重新加载应用；旧文档会话保留', 409);
+  const expectedVault = scoped ? opts.vault ?? await vaultRequestIdentity() : undefined;
+  if (vaultSessionStale && scoped && !url.startsWith('/api/settings')) {
     throw new ApiError('Vault 已切换，请重新加载应用；旧文档会话保留', 409);
   }
   // The settings switch owns the server maintenance lease. Counting its own
@@ -81,25 +64,33 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
     !['/api/attachments/execute', '/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(url.split('?')[0]);
   if (mutation) { mutations++; mutationChanged(); }
   try {
-  const { headers: optHeaders, ...rest } = opts;
+  const { headers: optHeaders, vault: _vault, ...rest } = opts;
+  const headers = new Headers(optHeaders);
+  if (!(opts.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (expectedVault) headers.set('X-Vault-Identity', expectedVault);
   const res = await fetch(url, {
     credentials: 'include',
     ...rest,
     // headers MUST be merged last — spreading ...opts after a `headers` literal
     // would drop Content-Type whenever a caller passes its own headers.
-    headers: { ...(opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(optHeaders ?? {}) },
+    headers,
   });
   if (!res.ok) {
     let msg = res.statusText;
     try {
-      msg = (await res.json()).error ?? msg;
+      const error = await res.json();
+      msg = error.error ?? msg;
+      if (error.code === 'VAULT_CHANGED') invalidateVaultRequests();
     } catch {
       /* ignore */
     }
     throw new ApiError(msg, res.status);
   }
   const ct = res.headers.get('content-type') ?? '';
-  return await (ct.includes('application/json') ? res.json() : res.text()) as T;
+  const result = await (ct.includes('application/json') ? res.json() : res.text()) as T;
+  if (scoped && vaultSessionStale && !url.startsWith('/api/settings'))
+    throw new ApiError('Vault 已切换，已忽略旧请求结果', 409);
+  return result;
   } finally { if (mutation) { mutations--; mutationChanged(); } }
 }
 
@@ -118,14 +109,20 @@ export class ApiError extends Error {
 export const api = {
   // files
   tree: () => req<TreeNode>('/api/files/'),
-  read: (path: string) =>
-    req<{ path: string; content: string; revision?: string }>(
+  read: async (path: string, vault?: string) => {
+    const expected = vault ?? await vaultRequestIdentity();
+    const file = await req<{ path: string; content: string; revision?: string; vault: string }>(
       `/api/files/content?path=${encodeURIComponent(path)}`,
-    ),
-  write: (path: string, content: string, baseRevision?: string) =>
+      { vault: expected },
+    );
+    if (file.vault !== expected) { invalidateVaultRequests(); throw new ApiError('文档来自其他 Vault，已保留当前会话', 409); }
+    return file;
+  },
+  write: (path: string, content: string, baseRevision?: string, vault?: string) =>
     req<{ ok: true; revision?: string }>('/api/files/content', {
       method: 'PUT',
       body: JSON.stringify({ path, content, baseRevision }),
+      vault,
     }),
   createFolder: (path: string) =>
     req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
@@ -150,7 +147,7 @@ export const api = {
   deleteTrashItem: (path: string) =>
     req<{ ok: true }>(`/api/files/trash/item?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
   emptyTrash: () => req<{ ok: true }>('/api/files/trash', { method: 'DELETE' }),
-  uploadUrl: () => '/api/files/upload',
+  uploadUrl: () => `/api/files/upload?vault=${encodeURIComponent(vaultIdentity ?? 'unbound')}`,
   upload: async (file: File, dir = 'attachments') => {
     const fd = new FormData();
     fd.append('dir', dir);
@@ -158,7 +155,7 @@ export const api = {
     return req<{ ok: true; path: string; size: number }>('/api/files/upload', { method: 'POST', body: fd });
   },
   rawUrl: (path: string, sourcePath = '') =>
-    `/api/files/content?path=${encodeURIComponent(path)}&sourcePath=${encodeURIComponent(sourcePath)}`,
+    `/api/files/content?path=${encodeURIComponent(path)}&sourcePath=${encodeURIComponent(sourcePath)}&vault=${encodeURIComponent(vaultIdentity ?? 'unbound')}`,
 
   catalog: () => req<{ entries: CatalogEntry[] }>('/api/catalog'),
   // search & links

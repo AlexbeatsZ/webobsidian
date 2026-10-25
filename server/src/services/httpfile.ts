@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import type { Request, Response } from 'express';
 
 /**
@@ -31,9 +32,9 @@ export async function sendFileWithRange(
     res.status(206);
     res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
     res.setHeader('Content-Length', String(end - start + 1));
-    createReadStream(absPath, { start, end }).pipe(res);
+    await pipeline(createReadStream(absPath, { start, end }), res);
     return;
   }
   res.setHeader('Content-Length', String(size));
-  createReadStream(absPath).pipe(res);
+  await pipeline(createReadStream(absPath), res);
 }

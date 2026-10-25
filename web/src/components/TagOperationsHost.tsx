@@ -156,6 +156,7 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
 
 function TagPageDialog({ request }: { request: Extract<TagDialogRequest, { kind: 'page' }> }) {
   const [path, setPath] = useState(request.suggestedPath);
+  const [createdPath, setCreatedPath] = useState<string>();
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   async function open(path: string) {
     assertTagVaultCurrent();
@@ -164,17 +165,22 @@ function TagPageDialog({ request }: { request: Extract<TagDialogRequest, { kind:
   async function create() {
     setBusy(true); setError('');
     try {
+      if (createdPath) { await open(createdPath); return; }
       if (!/\.(?:md|markdown)$/i.test(path) || path.startsWith('/') || path.includes('\\') || path.split('/').some((p) => !p || p === '.' || p === '..' || p.startsWith('.')))
         throw new Error('请输入 Vault 内的 Markdown 文件路径');
-      await tagsApi.createPage(request.tag, path);
+      const created = await tagsApi.createPage(request.tag, path);
+      setCreatedPath(created.path);
+      setPath(created.path);
+      if (created.indexing && created.indexing.status !== 'indexed')
+        useStore.getState().notify(`文件已保存：${created.path}；索引尚未更新，请勿重复创建。${created.indexing.status === 'failed' ? created.indexing.error : created.indexing.reason}`, 0);
       await useStore.getState().loadTree();
-      await open(path);
+      await open(created.path);
     } catch (error) { setError(String(error)); } finally { setBusy(false); }
   }
   return <div className="modal-backdrop native-tags-backdrop"><section role="dialog" aria-modal="true" aria-label="标签页" className="native-tags-dialog">
     <h2>#{request.tag} 的标签页</h2>
     {request.pages.length > 1 ? <><p>多个文件声明此标签别名，请选择：</p><ul>{request.pages.map((page) => <li key={page}><button disabled={busy} onClick={() => { void open(page).catch((e) => setError(String(e))); }}>{page}</button></li>)}</ul></> :
-      <><p>创建一个带有此标签 alias 的笔记：</p><input aria-label="标签页文件路径" value={path} disabled={busy} onChange={(e) => setPath(e.target.value)} /><button disabled={busy} onClick={() => { void create(); }}>创建并打开</button></>}
+      <><p>{createdPath ? '文件已保存，可重试打开：' : '创建一个带有此标签 alias 的笔记：'}</p><input aria-label="标签页文件路径" value={path} disabled={busy || !!createdPath} onChange={(e) => setPath(e.target.value)} /><button disabled={busy} onClick={() => { void create(); }}>{createdPath ? '打开已创建文件' : '创建并打开'}</button></>}
     {error && <p role="alert" className="native-tags-error">{error}</p>}
     <div className="native-tags-actions"><button disabled={busy} onClick={closeTagDialog}>关闭</button></div>
   </section></div>;

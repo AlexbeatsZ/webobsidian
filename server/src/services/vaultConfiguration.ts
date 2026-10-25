@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import { parse, printParseErrorCode, type ParseError } from 'jsonc-parser';
 import { getVaultRoot, vaultPathKey } from './vaultFile.js';
 import { readTextFile, writeTextFile } from './textFile.js';
+import type { VaultConfigurationSource } from '../contracts.js';
+export type { VaultConfigurationSource } from '../contracts.js';
 
 const DIRECTORY = '.obsidian/webobsidian';
 /** Configuration events bypass the note catalog and file tree. */
@@ -13,9 +15,6 @@ export function isVaultConfigurationPath(relative: string): boolean {
 }
 const MAX_BYTES = 1024 * 1024;
 const failure = (message: string, status = 400) => Object.assign(new Error(message), { status });
-export interface VaultConfigurationSource {
-  path: string; content: string; exists: boolean; revision?: string; vault: string;
-}
 export function parseConfiguration(content: string): unknown {
   const errors: ParseError[] = [];
   const value = parse(content.replace(/^\uFEFF/, ''), errors, { allowTrailingComma: true, disallowComments: false });

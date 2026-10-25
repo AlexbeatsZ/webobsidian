@@ -39,9 +39,12 @@ export class Component {
   private disposers: (() => any)[] = [];
   private children = new Set<Component>();
   private loaded = false;
+  private unloaded = false;
   private loading?: Promise<void>;
   register(dispose: () => any) {
-    this.disposers.push(dispose);
+    if (this.unloaded && this.loading) {
+      try { dispose(); } catch (error) { console.error(error); }
+    } else { this.unloaded = false; this.disposers.push(dispose); }
   }
   registerEvent(ref: EventRef) {
     this.register(() => ref.owner.offref(ref));
@@ -60,6 +63,8 @@ export class Component {
     this.register(() => el.removeEventListener(type, callback, options));
   }
   addChild<T extends Component>(child: T): T {
+    if (this.unloaded && this.loading) { child.unload(); return child; }
+    this.unloaded = false;
     this.children.add(child);
     if (this.loaded) void child.load().catch(() => {});
     return child;
@@ -70,21 +75,40 @@ export class Component {
     return child;
   }
   load(): Promise<void> {
-    if (this.loading) return this.loading;
+    if (this.loading) return this.loaded ? this.loading : this.loading.then(() => this.load());
     if (this.loaded) return Promise.resolve();
     this.loaded = true;
-    return (this.loading = (async () => {
-      await this.onload();
-      for (const c of this.children) await c.load();
-    })());
+    this.unloaded = false;
+    let begin!: () => void;
+    const loading = new Promise<void>((resolve, reject) => {
+      begin = () => {
+        void (async () => {
+          try {
+            await this.onload();
+            if (!this.loaded) return;
+            for (const child of this.children) {
+              if (!this.loaded) break;
+              await child.load();
+            }
+          } catch (error) {
+            this.unload();
+            throw error;
+          }
+        })().then(resolve, reject);
+      };
+    }).finally(() => { if (this.loading === loading) this.loading = undefined; });
+    this.loading = loading;
+    begin();
+    return loading;
   }
   unload() {
-    if (!this.loaded) return;
+    if (this.unloaded) return;
+    const wasLoaded = this.loaded;
     this.loaded = false;
-    this.loading = undefined;
+    this.unloaded = true;
     let failure: unknown;
     try {
-      this.onunload();
+      if (wasLoaded) this.onunload();
     } finally {
       for (const c of this.children) {
         try {

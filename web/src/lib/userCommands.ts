@@ -4,8 +4,8 @@ import { compileJavascript } from './javascript/execute';
 import { promptInput, chooseInput } from './obsidian/ui';
 import { type Command, type CommandContext } from './commands';
 import { request } from './api';
-import type { AutomationSettings } from '../../../server/src/services/automationSettings';
-import type { VaultConfigurationSource } from '../../../server/src/services/vaultConfiguration';
+import type { AutomationSettings } from '../../../server/src/contracts/automation';
+import type { VaultConfigurationSource } from '../../../server/src/contracts';
 export type { AutomationSettings };
 export interface AutomationConfiguration { source: VaultConfigurationSource; settings: AutomationSettings }
 export const readAutomation = () => request<AutomationConfiguration>('/api/native-features/automation');

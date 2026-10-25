@@ -436,13 +436,17 @@ export const MarkdownRenderer = {
       },
       openMenu: (menu) => useStore.getState().openContextMenu(menu),
     });
-    await new Promise<void>((resolve) => {
-      const stop = mountMarkdownFragment(el, source, {
+    await new Promise<void>((resolve, reject) => {
+      let stop: (() => void) | undefined;
+      let cancelled = false;
+      component.register(() => { cancelled = true; try { stop?.(); } finally { resolve(); } });
+      if (cancelled) return;
+      stop = mountMarkdownFragment(el, source, {
         id: sourcePath || 'plugin.md',
         context,
         onReady: resolve,
+        onError: reject,
       });
-      component.register(stop);
     });
   },
   async renderMarkdown(source: string, el: HTMLElement, path: string, component: events.Component) {

@@ -3,6 +3,8 @@ import type { EditorView } from '@codemirror/view';
 import { indentMore, indentLess } from '@codemirror/commands';
 import { openSearchPanel } from '@codemirror/search';
 import { toggleInline, toggleChecklist, insertLink, indentMarkdown } from './editorCommands';
+import { setEditorMode, type ModeRequest } from './fragmentNavigation';
+export { bindEditorMode, setEditorMode } from './fragmentNavigation';
 
 interface EditorCommands {
   undo: () => boolean;
@@ -10,23 +12,12 @@ interface EditorCommands {
 }
 const mounted = new Map<EditorView, EditorCommands>();
 let active: EditorView | null = null;
-type ViewMode = 'live' | 'reading' | 'source';
-type ModeRequest = ViewMode | 'toggle-preview' | 'toggle-source';
-const modeHandlers = new Map<EditorView, (mode: ModeRequest) => void>();
-/** The mounted Markdown view keeps ownership of its own mode and React callback. */
-export function bindEditorMode(view: EditorView, handler: (mode: ModeRequest) => void): () => void {
-  modeHandlers.set(view, handler);
-  return () => { if (modeHandlers.get(view) === handler) modeHandlers.delete(view); };
-}
 export function setActiveEditorMode(mode: ModeRequest): boolean {
   const view = getActiveEditor();
   if (!view) return false;
   setEditorMode(view, mode);
   // An editor without a mode switch must never redirect the action to another pane.
   return true;
-}
-export function setEditorMode(view: EditorView, mode: ModeRequest): boolean {
-  const handler = modeHandlers.get(view); handler?.(mode); return !!handler;
 }
 const available = (view: EditorView) => view.dom.isConnected && !view.dom.closest('[hidden], [aria-hidden="true"]');
 

@@ -1,6 +1,6 @@
 import { manualSave } from './writing/format';
 import { create } from 'zustand';
-import { api, type TreeNode } from './api';
+import { api, pendingMutations, type TreeNode } from './api';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
 import { parseLinkTarget } from '@webobsidian/markdown-core';
@@ -352,16 +352,77 @@ let canSave = false;
 let suppressSave = false;
 let saveTimer: number | undefined;
 let lastSaved = '';
+let desiredWorkspace = '';
+let workspaceWrite: Promise<void> | undefined;
+let workspaceDirty = false;
+let workspaceSaveError = '';
+let workspaceRetries = 0;
+let remoteWorkspaceGeneration = 0;
+let workspaceLoadGeneration = 0;
 
 function scheduleSave(): void {
   window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
-    const payload = pickPersisted(useStore.getState());
-    const json = JSON.stringify(payload);
-    if (json === lastSaved) return;
-    lastSaved = json;
-    api.putUiState(payload, CLIENT_ID).catch(() => {});
-  }, 500);
+  workspaceDirty = true;
+  workspaceRetries = 0;
+  saveTimer = window.setTimeout(() => { void flushWorkspaceState().catch(() => {}); }, 500);
+}
+
+export function workspaceHasUnsavedChanges(): boolean {
+  return workspaceDirty || workspaceWrite !== undefined;
+}
+
+export async function flushWorkspaceState(): Promise<void> {
+  window.clearTimeout(saveTimer);
+  saveTimer = undefined;
+  if (!canSave) {
+    if (workspaceDirty) throw new Error('工作区尚未成功读取，已保留当前布局；请重新读取后再保存');
+    return;
+  }
+  desiredWorkspace = JSON.stringify(pickPersisted(useStore.getState()));
+  workspaceDirty = desiredWorkspace !== lastSaved;
+  if (workspaceWrite) return workspaceWrite;
+  if (!workspaceDirty) return;
+  workspaceWrite = (async () => {
+    try {
+      while (desiredWorkspace !== lastSaved) {
+        const sent = desiredWorkspace;
+        await api.putUiState(JSON.parse(sent), CLIENT_ID);
+        lastSaved = sent;
+        desiredWorkspace = JSON.stringify(pickPersisted(useStore.getState()));
+        workspaceDirty = desiredWorkspace !== lastSaved;
+      }
+      workspaceRetries = 0;
+      if (workspaceSaveError && useStore.getState().toast === workspaceSaveError) useStore.getState().notify('工作区已保存');
+      workspaceSaveError = '';
+    } catch (error) {
+      workspaceDirty = true;
+      workspaceSaveError = `工作区保存失败，当前布局已保留：${String(error)}`;
+      useStore.getState().notify(workspaceSaveError, 0);
+      if (workspaceRetries < 3 && !useStore.getState().vaultSessionStale) {
+        const delay = 1000 * 2 ** workspaceRetries++;
+        saveTimer = window.setTimeout(() => { void flushWorkspaceState().catch(() => {}); }, delay);
+      }
+      throw error;
+    } finally {
+      workspaceWrite = undefined;
+    }
+  })();
+  return workspaceWrite;
+}
+
+export async function saveWorkspaceBeforeExit(): Promise<void> {
+  if (useStore.getState().pendingCanvasEdits) throw new Error('请先完成 Canvas 卡片或连线编辑');
+  await documents.pathsSettled();
+  for (const snapshot of documents.snapshots()) {
+    if (!snapshot.dirty && !snapshot.saving && !snapshot.conflict && !snapshot.locked) continue;
+    if (useStore.getState().vaultSessionStale) throw new Error('Vault 已切换，旧会话仍有未保存内容，请处理后再关闭');
+    await documents.saveLeaving(snapshot.id);
+  }
+  await flushWorkspaceState();
+  const state = useStore.getState();
+  if (state.pendingCanvasEdits || state.dirty || workspaceHasUnsavedChanges() || pendingMutations() ||
+      documents.snapshots().some(snapshot => snapshot.dirty || snapshot.saving || snapshot.conflict || snapshot.locked))
+    throw new Error('仍有未保存内容、冲突或写入请求，请处理后再关闭');
 }
 
 export const useStore = create<AppState>()(
@@ -818,21 +879,32 @@ export const useStore = create<AppState>()(
       },
 
       loadUiState: async () => {
+        const generation = ++workspaceLoadGeneration;
+        canSave = false;
         try {
           const s = await api.getUiState();
+          if (generation !== workspaceLoadGeneration) return;
           suppressSave = true;
           applyPersisted(s, set);
           lastSaved = JSON.stringify(pickPersisted(get()));
+          desiredWorkspace = lastSaved;
+          workspaceDirty = false;
+          workspaceRetries = 0;
+          canSave = true;
+        } catch (error) {
+          if (generation !== workspaceLoadGeneration) return;
+          get().notify(`工作区读取失败，已暂停布局保存：${String(error)}`, 0);
+          throw error;
+        } finally {
           suppressSave = false;
-        } catch {
-          /* first run / not authed */
         }
-        canSave = true;
         await get().hydrate();
       },
 
       applyRemoteState: async (state, originId) => {
         if (originId === CLIENT_ID) return; // ignore echo of our own change
+        const generation = ++remoteWorkspaceGeneration;
+        if (!canSave || workspaceHasUnsavedChanges()) return;
         const prevActive = get().activePath;
         const prevSplit = get().splitPath;
         await documents.saveLeaving(get().activePath);
@@ -842,10 +914,13 @@ export const useStore = create<AppState>()(
           if (tab.type !== 'markdown' || next?.type === 'markdown' && next.state.file === tab.state.file) continue;
           await saveLeavingSidebarTab(tab);
         }
+        if (generation !== remoteWorkspaceGeneration || workspaceHasUnsavedChanges()) return;
         suppressSave = true;
-        applyPersisted(state, set);
-        lastSaved = JSON.stringify(pickPersisted(get()));
-        suppressSave = false;
+        try {
+          applyPersisted(state, set);
+          lastSaved = JSON.stringify(pickPersisted(get()));
+          desiredWorkspace = lastSaved;
+        } finally { suppressSave = false; }
         if (get().activePath !== prevActive || get().splitPath !== prevSplit) {
           await get().hydrate();
         }
@@ -860,9 +935,10 @@ useStore.subscribe((state, prev) => {
     const doc = documents.get(state.activePath);
     if (doc) useStore.setState({ content: doc.snapshot.raw, dirty: doc.snapshot.dirty });
   }
-  if (!canSave || suppressSave) return;
+  if (suppressSave) return;
   if (PERSIST_KEYS.some(key => state[key] !== prev[key])) {
-    scheduleSave();
+    workspaceDirty = true;
+    if (canSave) scheduleSave();
   }
 });
 

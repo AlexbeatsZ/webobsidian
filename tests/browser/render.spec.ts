@@ -10,7 +10,9 @@ const { PNG } = require(path.join(path.dirname(require.resolve('playwright-core/
 // Allow only one 8-bit level of rasterization rounding, never displaced geometry.
 function samePixels(a: Buffer, b: Buffer): boolean {
   const left = PNG.sync.read(a), right = PNG.sync.read(b);
-  return left.width === right.width && left.height === right.height && left.data.every((value: number, i: number) => Math.abs(value - right.data[i]) <= 1);
+  return left.width > 0 && left.height > 0 && left.data.length > 0 && left.data.length === right.data.length
+    && left.width === right.width && left.height === right.height
+    && left.data.every((value: number, i: number) => Math.abs(value - right.data[i]) <= 1);
 }
 
 async function wrappedBodyOffset(page: Page, slot: number) {
@@ -128,6 +130,10 @@ test('shared syntax stays visually equal through multiple scroll positions; foot
   await page.evaluate(source => window.renderHarness.reset(source), source);
   await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).replace(/\r\n|\r/g, '\n').length));
   await expect(page.locator('[data-slot="0"] .cm-table')).toHaveCount(1);
+  await expect(page.locator('[data-slot="1"] .cm-table')).toHaveCount(1);
+  for (const slot of [0, 1]) {
+    await expect(page.locator(`[data-slot="${slot}"] .HyperMD-list-line[data-prefix-layout]`).first()).toBeAttached();
+  }
   await expect(page.locator('[data-render-pending]')).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
   await page.mouse.move(1490, 750);
@@ -135,12 +141,20 @@ test('shared syntax stays visually equal through multiple scroll positions; foot
     await page.evaluate(top => { window.renderHarness.scroll(0, top); window.renderHarness.scroll(1, top); }, top);
     await expect(page.locator('[data-render-pending]')).toHaveCount(0);
     await page.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); await document.fonts.ready; });
-    await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('.cm-line[data-list-body-start]')].every(line => line.style.paddingLeft !== ''));
+    await page.waitForFunction(() => [0, 1].every(slot => {
+      const content = document.querySelector(`[data-slot="${slot}"] .cm-content`);
+      if (!content?.querySelector('.cm-line')) return false;
+      const lines = [...document.querySelectorAll<HTMLElement>(`[data-slot="${slot}"] .cm-line[data-prefix-layout]`)];
+      return lines.every(line => line.style.getPropertyValue('--cm-list-prefix-width') !== ''
+        && line.style.getPropertyValue('--cm-quote-prefix-width') !== '');
+    }));
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const options = { animations: 'disabled' as const, caret: 'hide' as const,
       style: '.cm-props-add,.prop-pill-add,.prop-pill-x,.prop-del,.cm-source-toggle{visibility:hidden!important}' };
+    const origins = await page.locator('[data-slot]').evaluateAll(hosts => hosts.map(host => host.getBoundingClientRect().x));
     const live = await page.locator('[data-slot="0"]').screenshot(options);
-    const reading = await page.locator('[data-slot="1"]').screenshot(options);
+    const reading = await page.locator('[data-slot="1"]').screenshot({ ...options,
+      style: options.style + `[data-slot="0"]{visibility:hidden!important}[data-slot="1"]{position:relative;left:${origins[0] - origins[1]}px}` });
     if (!samePixels(live, reading)) {
       await info.attach('live-' + top, { body: live, contentType: 'image/png' });
       await info.attach('reading-' + top, { body: reading, contentType: 'image/png' });

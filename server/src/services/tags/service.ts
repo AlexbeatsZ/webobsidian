@@ -202,7 +202,7 @@ export class NativeTagService {
     const basename = tagName(tag).replaceAll('/', ' ');
     return { pages, suggestedPath: basename + '.md', content: `---\naliases: [${JSON.stringify('#' + tagName(tag))}]\n---\n` };
   }
-  async createPage(tag: string, relative: string): Promise<{ path: string }> {
+  async createPage(tag: string, relative: string) {
     const page = await this.page(tag);
     if (page.pages.length) fail('This tag already has a page; open an existing page', 409);
     if (!/\.(md|markdown)$/i.test(relative)) fail('Tag Pages must be Markdown files');
@@ -212,8 +212,8 @@ export class NativeTagService {
       current.candidates.some((candidate) => exactKey(candidate) === exactKey(relative));
     if (exact || await exists(relative)) fail('Tag Page path already exists', 409);
     // The preview is final source; exclusive creation must preserve it and await indexing.
-    await writeFileText(relative, page.content, undefined, { createOnly: true, prepared: true, waitForIndex: true });
-    return { path: relative };
+    const result = await writeFileText(relative, page.content, undefined, { createOnly: true, prepared: true, waitForIndex: true });
+    return { path: relative, ...(result.indexing ? { indexing: result.indexing } : {}) };
   }
 }
 export const nativeTags = new NativeTagService();

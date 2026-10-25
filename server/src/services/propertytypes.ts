@@ -1,6 +1,8 @@
 import { applyEdits, modify } from 'jsonc-parser';
 import { readObsidianConfiguration, writeObsidianPropertyTypes } from './vaultConfiguration.js';
 import { broadcast } from './realtime.js';
+import type { PropertyTypeExpectation } from '../contracts.js';
+export type { PropertyTypeExpectation } from '../contracts.js';
 
 /**
  * Obsidian stores per-vault property type assignments in `.obsidian/types.json`
@@ -19,9 +21,6 @@ export async function readPropertyTypes() {
   return { types: (data.types ?? {}) as Record<string, string>, source };
 }
 
-export interface PropertyTypeExpectation {
-  vault: string; revision?: string; exists: boolean; previous: string | null;
-}
 let changes: Promise<unknown> = Promise.resolve();
 export function setPropertyType(key: string, type: string, expected: PropertyTypeExpectation) {
   const operation = changes.catch(() => {}).then(async () => {

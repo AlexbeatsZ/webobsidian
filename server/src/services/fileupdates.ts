@@ -11,10 +11,12 @@ import { noteVaultMutation } from './vaultMaintenance.js';
 
 type Event = 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir';
 type Seen = { revision?: string; stamp: string; directory: boolean };
+import type { FileUpdateResult } from '../contracts.js';
+export type { FileUpdateResult } from '../contracts.js';
 const seen = new Map<string, Seen>();
 const queues = new Map<
   string,
-  { generation: number; drained: number; event: Event; promise: Promise<void> }
+  { generation: number; drained: number; event: Event; promise: Promise<FileUpdateResult> }
 >();
 let enabled = false;
 let active = 0;
@@ -121,7 +123,7 @@ async function update(relative: string, event: Event) {
 }
 
 /** Routes and watcher share one latest-state drain per canonical path. */
-export function queueFileUpdate(relative: string, event: Event = 'change'): Promise<void> {
+export function queueFileUpdate(relative: string, event: Event = 'change'): Promise<FileUpdateResult> {
   noteVaultMutation();
   relative = path.posix.normalize(relative.replace(/\\/g, '/')).replace(/^\/+/, '');
   if (
@@ -129,37 +131,44 @@ export function queueFileUpdate(relative: string, event: Event = 'change'): Prom
     relative === '.' ||
     relative.split('/').some((part) => part.startsWith('.') || part === 'node_modules')
   )
-    return Promise.resolve();
+    return Promise.resolve({ status: 'skipped', path: relative, reason: enabled ? 'ignored' : 'disabled' });
   const current = queues.get(relative);
   if (current) {
     current.generation++;
     current.event = event;
     return current.promise;
   }
-  const state = { generation: 0, drained: -1, event, promise: Promise.resolve() };
+  const state = { generation: 0, drained: -1, event, promise: Promise.resolve<FileUpdateResult>({ status: 'indexed', path: relative }) };
   queues.set(relative, state);
   state.promise = Promise.resolve()
     .then(async () => {
       await acquire();
+      let result: FileUpdateResult = { status: 'indexed', path: relative };
       try {
         let generation: number;
         do {
           generation = state.generation;
           try {
             await update(relative, state.event);
+            result = { status: 'indexed', path: relative };
           } catch (error) {
             console.error('[file index]', relative, error);
+            result = { status: 'failed', path: relative, error: error instanceof Error ? error.message : String(error) };
+            try { broadcast({ type: 'index-error', path: relative, error: result.error, indexed: false }); }
+            catch (notificationError) { console.error('[file index notification]', relative, notificationError); }
           }
           state.drained = generation;
         } while (generation !== state.generation);
+        return result;
       } finally {
         release();
       }
     })
-    .finally(() => {
+    .then(result => {
       if (queues.get(relative) === state) queues.delete(relative);
       // An event can arrive between the last drain check and this final microtask.
       if (state.drained !== state.generation) return queueFileUpdate(relative, state.event);
+      return result;
     });
   return state.promise;
 }

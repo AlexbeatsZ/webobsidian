@@ -8,6 +8,7 @@ declare global {
       nativePlugins: boolean;
       vaultPath?: string;
       openVaultPath(path: string): Promise<void>;
+      onBeforeClose(listener: () => Promise<void>): () => void;
       userscripts: UserscriptBridge;
       webviewer: {
         subscribe(listener: (page: { sourceGuestId: number; url: string }) => void): () => void;

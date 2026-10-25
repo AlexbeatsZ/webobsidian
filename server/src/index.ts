@@ -39,6 +39,8 @@ import { setBroadcaster, broadcast } from './services/realtime.js';
 import { isVaultConfigurationPath } from './services/vaultConfiguration.js';
 import { ensureVault } from './services/vault.js';
 import { getVaultRoot, clearVaultStats } from './services/vaultFile.js';
+import { vaultConfigurationIdentity } from './services/vaultConfiguration.js';
+import { asyncHandler } from './middleware/error.js';
 import { enableFileUpdates, queueFileUpdate, drainFileUpdates, rebuildFileIndexes } from './services/fileupdates.js';
 import { startAutoSync } from './services/autosync.js';
 
@@ -107,6 +109,10 @@ async function main() {
 
   // Local readiness endpoint for the desktop launcher.
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
+  app.get('/api/vault-identity', asyncHandler(async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ vault: (await vaultConfigurationIdentity()).vault });
+  }));
 
   // Specific routes precede the shared search router. Access is checked once above.
   app.use('/api/files', filesRouter);

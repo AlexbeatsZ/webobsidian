@@ -35,7 +35,9 @@ class PrefixedBlock extends WidgetType {
 
 export const blockLayout = StateField.define<RangeSet<BlockWrapper>>({
   create: build,
-  update: (value, transaction) => decorationInputsChanged(transaction) ? build(transaction.state) : value,
+  update: (value, transaction) => decorationInputsChanged(transaction, {
+    context: ['allowBlockEffects', 'allowScriptExecution'], latex: false,
+  }) ? build(transaction.state) : value,
   provide: (field) => EditorView.blockWrappers.from(field),
 });
 function build(state: EditorState): RangeSet<BlockWrapper> {

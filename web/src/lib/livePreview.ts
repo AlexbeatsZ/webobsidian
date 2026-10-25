@@ -28,6 +28,7 @@ import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } fro
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
 import { sourceBlockReplacement } from './blockLayout';
+import { RenderLifetime } from './obsidian/renderLifetime';
 import { equationLabel, equationReferenceLabel, equationReferenceName, equationTarget, equationAt, parseLinkTarget, type Equation, type MarkdownModel } from '@webobsidian/markdown-core';
 
 /**
@@ -214,9 +215,10 @@ class ImageWidget extends WidgetType {
     return o.src === this.src && o.alt === this.alt && o.width === this.width && o.height === this.height && o.ro === this.ro && o.target === this.target;
   }
   toDOM(view: EditorView) {
-    const wrap = document.createElement('span');
+    const doc = view.dom.ownerDocument, win = doc.defaultView!;
+    const wrap = doc.createElement('span');
     applyImagePresentation(wrap, this.target, this.alt);
-    const img = document.createElement('img');
+    const img = doc.createElement('img');
     img.src = this.src;
     img.alt = this.alt;
     img.className = 'cm-embed-image image-embed';
@@ -228,7 +230,8 @@ class ImageWidget extends WidgetType {
     img.onerror = () => {
       img.remove();
       wrap.querySelectorAll('.cm-image-resize').forEach((h) => h.remove());
-      const miss = document.createElement('span');
+      wrap.dataset.renderError = 'image';
+      const miss = doc.createElement('span');
       miss.textContent = '';
       wrap.appendChild(miss);
       embedNotFound(miss, this.alt);
@@ -246,7 +249,7 @@ class ImageWidget extends WidgetType {
       e.preventDefault();
       e.stopPropagation();
       const startX = pointX(e);
-      const zoom = Number(getComputedStyle(img).zoom) || 1;
+      const zoom = Number(win.getComputedStyle(img).zoom) || 1;
       const startW = img.getBoundingClientRect().width / zoom;
       const maxW = Math.max(80, view.contentDOM.clientWidth / zoom);
       let curW = Math.round(startW);
@@ -261,17 +264,17 @@ class ImageWidget extends WidgetType {
         img.removeAttribute('height');
       };
       const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        window.removeEventListener('touchmove', onMove);
-        window.removeEventListener('touchend', onUp);
+        win.removeEventListener('mousemove', onMove);
+        win.removeEventListener('mouseup', onUp);
+        win.removeEventListener('touchmove', onMove);
+        win.removeEventListener('touchend', onUp);
         wrap.classList.remove('is-resizing');
         writeImageWidth(view, wrap, curW);
       };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-      window.addEventListener('touchmove', onMove, { passive: false });
-      window.addEventListener('touchend', onUp);
+      win.addEventListener('mousemove', onMove);
+      win.addEventListener('mouseup', onUp);
+      win.addEventListener('touchmove', onMove, { passive: false });
+      win.addEventListener('touchend', onUp);
     };
     for (const side of (view.state.readOnly ? [] : ['left', 'right']) as ('left' | 'right')[]) {
       const h = document.createElement('span');
@@ -585,6 +588,7 @@ function ensureMermaid() {
   return mermaidPromise;
 }
 let mermaidSeq = 0;
+const mermaidMounts = new WeakMap<HTMLElement, RenderLifetime>();
 
 class MermaidWidget extends WidgetType {
   constructor(readonly code: string, readonly range?: { from: number; to: number }) {
@@ -597,27 +601,38 @@ class MermaidWidget extends WidgetType {
     return true;
   }
   toDOM(view: EditorView) {
-    const div = document.createElement('div');
+    const doc = view.dom.ownerDocument;
+    const div = doc.createElement('div');
     div.className = 'mermaid cm-mermaid';
-    const body = document.createElement('div');
+    const body = doc.createElement('div');
     body.textContent = '…'; div.appendChild(body);
     div.dataset.renderPending = 'true';
+    const lifetime = new RenderLifetime(), renderId = `cm-mmd-${++mermaidSeq}`;
+    const stage = doc.createElement('div');
+    Object.assign(stage.style, { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' });
+    void lifetime.load(); mermaidMounts.set(div, lifetime);
+    lifetime.register(() => { stage.remove(); delete div.dataset.renderPending; });
     void ensureMermaid()
       .then(async mermaid => {
-        await Promise.all(['MathJax_Main', 'MathJax_Math', 'Noto Serif SC'].map(font => document.fonts.load('16px "' + font + '"')));
-        return mermaid.render(`cm-mmd-${++mermaidSeq}`, this.code);
+        lifetime.assertActive();
+        await Promise.all(['MathJax_Main', 'MathJax_Math', 'Noto Serif SC'].map(font => doc.fonts.load('16px "' + font + '"')));
+        lifetime.assertActive(); doc.body.appendChild(stage);
+        return mermaid.render(renderId, this.code, stage);
       })
       .then(({ svg }) => {
-        body.innerHTML = svg;
+        if (!lifetime.signal.aborted) { body.innerHTML = svg; view.requestMeasure(); }
       })
       .catch((err) => {
+        if (lifetime.signal.aborted) return;
         div.classList.add('mod-error');
         body.textContent = String(err?.message ?? err);
-        // mermaid leaves an orphaned error element in <body> on parse failure
-        document.getElementById(`dcm-mmd-${mermaidSeq}`)?.remove();
-      }).finally(() => { delete div.dataset.renderPending; });
+        view.requestMeasure();
+      }).finally(() => { stage.remove(); delete div.dataset.renderPending; });
     if (this.range && !view.state.readOnly) div.appendChild(sourceButton(view, this.range, '图表'));
     return div;
+  }
+  destroy(dom: HTMLElement) {
+    const lifetime = mermaidMounts.get(dom); mermaidMounts.delete(dom); lifetime?.unload();
   }
 }
 
@@ -662,7 +677,7 @@ export const mathBlockField = StateField.define<DecorationSet>({
 export const mermaidField = StateField.define<DecorationSet>({
   create: (state) => buildMermaid(state),
   update(value, tr) {
-    if (decorationInputsChanged(tr)) {
+    if (decorationInputsChanged(tr, { selection: true, context: ['allowBlockEffects', 'allowScriptExecution'], latex: false })) {
       return buildMermaid(tr.state);
     }
     return value.map(tr.changes);
@@ -867,7 +882,7 @@ function buildCalloutFolds(state: EditorState): DecorationSet {
 export const calloutFoldDeco = StateField.define<DecorationSet>({
   create: (state) => buildCalloutFolds(state),
   update(value, tr) {
-    if (decorationInputsChanged(tr, false) || tr.startState.field(calloutFoldState) !== tr.state.field(calloutFoldState)) {
+    if (decorationInputsChanged(tr, { selection: false, context: ['allowBlockEffects', 'allowScriptExecution'], latex: false }) || tr.startState.field(calloutFoldState) !== tr.state.field(calloutFoldState)) {
       return buildCalloutFolds(tr.state);
     }
     return value.map(tr.changes);
@@ -943,7 +958,7 @@ class TableWidget extends WidgetType {
             if ((e.target as HTMLElement).closest('.cm-col-handle,.cm-row-handle')) return;
             if ((e.key === 'Enter' && !e.shiftKey || e.key === 'Escape') && !e.isComposing) {
               e.preventDefault(); e.stopPropagation();
-              if (e.key === 'Escape') { editing = false; mount('reading'); } else (document.activeElement as HTMLElement)?.blur();
+              if (e.key === 'Escape') { editing = false; mount('reading'); } else (wrap.ownerDocument.activeElement as HTMLElement)?.blur();
             }
           }, true);
           cell.addEventListener('contextmenu', (e) => {
@@ -987,7 +1002,7 @@ class TableWidget extends WidgetType {
       const finish = (commit: boolean) => {
         const current = drag; if (!current) return;
         drag = undefined; feedback(); frame.classList.remove('is-dragging-row', 'is-dragging-column');
-        window.removeEventListener('scroll', cancelDrag, true); window.removeEventListener('keydown', cancelKey);
+        wrap.ownerDocument.defaultView!.removeEventListener('scroll', cancelDrag, true); wrap.ownerDocument.defaultView!.removeEventListener('keydown', cancelKey);
         current.handle.setAttribute('aria-pressed', 'false');
         if (frame.hasPointerCapture(current.pointer)) frame.releasePointerCapture(current.pointer);
         if (commit && current.moved && current.to >= 0 && current.from !== current.to) structural(current.axis === 'row'
@@ -999,7 +1014,7 @@ class TableWidget extends WidgetType {
         if (!handle || event.button !== 0 || drag) return;
         event.preventDefault(); event.stopPropagation();
         // Do not reorder a stale table while a cell owns an uncommitted draft.
-        if (wrap.querySelector('[contenteditable="true"]')) { (document.activeElement as HTMLElement)?.blur(); return; }
+        if (wrap.querySelector('[contenteditable="true"]')) { (wrap.ownerDocument.activeElement as HTMLElement)?.blur(); return; }
         const axis = handle.dataset.axis as 'row' | 'column';
         const items = axis === 'row' ? [...(table.tBodies[0]?.rows ?? [])] : [...table.tHead!.rows[0].cells];
         const index = Number(handle.dataset.index);
@@ -1007,7 +1022,7 @@ class TableWidget extends WidgetType {
           bounds: items.map(item => item.getBoundingClientRect()), startX: event.clientX, startY: event.clientY, moved: false };
         handle.setAttribute('aria-pressed', 'true'); frame.classList.add('is-dragging-' + axis);
         frame.setPointerCapture(event.pointerId); feedback();
-        window.addEventListener('scroll', cancelDrag, true); window.addEventListener('keydown', cancelKey);
+        wrap.ownerDocument.defaultView!.addEventListener('scroll', cancelDrag, true); wrap.ownerDocument.defaultView!.addEventListener('keydown', cancelKey);
       });
       frame.addEventListener('pointermove', event => {
         if (!drag || drag.pointer !== event.pointerId) return;

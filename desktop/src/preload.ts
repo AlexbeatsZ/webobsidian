@@ -12,6 +12,16 @@ const desktopApi = {
   platform: process.platform,
   nativePlugins: !!nativeArg,
   openVaultPath: (path: string): Promise<void> => ipcRenderer.invoke('desktop:open-vault-path', path),
+  onBeforeClose: (listener: () => Promise<void>) => {
+    const handler = (_event: unknown, token: string) => {
+      void Promise.resolve().then(listener).then(
+        () => ipcRenderer.send('desktop:close-result', token, { ok: true }),
+        error => ipcRenderer.send('desktop:close-result', token, { ok: false, error: String(error) }),
+      );
+    };
+    ipcRenderer.on('desktop:prepare-close', handler);
+    return () => ipcRenderer.removeListener('desktop:prepare-close', handler);
+  },
   webviewer: {
     subscribe: (listener: (page: { sourceGuestId: number; url: string }) => void) => {
       const handler = (_event: unknown, page: { sourceGuestId: number; url: string }) => listener(page);
@@ -40,6 +50,7 @@ if (process.isMainFrame) {
   ipcRenderer.on('desktop:command', (_event, command: string) => {
     window.dispatchEvent(new CustomEvent('desktop-command', { detail: command }));
   });
+  ipcRenderer.on('desktop:close-cancelled', () => window.dispatchEvent(new Event('desktop-close-cancelled')));
   window.addEventListener('DOMContentLoaded', () => void installTitleBar(), { once: true });
 }
 }

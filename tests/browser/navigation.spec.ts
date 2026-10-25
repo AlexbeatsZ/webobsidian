@@ -176,9 +176,10 @@ test.describe('workspace navigation', () => {
     const contents: Record<string, string> = { 'a.md': '# Start\n\n[[#End]] and [[b#Other]]\n\n' + 'padding\n\n'.repeat(55) + '# End\n\nfinish', 'b.md': '# Other\n\nbody' };
     await page.route('**/api/**', async route => {
       const url = new URL(route.request().url());
+      if (url.pathname === '/api/vault-identity') return route.fallback();
       if (url.pathname === '/api/files/content') {
         const path = url.searchParams.get('path')!;
-        return route.fulfill({ json: { path, content: contents[path] ?? '', revision: 'fixture' } });
+        return route.fulfill({ json: { path, content: contents[path] ?? '', revision: 'fixture', vault: 'browser-fixture' } });
       }
       if (url.pathname === '/api/resolve') {
         const target = url.searchParams.get('target') ?? '';
@@ -190,12 +191,16 @@ test.describe('workspace navigation', () => {
     });
     await page.evaluate(async () => {
       const module = (path: string) => import(path);
-      const { useStore } = await module('/src/lib/store.ts');
+      const storeUrls = [...new Set(performance.getEntriesByType('resource')
+        .map(entry => entry.name).filter(name => new URL(name).pathname === '/src/lib/store.ts'))];
+      if (storeUrls.length !== 1) throw new Error(`Expected one loaded workspace store module, got ${JSON.stringify(storeUrls)}`);
+      const { useStore } = await module(storeUrls[0]);
       useStore.setState({ activePath: null, tabs: [], history: [], histIndex: -1, rightTabs: [], rightActiveId: null, rightOpen: true });
       await window.renderHarness.workspace('a.md');
       (window as any).navigationStore = useStore;
     });
     await expect(page.locator('.workspace .cm-content')).toContainText('Start');
+    expect(await page.evaluate(() => (window as any).navigationStore.getState().activePath)).toBe('a.md');
   });
 
   test('back and forward restore same-note and cross-note selection without adding entries', async ({ page }) => {

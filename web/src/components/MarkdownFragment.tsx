@@ -1,11 +1,18 @@
-import { useMemo, useSyncExternalStore } from 'react';
+import { Component, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { DocumentSession } from '@webobsidian/markdown-core';
 import MarkdownView from './MarkdownView';
 import type { FragmentOptions, RenderContext } from '../lib/renderContext';
 
+class FragmentBoundary extends Component<{ onError: (error: Error) => void; children: ReactNode }, { error?: Error }> {
+  state: { error?: Error } = {};
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) { this.props.onError(error); }
+  render() { return this.state.error ? <span role="alert">{this.state.error.message}</span> : this.props.children; }
+}
+
 /** The same engine in a small host. A cell owns a local draft until focus leaves. */
-export function mountMarkdownFragment(host: HTMLElement, source: string, options: FragmentOptions & { context: RenderContext }): () => void {
+export function mountMarkdownFragment(host: HTMLElement, source: string, options: FragmentOptions & { context: RenderContext; onError?: (error: Error) => void }): () => void {
   host.dataset.renderPending = 'true';
   const root = createRoot(host);
   let destroyed = false;
@@ -24,14 +31,22 @@ export function mountMarkdownFragment(host: HTMLElement, source: string, options
     const context = useMemo(() => ({ ...options.context, sourceFragment: true, equations: options.equations, mathSource: options.mathSource }), []);
     return <div onBlurCapture={() => {
       queueMicrotask(() => {
-        if (!destroyed && !host.contains(document.activeElement)) options.onCommit?.(session.snapshot.raw);
+        if (!destroyed && !host.contains(host.ownerDocument.activeElement)) options.onCommit?.(session.snapshot.raw);
       });
     }}><MarkdownView snapshot={snapshot} mode={options.mode ?? 'reading'} context={context}
       layout="embedded" showTitle={false} autoFocus={options.autoFocus} onReady={(view) => {
+        if (destroyed) return;
         unbind?.(); unbind = view ? options.context.bindEditor?.(view, { undo: () => session.undo(), redo: () => session.redo() }) : undefined;
         if (view) { delete host.dataset.renderPending; options.onReady?.(); }
       }} {...callbacks} /></div>;
   }
-  root.render(<Fragment />);
-  return () => { destroyed = true; unbind?.(); queueMicrotask(() => root.unmount()); };
+  root.render(<FragmentBoundary onError={error => {
+    if (destroyed) return;
+    delete host.dataset.renderPending; host.dataset.renderError = 'fragment'; options.onError?.(error);
+  }}><Fragment /></FragmentBoundary>);
+  return () => {
+    if (destroyed) return;
+    destroyed = true; delete host.dataset.renderPending; unbind?.();
+    queueMicrotask(() => root.unmount());
+  };
 }

@@ -16,6 +16,8 @@ import {
 } from '@webobsidian/search-core';
 import { parseNote, type ParsedNote } from './markdown.js';
 import { SourceDocument } from '@webobsidian/markdown-core';
+import type { SearchHit, MatchContext, NoteMatches } from '../contracts.js';
+export type { SearchHit, MatchContext, NoteMatches } from '../contracts.js';
 
 /**
  * QMD — the WebObsidian search engine.
@@ -32,33 +34,6 @@ interface QmdDoc {
   path: string;
   body: string;
   [field: string]: string;
-}
-
-export interface SearchHit {
-  path: string;
-  title: string;
-  score: number;
-  tags: string[];
-  snippet: string;
-  matchedField?: string;
-  matchKind?: 'literal' | 'pinyin';
-}
-
-/** One match snippet within a note. `ranges` are [start,len] offsets into `text`
- *  marking where the query terms occur (for highlighting). */
-export interface MatchContext {
-  text: string;
-  source?: { from: number; to: number; text: string };
-  ranges: [number, number][];
-  /** ellipsis flags — context is clipped from the surrounding body. */
-  pre: boolean;
-  post: boolean;
-}
-
-export interface NoteMatches {
-  path: string;
-  count: number; // total term occurrences in the note's body
-  contexts: MatchContext[];
 }
 
 const FIELDS = ['title', 'headings', 'tags', 'path', 'body'] as const;
@@ -121,10 +96,10 @@ export class QmdEngine {
   }
 
   upsertNote(rel: string, note: ParsedNote): void {
-    this.catalog.putNote(rel, note);
     const doc = this.fromNote(rel, note);
     if (this.mini.has(rel)) this.mini.replace(doc);
     else this.mini.add(doc);
+    this.catalog.putNote(rel, note);
   }
 
   remove(rel: string): void {

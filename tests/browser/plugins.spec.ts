@@ -1,4 +1,5 @@
-import { test, expect, _electron as electron } from '@playwright/test';
+import { _electron as electron } from '@playwright/test';
+import { test, expect } from './test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -28,7 +29,8 @@ async function setup(
   entries: any[],
   raw = '# Fixture\n\nplain\n\n```fixture\nhello\n```\n\nend',
   data: Record<string, any> = {},
-  extras: Record<string, string> = {}
+  extras: Record<string, string> = {},
+  baseURL?: string
 ) {
   const contents: Record<string, string> = {
     'fixture.md': raw,
@@ -40,6 +42,7 @@ async function setup(
       url = new URL(request.url()),
       body = request.postDataJSON?.();
     const json = (value: any) => route.fulfill({ json: value });
+    if (url.pathname === '/api/vault-identity') return json({ vault: 'browser-fixture' });
     if(url.pathname==='/api/writing')return json({version:1,migration:'fixture',latex:{snippets:'[]',snippetVariables:'{}',...data['obsidian-latex-suite']},linter:migrateLinterReplacements(data['obsidian-linter']??{}),hotkeys:{}});
     if (url.pathname === '/api/plugins/')
       return json({ plugins: entries.map(({ code, ...m }) => m) });
@@ -85,6 +88,7 @@ async function setup(
         path: p,
         content: contents[p!] ?? '',
         revision: 'initial',
+        vault: 'browser-fixture',
       });
     }
     if (url.pathname === '/api/plugins/adapter') {
@@ -105,7 +109,7 @@ async function setup(
     if (url.pathname === '/api/properties') return json({ properties: [] });
     return json({});
   });
-  await page.goto('http://127.0.0.1:5179/__plugin-test');
+  await page.goto(baseURL ? new URL('/__plugin-test', baseURL).href : '/__plugin-test');
   await page.waitForSelector('[data-plugin-ready="true"]');
   await page.waitForSelector('.cm-content');
   return { data, contents };
@@ -113,8 +117,6 @@ async function setup(
 test('real command, settings, metadata, CM extension, fenced renderer and unload', async ({
   page,
 }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
   const { data } = await setup(page, [
     {
       id: 'fixture',
@@ -170,6 +172,7 @@ test('real command, settings, metadata, CM extension, fenced renderer and unload
   });
   expect(metadata.frontmatter.tags).toEqual(['test']);
   expect(metadata.headings[0].heading).toBe('Other');
+  await expect.poll(() => page.evaluate(() => (window as any).fixtureTicks ?? 0)).toBeGreaterThan(0);
   await page.evaluate(() => {
     const h = (window as any).pluginHarness;
     h.sharedApp.vault.trigger('fixture');
@@ -177,6 +180,9 @@ test('real command, settings, metadata, CM extension, fenced renderer and unload
     h.sharedApp.vault.trigger('fixture');
   });
   expect(await page.evaluate(() => (window as any).fixtureEvents)).toBe(1);
+  const stoppedTicks = await page.evaluate(() => (window as any).fixtureTicks);
+  await page.waitForTimeout(120);
+  expect(await page.evaluate(() => (window as any).fixtureTicks)).toBe(stoppedTicks);
   expect(await page.evaluate(() => (window as any).fixtureChildUnloaded)).toBe(
     true
   );
@@ -186,7 +192,6 @@ test('real command, settings, metadata, CM extension, fenced renderer and unload
       ...[...(window as any).pluginHarness.pluginCommands.keys()].filter((id: string) => id.startsWith('fixture:')),
     ])
   ).toEqual([]);
-  expect(errors).toEqual([]);
 });
 
 test('current original plugins load against the host', async ({ page }) => {
@@ -343,6 +348,7 @@ test('current original plugins load against the host', async ({ page }) => {
   }
   console.log(JSON.stringify(inventory, null, 2));
   expect(inventory.filter((i) => i.errors?.length)).toEqual([]);
+  expect(inventory.filter((i) => i.logs?.length)).toEqual([]);
   expect(
     inventory
       .flatMap((i) => i.statuses ?? [])
@@ -357,7 +363,7 @@ test('current original plugins load against the host', async ({ page }) => {
   }
 });
 
-test('native original plugins use isolated Node filesystem and MCP runtime', async () => {
+test('native original plugins use isolated Node filesystem and MCP runtime', async ({ baseURL }) => {
   test.skip(
     !process.env.OBSIDIAN_PLUGIN_VAULTS,
     'Original native plugin sources are opt-in'
@@ -443,7 +449,7 @@ test('native original plugins use isolated Node filesystem and MCP runtime', asy
           cacheFolder: '.obsidian/plugins/local-latex-renderer/cache',
         };
     }
-    await setup(page, entries, '# Fixture\n\nplain', data);
+    await setup(page, entries, '# Fixture\n\nplain', data, {}, baseURL);
     await expect
       .poll(() =>
         page.evaluate(
@@ -458,6 +464,7 @@ test('native original plugins use isolated Node filesystem and MCP runtime', asy
       ...(window as any).pluginHarness.pluginStatuses.values(),
     ]);
     console.log('native', JSON.stringify({ statuses, errors, logs }));
+    expect(statuses).toHaveLength(entries.length);
     expect(statuses.every((s: any) => s.state === 'loaded')).toBe(true);
     expect(errors).toEqual([]);
     expect(logs).toEqual([]);

@@ -5,6 +5,7 @@ export const test = base.extend<{ runtimeErrors: void; expectedErrors: string[] 
   runtimeErrors: [async ({ page, expectedErrors }, use) => {
     // Vite's test page has no icon; fulfill the browser's implicit icon request.
     await page.route('**/favicon.ico', route => route.fulfill({ status: 204 }));
+    await page.route('**/api/vault-identity', route => route.fulfill({ json: { vault: 'browser-fixture' } }));
     await page.route('**/api/writing', route => route.fulfill({ json: {
       version: 1, migration: 'fixture', latex: { snippets: '[]', snippetVariables: '{}' }, linter: {}, hotkeys: {},
     } }));

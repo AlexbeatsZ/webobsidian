@@ -1,5 +1,57 @@
 # Shared ownership follow-up (2026-10-23)
 
+## Architecture implementation and acceptance (2026-10-24)
+
+This separately authorized implementation supersedes the old source-only testing
+restriction for this batch. Detailed evidence and remaining boundaries belong to
+`tests/reports/architecture-20261024.md`; historical sections below retain their
+original validation scope.
+
+- Vault file requests carry an explicit root identity. The existing request
+  adapter caches it, DocumentRegistry captures it per session, and raw-resource
+  URLs carry it as a query parameter. Missing/stale file identities fail closed;
+  delayed responses cannot silently bind a document to another Vault. This is a
+  root identity, not a per-switch session epoch or a replacement for content CAS.
+- The existing maintenance gate now counts actual handler promises and streaming
+  pipelines, not response close events. GET configuration migrations participate.
+  Detached Git receives its own idempotent release even when started inside an
+  admitted request. Exclusive maintenance does not wait on its own handler.
+- Text, binary and plugin data writes share the existing canonical-path queue.
+  Unique temporary files plus rename replace normal writes; exclusive creation
+  links a completed temporary file without overwriting an existing destination.
+  Binary writes neither read old bytes nor hash them. Hard-link support remains
+  a filesystem requirement for exclusive creation; unsupported filesystems fail
+  rather than falling back to an overwrite or exposing partially written data.
+- The existing indexing queue reports indexed/failed/skipped. A saved Tag Page
+  returns its path even when indexing fails. The dialog warns and can retry open
+  without another create; background errors reach the existing notification UI.
+  These results do not promise transactional rollback of Search and Links.
+- Workspace persistence distinguishes desired, in-flight and acknowledged state,
+  serializes writes, retries failures at 1/2/4 seconds and supports explicit flush.
+  Failed initial reads cannot overwrite state with defaults. Server persistence
+  serializes reads/writes/Vault selection and treats only ENOENT as empty.
+- Native close uses token-validated IPC to await existing document saves and
+  workspace flush, then checks dirty/conflict/Canvas/pending mutations. Failure
+  or timeout keeps the window and restores editing. Browser beforeunload and
+  Android/background termination remain best effort, not asynchronous shutdown
+  guarantees. No independent document writer or recovery database is introduced.
+- Browser-safe DTOs belong to `server/src/contracts.ts`; the existing Automation
+  validation schema belongs to `server/src/contracts/automation.ts`. Services
+  reexport types for compatibility; frontend imports do not traverse IO services.
+  Writing uses the same scoped request/error/mutation adapter as other features.
+
+No new parser, document history, index, MathJax queue or general event framework
+is added. The targeted Writing/editor import cycles are removed, not every SCC:
+MarkdownView/MarkdownFragment and the existing Lua-snippet/Linter groups remain.
+
+The existing decoration dependency helper compares semantic context values.
+Mermaid, fold, HTML and block layout explicitly depend on execution capabilities,
+not unrelated callbacks/equation contexts or LaTeX settings. Mandatory document,
+mode, source-region and refresh invalidation remains. The benchmark measures
+bounded repeated context reconfiguration, not typing latency. Broad NoteEmbed
+invalidation is deliberately retained until macro/equation/offset dependencies
+can be represented without stale rendering.
+
 The user approved the nine-work-package review of65ef0c3. This extends existing
 owners and removes their bypasses. Source/diff review is the evidence for this
 batch: tests, typechecks, builds, fixtures and app/server/browser/device acceptance

@@ -5,10 +5,15 @@ import { mathRegions, formulaAt, type MathRegion } from '@webobsidian/markdown-c
 import { syntaxModel } from '../../../syntaxModel';
 import { getLatexSuiteConfig } from '../snippets/codemirror/config';
 import { formulaTree } from '../parser/language';
-import { MathMode, type Bounds } from './context';
+import type { Bounds } from './context';
 import { sourceIsOpen } from '../../../sourceControls';
 import { mathSourceVisible } from './mathPresentation';
 
+export enum MathMode {
+  InlineMath,
+  BlockMath,
+  CodeMath,
+}
 export type MathBounds = Bounds & {
   mode: MathMode;
   tree: SyntaxNode | null;

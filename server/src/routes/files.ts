@@ -8,6 +8,7 @@ import { getSettings } from '../services/settings.js';
 import { resolveFile } from '../services/fileindex.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
+import { vaultConfigurationIdentity } from '../services/vaultConfiguration.js';
 
 export const filesRouter = Router();
 
@@ -35,7 +36,7 @@ filesRouter.get(
       if (resolved) rel = resolved;
     }
     if (isTextFile(rel) && req.query.raw !== '1') {
-      res.json({ path: rel, ...(await readFileSnapshot(rel)), encoding: 'utf8' });
+      res.json({ path: rel, ...(await readFileSnapshot(rel)), encoding: 'utf8', vault: (await vaultConfigurationIdentity()).vault });
     } else {
       // Stream with Range support so embedded <video>/<audio> can seek.
       const abs = await resolveInVault(rel);
