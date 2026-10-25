@@ -477,6 +477,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-editor .cm-content, .cm-editor .cm-inline-title { font-family: var(--font-text);
   box-sizing: border-box; min-width: 0; margin: 0 auto; padding: 28px var(--file-margins) 40vh; }
 .cm-editor .cm-content { font-size: var(--font-text-size); line-height: var(--line-height-normal); caret-color: var(--text-normal); }
+.cm-editor .cm-note-title-row { font-size: var(--font-text-size); }
 .cm-editor .cm-inline-title { width: 100%; padding-bottom: .5em; }
 .markdown-source-view.is-readable-line-width .cm-content,
 .markdown-source-view.is-readable-line-width .cm-inline-title { max-width: var(--file-line-width); }

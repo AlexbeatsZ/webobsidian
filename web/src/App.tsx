@@ -32,6 +32,7 @@ import { clearNativeFeaturePreferences } from './lib/nativeFeaturePreferences';
 import { documents } from './lib/documents';
 import { initializePropertyTypes } from './lib/propertyTypes';
 import { configureDebug, debugEnabled, recordDebug } from './lib/debug';
+import { defaultUiSettings, type UiSettings } from '../../server/src/contracts/uiSettings';
 
 export default function App() {
   const loadTree = useStore((s) => s.loadTree);
@@ -44,7 +45,32 @@ export default function App() {
   const setPalette = useStore((s) => s.setPalette);
   const save = useStore((s) => s.save);
   const toast = useStore((s) => s.toast);
-  const [theme, setTheme] = useState<'theme-dark' | 'theme-light'>('theme-light');
+  const [ui, setUi] = useState<UiSettings>(defaultUiSettings);
+  const theme = ui.theme === 'obsidian-dark' ? 'theme-dark' : 'theme-light';
+
+  useEffect(() => {
+    let active = true, changed = false;
+    const apply = (settings: { ui: UiSettings }) => {
+      setUi({ ...defaultUiSettings, ...settings.ui });
+    };
+    const update = (event: Event) => { changed = true; apply((event as CustomEvent<{ ui: UiSettings }>).detail); };
+    window.addEventListener('settings-changed', update);
+    void api.getSettings().then(settings => { if (active && !changed) apply(settings); }).catch(() => {});
+    return () => { active = false; window.removeEventListener('settings-changed', update); };
+  }, []);
+
+  useEffect(() => { configureDebug(ui.debugRecording, ui.debugSource); }, [ui.debugRecording, ui.debugSource]);
+
+  useLayoutEffect(() => {
+    const body = document.body;
+    const size = body.style.getPropertyValue('--font-text-size'), width = body.style.getPropertyValue('--file-line-width');
+    body.style.setProperty('--font-text-size', `${ui.fontTextSize}px`);
+    body.style.setProperty('--file-line-width', `${ui.fileLineWidth}px`);
+    return () => {
+      if (size) body.style.setProperty('--font-text-size', size); else body.style.removeProperty('--font-text-size');
+      if (width) body.style.setProperty('--file-line-width', width); else body.style.removeProperty('--file-line-width');
+    };
+  }, [ui.fontTextSize, ui.fileLineWidth]);
 
   useEffect(() => documents.subscribe(snapshot => {
     if (debugEnabled()) recordDebug('document.state', { path: snapshot.id, version: snapshot.version,
@@ -82,10 +108,6 @@ export default function App() {
           return useStore.getState().openFile(deepLink);
         }
       })
-      .catch(() => {});
-    api
-      .getSettings()
-      .then((s) => { setTheme(s?.ui?.theme === 'obsidian-dark' ? 'theme-dark' : 'theme-light'); configureDebug(Boolean(s?.ui?.debugRecording), s?.ui?.debugSource !== false); })
       .catch(() => {});
     loadPlugins().catch(() => {});
     // websocket live updates

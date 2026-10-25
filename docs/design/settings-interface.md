@@ -24,6 +24,34 @@ No editor selection/input subscriptions are added.
 
 ## Configuration ownership
 
+### Document typography (2026-10-25)
+
+Appearance exposes document font size (integer12–36px, default18) and readable
+column width (integer320–2000px, default700). Width includes the existing32px
+padding on each side; the default net text area is636px. Narrow panes still
+shrink to their available width. Defaults preserve existing layout rather than
+silently widening every Vault. Restore defaults changes only these two fields.
+
+The existing server settings `ui` object owns persistence. The shared pure
+`contracts/uiSettings` schema supplies defaults/ranges to storage, route validation
+and the Appearance controls. Invalid partial updates fail before persistence.
+Successful UI saves notify the mounted App through the existing API facade;
+App projects values into `--font-text-size` and `--file-line-width` on the body.
+There is no extra storage/index, editor recreation or page reload. Failed saves
+leave the last applied appearance and expose a retryable error.
+
+UI-only writes are ordered to prevent old responses restoring obsolete sizes.
+Vault switches retain their separate maintenance behavior and must not be
+queued behind ordinary UI writes in a way that deadlocks pending-mutation drain.
+Existing document sessions, undo and selection remain untouched. Main title,
+content and both view modes consume the same typography; UI control font sizes
+remain separate. Existing CodeMirror geometry updates and MathJax measurement
+own formula invalidation; no additional resize observer or renderer is introduced.
+
+User CSS remains possible, but an explicitly scoped custom override can still
+supersede inherited document variables. These preferences do not promise exact
+visual parity with every Obsidian theme or change monospace font glyph metrics.
+
 Settings exposes ordinary toggles, file paths, external open, copy-path and reload.
 ConfigurationFile is the shared visual row, consuming desktop.openVaultPath. It
 owns no configuration store or editor. Browser clients can copy paths; desktop

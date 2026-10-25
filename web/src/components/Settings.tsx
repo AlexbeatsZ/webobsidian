@@ -26,6 +26,7 @@ import { notifyIndexChanged } from '../lib/indexEvents';
 import { documents } from '../lib/documents';
 import { workspaceMaintenanceBlockers } from '../lib/vaultMaintenance';
 import { SettingRow as Row, SettingGroup } from './SettingRow';
+import { documentAppearance, UiSettingsSchema, type UiSettings } from '../../../server/src/contracts/uiSettings';
 
 type Section =
   'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
@@ -81,11 +82,12 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
-    if (open)
-      api
-        .getSettings()
-        .then(setSettings)
-        .catch(() => {});
+    if (!open) return;
+    let active = true, changed = false;
+    const update = (event: Event) => { changed = true; setSettings((event as CustomEvent).detail); };
+    window.addEventListener('settings-changed', update);
+    void api.getSettings().then(value => { if (active && !changed) setSettings(value); }).catch(() => {});
+    return () => { active = false; window.removeEventListener('settings-changed', update); };
   }, [open]);
 
   useEffect(() => {
@@ -569,7 +571,15 @@ function Plugins() {
 }
 
 function Appearance({ s }: { s: any }) {
-  const [theme, setTheme] = useState(s.ui.theme);
+  const [fontTextSize, setFontTextSize] = useState(String(s.ui.fontTextSize ?? documentAppearance.fontTextSize.default));
+  const [fileLineWidth, setFileLineWidth] = useState(String(s.ui.fileLineWidth ?? documentAppearance.fileLineWidth.default));
+  const [uiError, setUiError] = useState(''), [saving, setSaving] = useState(false), [saved, setSaved] = useState(false);
+  const saveGeneration = useRef(0);
+  useEffect(() => {
+    if (saving || uiError) return;
+    setFontTextSize(String(s.ui.fontTextSize ?? documentAppearance.fontTextSize.default));
+    setFileLineWidth(String(s.ui.fileLineWidth ?? documentAppearance.fileLineWidth.default));
+  }, [s.ui.fontTextSize, s.ui.fileLineWidth, saving, uiError]);
   const [snippets, setSnippets] = useState<CssSnippets>();
   const [query, setQuery] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const reloadSnippets = () => {
@@ -583,22 +593,56 @@ function Appearance({ s }: { s: any }) {
     void readCssSnippets().then(value => { if (active) setSnippets(value); }).catch(cause => { if (active) setError(String(cause)); });
     return () => { active = false; };
   }, []);
-  const save = async (t: string) => {
-    setTheme(t);
-    await api.putSettings({ ui: { theme: t } });
-    location.reload();
+  const save = async (patch: Partial<UiSettings>) => {
+    const generation = ++saveGeneration.current;
+    setUiError(''); setSaving(true); setSaved(false);
+    try {
+      await api.putSettings({ ui: patch });
+      if (generation === saveGeneration.current) setSaved(true);
+    } catch (cause) {
+      if (generation === saveGeneration.current) setUiError(`保存失败：${String(cause)}`);
+    } finally { if (generation === saveGeneration.current) setSaving(false); }
+  };
+  const changeNumber = (key: keyof typeof documentAppearance, value: string) => {
+    if (key === 'fontTextSize') setFontTextSize(value); else setFileLineWidth(value);
+    const result = value.trim() ? UiSettingsSchema.shape[key].safeParse(Number(value)) : undefined;
+    if (!result?.success) {
+      const limits = documentAppearance[key];
+      ++saveGeneration.current; setSaving(false); setSaved(false);
+      setUiError(`请输入 ${limits.min}–${limits.max} 之间的整数。`);
+      return;
+    }
+    void save({ [key]: result.data });
   };
   return (
     <div>
       <h2>外观</h2>
       <SettingGroup title="主题">
       <Row name="基础颜色" desc="设置应用界面、编辑和阅读视图的配色">
-        <select className="text-input" value={theme} onChange={(e) => save(e.target.value)}>
+        <select className="text-input" value={s.ui.theme} onChange={event => void save({ theme: event.target.value as UiSettings['theme'] })}>
           <option value="obsidian-dark">深色</option>
           <option value="obsidian-light">浅色</option>
         </select>
       </Row>
       </SettingGroup>
+      <SettingGroup title="正文">
+        <Row name="正文字号" desc={`编辑和阅读同步生效，${documentAppearance.fontTextSize.min}–${documentAppearance.fontTextSize.max} px；不改变界面字号。`}>
+          <input className="text-input" type="number" min={documentAppearance.fontTextSize.min} max={documentAppearance.fontTextSize.max}
+            step={1} value={fontTextSize} onChange={event => changeNumber('fontTextSize', event.target.value)} />
+        </Row>
+        <Row name="正文列宽（含左右边距）" desc={`编辑和阅读共用，${documentAppearance.fileLineWidth.min}–${documentAppearance.fileLineWidth.max} px；默认 700 px，扣除两侧各 32 px 边距后正文为 636 px。窄窗口自动收窄。`}>
+          <input className="text-input" type="number" min={documentAppearance.fileLineWidth.min} max={documentAppearance.fileLineWidth.max}
+            step={1} value={fileLineWidth} onChange={event => changeNumber('fileLineWidth', event.target.value)} />
+        </Row>
+        <Row name="恢复默认正文外观" desc="正文字号 18 px，正文列宽 700 px。">
+          <button type="button" disabled={saving} onClick={() => {
+            setFontTextSize(String(documentAppearance.fontTextSize.default)); setFileLineWidth(String(documentAppearance.fileLineWidth.default));
+            void save({ fontTextSize: documentAppearance.fontTextSize.default, fileLineWidth: documentAppearance.fileLineWidth.default });
+          }}>恢复默认</button>
+        </Row>
+      </SettingGroup>
+      {uiError && <p role="alert">{uiError}</p>}
+      <p role="status" aria-live="polite">{saving ? '正在保存…' : saved ? '已保存' : ''}</p>
       <SettingGroup title="CSS 样式片段">
         <ConfigurationFile name="片段文件夹" path=".obsidian/snippets">
           <button type="button" disabled={busy} onClick={reloadSnippets}>刷新</button>

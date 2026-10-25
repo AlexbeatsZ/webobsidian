@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { readCssSnippets, readCssSnippet, setCssSnippetEnabled } from '../services/cssSnippets.js';
 import { readHotkeys, patchHotkeys } from '../services/hotkeySettings.js';
 import { DebugLog } from '../services/debugLog.js';
+import { UiSettingsSchema } from '../contracts/uiSettings.js';
 
 let switchRuntime = async (_commit: () => Promise<void>): Promise<void> => { throw new Error('Vault switch runtime is not ready'); };
 /** The server owns its existing watcher and index lifecycle. */
@@ -57,6 +58,8 @@ settingsRouter.put(
   '/',
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
+    const ui = body.ui === undefined ? undefined : UiSettingsSchema.partial().strict().safeParse(body.ui);
+    if (ui && !ui.success) throw Object.assign(new Error(ui.error.message), { status: 400 });
     let previous = await getSettings();
     let previousRoot = previous.vault.path;
     // A changed vault.path turns the whole files API into read/write over that
@@ -85,7 +88,7 @@ settingsRouter.put(
           if (!d.search.chinese.migration) d.search.chinese.migration = 'Native settings';
         }
       }
-      if (body.ui) Object.assign(d.ui, body.ui);
+      if (ui?.success) Object.assign(d.ui, ui.data);
     }); };
     if (typeof body.vault?.path === 'string') {
       await withVaultMaintenance(drainFileUpdates, async () => {

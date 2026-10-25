@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { config, SETTINGS_FILE } from '../config.js';
+import { UiSettingsSchema } from '../contracts/uiSettings.js';
 
 /** ---- Schema (PRD §6) ---------------------------------------------------- */
 
@@ -81,14 +82,7 @@ const SettingsSchema = z.object({
       indexFrontmatter: z.boolean().default(true),
     })
     .default({}),
-  ui: z
-    .object({
-      theme: z.enum(['obsidian-dark', 'obsidian-light']).default('obsidian-light'),
-      defaultView: z.enum(['live', 'source', 'reading']).default('live'),
-      debugRecording: z.boolean().default(false),
-      debugSource: z.boolean().default(true),
-    })
-    .default({}),
+  ui: UiSettingsSchema.default({}),
   plugins: z
     .object({
       enabled: z.array(z.string()).default([]),
