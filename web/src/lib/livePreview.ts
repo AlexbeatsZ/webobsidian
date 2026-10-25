@@ -448,7 +448,8 @@ class MathWidget extends WidgetType {
     const mount: MathMount = {
       stop: () => {},
       measure: () => {
-        const container = this.display ? body : view.contentDOM;
+        const container = this.display ? span.parentElement : view.contentDOM;
+        if (!container) return;
         if (!span.isConnected || !container.clientWidth) return;
         const metrics = readMathMetrics(body, container);
         if (!invalid && previous?.em === metrics.em && previous.containerWidth === metrics.containerWidth && previous.family === metrics.family) return;
@@ -1827,7 +1828,6 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         // Code block lines: HyperMD-codeblock(-begin/-end) like Obsidian.
-        // The ``` fences are concealed while the caret is outside the block.
         // Indented code (4 spaces): mono font, NO background — just the indent
         // guide on the leading unit, like Obsidian.
         if (name === 'CodeBlock') {
@@ -1845,27 +1845,35 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (name === 'FencedCode') {
           const first = doc.lineAt(node.from).number;
           const last = doc.lineAt(Math.min(node.to, doc.length)).number;
-          const blockTouched = touches(node.from, Math.min(node.to, doc.length));
-          // language from the fence info-string (§7) → flair label top-right
+          const blockTouched = !readonly && !forceRendered(view.state, node) &&
+            sel.ranges.some(range => range.from <= node.to && range.to >= node.from);
+          const fences: { from: number; to: number }[] = [];
+          for (let child = node.node.firstChild; child; child = child.nextSibling) {
+            if (child.name === 'CodeMark') fences.push(child);
+          }
           const code = view.state.field(blockModel).containers.find((block) => block.kind === 'code' && block.from === doc.line(first).from);
           const lang = code?.language ?? '';
           for (let i = first; i <= last; i++) {
             const l = doc.line(i);
             const logical = stripQuotePrefix(l.text, code?.depth ?? 0);
             const prefixLength = l.text.length - logical.length;
-            const isFence = /^\s*(`{3,}|~{3,})/.test(logical);
+            const fence = fences.find(mark => mark.from >= l.from && mark.from <= l.to);
             all.push(
               Decoration.line({
                 class:
                   'HyperMD-codeblock HyperMD-codeblock-bg' +
                   (i === first ? ' HyperMD-codeblock-begin' : '') +
                   (i === last ? ' HyperMD-codeblock-end' : ''),
-                attributes: i === first && lang ? { 'data-lang': lang } : undefined,
+                attributes: !blockTouched && i === first && lang ? { 'data-lang': lang } : undefined,
               }).range(l.from, l.from),
             );
-            if (!blockTouched && isFence && (i === first || i === last) && l.to > l.from) {
-              pushReplace(l.from, l.to, hidden);
-            } else if (!blockTouched && prefixLength) pushReplace(l.from, l.from + prefixLength, hidden);
+            if (readonly && fence) pushReplace(l.from, l.to, hidden);
+            else {
+              if (!blockTouched && prefixLength) pushReplace(l.from, l.from + prefixLength, hidden);
+              if (fence) all.push(Decoration.mark({ class: 'cm-formatting cm-formatting-code-block',
+                attributes: blockTouched ? undefined : { style: 'color: transparent' },
+              }).range(fence.from, l.to));
+            }
           }
           return;
         }

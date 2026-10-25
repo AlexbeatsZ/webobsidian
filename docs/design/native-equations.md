@@ -78,6 +78,21 @@ from the package root. No equations -> metadata -> equations recursion exists.
 
 ## Rendering and contexts
 
+Display formulas retain intrinsic width, including overflow beyond the document
+column. The MathWidget host grows with its SVG and automatic label; its three-column
+grid centers short formulas and puts the label after long formulas with a real gap.
+Do not restore absolute-positioned labels, fixed horizontal reservation, SVG
+max-width, or a separately scrolling formula body. The editor scroller owns
+horizontal navigation. Explicit TeX tags remain MathJax-owned.
+
+MathWidget measures the parent source line, not its expanding body, for conversion
+metrics. This prevents output width from feeding back into repeated conversions.
+The existing queue/cache/cancellation and view-local lifetime remain authoritative.
+The 2026-10-25 feedback regression covers automatic/explicit labels, source previews,
+reading, print DOM, nested contexts, resize and cancellation. Browser evidence is
+not installed-package or OS-print acceptance; see
+`tests/reports/feedback-equation-number-20261025.md`.
+
 The existing MathWidget displays automatic numbers as a separate label. Numeric
 changes do not enter the TeX cache key. MathJax stays configured with `tags:none`;
 its conversion order, viewport, duplicate views and print copies do not own

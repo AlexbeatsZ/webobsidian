@@ -1,13 +1,16 @@
-.cm-math-rendered.cm-numbered-equation {
-  position: relative;
-  box-sizing: border-box;
-  padding-inline: 4em;
+.cm-math-rendered.math-block.cm-numbered-equation {
+  display: grid;
+  grid-template-columns: 1fr max-content 1fr;
+  column-gap: 1em;
+  align-items: center;
+}
+.cm-numbered-equation > .cm-math-body {
+  grid-column: 2;
 }
 .cm-equation-number {
-  position: absolute;
-  inset-inline-end: .5em;
-  top: 50%;
-  transform: translateY(-50%);
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: var(--text-normal);

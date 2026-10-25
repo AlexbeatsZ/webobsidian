@@ -1,5 +1,30 @@
 # Vault-defined block effects
 
+## Built-in query and fence selection (2026-10-25)
+
+`queryBlock.ts` registers the built-in query language through the existing code
+processor registry during native host startup. It reuses `api.search`, search-core
+query parsing, search refresh notifications and the render child lifecycle. It
+does not execute note content or create another search index/parser/watcher.
+Returned titles/snippets are text nodes; abort and teardown prevent stale output.
+
+This is a deliberately partial query implementation: one search word, tag include/
+exclude filters (including descendants), and a relative `path:` token. Path searches
+retain the application's existing tokenization/fuzzy/prefix semantics; the UI says
+so. Multiword, phrase, OR/grouping, regex and property searches are explicitly
+unsupported rather than silently executed with different meanings. Full Obsidian
+query compatibility remains open. Broad matches must be capped with a visible
+truncation notice, not synchronously expanded into an unbounded DOM.
+
+All processed code blocks share the selection intersection rule for source reveal;
+processors can request a closed fence with `requiresClosed`. No language-name
+condition belongs in the shared renderer. In ordinary editable code blocks,
+transparent formatting marks retain original fence text and native hit testing;
+touching the block reveals it. Reading mode still hides fences. Lezer CodeMark
+nodes own fence identity, replacing the old line regex. No extra input/coordinate
+pipeline is introduced. See `tests/reports/feedback-code-query-20261025.md` for
+browser coverage and the remaining native-package/server acceptance boundaries.
+
 ## Accepted scope (2026-10-22)
 
 `[name]` applies a Vault-owned definition to the next Markdown block. Multiple

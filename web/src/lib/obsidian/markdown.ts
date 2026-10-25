@@ -34,6 +34,7 @@ type Processor = {
   sortOrder: number;
   scope?: 'script';
   accepts?: (source: string) => boolean;
+  requiresClosed?: boolean;
 };
 export interface CodeBlockContext {
   sourcePath: string;
@@ -156,12 +157,14 @@ function build(state: EditorState, previous?: DecorationSet, tr?: Transaction): 
     const processor = codeProcessors.get(block.language.toLowerCase());
     if (
       !processor ||
-      (processor.scope === 'script' && !block.closed) ||
+      ((processor.scope === 'script' || processor.requiresClosed) && !block.closed) ||
       !(processor.scope === 'script' ? context.allowScriptExecution : context.allowPlugins) ||
       (processor.accepts && !processor.accepts(block.body)) ||
       sourceIsOpen(state, block) ||
       (!forceRendered(state, block) &&
-        caretTouches(block, state.field(compositionSelection).selection.ranges, ro))
+        (caretTouches(block, state.field(compositionSelection).selection.ranges, ro) ||
+          (!ro && state.field(compositionSelection).selection.ranges.some(range =>
+            !range.empty && range.from < block.to && range.to > block.from))))
     )
       continue;
     const old = prior.get(`${block.from}:${block.to}`);
@@ -317,7 +320,7 @@ export function registerCodeProcessor(
   lang: string,
   callback: (source: string, el: HTMLElement, ctx: any) => any,
   sortOrder = 0,
-  options: Pick<Processor, 'scope' | 'accepts'> = {},
+  options: Pick<Processor, 'scope' | 'accepts' | 'requiresClosed'> = {},
 ) {
   const key = lang.toLowerCase();
   if (codeProcessors.has(key))

@@ -583,11 +583,12 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 /* The host keeps the text line box; scaled MathJax output contributes only its
    SVG ascent/descent, without another inherited text strut. */
 .cm-math-rendered.math-inline > .cm-math-body > mjx-container[jax="SVG"] { line-height: 0; }
-.cm-math-rendered.math-block { display: block; text-align: center; padding: 0.5em 0; width: 100%; min-width: 0; max-width: 100%; }
-.cm-math-rendered.math-block > .cm-math-body { display: block; min-width: 0; overflow-x: auto; }
+.cm-math-rendered.math-block { display: block; text-align: center; padding: 0.5em 0; width: max-content; min-width: 100%; max-width: none; }
+.cm-math-rendered.math-block > .cm-math-body { display: block; min-width: max-content; }
 .cm-highlight .math-inline, .cm-highlight + .cm-widgetBuffer + .math-inline { background-color: var(--text-highlight-bg); }
 .cm-math-rendered mjx-container[jax="SVG"][display="true"] { margin: 0; }
 .cm-math-rendered mjx-container[jax="SVG"] { max-width: 100%; }
+.cm-math-rendered.math-block mjx-container[jax="SVG"] { max-width: none; }
 /* Code block: mono font on every code line; bg + inner padding only on fenced
    blocks (HyperMD-codeblock-bg) — indented code has no bg, like Obsidian. */
 .cm-s-obsidian .cm-line.HyperMD-codeblock { font-family: var(--font-mono); font-size: var(--font-smaller); }

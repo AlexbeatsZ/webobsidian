@@ -36,6 +36,7 @@ import * as markdown from './markdown';
 import { WebViewerView, promptWebViewer } from './webviewer';
 import { bindPluginMenus } from './menus';
 import { installJavascript } from '../javascript/runtime';
+import { installQueryBlocks } from '../queryBlock';
 import { installBlockEffects } from '../blocks/runtime';
 
 export type PluginStatus = {
@@ -796,12 +797,14 @@ export async function loadPlugins(): Promise<void> {
       ),
     ];
     const stopJavascript = installJavascript(sharedApp);
+    const stopQueryBlocks = installQueryBlocks();
     const stopBlocks = installBlockEffects(sharedApp);
     const stopCssSnippets = initializeCssSnippets(error => useStore.getState().notify(error));
     stopHost = () => {
       window.removeEventListener('file-path-changed', pathChanged);
       sharedApp.automation.dispose();
       stopJavascript();
+      stopQueryBlocks();
       stopBlocks();
       stopCssSnippets();
       stopMenus();
