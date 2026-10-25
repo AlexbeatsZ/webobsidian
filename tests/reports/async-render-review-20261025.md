@@ -50,7 +50,19 @@ references cannot be forcibly cancelled by the cooperative lifetime contract.
 - Final Web, Server and desktop typechecks passed. The prior formula-adjacent
   click case passed this run; its earlier intermittent failure is not attributed
   to these fixes. No assertion/tolerance was weakened.
-- Exact-commit package/startup results are recorded after build completion.
+- Exact source30f87dce784c5cc9404a75b2a5331391c31fe1b6 archived under Temp;
+  fresh search/core/Web/Server/desktop compilation, NSIS and actual packaged
+  standalone guard passed. Delivered setup is104100689bytes, PE0.1.26:
+  desktop/release/0.1.26/WebObsidian-0.1.26-win-x64-setup.exe.
+  BUILD-INFO.json beside it records source, commands, evidence and boundaries.
+- Actual packaged server/SPA startup passed in an isolated Vault/profile with
+  Edge in4.671s, zero renderer errors: real input/disk save, snippets/templates,
+  JS widgets/native blocks/equation reference, modes/search/menu/attachments/tabs.
+  This is not native Electron UI or installer execution acceptance.
+- Parent inspected the final pending/committed preview screenshots, physical
+  setup size/version, BUILD-INFO and packaged startup/guard logs. Root public
+  index metadata stayed909bytes and UTC2026-10-23T12:05:49.8534997Z; old releases
+  retained. Build evidence: Temp/.agents/meta-obsidian-win-0126-async-render-20261025.
 - 0.1.26 includes preceding appearance settings and formula transition fixes;
   0.1.25 predates both. Installer execution is not requested in this turn.
 
