@@ -586,6 +586,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-math-rendered.math-inline > .cm-math-body > mjx-container[jax="SVG"] { line-height: 0; }
 .cm-math-rendered.math-block { display: block; text-align: center; padding: 0.5em 0; width: max-content; min-width: 100%; max-width: none; }
 .cm-math-rendered.math-block > .cm-math-body { display: block; min-width: max-content; }
+.cm-math-status { color: var(--text-muted); font-size: var(--font-smaller); }
+.cm-math-rendered.mod-error .cm-math-status { color: var(--text-error, var(--color-red)); }
 .cm-highlight .math-inline, .cm-highlight + .cm-widgetBuffer + .math-inline { background-color: var(--text-highlight-bg); }
 .cm-math-rendered mjx-container[jax="SVG"][display="true"] { margin: 0; }
 .cm-math-rendered mjx-container[jax="SVG"] { max-width: 100%; }

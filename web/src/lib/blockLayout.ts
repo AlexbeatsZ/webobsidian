@@ -11,16 +11,26 @@ import { blockEffectOwns } from './blocks/model';
 
 /** All whole-line replacements preserve the same source prefix as native lines. */
 export function sourceBlockReplacement(state: EditorState, range: SourceSpan, widget: WidgetType) {
+  const presentation = sourceBlockPresentation(state, range, widget);
+  return Decoration.replace({ widget: presentation.widget, block: true }).range(presentation.from, range.to);
+}
+
+export function sourceBlockPresentation(state: EditorState, range: SourceSpan, widget: WidgetType) {
   const line = state.doc.lineAt(range.from), prefix = sourceLinePrefix(line.text);
   const wholeLine = range.from <= line.from + prefix.length;
-  return Decoration.replace({ widget: prefix && wholeLine ? new PrefixedBlock(widget, prefix) : widget, block: true })
-    .range(wholeLine ? line.from : range.from, range.to);
+  return { widget: prefix && wholeLine ? new PrefixedBlock(widget, prefix) : widget, from: wholeLine ? line.from : range.from };
 }
 
 class PrefixedBlock extends WidgetType {
   constructor(readonly content: WidgetType, readonly prefix: string) { super(); }
   eq(other: PrefixedBlock) {
     return this.prefix === other.prefix && this.content.constructor === other.content.constructor && this.content.eq(other.content);
+  }
+  updateDOM(dom: HTMLElement, view: EditorView, previous: PrefixedBlock) {
+    if (this.content.constructor !== previous.content.constructor ||
+      (!this.content.eq(previous.content) && !this.content.updateDOM(dom.lastElementChild as HTMLElement, view, previous.content))) return false;
+    dom.firstElementChild!.textContent = this.prefix;
+    return true;
   }
   toDOM(view: EditorView) {
     const shell = document.createElement('div'); shell.className = 'cm-prefixed-block';

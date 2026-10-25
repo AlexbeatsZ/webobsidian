@@ -27,7 +27,7 @@ import { renderMath, readMathMetrics, type MathMetrics, mathDefinitionContext, s
 import { editorMathRegions, mathSourceVisible, mathPreview, mathPreviewTex } from './writing/latex/editor_context/mathPresentation';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
-import { sourceBlockReplacement } from './blockLayout';
+import { sourceBlockReplacement, sourceBlockPresentation } from './blockLayout';
 import { RenderLifetime } from './obsidian/renderLifetime';
 import { equationLabel, equationReferenceLabel, equationReferenceName, equationTarget, equationAt, parseLinkTarget, type Equation, type MarkdownModel } from '@webobsidian/markdown-core';
 
@@ -403,6 +403,7 @@ interface MathMount {
   controller?: AbortController; stop: () => void;
   measure(): MathMetrics | undefined;
   render(metrics: MathMetrics): void;
+  update(widget: MathWidget): void;
 }
 const mathMounts = new WeakMap<HTMLElement, MathMount>();
 const mathMeasureKey = {};
@@ -430,25 +431,55 @@ class MathWidget extends WidgetType {
   eq(o: MathWidget) {
     return o.tex === this.tex && o.display === this.display && o.range?.from === this.range?.from && o.range?.to === this.range?.to && o.number === this.number && o.anchor === this.anchor && o.preview === this.preview && o.sourceInTitle === this.sourceInTitle && o.definitions.length === this.definitions.length && o.definitions.every((d,i) => d === this.definitions[i]);
   }
+  updateDOM(dom: HTMLElement, _view: EditorView, previous: MathWidget) {
+    const mount = mathMounts.get(dom);
+    if (!mount || this.display !== previous.display || !this.range || this.range.from !== previous.range?.from) return false;
+    mount.update(this);
+    return true;
+  }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
-    span.className = 'cm-math-rendered' + (this.display ? ' math-block' : ' math-inline') + (this.preview ? ' cm-math-edit-preview' : '');
-    if (this.number) span.classList.add('cm-numbered-equation');
+    span.className = 'cm-math-rendered' + (this.display ? ' math-block' : ' math-inline');
     const body = document.createElement('span');
     body.className = 'cm-math-body';
-    body.textContent = this.tex;
-    span.appendChild(body); // shown until MathJax finishes, or if loading fails
-    if (this.anchor) span.dataset.equationId = this.anchor;
-    if (this.number) {
-      const label = document.createElement('span'); label.className = 'cm-equation-number'; label.textContent = this.number;
-      span.appendChild(label);
-    }
+    const status = document.createElement('span'); status.className = 'cm-math-status';
+    status.setAttribute('role', 'status'); status.setAttribute('aria-label', '正在渲染公式');
+    status.textContent = this.display ? '正在渲染公式…' : '…';
+    body.appendChild(status); span.appendChild(body);
     span.dataset.renderPending = 'true';
-    let previous: MathMetrics | undefined, invalid = true;
+    span.setAttribute('aria-busy', 'true');
+    let widget: MathWidget = this, previous: MathMetrics | undefined, invalid = true;
+    const present = () => {
+      span.classList.toggle('cm-math-edit-preview', widget.preview);
+      span.classList.toggle('cm-numbered-equation', Boolean(widget.number));
+      if (widget.anchor) span.dataset.equationId = widget.anchor;
+      else delete span.dataset.equationId;
+      span.querySelector(':scope > .cm-equation-number')?.remove();
+      if (widget.number) {
+        const label = document.createElement('span'); label.className = 'cm-equation-number'; label.textContent = widget.number;
+        span.appendChild(label);
+      }
+      span.querySelector(':scope > .cm-source-toggle')?.remove();
+      if (widget.display && widget.range && !widget.preview && !widget.sourceInTitle && !view.state.readOnly) {
+        const range = widget.range, formula = editorMathRegions(view.state).find(region => region.from === range.from && region.to === range.to);
+        span.appendChild(sourceButton(view, range, '公式', {
+          selection: formula ? { from: formula.bodyFrom, to: formula.bodyTo } : range }));
+      }
+    };
     const mount: MathMount = {
       stop: () => {},
+      update: next => {
+        const changed = widget.tex !== next.tex || widget.preview !== next.preview ||
+          widget.definitions.length !== next.definitions.length || widget.definitions.some((definition, index) => definition !== next.definitions[index]);
+        widget = next; present();
+        if (changed) {
+          mount.controller?.abort(); invalid = true;
+          span.dataset.renderPending = 'true'; span.setAttribute('aria-busy', 'true');
+          scheduleMathMeasure(view);
+        }
+      },
       measure: () => {
-        const container = this.display ? span.parentElement : view.contentDOM;
+        const container = widget.display ? span.parentElement : view.contentDOM;
         if (!container) return;
         if (!span.isConnected || !container.clientWidth) return;
         const metrics = readMathMetrics(body, container);
@@ -460,28 +491,38 @@ class MathWidget extends WidgetType {
         mount.controller?.abort();
         const controller = new AbortController(); mount.controller = controller;
         span.dataset.renderPending = 'true';
+        span.setAttribute('aria-busy', 'true');
+        if (body.querySelector('[data-mathjax-version]')) status.remove();
+        else {
+          status.setAttribute('role', 'status'); status.setAttribute('aria-label', '正在渲染公式');
+          status.textContent = widget.display ? '正在渲染公式…' : '…';
+          body.replaceChildren(status);
+        }
         const context = contextOf(view), source = context.mathSource;
         const model = source?.model ?? view.state.field(syntaxModel);
-        const from = (this.range?.from ?? 0) + (source?.from ?? 0);
-        void renderMath(body, this.tex, this.display, controller.signal, { transient: this.preview,
+        const from = (widget.range?.from ?? 0) + (source?.from ?? 0);
+        void renderMath(body, widget.tex, widget.display, controller.signal, { transient: widget.preview,
           sourcePath: context.sourcePath, definitions: mathDefinitionContext(model, from), metrics })
         .then(() => { if (!controller.signal.aborted) { span.classList.remove('mod-error'); span.removeAttribute('title'); } })
         .catch(error => {
           if (controller.signal.aborted) return;
           span.classList.add('mod-error');
           span.title = `Formula rendering failed: ${error instanceof Error ? error.message : String(error)}`;
+          const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = '重试';
+          retry.addEventListener('mousedown', event => { event.preventDefault(); event.stopPropagation(); });
+          retry.addEventListener('click', event => {
+            event.preventDefault(); event.stopPropagation(); invalid = true; scheduleMathMeasure(view);
+          });
+          status.setAttribute('role', 'alert'); status.removeAttribute('aria-label');
+          status.replaceChildren('公式渲染失败 ', retry); body.appendChild(status);
         })
-        .finally(() => { if (!controller.signal.aborted) { delete span.dataset.renderPending; view.requestMeasure(); } });
+        .finally(() => { if (!controller.signal.aborted) { delete span.dataset.renderPending; span.removeAttribute('aria-busy'); view.requestMeasure(); } });
       },
     };
     mathMounts.set(span, mount);
     mount.stop = subscribeMathConfiguration(() => { invalid = true; scheduleMathMeasure(view); });
+    present();
     scheduleMathMeasure(view);
-    if (this.display && this.range && !this.preview && !this.sourceInTitle && !view.state.readOnly) {
-      const formula = editorMathRegions(view.state).find(r => r.from === this.range!.from && r.to === this.range!.to);
-      span.appendChild(sourceButton(view, this.range, '公式', {
-        selection: formula ? { from: formula.bodyFrom, to: formula.bodyTo } : this.range }));
-    }
     return span;
   }
   ignoreEvent() {
@@ -657,9 +698,12 @@ function buildMathBlocks(state: EditorState): DecorationSet {
       decorations.push(sourceBlockReplacement(state, region, numberedMath(state, region.tex, true, region)));
   }
   const preview = mathPreview(state);
-  if (preview?.placement === 'document' && !blockEffectOwns(state, preview.region))
-    decorations.push(Decoration.widget({ widget: numberedMath(state, mathPreviewTex(state, preview.region), true, preview.region, true),
+  if (preview?.placement === 'document' && !blockEffectOwns(state, preview.region)) {
+    const widget = numberedMath(state, mathPreviewTex(state, preview.region), true, preview.region, true);
+    const block = state.field(blockModel).math.some(formula => formula.from === preview.region.from);
+    decorations.push(Decoration.widget({ widget: block ? sourceBlockPresentation(state, preview.region, widget).widget : widget,
       block: true, side: 1 }).range(preview.region.to));
+  }
   return Decoration.set(decorations, true);
 }
 function numberedMath(state: EditorState, tex: string, display: boolean, range: { from: number; to: number }, preview = false) {

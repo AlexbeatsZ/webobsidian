@@ -1,5 +1,25 @@
 # Rendering unification
 
+## Formula transition presentation (2026-10-25)
+
+MathWidget never inserts raw TeX as asynchronous presentation placeholder.
+Cold mounts show a compact status (ellipsis for inline math). Existing successful
+SVG remains while conversion is pending; renderMath replaces the body only on
+successful completion. Failures are visible with retry and retain an available
+previous SVG. This does not hide or replace the native highlighted source editor.
+
+MathWidget.updateDOM reuses the existing DOM-owned mount for compatible display
+kind/source start, updates source ranges/number/anchor/control state, and aborts
+obsolete work. Existing queue/cache and measure scheduling remain authoritative.
+PrefixedBlock delegates content updates and retains its structural prefix;
+whole-line formula previews use the same sourceBlockPresentation as replacement
+widgets, including multiline Callouts. No new input, parsing or observer path.
+
+Parent independently ran15/15 transition cases (25.0s) and Web types; worker
+adjacent56/56 plus5/5 original math cases passed. Frame sampling covers delayed
+conversion, cold/error/retry/cancellation, source edit/Undo and changing metrics.
+Report: tests/reports/math-transition-20261025.md. No new installed EXE acceptance.
+
 ## Lifecycle and complex rendering (2026-10-24)
 
 The mounted DOM owns footnote cleanup in a WeakMap, so CodeMirror replacing an
@@ -231,7 +251,8 @@ font readiness is awaited after scrolling. Human real-vault acceptance remains p
 - mathjax.ts owns one lazy runtime and calls tex2svgPromise so font/extension
   loading completes before render-pending is cleared. MathJax 4 serializes those
   conversions internally. Widget destruction aborts late DOM updates; completion
-  asks CodeMirror to measure the changed layout. Failed loads retain raw TeX.
+  asks CodeMirror to measure the changed layout. Pending/failed widget presentation
+  now follows the Formula transition presentation contract above, not raw TeX.
 - ui/safe filters attributes from user-authored TeX, including unsafe URL protocols.
   The source session remains authoritative and unchanged by formula conversion.
   The existing dollar-delimiter parser and formula source controls remain shared
