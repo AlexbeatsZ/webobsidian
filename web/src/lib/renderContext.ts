@@ -14,6 +14,7 @@ export interface FragmentOptions {
   id: string; mode?: 'live' | 'reading'; sourceFrom?: number; autoFocus?: boolean;
   context?: RenderContext; onCommit?: (source: string) => void;
   onReady?: () => void;
+  onError?: (error: Error) => void;
   equations?: EquationContext;
   mathSource?: { model: MarkdownModel; from: number };
 }

@@ -1,5 +1,29 @@
 # Rendering unification
 
+## Ownership follow-up (2026-10-25, after 0.1.26)
+
+Review toolbar/candidate resources belong to their mounted DOM, never WidgetType
+instance fields: CodeMirror can retain DOM while transferring it to a new equal
+widget. Their existing RenderLifetime owns cleanup. Source/preview toggles create
+a separate fragment child host so deferred React unmount cannot remove the next
+mode's DOM. Non-executing review permissions and source/history ownership stay
+unchanged.
+
+Table mounts and individual editable-cell fragments use existing terminal
+lifetimes. Invalidate before invoking cleanup; reading fragments cannot commit,
+and a superseded/disposed live fragment cannot write or reenter a cell mount.
+JavascriptRun also forwards fragment errors and settles once on success/error/
+abort instead of leaving scripts pending. This is ownership repair in existing
+Modules, not a new rendering framework or an additional input pipeline.
+
+FragmentOptions owns the optional error callback for every mount caller; the
+concrete React component must not privately redeclare this shared contract.
+Markdown and sanitized-HTML image mounts own load/error listeners through their
+existing lifetime signal. Image resize cancellation removes window listeners on
+disposal or load failure without committing an obsolete width.
+
+Evidence: tests/reports/render-followup-20261025.md and its two owner reports.
+
 ## Asynchronous sibling transitions (2026-10-25)
 
 Pending presentation belongs to the existing DOM-owned render lifetime, not to

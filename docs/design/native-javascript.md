@@ -1,5 +1,14 @@
 # Native JavaScript blocks
 
+## Fragment failure settlement (2026-10-25)
+
+JavascriptRun.renderMarkdown forwards the shared fragment's onError and rejects
+the awaiting script instead of leaving the block pending until disposal. Success,
+failure and abort settle once and detach the abort listener, including synchronous
+mount exceptions. Late readiness after failure/disposal does not request layout.
+This stays in the existing JavascriptRun Module used by scripts and block effects;
+callers keep the same Interface and no additional rendering Adapter is introduced.
+
 ## Render lifetime follow-up (2026-10-23)
 
 JavascriptRun inherits terminal RenderLifetime with existing code-block and

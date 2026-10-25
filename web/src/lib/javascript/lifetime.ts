@@ -55,10 +55,19 @@ export class JavascriptRun extends RenderLifetime {
     const mount = this.context.mountFragment;
     if (!mount) throw new Error('Markdown 片段渲染不可用');
     // Register immediately, even if disposal happens before React reports ready.
-    await new Promise<void>(resolve => {
-      const done = () => { this.signal.removeEventListener('abort', done); resolve(); };
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const clear = () => {
+        if (settled) return false;
+        settled = true; this.signal.removeEventListener('abort', done); return true;
+      };
+      const done = () => { if (clear()) resolve(); };
+      const failed = (error: unknown) => { if (clear()) reject(error); };
       this.signal.addEventListener('abort', done, { once: true });
-      this.register(mount(target, markdown, { id: context.sourcePath, context: nonExecutingContext(context), onReady: () => { this.measure(); done(); } }));
+      try {
+        this.register(mount(target, markdown, { id: context.sourcePath, context: nonExecutingContext(context),
+          onReady: () => { if (settled || this.signal.aborted) return; this.measure(); done(); }, onError: failed }));
+      } catch (error) { failed(error); }
     });
     this.assertActive();
   }

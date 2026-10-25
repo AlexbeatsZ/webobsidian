@@ -4,33 +4,40 @@ import { SourceDocument, rebaseReview, type ReviewProposal } from '@webobsidian/
 import { contextOf, nonExecutingContext } from '../renderContext';
 import { reviewSnapshot, subscribeReview, decideReview } from './client';
 import { createElement } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import { ReviewToolbar } from '../../components/ReviewHost';
+import { RenderLifetime } from '../obsidian/renderLifetime';
 
 const refreshReview = StateEffect.define<void>();
 type Placed = { id: string; from: number; to: number; insert: string; original: string; conflict?: boolean };
 type ReviewView = { proposal: ReviewProposal | null; hunks: Placed[]; decorations: DecorationSet };
+const reviewMounts = new WeakMap<HTMLElement, RenderLifetime>();
 
 /** The bar belongs to CM's existing centered document column, like the hunks. */
 class ReviewToolbarWidget extends WidgetType {
-  private root?: Root;
   constructor(readonly path: string) { super(); }
   eq(other: ReviewToolbarWidget) { return this.path === other.path; }
   toDOM() {
     const host = document.createElement('div');
-    this.root = createRoot(host); this.root.render(createElement(ReviewToolbar, { path: this.path }));
+    const lifetime = new RenderLifetime();
+    void lifetime.load(); reviewMounts.set(host, lifetime);
+    const root = createRoot(host); root.render(createElement(ReviewToolbar, { path: this.path }));
+    lifetime.register(() => queueMicrotask(() => root.unmount()));
     return host;
   }
-  destroy() { const root = this.root; this.root = undefined; queueMicrotask(() => root?.unmount()); }
+  destroy(dom: HTMLElement) { const lifetime = reviewMounts.get(dom); reviewMounts.delete(dom); lifetime?.unload(); }
   ignoreEvent() { return true; }
 }
 
 class CandidateWidget extends WidgetType {
-  private cleanup?: () => void;
   constructor(readonly proposal: string, readonly hunk: Placed, readonly busy: boolean) { super(); }
   eq(other: CandidateWidget) { return this.proposal === other.proposal && this.hunk.id === other.hunk.id && this.hunk.insert === other.hunk.insert && this.busy === other.busy; }
   toDOM(view: EditorView) {
     const root = document.createElement('div'); root.className = 'native-review-candidate';
+    const lifetime = new RenderLifetime();
+    void lifetime.load(); reviewMounts.set(root, lifetime);
+    let cleanup: (() => void) | undefined;
+    lifetime.register(() => { cleanup?.(); cleanup = undefined; });
     root.dataset.reviewHunk = this.hunk.id;
     const actions = root.appendChild(document.createElement('div')); actions.className = 'native-review-actions';
     const button = (text: string, run: () => void) => { const b = actions.appendChild(document.createElement('button'));
@@ -42,16 +49,18 @@ class CandidateWidget extends WidgetType {
     context.allowBlockEffects = false;
     let source = false;
     const draw = () => {
-      this.cleanup?.(); this.cleanup = undefined; body.replaceChildren();
+      if (lifetime.signal.aborted) return;
+      cleanup?.(); cleanup = undefined; body.replaceChildren();
       if (!this.hunk.insert) { body.textContent = '删除这些行'; return; }
       if (source || !context.mountFragment) { const pre = body.appendChild(document.createElement('pre')); pre.textContent = this.hunk.insert; return; }
-      this.cleanup = context.mountFragment(body, this.hunk.insert, { id: `review:${this.proposal}:${this.hunk.id}`, mode: 'reading',
+      const preview = body.appendChild(document.createElement('div'));
+      cleanup = context.mountFragment(preview, this.hunk.insert, { id: `review:${this.proposal}:${this.hunk.id}`, mode: 'reading',
         context, autoFocus: false });
     };
     const toggle = button('查看源码', () => { source = !source; toggle.textContent = source ? '查看预览' : '查看源码'; draw(); });
     draw(); return root;
   }
-  destroy() { this.cleanup?.(); this.cleanup = undefined; }
+  destroy(dom: HTMLElement) { const lifetime = reviewMounts.get(dom); reviewMounts.delete(dom); lifetime?.unload(); }
   ignoreEvent() { return true; }
 }
 

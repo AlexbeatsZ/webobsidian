@@ -56,14 +56,14 @@ export function applyImagePresentation(wrap: HTMLElement, target: string, alt: s
 }
 
 /** HTML images receive the same presentation as Markdown images after sanitizing. */
-export function presentHtmlImages(host: HTMLElement, targets: string[], onLoad: () => void): void {
+export function presentHtmlImages(host: HTMLElement, targets: string[], onLoad: () => void, signal: AbortSignal): void {
   host.querySelectorAll('img').forEach((img, index) => {
     const wrap = img.ownerDocument.createElement('span');
     applyImagePresentation(wrap, targets[index] ?? img.getAttribute('src') ?? '', img.alt);
     img.classList.add('cm-embed-image');
     img.replaceWith(wrap); wrap.appendChild(img);
-    img.addEventListener('load', onLoad, { once: true });
-    img.addEventListener('error', onLoad, { once: true });
+    img.addEventListener('load', onLoad, { once: true, signal });
+    img.addEventListener('error', onLoad, { once: true, signal });
   });
   for (const wrap of host.querySelectorAll('.cm-image-wrap')) {
     const row = wrap.parentElement!;

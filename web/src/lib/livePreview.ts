@@ -206,7 +206,9 @@ function writeImageWidth(view: EditorView, wrap: HTMLElement, width: number): vo
   }
 }
 
+const imageMounts = new WeakMap<HTMLElement, RenderLifetime>();
 class ImageWidget extends WidgetType {
+  destroy(dom: HTMLElement) { const lifetime = imageMounts.get(dom); imageMounts.delete(dom); lifetime?.unload(); }
   /** `width`/`height` from the Obsidian size param `![[img|300]]` / `![[img|300x200]]`. */
   constructor(readonly src: string, readonly alt: string, readonly width?: number, readonly height?: number, readonly ro = false, readonly target = src) {
     super();
@@ -217,17 +219,21 @@ class ImageWidget extends WidgetType {
   toDOM(view: EditorView) {
     const doc = view.dom.ownerDocument, win = doc.defaultView!;
     const wrap = doc.createElement('span');
+    const lifetime = new RenderLifetime(); imageMounts.set(wrap, lifetime);
+    let cancelResize: (() => void) | undefined;
+    lifetime.register(() => cancelResize?.());
     applyImagePresentation(wrap, this.target, this.alt);
     const img = doc.createElement('img');
     img.src = this.src;
     img.alt = this.alt;
     img.className = 'cm-embed-image image-embed';
     img.draggable = false;
-    img.addEventListener('load', () => view.requestMeasure(), { once: true });
+    img.addEventListener('load', () => view.requestMeasure(), { once: true, signal: lifetime.signal });
     if (this.width) img.width = this.width;
     if (this.height) img.height = this.height;
     // Missing attachment → Obsidian-style "could not be found" box.
-    img.onerror = () => {
+    img.addEventListener('error', () => {
+      cancelResize?.();
       img.remove();
       wrap.querySelectorAll('.cm-image-resize').forEach((h) => h.remove());
       wrap.dataset.renderError = 'image';
@@ -235,17 +241,19 @@ class ImageWidget extends WidgetType {
       miss.textContent = '';
       wrap.appendChild(miss);
       embedNotFound(miss, this.alt);
-    };
+    }, { once: true, signal: lifetime.signal });
     // Plain click (no drag) → full-screen zoom/pan viewer.
     img.addEventListener('click', (e) => {
       e.preventDefault();
       openLightbox(this.src, this.alt);
-    });
+    }, { signal: lifetime.signal });
     wrap.appendChild(img);
 
     // Drag-to-resize — left/right edge bars; width is written back as `|W`,
     // keeping aspect ratio (height auto), like Obsidian's image resize.
     const startResize = (e: MouseEvent | TouchEvent, side: 'left' | 'right') => {
+      if (lifetime.signal.aborted || view.state.readOnly) return;
+      cancelResize?.();
       e.preventDefault();
       e.stopPropagation();
       const startX = pointX(e);
@@ -254,7 +262,16 @@ class ImageWidget extends WidgetType {
       const maxW = Math.max(80, view.contentDOM.clientWidth / zoom);
       let curW = Math.round(startW);
       wrap.classList.add('is-resizing');
+      const stopResize = () => {
+        win.removeEventListener('mousemove', onMove);
+        win.removeEventListener('mouseup', onUp);
+        win.removeEventListener('touchmove', onMove);
+        win.removeEventListener('touchend', onUp);
+        wrap.classList.remove('is-resizing');
+        cancelResize = undefined;
+      };
       const onMove = (ev: MouseEvent | TouchEvent) => {
+        if (cancelResize !== stopResize) return;
         if ('touches' in ev) ev.preventDefault();
         const dx = (pointX(ev) - startX) / zoom;
         curW = Math.min(maxW, Math.max(40, Math.round(side === 'right' ? startW + dx : startW - dx)));
@@ -264,13 +281,11 @@ class ImageWidget extends WidgetType {
         img.removeAttribute('height');
       };
       const onUp = () => {
-        win.removeEventListener('mousemove', onMove);
-        win.removeEventListener('mouseup', onUp);
-        win.removeEventListener('touchmove', onMove);
-        win.removeEventListener('touchend', onUp);
-        wrap.classList.remove('is-resizing');
+        if (cancelResize !== stopResize) return;
+        stopResize();
         writeImageWidth(view, wrap, curW);
       };
+      cancelResize = stopResize;
       win.addEventListener('mousemove', onMove);
       win.addEventListener('mouseup', onUp);
       win.addEventListener('touchmove', onMove, { passive: false });
@@ -279,8 +294,8 @@ class ImageWidget extends WidgetType {
     for (const side of (view.state.readOnly ? [] : ['left', 'right']) as ('left' | 'right')[]) {
       const h = document.createElement('span');
       h.className = `cm-image-resize cm-image-resize-${side}`;
-      h.addEventListener('mousedown', (e) => startResize(e, side));
-      h.addEventListener('touchstart', (e) => startResize(e, side), { passive: false });
+      h.addEventListener('mousedown', (e) => startResize(e, side), { signal: lifetime.signal });
+      h.addEventListener('touchstart', (e) => startResize(e, side), { passive: false, signal: lifetime.signal });
       wrap.appendChild(h);
     }
     return wrap;
@@ -997,21 +1012,21 @@ export const calloutFoldDeco = StateField.define<DecorationSet>({
 
 type TableBlock = TableModel;
 
-const tableMounts = new WeakMap<HTMLElement, (() => void)[]>();
+const tableMounts = new WeakMap<HTMLElement, RenderLifetime>();
 class TableWidget extends WidgetType {
   constructor(readonly block: TableBlock, readonly ro: boolean, readonly mathDependencies: string) { super(); }
   eq(o: TableWidget) { return o.block.key === this.block.key && o.block.from === this.block.from && o.ro === this.ro && o.mathDependencies === this.mathDependencies; }
   ignoreEvent() { return true; }
-  destroy(dom: HTMLElement) { const cleanup = tableMounts.get(dom); tableMounts.delete(dom); cleanup?.forEach(stop => stop()); }
+  destroy(dom: HTMLElement) { const lifetime = tableMounts.get(dom); tableMounts.delete(dom); lifetime?.unload(); }
   toDOM(view: EditorView) {
     const b = this.block, context = contextOf(view);
     const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap'; wrap.dataset.tableFrom = String(b.from);
     const frame = document.createElement('div'); frame.className = 'cm-table-frame'; wrap.appendChild(frame);
-    const cleanup: (() => void)[] = []; tableMounts.set(wrap, cleanup);
+    const lifetime = new RenderLifetime(); tableMounts.set(wrap, lifetime);
     if (!this.ro) frame.appendChild(sourceButton(view, b, '表格'));
     const table = document.createElement('table'); table.className = 'cm-table'; frame.appendChild(table);
     const apply = (changes: SourceChange[]) => {
-      if (view.state.readOnly || view.state.sliceDoc(b.from, b.to) !== b.key) return;
+      if (lifetime.signal.aborted || view.state.readOnly || view.state.sliceDoc(b.from, b.to) !== b.key) return;
       if (changes.length) view.dispatch({ changes, userEvent: 'input.table' });
     };
     const structural = (operation: TableOperation) => apply(changeTable(b, operation));
@@ -1024,22 +1039,30 @@ class TableWidget extends WidgetType {
         const content = document.createElement('div'); content.className = 'cm-table-cell-content'; cell.appendChild(content);
         const token = row.cells[col];
         const raw = token?.text ?? '';
-        let stop: (() => void) | undefined;
+        let fragment: RenderLifetime | undefined;
         let editing = false;
         const mount = (mode: 'live' | 'reading') => {
-          stop?.(); content.replaceChildren();
+          fragment?.unload();
+          if (lifetime.signal.aborted) return;
+          const rendering = fragment = new RenderLifetime();
+          content.replaceChildren();
           const host = document.createElement('div'); content.appendChild(host);
-          stop = context.mountFragment?.(host, raw, {
+          const stop = context.mountFragment?.(host, raw, {
             id: context.sourcePath + ':cell:' + ri + ':' + col, sourceFrom: token?.from ?? row.to,
             equations: { ...equationsOf(view.state), from: equationsOf(view.state).from + (token?.from ?? row.to) },
             mathSource: { model: context.mathSource?.model ?? view.state.field(syntaxModel),
               from: (context.mathSource?.from ?? 0) + (token?.from ?? row.to) },
             mode, autoFocus: mode === 'live',
-            onCommit: (value) => { editing = false; if (value !== raw) apply([editTableCell(b, ri, col, value)]); else mount('reading'); },
+            onCommit: mode === 'live' ? (value) => {
+              if (lifetime.signal.aborted || rendering.signal.aborted) return;
+              rendering.unload(); editing = false;
+              if (value !== raw) apply([editTableCell(b, ri, col, value)]); else mount('reading');
+            } : undefined,
           });
+          if (stop) rendering.register(stop);
           if (!stop) host.textContent = raw;
         };
-        cleanup.push(() => stop?.()); mount('reading');
+        lifetime.register(() => fragment?.unload()); mount('reading');
         if (!this.ro && b.editable) {
           if (ri === 0 || col === 0) {
             const handle = document.createElement('button'); handle.type = 'button';
@@ -1142,7 +1165,7 @@ class TableWidget extends WidgetType {
       frame.addEventListener('lostpointercapture', () => finish(false));
       const cancelDrag = () => finish(false);
       const cancelKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && drag) { event.preventDefault(); finish(false); } };
-      cleanup.push(() => finish(false));
+      lifetime.register(() => finish(false));
       frame.addEventListener('keydown', event => {
         const handle = (event.target as Element).closest<HTMLButtonElement>('.cm-col-handle,.cm-row-handle');
         if (!handle || wrap.querySelector('[contenteditable="true"]')) return;
@@ -1185,6 +1208,7 @@ class BulletWidget extends WidgetType {
 // Strip scripts/handlers/dangerous URLs from raw note HTML before rendering it
 // inline (Obsidian renders embedded HTML, e.g. CKEditor/Trilium tables, the same).
 class HtmlBlockWidget extends WidgetType {
+  destroy(dom: HTMLElement) { const lifetime = imageMounts.get(dom); imageMounts.delete(dom); lifetime?.unload(); }
   constructor(readonly html: string, readonly range?: { from: number; to: number }) {
     super();
   }
@@ -1194,12 +1218,13 @@ class HtmlBlockWidget extends WidgetType {
   toDOM(view: EditorView) {
     const div = document.createElement('div');
     div.className = 'cm-html-block';
+    const lifetime = new RenderLifetime(); imageMounts.set(div, lifetime);
     const imageTargets: string[] = [];
     const safe = sanitizeHtml(this.html);
     const parsed = document.createElement('template'); parsed.innerHTML = safe;
     parsed.content.querySelectorAll('img').forEach(img => imageTargets.push(img.getAttribute('src') ?? ''));
     div.innerHTML = sanitizeHtml(this.html, contextOf(view).rawUrl);
-    presentHtmlImages(div, imageTargets, () => view.requestMeasure());
+    presentHtmlImages(div, imageTargets, () => view.requestMeasure(), lifetime.signal);
     if (!view.state.readOnly && this.range) div.appendChild(sourceButton(view, this.range, 'HTML'));
     div.addEventListener('mousedown', (e) => {
       const a = (e.target as HTMLElement).closest('a');

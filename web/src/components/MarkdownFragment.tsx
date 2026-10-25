@@ -12,7 +12,7 @@ class FragmentBoundary extends Component<{ onError: (error: Error) => void; chil
 }
 
 /** The same engine in a small host. A cell owns a local draft until focus leaves. */
-export function mountMarkdownFragment(host: HTMLElement, source: string, options: FragmentOptions & { context: RenderContext; onError?: (error: Error) => void }): () => void {
+export function mountMarkdownFragment(host: HTMLElement, source: string, options: FragmentOptions & { context: RenderContext }): () => void {
   host.dataset.renderPending = 'true';
   const root = createRoot(host);
   let destroyed = false;
