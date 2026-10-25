@@ -1,5 +1,33 @@
 # Rendering unification
 
+## Asynchronous sibling transitions (2026-10-25)
+
+Pending presentation belongs to the existing DOM-owned render lifetime, not to
+source text. Mermaid, note embeds, native block effects and MarkdownRenderer
+retain a successful compatible output while its replacement is prepared. A
+different MarkdownRenderer source/path or suggestion identity must not silently
+display the previous identity as its result. Query refresh builds new rows before
+replacing successful results; failures remain visible without erasing those rows.
+
+Staging must remain measurable at its final column width. `display:none`/`hidden`
+cannot prepare width-dependent formulas: the actual MarkdownView, MathJax, tables
+and image layout need a nonzero containing width before readiness. Only the current
+non-aborted lifetime may publish output, clear pending state or report a failure.
+Unmount cancels staged work and removes its owned DOM. No extra parser, MathJax
+queue/cache, coordinate pipeline or global overflow clipping is introduced.
+
+Math tooltip recomputation retains its SVG without visible pending text that would
+widen the tooltip. Suggestion previews distinguish same-item recomputation from a
+new selection. The plugin math adapter handles cleanup on the original promise;
+an ignored rejected `finally` derivative must not create an unhandled rejection.
+Code processors expose a short initial status rather than an unexplained empty
+box; cooperative third-party cancellation remains the documented boundary.
+
+Reports: `tests/reports/async-media-transition-20261025.md`,
+`tests/reports/async-math-surfaces-20261025.md`, and
+`tests/reports/async-processor-transition-20261025.md`. Parent integration/build
+evidence is recorded in `tests/reports/async-render-review-20261025.md`.
+
 ## Formula transition presentation (2026-10-25)
 
 MathWidget never inserts raw TeX as asynchronous presentation placeholder.

@@ -94,12 +94,17 @@ class CodeWidget extends WidgetType {
     );
   }
   toDOM(view: EditorView) {
-    const host = document.createElement('div');
+    const doc = view.dom.ownerDocument;
+    const host = doc.createElement('div');
     host.className = 'block-language-' + this.lang + (this.processor.scope === 'script' ? ' native-js-code-block' : ' plugin-code-block');
     host.dataset.renderPending = 'true';
-    const content = document.createElement('div');
-    host.append(content);
+    const content = doc.createElement('div');
+    const pending = doc.createElement('div');
+    pending.setAttribute('role', 'status');
+    pending.textContent = '正在渲染…';
+    host.append(pending, content);
     const child = new RenderLifetime();
+    child.register(() => { delete host.dataset.renderPending; pending.remove(); });
     mounts.set(host, child);
     void child.load();
     const ctx = {
@@ -115,13 +120,19 @@ class CodeWidget extends WidgetType {
       }),
     };
     Promise.resolve()
-      .then(() => { if (!child.signal.aborted) return this.processor.callback(content, ctx); })
+      .then(() => {
+        if (child.signal.aborted) return;
+        const result = this.processor.callback(content, ctx);
+        if (content.hasChildNodes()) pending.remove();
+        return result;
+      })
       .catch((error) => {
         if (child.signal.aborted) return;
         content.textContent = String(error);
         host.classList.add('mod-error');
       })
       .finally(() => {
+        pending.remove();
         if (!child.signal.aborted) { delete host.dataset.renderPending; view.requestMeasure(); }
       });
     // Code processors receive their fenced body, matching Obsidian's contract.

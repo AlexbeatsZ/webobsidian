@@ -544,18 +544,15 @@ class HrWidget extends WidgetType {
 
 /* ---------------- note embeds (transclusion, like Obsidian ![[note]]) ---------------- */
 
-// Injected from Editor.tsx: resolves a wikilink target and returns rendered,
-// sanitized HTML (api.resolve + renderMarkdown — same pipeline as Reading view).
 function embedNotFound(el: HTMLElement, target: string) {
   el.classList.add('cm-embed-missing');
   el.textContent = `"${target}" could not be found.`;
 }
 
-const noteEmbedMounts = new WeakMap<HTMLElement, { controller: AbortController; cleanup: (() => void)[] }>();
+const noteEmbedMounts = new WeakMap<HTMLElement, RenderLifetime>();
 class NoteEmbedWidget extends WidgetType {
   destroy(dom: HTMLElement) {
-    const mount = noteEmbedMounts.get(dom); noteEmbedMounts.delete(dom);
-    mount?.controller.abort(); mount?.cleanup.forEach(stop => stop());
+    const lifetime = noteEmbedMounts.get(dom); noteEmbedMounts.delete(dom); lifetime?.unload();
   }
   constructor(readonly target: string) {
     super();
@@ -567,6 +564,7 @@ class NoteEmbedWidget extends WidgetType {
     return true;
   }
   toDOM(view: EditorView) {
+    const document = view.dom.ownerDocument;
     const box = document.createElement('div');
     box.className = 'internal-embed markdown-embed cm-note-embed';
     const open = document.createElement('span');
@@ -582,33 +580,66 @@ class NoteEmbedWidget extends WidgetType {
     content.className = 'markdown-embed-content';
     content.textContent = '…';
     box.append(open, content);
-    const controller = new AbortController();
+    const lifetime = new RenderLifetime(); void lifetime.load(); noteEmbedMounts.set(box, lifetime);
     const context = contextOf(view);
     const trail = context.embedTrail ?? [context.sourcePath];
-    const cleanup: (() => void)[] = []; noteEmbedMounts.set(box, { controller, cleanup });
+    let active: RenderLifetime | undefined, pending: RenderLifetime | undefined;
+    lifetime.register(() => { pending?.unload(); active?.unload(); delete box.dataset.renderPending; });
     if (trail.length > 4) { content.textContent = '嵌入层级已达上限'; return box; }
     box.dataset.renderPending = 'true';
-    void context.renderEmbed(this.target, controller.signal).then(res => {
-      if (controller.signal.aborted) return;
+    void context.renderEmbed(this.target, lifetime.signal).then(res => {
+      if (lifetime.signal.aborted) return;
       if (!res) { embedNotFound(content, this.target); return; }
       if (trail.includes(res.path)) { content.textContent = '循环嵌入：' + res.path; return; }
-      let stop: (() => void) | undefined, previous: string | undefined, revision: string | undefined;
-      cleanup.push(() => stop?.());
+      let previous: string | undefined, revision: string | undefined;
       const refresh = () => {
-        if (controller.signal.aborted) return;
+        if (lifetime.signal.aborted) return;
         const fragment = res.read();
-        if (!fragment) { stop?.(); content.textContent = '找不到嵌入的章节或块'; return; }
+        if (!fragment) {
+          pending?.unload(); pending = undefined; active?.unload(); active = undefined;
+          previous = undefined; revision = undefined; delete box.dataset.renderPending;
+          content.textContent = '找不到嵌入的章节或块'; view.requestMeasure(); return;
+        }
         if (fragment.source === previous && fragment.equations?.revision === revision) return;
-        previous = fragment.source; revision = fragment.equations?.revision; stop?.(); content.replaceChildren();
-        const host = document.createElement('div'); host.className = 'cm-note-fragment'; content.appendChild(host);
-        stop = context.mountFragment?.(host, fragment.source, { id: res.path, sourceFrom: fragment.from, equations: fragment.equations, mathSource: fragment.mathSource,
-          context: { ...res.context, embedTrail: [...trail, res.path] } });
-        if (!stop) host.textContent = fragment.source;
+        previous = fragment.source; revision = fragment.equations?.revision; pending?.unload();
+        const render = new RenderLifetime(); void render.load(); pending = render;
+        box.dataset.renderPending = 'true';
+        const host = document.createElement('div'); host.className = 'cm-note-fragment';
+        Object.assign(host.style, { height: '0', overflow: 'hidden', visibility: 'hidden', pointerEvents: 'none' });
+        content.appendChild(host);
+        render.register(() => host.remove());
+        const failed = (error: unknown) => {
+          if (render.signal.aborted || lifetime.signal.aborted || pending !== render) return;
+          render.unload(); pending = undefined; previous = undefined; revision = undefined;
+          delete box.dataset.renderPending;
+          const status = document.createElement('span'); status.setAttribute('role', 'alert');
+          status.textContent = '无法加载嵌入内容';
+          if (!active) content.replaceChildren(status);
+          else { content.querySelector(':scope > [role="alert"]')?.remove(); content.appendChild(status); }
+          context.reportError?.(String(error)); view.requestMeasure();
+        };
+        const options = { id: res.path, sourceFrom: fragment.from, equations: fragment.equations, mathSource: fragment.mathSource,
+          context: { ...res.context, embedTrail: [...trail, res.path] },
+          onError: failed,
+          onReady: () => {
+            if (render.signal.aborted || lifetime.signal.aborted || pending !== render) return;
+            active?.unload(); active = render; pending = undefined;
+            host.removeAttribute('style'); content.replaceChildren(host);
+            delete box.dataset.renderPending; view.requestMeasure();
+          },
+        };
+        try {
+          const stop = context.mountFragment?.(host, fragment.source, options);
+          if (!stop) { failed(new Error('Markdown fragment renderer is unavailable')); return; }
+          render.register(stop);
+        } catch (error) { failed(error); }
       };
-      cleanup.push(res.subscribe(refresh)); refresh();
+      lifetime.register(res.subscribe(refresh)); refresh();
     }).catch(error => {
-      if (!controller.signal.aborted) { content.textContent = '无法加载嵌入内容'; context.reportError?.(String(error)); }
-    }).finally(() => { delete box.dataset.renderPending; });
+      if (!lifetime.signal.aborted) { content.textContent = '无法加载嵌入内容'; context.reportError?.(String(error)); view.requestMeasure(); }
+    }).finally(() => {
+      if (!lifetime.signal.aborted && !pending) { delete box.dataset.renderPending; view.requestMeasure(); }
+    });
     return box;
   }
 }
@@ -630,7 +661,7 @@ function ensureMermaid() {
   return mermaidPromise;
 }
 let mermaidSeq = 0;
-const mermaidMounts = new WeakMap<HTMLElement, RenderLifetime>();
+const mermaidMounts = new WeakMap<HTMLElement, { update: (widget: MermaidWidget) => void; destroy: () => void }>();
 
 class MermaidWidget extends WidgetType {
   constructor(readonly code: string, readonly range?: { from: number; to: number }) {
@@ -642,39 +673,66 @@ class MermaidWidget extends WidgetType {
   ignoreEvent() {
     return true;
   }
+  updateDOM(dom: HTMLElement) {
+    const mount = mermaidMounts.get(dom);
+    if (!mount) return false;
+    mount.update(this); return true;
+  }
   toDOM(view: EditorView) {
     const doc = view.dom.ownerDocument;
     const div = doc.createElement('div');
     div.className = 'mermaid cm-mermaid';
     const body = doc.createElement('div');
-    body.textContent = '…'; div.appendChild(body);
-    div.dataset.renderPending = 'true';
-    const lifetime = new RenderLifetime(), renderId = `cm-mmd-${++mermaidSeq}`;
-    const stage = doc.createElement('div');
-    Object.assign(stage.style, { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' });
-    void lifetime.load(); mermaidMounts.set(div, lifetime);
-    lifetime.register(() => { stage.remove(); delete div.dataset.renderPending; });
-    void ensureMermaid()
-      .then(async mermaid => {
-        lifetime.assertActive();
-        await Promise.all(['MathJax_Main', 'MathJax_Math', 'Noto Serif SC'].map(font => doc.fonts.load('16px "' + font + '"')));
-        lifetime.assertActive(); doc.body.appendChild(stage);
-        return mermaid.render(renderId, this.code, stage);
-      })
-      .then(({ svg }) => {
-        if (!lifetime.signal.aborted) { body.innerHTML = svg; view.requestMeasure(); }
-      })
-      .catch((err) => {
-        if (lifetime.signal.aborted) return;
-        div.classList.add('mod-error');
-        body.textContent = String(err?.message ?? err);
-        view.requestMeasure();
-      }).finally(() => { stage.remove(); delete div.dataset.renderPending; });
-    if (this.range && !view.state.readOnly) div.appendChild(sourceButton(view, this.range, '图表'));
+    div.appendChild(body);
+    let widget: MermaidWidget = this, current: RenderLifetime | undefined;
+    const status = doc.createElement('span');
+    const render = () => {
+      current?.unload();
+      const lifetime = new RenderLifetime(), renderId = `cm-mmd-${++mermaidSeq}`;
+      current = lifetime; void lifetime.load();
+      const code = widget.code, stage = doc.createElement('div');
+      Object.assign(stage.style, { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' });
+      lifetime.register(() => stage.remove());
+      div.dataset.renderPending = 'true'; div.setAttribute('aria-busy', 'true');
+      div.classList.remove('mod-error'); div.removeAttribute('title');
+      if (body.querySelector('svg')) status.remove();
+      else { status.setAttribute('role', 'status'); status.textContent = '正在渲染图表…'; body.replaceChildren(status); }
+      void ensureMermaid()
+        .then(async mermaid => {
+          lifetime.assertActive();
+          await Promise.all(['MathJax_Main', 'MathJax_Math', 'Noto Serif SC'].map(font => doc.fonts.load('16px "' + font + '"')));
+          lifetime.assertActive(); doc.body.appendChild(stage);
+          return mermaid.render(renderId, code, stage);
+        })
+        .then(({ svg }) => {
+          if (!lifetime.signal.aborted) { body.innerHTML = svg; view.requestMeasure(); }
+        })
+        .catch((err) => {
+          if (lifetime.signal.aborted) return;
+          div.classList.add('mod-error');
+          div.title = String(err?.message ?? err);
+          status.setAttribute('role', 'alert'); status.textContent = '图表渲染失败';
+          body.appendChild(status);
+          view.requestMeasure();
+        }).finally(() => {
+          stage.remove();
+          if (lifetime.signal.aborted || current !== lifetime) return;
+          delete div.dataset.renderPending; div.removeAttribute('aria-busy'); view.requestMeasure();
+        });
+    };
+    const present = () => {
+      div.querySelector(':scope > .cm-source-toggle')?.remove();
+      if (widget.range && !view.state.readOnly) div.appendChild(sourceButton(view, widget.range, '图表'));
+    };
+    mermaidMounts.set(div, {
+      update: next => { const changed = widget.code !== next.code; widget = next; present(); if (changed) render(); },
+      destroy: () => { current?.unload(); delete div.dataset.renderPending; div.removeAttribute('aria-busy'); },
+    });
+    present(); render();
     return div;
   }
   destroy(dom: HTMLElement) {
-    const lifetime = mermaidMounts.get(dom); mermaidMounts.delete(dom); lifetime?.unload();
+    const mount = mermaidMounts.get(dom); mermaidMounts.delete(dom); mount?.destroy();
   }
 }
 

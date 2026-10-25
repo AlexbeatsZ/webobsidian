@@ -33,6 +33,7 @@ import * as files from './vault';
 import * as workspace from './workspace';
 import * as editor from './editor';
 import * as markdown from './markdown';
+import { RenderLifetime } from './renderLifetime';
 import { WebViewerView, promptWebViewer } from './webviewer';
 import { bindPluginMenus } from './menus';
 import { installJavascript } from '../javascript/runtime';
@@ -428,6 +429,7 @@ export async function requestUrl(input: string | any) {
     },
   };
 }
+const markdownMounts = new WeakMap<HTMLElement, { pending?: RenderLifetime; complete?: { lifetime: RenderLifetime; source: string; sourcePath: string } }>();
 export const MarkdownRenderer = {
   async render(_app: App, source: string, el: HTMLElement, sourcePath: string, component: events.Component) {
     const context = createVaultRenderContext(sourcePath, {
@@ -438,16 +440,55 @@ export const MarkdownRenderer = {
       openMenu: (menu) => useStore.getState().openContextMenu(menu),
     });
     await new Promise<void>((resolve, reject) => {
-      let stop: (() => void) | undefined;
-      let cancelled = false;
-      component.register(() => { cancelled = true; try { stop?.(); } finally { resolve(); } });
-      if (cancelled) return;
-      stop = mountMarkdownFragment(el, source, {
-        id: sourcePath || 'plugin.md',
-        context,
-        onReady: resolve,
-        onError: reject,
+      const entry = markdownMounts.get(el) ?? {};
+      markdownMounts.set(el, entry);
+      entry.pending?.unload();
+      if (entry.complete && (entry.complete.source !== source || entry.complete.sourcePath !== sourcePath)) entry.complete.lifetime.unload();
+      const lifetime = new RenderLifetime();
+      entry.pending = lifetime;
+      const content = el.ownerDocument.createElement('div');
+      content.style.visibility = 'hidden';
+      content.style.height = '0';
+      content.style.overflow = 'hidden';
+      const status = el.ownerDocument.createElement('span');
+      status.setAttribute('role', 'status');
+      status.textContent = '正在渲染…';
+      el.dataset.renderPending = 'true';
+      delete el.dataset.renderError;
+      lifetime.register(() => {
+        if (entry.pending === lifetime) { entry.pending = undefined; delete el.dataset.renderPending; delete el.dataset.renderError; }
+        if (entry.complete?.lifetime === lifetime) entry.complete = undefined;
+        content.remove(); status.remove(); resolve();
       });
+      component.register(() => lifetime.unload());
+      if (lifetime.signal.aborted) return;
+      void lifetime.load();
+      if (!entry.complete) el.append(status);
+      el.append(content);
+      try {
+        lifetime.register(mountMarkdownFragment(content, source, {
+          id: sourcePath || 'plugin.md',
+          context,
+          onReady: () => {
+            if (lifetime.signal.aborted || entry.pending !== lifetime) return;
+            entry.complete?.lifetime.unload();
+            entry.complete = { lifetime, source, sourcePath }; entry.pending = undefined;
+            content.style.visibility = ''; content.style.height = ''; content.style.overflow = '';
+            el.replaceChildren(content); status.remove();
+            delete el.dataset.renderPending;
+            resolve();
+          },
+          onError: error => {
+            if (lifetime.signal.aborted || entry.pending !== lifetime) return;
+            content.style.visibility = ''; content.style.height = ''; content.style.overflow = ''; status.remove();
+            delete el.dataset.renderPending; el.dataset.renderError = 'fragment';
+            reject(error);
+          },
+        }));
+      } catch (error) {
+        reject(error);
+        lifetime.unload();
+      }
     });
   },
   async renderMarkdown(source: string, el: HTMLElement, path: string, component: events.Component) {
@@ -460,9 +501,15 @@ function renderMath(source: string, display: boolean) {
     cls: display ? 'math math-block' : 'math math-inline',
   });
   el.dataset.latex = source;
+  el.textContent = '正在渲染公式…'; el.setAttribute('aria-busy', 'true');
   const promise = renderMathInto(el, source, display, new AbortController().signal);
   mathPromises.add(promise);
-  void promise.finally(() => mathPromises.delete(promise));
+  void promise.then(() => {
+    mathPromises.delete(promise); el.removeAttribute('aria-busy');
+  }, error => {
+    mathPromises.delete(promise); el.removeAttribute('aria-busy');
+    el.textContent = '无法渲染公式'; el.title = String(error);
+  });
   return el;
 }
 export const obsidianModule: Record<string, any> = {

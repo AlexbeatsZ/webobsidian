@@ -36,13 +36,13 @@ export function installQueryBlocks(): () => void {
       const controller = new AbortController();
       active = controller;
       status.textContent = '搜索中…';
-      results.replaceChildren();
       try {
         const { hits } = await api.search(query, queryResultLimit + 1, controller.signal);
         if (controller.signal.aborted || context.signal.aborted) return;
         status.textContent = hits.length > queryResultLimit
           ? `已显示前 ${queryResultLimit} 个结果；还有更多匹配，请缩小搜索范围`
           : hits.length ? `${hits.length} 个结果` : '没有搜索结果';
+        const rows = element.ownerDocument.createDocumentFragment();
         for (const hit of hits.slice(0, queryResultLimit)) {
           const row = element.ownerDocument.createElement('li');
           const link = element.ownerDocument.createElement('a');
@@ -64,8 +64,9 @@ export function installQueryBlocks(): () => void {
             snippet.textContent = hit.snippet;
             row.append(snippet);
           }
-          results.append(row);
+          rows.append(row);
         }
+        results.replaceChildren(rows);
       } catch (error) {
         if (!controller.signal.aborted && !context.signal.aborted)
           status.textContent = `搜索失败：${error instanceof Error ? error.message : String(error)}`;

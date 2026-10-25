@@ -9,6 +9,7 @@ export function createMathTooltip(view: EditorView, tex: string, options: {
   dom.className = 'cm-tooltip-cursor' + (options.above === undefined ? '' : options.above ? ' cm-tooltip-above' : ' cm-tooltip-below');
   const body = document.createElement('div'); body.className = 'cm-math-tooltip-body';
   body.textContent = '正在渲染…'; dom.appendChild(body);
+  const status = document.createElement('span'); status.setAttribute('role', 'status');
   let controller = new AbortController(), previous: MathMetrics | undefined;
   let invalid = true, destroyed = false;
   const render = (force = false) => {
@@ -23,9 +24,20 @@ export function createMathTooltip(view: EditorView, tex: string, options: {
       previous = metrics; invalid = false;
       controller.abort(); controller = new AbortController();
       const signal = controller.signal;
+      const rendered = body.querySelector('mjx-container');
+      status.textContent = rendered ? '' : '正在渲染公式…'; status.removeAttribute('title');
+      status.setAttribute('aria-label', '正在渲染公式…');
+      if (!rendered) body.replaceChildren();
+      body.appendChild(status); body.setAttribute('aria-busy', 'true');
       void renderMath(body, tex, options.display, signal, {
         transient: true, sourcePath: options.sourcePath, definitions: options.definitions, metrics,
-      }).catch(() => { if (!signal.aborted) body.textContent = '无法渲染公式'; });
+      }).then(() => {
+        if (!signal.aborted) body.removeAttribute('aria-busy');
+      }, error => {
+        if (signal.aborted) return;
+        invalid = true; body.removeAttribute('aria-busy');
+        status.textContent = '无法渲染公式'; status.removeAttribute('aria-label'); status.title = String(error);
+      });
     } });
   };
   let stop = () => {};

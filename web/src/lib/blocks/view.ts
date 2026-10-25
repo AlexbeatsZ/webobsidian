@@ -19,17 +19,23 @@ class EffectWidget extends WidgetType {
   toDOM(view: EditorView) {
     const doc = view.dom.ownerDocument, host = doc.createElement('div');
     host.className = ['native-block-effect', ...this.block.classes].join(' ');
-    let stopped = false, run: JavascriptRun | undefined, queued = false, errorOutput: HTMLElement | undefined;
+    let stopped = false, run: JavascriptRun | undefined, complete: JavascriptRun | undefined, queued = false, errorOutput: HTMLElement | undefined;
     const measure = () => { if (!stopped) view.requestMeasure(); };
     const render = async () => {
       if (stopped) return;
-      run?.unload();
+      if (run !== complete) run?.unload();
       errorOutput?.remove(); errorOutput = undefined;
-      const output = doc.createElement('div'); host.prepend(output);
+      const output = doc.createElement('div');
+      const stage = doc.createElement('div'); stage.append(output);
+      stage.style.visibility = 'hidden'; stage.style.height = '0'; stage.style.overflow = 'hidden';
+      const pending = doc.createElement('span'); pending.setAttribute('role', 'status'); pending.textContent = '正在渲染…';
+      if (!complete) host.prepend(pending);
+      host.prepend(stage);
       const current = createEffectRun(output, contextOf(view), () => {
-        if (stopped || queued) return; queued = true;
+        if (stopped || run !== current || queued) return; queued = true;
         queueMicrotask(() => { queued = false; if (!stopped) void render(); });
       }, measure); run = current; host.dataset.renderPending = 'true';
+      current.register(() => { pending.remove(); stage.remove(); });
       try {
         const model = this.identity.model, target = this.identity.target;
         const raw = model.text.slice(target.target.from, target.to);
@@ -47,6 +53,9 @@ class EffectWidget extends WidgetType {
         current.assertActive();
         if (typeof result === 'string') await current.renderMarkdown(result);
         else if (typeof result === 'function') current.onCleanup(result as () => void);
+        current.assertActive();
+        complete?.unload(); complete = current;
+        stage.style.visibility = ''; stage.style.height = ''; stage.style.overflow = '';
       } catch (error) {
         if (!current.signal.aborted) {
           current.unload();
@@ -54,9 +63,9 @@ class EffectWidget extends WidgetType {
           // Keep source accessible even when user code fails.
           output.replaceChildren(message); host.prepend(output); errorOutput = output;
         }
-      } finally { if (!stopped && run === current) { delete host.dataset.renderPending; measure(); } }
+      } finally { pending.remove(); if (!stopped && run === current) { delete host.dataset.renderPending; measure(); if (current.signal.aborted) run = complete; } }
     };
-    mounts.set(host, { stop() { stopped = true; run?.unload(); } });
+    mounts.set(host, { stop() { stopped = true; run?.unload(); if (complete !== run) complete?.unload(); delete host.dataset.renderPending; } });
     if (!view.state.readOnly) host.append(sourceButton(view, () => this.identity.range, '块效果'));
     void render(); return host;
   }

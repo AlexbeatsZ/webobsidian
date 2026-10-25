@@ -4,6 +4,7 @@ import { contextOf, nonExecutingContext, renderContext, type RenderContext } fro
 import { followRenderedLink, linkIntent } from './fragmentNavigation';
 import { syntaxModel, sourceOf } from './syntaxModel';
 import { livePreviewReadonly } from './renderState';
+import { RenderLifetime } from './obsidian/renderLifetime';
 
 export function bindRenderedLink(anchor: HTMLAnchorElement, view: EditorView, target: string, footnote = false) {
   anchor.href = target; anchor.dataset.previewLink = target;
@@ -17,17 +18,42 @@ export function bindRenderedLink(anchor: HTMLAnchorElement, view: EditorView, ta
 }
 
 export function mountLinkPreview(host: HTMLElement, context: RenderContext, target: string): () => void {
-  const controller = new AbortController();
-  let unmount: (() => void) | undefined, unsubscribe: (() => void) | undefined;
+  const document = host.ownerDocument, lifetime = new RenderLifetime(); void lifetime.load();
+  let active: RenderLifetime | undefined, pending: RenderLifetime | undefined;
   const title = document.createElement('a'); title.className = 'cm-link-preview-header'; title.textContent = target;
   title.href = target; title.onclick = event => { event.preventDefault(); context.openLink(target, linkIntent(event)); };
   const body = document.createElement('div'); body.className = 'cm-link-preview-body';
   host.append(title, body); body.textContent = '加载预览…';
+  lifetime.register(() => { pending?.unload(); active?.unload(); delete body.dataset.renderPending; });
   const mount = (source: string, from: number, model: ReturnType<typeof import('@webobsidian/markdown-core')['analyzeMarkdown']>, scoped: RenderContext) => {
-    unmount?.(); const fragmentHost = document.createElement('div'); body.replaceChildren(fragmentHost);
-    unmount = context.mountFragment?.(fragmentHost, source, { id: scoped.sourcePath + '#preview', mode: 'reading', sourceFrom: from,
+    if (lifetime.signal.aborted) return;
+    pending?.unload();
+    const render = new RenderLifetime(); void render.load(); pending = render;
+    const fragmentHost = document.createElement('div');
+    Object.assign(fragmentHost.style, { height: '0', overflow: 'hidden', visibility: 'hidden', pointerEvents: 'none' });
+    body.appendChild(fragmentHost); body.dataset.renderPending = 'true';
+    render.register(() => fragmentHost.remove());
+    const failed = (error: unknown) => {
+      if (lifetime.signal.aborted || render.signal.aborted || pending !== render) return;
+      render.unload(); pending = undefined; delete body.dataset.renderPending;
+      const status = document.createElement('span'); status.setAttribute('role', 'alert'); status.textContent = '预览失败：' + String(error);
+      if (!active) body.replaceChildren(status);
+      else { body.querySelector(':scope > [role="alert"]')?.remove(); body.appendChild(status); }
+    };
+    const options = { id: scoped.sourcePath + '#preview', mode: 'reading' as const, sourceFrom: from,
       context: { ...nonExecutingContext(scoped), footnoteBody: true, navigationId: undefined, recordNavigation: undefined },
-      equations: equationContext(model, from), mathSource: { model, from } });
+      equations: equationContext(model, from), mathSource: { model, from }, onError: failed,
+      onReady: () => {
+        if (lifetime.signal.aborted || render.signal.aborted || pending !== render) return;
+        active?.unload(); active = render; pending = undefined;
+        fragmentHost.removeAttribute('style'); body.replaceChildren(fragmentHost); delete body.dataset.renderPending;
+      },
+    };
+    try {
+      const stop = context.mountFragment?.(fragmentHost, source, options);
+      if (!stop) { failed(new Error('Markdown fragment renderer is unavailable')); return; }
+      render.register(stop);
+    } catch (error) { failed(error); }
   };
   const destination = parseLinkTarget(target);
   const local = !destination.path || destination.path === context.sourcePath;
@@ -35,17 +61,21 @@ export function mountLinkPreview(host: HTMLElement, context: RenderContext, targ
     const model = context.mathSource.model, range = fragmentRange(model, destination.fragment);
     if (range) mount(model.text.slice(range.from, range.to), range.from, model, context);
     else body.textContent = '未找到链接目标';
-  } else void context.renderEmbed(target, controller.signal).then(note => {
-    if (controller.signal.aborted) return;
+  } else void context.renderEmbed(target, lifetime.signal).then(note => {
+    if (lifetime.signal.aborted) return;
     if (!note) { body.textContent = '未找到笔记或链接目标'; return; }
     const paint = () => {
+      if (lifetime.signal.aborted) return;
       const data = note.read();
-      if (!data?.mathSource) { unmount?.(); unmount = undefined; body.textContent = '未找到链接目标'; return; }
+      if (!data?.mathSource) {
+        pending?.unload(); pending = undefined; active?.unload(); active = undefined;
+        delete body.dataset.renderPending; body.textContent = '未找到链接目标'; return;
+      }
       mount(data.source, data.from, data.mathSource.model, { ...note.context, mountFragment: context.mountFragment });
     };
-    unsubscribe = note.subscribe(paint); paint();
-  }).catch(error => { if (!controller.signal.aborted) body.textContent = '预览失败：' + String(error); });
-  return () => { controller.abort(); unsubscribe?.(); unmount?.(); };
+    lifetime.register(note.subscribe(paint)); paint();
+  }).catch(error => { if (!lifetime.signal.aborted) body.textContent = '预览失败：' + String(error); });
+  return () => lifetime.unload();
 }
 
 export class LinkPreviewPopover {

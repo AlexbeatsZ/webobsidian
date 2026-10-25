@@ -19,6 +19,7 @@ class JavascriptBlock extends Component {
   private disposed = false;
   private timer?: number;
   private run?: JavascriptRun;
+  private complete?: JavascriptRun;
   private execute?: (...args: any[]) => Promise<unknown>;
   private error?: HTMLElement;
   constructor(private app: App, private source: string, private host: HTMLElement, private ctx: CodeBlockContext) {
@@ -35,9 +36,16 @@ class JavascriptBlock extends Component {
     if (this.disposed || this.ctx.signal.aborted) return;
     window.clearTimeout(this.timer); this.timer = undefined;
     this.error?.remove(); this.error = undefined;
-    if (this.run) this.removeChild(this.run);
-    const output = this.host.ownerDocument.createElement('div'); output.className = 'interactive-js-output'; this.host.append(output);
-    const run = new JavascriptRun(this.app, output, this.ctx.renderContext, this.schedule, this.ctx.requestMeasure);
+    if (this.run && this.run !== this.complete) this.removeChild(this.run);
+    const doc = this.host.ownerDocument;
+    const output = doc.createElement('div'); output.className = 'interactive-js-output';
+    const stage = doc.createElement('div'); stage.append(output); this.host.append(stage);
+    stage.style.visibility = 'hidden'; stage.style.height = '0'; stage.style.overflow = 'hidden';
+    const pending = doc.createElement('span'); pending.setAttribute('role', 'status'); pending.textContent = '正在渲染…';
+    if (!this.complete) this.host.append(pending);
+    const run = new JavascriptRun(this.app, output, this.ctx.renderContext,
+      () => { if (this.run === run) this.schedule(); }, this.ctx.requestMeasure);
+    run.register(() => { pending.remove(); stage.remove(); });
     this.run = this.addChild(run); void run.load();
     this.host.dataset.renderPending = 'true'; this.host.setAttribute('aria-busy', 'true');
     try {
@@ -48,6 +56,10 @@ class JavascriptBlock extends Component {
       await this.execute(this.app, output, run.sourcePath, run, charts.echarts,
         (option: EChartsOption, options?: ChartOptions) => { run.assertActive(); return charts.chart(output, run.onCleanup, option, options); },
         createWidgets(run), run.watch, run.onCleanup, run.renderMarkdown.bind(run), run.signal);
+      run.assertActive();
+      if (this.complete) this.removeChild(this.complete);
+      this.complete = run;
+      stage.style.visibility = ''; stage.style.height = ''; stage.style.overflow = '';
     } catch (error) {
       if (!run.signal.aborted) {
         // Dispose partial output as well as charts/observers created before errors.
@@ -57,8 +69,10 @@ class JavascriptBlock extends Component {
         this.host.append(pre); this.error = pre;
       }
     } finally {
+      pending.remove();
       if (!this.disposed && this.run === run) {
         delete this.host.dataset.renderPending; this.host.removeAttribute('aria-busy'); this.ctx.requestMeasure();
+        if (run.signal.aborted) this.run = this.complete;
       }
     }
   }

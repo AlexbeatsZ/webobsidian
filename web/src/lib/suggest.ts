@@ -188,6 +188,7 @@ function renderLabel(el: HTMLElement, label: string, item: Item) {
 const cachedTags = new WeakMap<EditorView, string[]>();
 class SuggestState {
   private preview?: AbortController;
+  private previewItem?: Item['equation'];
   private generation = 0;
   private targetPath = '';
   private targetLoad?: Promise<import('@webobsidian/markdown-core').DocumentSession>;
@@ -339,17 +340,31 @@ class SuggestState {
 
   private renderPreview() {
     this.preview?.abort();
-    this.dom?.querySelector('.suggestion-equation-preview')?.remove();
     const item = this.items[this.selected]?.equation;
+    let preview = this.dom?.querySelector<HTMLElement>('.suggestion-equation-preview');
+    if (item !== this.previewItem) { preview?.remove(); preview = null; }
+    this.previewItem = item;
     if (!this.dom || !item) return;
-    const preview = document.createElement('div'); preview.className = 'suggestion-equation-preview'; this.dom.appendChild(preview);
+    if (!preview) {
+      preview = document.createElement('div'); preview.className = 'suggestion-equation-preview'; this.dom.appendChild(preview);
+    }
+    preview.querySelector('[role="status"]')?.remove();
+    const status = document.createElement('span'); status.setAttribute('role', 'status'); status.textContent = '正在渲染公式…';
+    preview.appendChild(status); preview.setAttribute('aria-busy', 'true');
     this.preview = new AbortController();
-    void renderMath(preview, item.value.tex, true, this.preview.signal, { transient: true, sourcePath: item.path,
-      definitions: mathDefinitionContext(item.model, item.value.from) }).catch(() => {});
+    const signal = this.preview.signal, host = preview;
+    void renderMath(host, item.value.tex, true, signal, { transient: true, sourcePath: item.path,
+      definitions: mathDefinitionContext(item.model, item.value.from) }).then(() => {
+      if (!signal.aborted) host.removeAttribute('aria-busy');
+    }, error => {
+      if (signal.aborted) return;
+      host.removeAttribute('aria-busy'); status.textContent = '无法渲染公式'; status.title = String(error);
+    });
   }
 
   hide() {
     this.preview?.abort();
+    this.previewItem = undefined;
     this.generation++;
     this.ctx = null;
     if (this.dom) {
