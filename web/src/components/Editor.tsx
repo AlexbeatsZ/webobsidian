@@ -10,6 +10,9 @@ import { analyzeMarkdown, fragmentRange, equationContext } from '@webobsidian/ma
 import { nativeReviewExtension } from '../lib/review/view';
 import { propertyTypesSnapshot, subscribePropertyTypes } from '../lib/propertyTypes';
 import type { LinkIntent } from '../lib/fragmentNavigation';
+import { TEXT_EXT_RE } from '../lib/media';
+import AttachmentView from './AttachmentView';
+import PdfViewer from './PdfViewer';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
 export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment, sidebar = false, navigationId, onOpenLink, onReady }: {
@@ -32,7 +35,8 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   const notify = useStore((s) => s.notify);
   const files = useStore((s) => s.filePaths);
   const propertyTypes = useSyncExternalStore(subscribePropertyTypes, propertyTypesSnapshot);
-  const { session, snapshot, error } = useDocumentSession(path);
+  const textPath = path && TEXT_EXT_RE.test(path) ? path : null;
+  const { session, snapshot, error } = useDocumentSession(textPath);
   const reviewExtensions = useMemo(() => path && !embedded && !fragment ? nativeReviewExtension(path) : [], [path, embedded, fragment]);
   useEffect(() => session && !reading ? bindTimestampUpdates(session, notify) : undefined, [session, reading, notify]);
   const [editorView, setEditorView] = useState<import('@codemirror/view').EditorView | null>(null);
@@ -52,6 +56,8 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     const from = fragment ? fragmentRange(model, fragment)?.from ?? 0 : 0;
     return { ...context, sourceFragment: !!fragment, equations: equationContext(model, from), mathSource: { model, from } };
   }, [context, session, snapshot.version, fragment]);
+  if (path && /\.pdf$/i.test(path)) return <PdfViewer key={path} path={path} viewId={navigationId ?? (suppliedPath ? 'split' : 'main')} />;
+  if (path && !textPath) return <AttachmentView key={path} path={path} />;
   if (error) return <div className="editor-error" role="alert">{error.message}</div>;
   if (!session) return <div className="editor-loading">加载中…</div>;
   const analysis = session.analysis;

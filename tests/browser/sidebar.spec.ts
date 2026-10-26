@@ -57,7 +57,7 @@ test.beforeEach(async ({ page }) => {
 
 test('floating right dock adds tabs without resizing the document or changing the main file', async ({ page }) => {
   const before = (await page.locator('.workspace').boundingBox())!.width;
-  await expect(page.locator('.ribbon-fixed button')).toHaveCount(4);
+  await expect(page.locator('.ribbon-fixed button')).toHaveCount(5);
   await page.getByRole('button', { name: '新建右侧标签页' }).click();
   await expect(page.getByRole('tab', { name: 'Homepage' })).toHaveCount(1);
   await page.evaluate(() => (window as any).sidebarFixture.store.getState().toggleRight());

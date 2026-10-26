@@ -61,6 +61,18 @@ aliases/headings use the same matcher. Heading search includes unsaved changes.
 
 ## Validation boundary
 
+### 2026-10-25 thumbnail consumers
+
+The existing matchesFor occurrence pass also returns optional sourceRanges for
+the complete matched body, independent of the context-preview limit. Coordinates
+are normalized SourceDocument UTF-16 offsets and retain exact matched text.
+SearchPanel publishes its existing per-note results through the search module;
+the minimap subscribes without a second request or matcher. Query changes and
+panel disposal clear that snapshot. Consumers reject ranges whose text no longer
+matches an unsaved editor document rather than highlighting stale positions.
+Focused source-range and subscription tests were executed for this extension;
+the older validation restrictions below describe the original implementation.
+
 Current work is static only: type checks and isolated production/bundle checks.
 Regression cases cover mixed queries, polyphony, UTF-16 ranges, repeat matches,
 literal isolation and name/body strategy. These cases are not executed under the

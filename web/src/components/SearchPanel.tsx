@@ -1,5 +1,5 @@
 import { useIndexVersion } from '../lib/indexEvents';
-import { useSearch } from '../lib/search';
+import { useSearch, publishSearchResultHighlights } from '../lib/search';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type SearchHit, type MatchContext, type NoteMatches } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -95,10 +95,15 @@ export default function SearchPanel() {
   // Drop cached per-note matches + collapse overrides when the query changes.
   useEffect(() => {
     matchGeneration.current++;
+    publishSearchResultHighlights('', new Map());
     setMatches(new Map());
     setNoteOverride(new Map());
     inflight.current.clear();
   }, [q, matchCase, indexVersion, searchConfig]);
+  useEffect(() => {
+    publishSearchResultHighlights(q, matches);
+    return () => { publishSearchResultHighlights('', new Map()); };
+  }, [matches]);
   // Toggling the global collapse switch clears individual overrides.
   useEffect(() => setNoteOverride(new Map()), [collapsed]);
 

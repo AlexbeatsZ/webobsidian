@@ -310,7 +310,9 @@ export class QmdEngine {
     }
     flush();
 
-    return { path: rel, count: occ.length, contexts };
+    return { path: rel, count: occ.length, contexts,
+      sourceRanges: occ.map(match => ({ from: bodyFrom + match.start, to: bodyFrom + match.start + match.len,
+        text: body.slice(match.start, match.start + match.len) })) };
   }
 
   allTags(): { tag: string; count: number }[] {

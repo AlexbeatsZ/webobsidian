@@ -38,6 +38,7 @@ export interface MatchContext {
 export interface NoteMatches {
   path: string;
   count: number;
+  sourceRanges?: { from: number; to: number; text: string }[];
   contexts: MatchContext[];
 }
 

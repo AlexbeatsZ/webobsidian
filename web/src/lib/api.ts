@@ -1,4 +1,5 @@
 import type { CatalogEntry } from '@webobsidian/search-core';
+import { TEXT_EXT_RE } from './media';
 import type { VaultConfigurationSource, PropertyTypeExpectation, TreeNode, SearchHit, MatchContext, NoteMatches } from '../../../server/src/contracts';
 export type { VaultConfigurationSource, PropertyTypeExpectation, TreeNode, SearchHit, MatchContext, NoteMatches } from '../../../server/src/contracts';
 // Thin fetch wrapper around the WebObsidian server API.
@@ -111,11 +112,14 @@ export const api = {
   // files
   tree: () => req<TreeNode>('/api/files/'),
   read: async (path: string, vault?: string) => {
+    if (!TEXT_EXT_RE.test(path)) throw new ApiError('此文件不支持文本编辑，请以附件方式打开', 415);
     const expected = vault ?? await vaultRequestIdentity();
     const file = await req<{ path: string; content: string; revision?: string; vault: string }>(
       `/api/files/content?path=${encodeURIComponent(path)}`,
       { vault: expected },
     );
+    if (!file || typeof file !== 'object' || typeof file.content !== 'string' || typeof file.vault !== 'string' || !file.vault)
+      throw new ApiError('无效的文本文档响应，未创建文档会话', 502);
     if (file.vault !== expected) { invalidateVaultRequests(); throw new ApiError('文档来自其他 Vault，已保留当前会话', 409); }
     return file;
   },

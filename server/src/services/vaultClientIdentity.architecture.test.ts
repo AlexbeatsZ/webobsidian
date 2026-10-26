@@ -54,3 +54,28 @@ it('rejects an identity-mismatched file response even when its content revision 
   await expect(api.read('same.md')).rejects.toMatchObject({ status: 409 });
   await expect(api.rename('same.md', 'other.md')).rejects.toMatchObject({ status: 409 });
 });
+
+it('rejects binary document reads without fetching or invalidating the workspace identity', async () => {
+  const fetcher = vi.fn(async (url: string) => url === '/api/vault-identity' ? Response.json({ vault: 'vault-A' }) :
+    url.startsWith('/api/files/content?') ? new Response('%PDF-1.7', { headers: { 'Content-Type': 'application/pdf' } }) :
+    Response.json({ ok: true }));
+  vi.stubGlobal('fetch', fetcher);
+  const { api } = await import(modulePath);
+  for (const path of ['paper.pdf', 'PAPER.PDF', 'archive.zip', 'attachment.bin']) {
+    await expect(api.read(path)).rejects.toMatchObject({ status: 415 });
+  }
+  expect(fetcher).not.toHaveBeenCalled();
+  await expect(api.putUiState({ activePath: 'paper.pdf' }, 'fixture')).resolves.toMatchObject({ ok: true });
+});
+
+it.each([
+  () => new Response('%PDF-1.7', { headers: { 'Content-Type': 'application/pdf' } }),
+  () => Response.json({ path: 'note.md', content: 'missing identity' }),
+  () => Response.json({ path: 'note.md', content: null, vault: 'vault-A' }),
+])('reports an invalid text response without treating it as a Vault switch', async response => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/vault-identity' ? Response.json({ vault: 'vault-A' }) :
+    url.startsWith('/api/files/content?') ? response() : Response.json({ ok: true })));
+  const { api } = await import(modulePath);
+  await expect(api.read('note.md')).rejects.toMatchObject({ status: 502 });
+  await expect(api.putUiState({ activePath: 'note.md' }, 'fixture')).resolves.toMatchObject({ ok: true });
+});

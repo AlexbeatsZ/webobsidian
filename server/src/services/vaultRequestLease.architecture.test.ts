@@ -192,3 +192,28 @@ it('holds the read operation through the last media-stream byte', async () => {
   await maintenance;
   expect(maintained).toBe(true);
 });
+
+it('serves scoped PDF bytes and ranges while rejecting missing and stale identities', async () => {
+  const bytes = '%PDF-1.7\nfixture PDF bytes\n%%EOF';
+  await fs.writeFile(path.join(state.root, 'paper.pdf'), bytes);
+  const vault = (await vaultConfigurationIdentity()).vault;
+  const scoped = url + `/api/files/content?path=paper.pdf&vault=${vault}`;
+  const response = await fetch(scoped);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')).toBe('application/pdf');
+  expect(await response.text()).toBe(bytes);
+  const partial = await fetch(scoped, { headers: { Range: 'bytes=0-7' } });
+  expect(partial.status).toBe(206);
+  expect(partial.headers.get('content-range')).toBe(`bytes 0-7/${bytes.length}`);
+  expect(await partial.text()).toBe('%PDF-1.7');
+  for (const request of [
+    fetch(url + '/api/files/content?path=paper.pdf'),
+    fetch(scoped, { headers: { 'X-Vault-Identity': 'old-vault' } }),
+    fetch(url + '/api/files/content?path=paper.pdf&vault=old-vault'),
+  ]) {
+    const rejected = await request;
+    expect(rejected.status).toBe(409);
+    expect(await rejected.json()).toMatchObject({ code: 'VAULT_CHANGED' });
+  }
+  expect((await vaultConfigurationIdentity()).vault).toBe(vault);
+});

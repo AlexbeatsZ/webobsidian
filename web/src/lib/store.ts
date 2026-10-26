@@ -9,6 +9,7 @@ import { sidebarTab, restoreSidebarTabs, type SidebarTab } from './sidebarTabs';
 import { getActiveEditor } from './activeEditor';
 import { contextOf } from './renderContext';
 import type { MenuContext } from './configuredMenus/types';
+import { TEXT_EXT_RE } from './media';
 let openGeneration = 0;
 let splitGeneration = 0;
 const rightGenerations = new Map<string, number>();
@@ -167,8 +168,8 @@ interface AppState {
 
   leftPanel: 'files' | 'search';
   setLeftPanel: (p: 'files' | 'search') => void;
-  rightPanel: 'backlinks' | 'outgoing' | 'tags' | 'outline';
-  setRightPanel: (p: 'backlinks' | 'outgoing' | 'tags' | 'outline') => void;
+  rightPanel: 'backlinks' | 'outgoing' | 'tags' | 'outline' | 'minimap';
+  setRightPanel: (p: 'backlinks' | 'outgoing' | 'tags' | 'outline' | 'minimap') => void;
   rightTabs: SidebarTab[];
   rightActiveId: string | null;
   leftActiveId: string | null;
@@ -244,8 +245,6 @@ interface AppState {
   /** Apply a workspace state pushed from another tab/device. */
   applyRemoteState: (state: any, originId: string) => Promise<void>;
 }
-
-const TEXT_RE = /\.(md|markdown|txt|json|csv|canvas|css|js|ya?ml)$/i;
 
 /** All file identities in the existing layout follow one explicit path change. */
 function remapWorkspacePaths(state: AppState, from: string, to?: string): Partial<AppState> {
@@ -324,7 +323,7 @@ function applyPersisted(s: any, set: (p: any) => void): void {
     recent: Array.isArray(s.recent) ? s.recent : [],
     bookmarks: Array.isArray(s.bookmarks) ? s.bookmarks : [],
     leftPanel: s.leftPanel === 'search' ? 'search' : 'files',
-    rightPanel: s.leftPanel === 'tags' ? 'tags' : ['backlinks', 'outgoing', 'tags', 'outline'].includes(s.rightPanel) ? s.rightPanel : 'backlinks',
+    rightPanel: s.leftPanel === 'tags' ? 'tags' : ['backlinks', 'outgoing', 'tags', 'outline', 'minimap'].includes(s.rightPanel) ? s.rightPanel : 'backlinks',
     rightTabs,
     leftActiveId: rightTabs.some(tab => tab.side === 'left' && tab.id === s.leftActiveId) ? s.leftActiveId : null,
     rightActiveId: s.leftPanel === 'bookmarks' ? rightTabs.find(tab => tab.type === 'bookmarks')!.id
@@ -532,7 +531,7 @@ export const useStore = create<AppState>()(
       splitDirection: 'right',
       openToSide: async (path, direction) => {
         cancelNavigation('split', path);
-        if (!TEXT_RE.test(path)) return;
+        if (!TEXT_EXT_RE.test(path)) return;
         const generation = ++splitGeneration;
         const doc = await documents.open(path);
         if (generation !== splitGeneration) return;
@@ -704,7 +703,7 @@ export const useStore = create<AppState>()(
         // view — never read it as a note nor pollute Recent with it.
         const isFolder = !home && findNode(get().tree, path)?.type === 'folder';
         let content = '';
-        if (!isFolder && TEXT_RE.test(path)) {
+        if (!isFolder && TEXT_EXT_RE.test(path)) {
           const doc = await documents.open(path);
           content = doc.snapshot.raw;
         }
@@ -792,7 +791,7 @@ export const useStore = create<AppState>()(
       save: async (cause = 'manual') => {
         const editor = cause === 'manual' ? getActiveEditor() : null;
         const path = editor && !editor.state.readOnly ? contextOf(editor).sourcePath : get().activePath;
-        if (path && TEXT_RE.test(path)) {
+        if (path && TEXT_EXT_RE.test(path)) {
           if(cause==='manual')await manualSave(path);else await documents.get(path)?.save();
         }
       },
@@ -855,7 +854,7 @@ export const useStore = create<AppState>()(
         // Active tab + split pane content aren't persisted (only the paths) —
         // re-read them from the vault after a reload. Drop tabs whose file is gone.
         const { activePath, splitPath, tabs } = get();
-        if (activePath && TEXT_RE.test(activePath)) {
+        if (activePath && TEXT_EXT_RE.test(activePath)) {
           try {
             const doc = await documents.refresh(activePath);
             if (get().activePath === activePath) set({ content: doc.snapshot.raw, dirty: doc.snapshot.dirty });
@@ -868,7 +867,7 @@ export const useStore = create<AppState>()(
             });
           }
         }
-        if (splitPath && TEXT_RE.test(splitPath)) {
+        if (splitPath && TEXT_EXT_RE.test(splitPath)) {
           try {
             const doc = await documents.refresh(splitPath);
             if (get().splitPath === splitPath) set({ splitContent: doc.snapshot.raw });

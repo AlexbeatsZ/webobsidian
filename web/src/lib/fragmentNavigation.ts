@@ -27,10 +27,19 @@ export interface NavigationLocation {
 export interface LinkIntent { disposition?: 'current' | 'tab' | 'side'; source?: EditorView; viewId?: string; focus?: boolean; line?: number }
 export interface NavigationRequest extends LinkIntent {
   fragment?: string; range?: SourceSpan; text?: string; location?: NavigationLocation; history?: boolean;
+  scrollOnly?: boolean;
 }
 export type NavigationResult = { status: 'opened'; location: NavigationLocation } | { status: 'missing' | 'cancelled' };
 type Binding = { id: string; full: boolean };
 const views = new Map<EditorView, Binding>();
+const viewListeners = new Set<(view: EditorView) => void>();
+export function subscribeNavigationViews(listener: (view: EditorView) => void) {
+  viewListeners.add(listener);
+  return () => { viewListeners.delete(listener); };
+}
+function notifyView(view: EditorView) {
+  if (views.get(view)?.full) viewListeners.forEach(listener => listener(view));
+}
 const pending = new Map<string, { path: string; request: NavigationRequest; resolve: (result: NavigationResult) => void; timer: ReturnType<typeof setTimeout>; modeApplied?: boolean }>();
 const positions = new WeakMap<EditorView, Set<NavigationLocation>>();
 /** Existing Callout fold state consumes this request; navigation owns no fold state. */
@@ -59,17 +68,25 @@ export function captureLocation(path: string, id = 'main', target?: EditorView):
   const view = target ?? navigationView(path, id);
   if (!view) return { path, viewId: id };
   const offset = contextOf(view).mathSource?.from ?? 0, selection = view.state.selection.main;
-  const top = view.lineBlockAtHeight(view.scrollDOM.scrollTop - view.contentDOM.offsetTop);
+  const viewport = navigationViewport(view);
   const from = Math.max(0, selection.anchor - 32), to = Math.min(view.state.doc.length, selection.anchor + 32);
   const location: NavigationLocation = { path, viewId: views.get(view)?.id ?? id,
-    anchor: selection.anchor + offset, head: selection.head + offset, scrollAnchor: top.from + offset,
-    scrollOffset: view.scrollDOM.scrollTop - top.top - view.contentDOM.offsetTop, scrollLeft: view.scrollDOM.scrollLeft,
+    anchor: selection.anchor + offset, head: selection.head + offset, scrollAnchor: viewport.from,
+    scrollOffset: viewport.scrollOffset, scrollLeft: view.scrollDOM.scrollLeft,
     version: view.state.field(syntaxModel).version,
     mode: (view.dom.closest('[data-mode]')?.getAttribute('data-mode') as NavigationLocation['mode']) ?? undefined,
     context: { text: view.state.sliceDoc(from, to), offset: selection.anchor - from } };
   const saved = positions.get(view) ?? new Set(); saved.add(location);
   if (saved.size > 220) saved.delete(saved.values().next().value!);
   positions.set(view, saved); return location;
+}
+
+export function navigationViewport(view: EditorView) {
+  const offset = contextOf(view).mathSource?.from ?? 0;
+  const top = view.scrollDOM.scrollTop - view.contentDOM.offsetTop;
+  const first = view.lineBlockAtHeight(top);
+  const last = view.lineBlockAtHeight(top + view.scrollDOM.clientHeight);
+  return { from: first.from + offset, to: last.to + offset, scrollOffset: top - first.top };
 }
 
 function reveal(view: EditorView, request: NavigationRequest): NavigationResult {
@@ -104,13 +121,14 @@ function reveal(view: EditorView, request: NavigationRequest): NavigationResult 
   const from = range.from - offset, to = range.to - offset;
   if (from < 0 || to < from || to > view.state.doc.length) return { status: 'missing' };
   const before = captureLocation(context.sourcePath, views.get(view)?.id, view);
-  const effects: StateEffect<unknown>[] = [revealNavigation.of({ from, to }), renderSourceRegion.of({ from, to })];
+  const effects: StateEffect<unknown>[] = [revealNavigation.of({ from, to })];
+  if (!request.scrollOnly) effects.push(renderSourceRegion.of({ from, to }));
   foldedRanges(view.state).between(from, Math.max(from, to), (start, end) => { effects.push(unfoldEffect.of({ from: start, to: end })); });
-  effects.push(setHighlight.of(restored ? null : { range: { from, to }, inline: target?.kind === 'reference' || !!request.range }));
+  if (!request.scrollOnly) effects.push(setHighlight.of(restored ? null : { range: { from, to }, inline: target?.kind === 'reference' || !!request.range }));
   const footer = target?.kind === 'footnote' && view.state.field(livePreviewReadonly) && !context.footnoteBody;
   const scrollAnchor = footer ? view.state.doc.length : restored?.scrollAnchor === undefined ? from : Math.max(0, Math.min(view.state.doc.length, restored.scrollAnchor + restoredDelta - offset));
   effects.push(EditorView.scrollIntoView(scrollAnchor, { y: restored ? 'start' : 'center' }));
-  view.dispatch({ selection: { anchor: from, head: restored?.head === undefined ? from : Math.max(0, Math.min(view.state.doc.length, restored.head + restoredDelta - offset)) }, effects });
+  view.dispatch({ selection: request.scrollOnly ? undefined : { anchor: from, head: restored?.head === undefined ? from : Math.max(0, Math.min(view.state.doc.length, restored.head + restoredDelta - offset)) }, effects });
   if (footer) view.requestMeasure({ read: () => view.dom.querySelector<HTMLElement>('[data-footnote-target="' + CSS.escape(request.fragment!) + '"]'),
     write: element => element?.scrollIntoView({ block: 'center' }) });
   if (restored) view.requestMeasure({ read: () => view.lineBlockAt(scrollAnchor).top + view.contentDOM.offsetTop + (restored.scrollOffset ?? 0),
@@ -162,8 +180,9 @@ export function openFragment(path: string, fragment: string, target?: EditorView
 export function bindFragmentNavigation(view: EditorView, _path: string, full: boolean): () => void {
   const id = contextOf(view).navigationId ?? (full ? 'main' : 'fragment:' + Math.random().toString(36).slice(2));
   views.set(view, { id, full });
+  notifyView(view);
   requestAnimationFrame(() => consume(view, id));
-  return () => { views.delete(view); positions.delete(view); };
+  return () => { const full = views.get(view)?.full; views.delete(view); positions.delete(view); if (full) viewListeners.forEach(listener => listener(view)); };
 }
 
 /** Click, keyboard and menu adapters pass the same target and opening intent. */
@@ -188,6 +207,7 @@ export const navigationExtensions: Extension = [highlight, ViewPlugin.fromClass(
   timer: ReturnType<typeof setTimeout> | undefined;
   constructor(readonly view: EditorView) {}
   update(update: import('@codemirror/view').ViewUpdate) {
+    notifyView(this.view);
     if (update.docChanged) for (const location of positions.get(this.view) ?? []) {
       const offset = contextOf(this.view).mathSource?.from ?? 0;
       for (const key of ['anchor', 'head', 'scrollAnchor'] as const) if (location[key] !== undefined)

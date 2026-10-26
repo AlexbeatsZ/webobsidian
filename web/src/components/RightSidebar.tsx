@@ -11,6 +11,10 @@ import { useDocumentSession } from '../lib/useDocumentSession';
 import { sharedApp } from '../lib/plugins';
 import SidebarDock from './SidebarDock';
 import { useLinkPreview } from '../lib/useLinkPreview';
+import MarkdownMinimap from './MarkdownMinimap';
+import { useMainPdfSession } from '../lib/pdf/react';
+import PdfOutlinePanel from './PdfOutlinePanel';
+import PdfThumbnailsPanel from './PdfThumbnailsPanel';
 
 const MD_RE = /\.(md|markdown)$/i;
 const name = (p: string) => p.split('/').pop()?.replace(MD_RE, '') ?? p;
@@ -20,6 +24,7 @@ const TABS = [
   { id: 'outgoing', icon: 'arrow-up-right', title: '出链' },
   { id: 'tags', icon: 'hash', title: '标签' },
   { id: 'outline', icon: 'list', title: '大纲' },
+  { id: 'minimap', icon: 'image', title: '缩略图' },
 ] as const;
 
 function useActiveMetadata() {
@@ -255,6 +260,8 @@ function OutlinePanel() {
 }
 
 export default function RightSidebar({ open }: { open: boolean; onTheme?: () => void }) {
+  const path = useStore(s => s.activePath);
+  const pdf = useMainPdfSession(path);
   const rightPanel = useStore((s) => s.rightPanel);
   const setRightPanel = useStore((s) => s.setRightPanel);
   const activeId = useStore(s => s.rightActiveId);
@@ -283,7 +290,10 @@ export default function RightSidebar({ open }: { open: boolean; onTheme?: () => 
           </div>
         </>
       )}
-      {presented && !activeId && rightPanel === 'outline' && <OutlinePanel />}
+      {presented && !activeId && rightPanel === 'outline' && (pdf ? <PdfOutlinePanel session={pdf} /> : <OutlinePanel />)}
+      {presented && !activeId && rightPanel === 'minimap' && (pdf ? <PdfThumbnailsPanel session={pdf} />
+        : path && MD_RE.test(path) ? <MarkdownMinimap key={path} path={path} />
+        : <div className="panel-item">打开 Markdown 或 PDF 查看缩略图</div>)}
       <SidebarTabPanels side="right" open={presented} />
     </div>}
     </SidebarDock>

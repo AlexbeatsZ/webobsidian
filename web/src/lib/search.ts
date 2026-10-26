@@ -12,8 +12,20 @@ import {
   type VaultHotkeys,
   type Hotkey,
 } from '@webobsidian/search-core';
-import { api, request } from './api';
+import { api, request, type NoteMatches } from './api';
 export { matchText, matchPath };
+const resultListeners = new Set<() => void>();
+let resultSnapshot: { query: string; matches: ReadonlyMap<string, NoteMatches> } = { query: '', matches: new Map() };
+export const getSearchResultHighlights = () => resultSnapshot;
+export function subscribeSearchResultHighlights(listener: () => void) {
+  resultListeners.add(listener);
+  return () => { resultListeners.delete(listener); };
+}
+export function publishSearchResultHighlights(query: string, matches: ReadonlyMap<string, NoteMatches>) {
+  if (resultSnapshot.query === query && resultSnapshot.matches === matches) return;
+  resultSnapshot = { query, matches };
+  resultListeners.forEach(listener => listener());
+}
 let entries: CatalogEntry[] = [],
   settings: SearchSettings = { ...searchDefaults };
 let revision = 0,

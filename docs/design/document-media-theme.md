@@ -74,6 +74,12 @@
 - 保留 `.chem-cell` 生成 SVG 的 1.2px 化学键和浅色/打印滤镜兼容样式。
   当前没有化学结构生成器，且用户原始 HTML 的 SVG 仍按统一策略净化，不开放任意 SVG。
 - 当前没有 PDF.js 阅读器，PDF canvas 反色规则没有可作用的组件，未伪造 PDF 迁移完成。
+  PDF 和其他非文本附件打开到不可编辑的附件页，明确说明不支持应用内 PDF 阅读，
+  提供浏览器打开/下载入口；地址等既有 Vault 身份初始化后通过 api.rawUrl 生成。
+  不使用 iframe，不启动第二份工作区。中央、侧栏和恢复的分屏均由 Editor 在
+  useDocumentSession 之前按既有共享文本扩展名规则分流，api.read 同时拒绝二进制路径。
+  二进制/无效文本响应报告类型或响应错误，不冒充 Vault 切换；真实身份不匹配仍永久
+  停止当前页面的后续仓库请求，旧草稿保留。回归见 tests/reports/pdf-identity-20261025.md。
   Dataview/exTable 等插件专用容器也未实现；通用表格/HTML 容器已采用宽度规则。
 - Hider.css 的侧边栏/标签栏/PDF 工具栏交互属于外层 UI，另行处理。
 
