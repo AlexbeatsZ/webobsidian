@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EditorState, Text } from '@codemirror/state';
 import { SearchQuery } from '@codemirror/search';
 import { analyzeMarkdown } from '@webobsidian/markdown-core';
-import { minimapRows, minimapViewport, minimapSearchRows, workspaceMatchRanges, MINIMAP_MAX_HEIGHT } from './markdownMinimap';
+import { minimapRows, minimapSourceWidth, minimapViewport, minimapSearchRows, workspaceMatchRanges, MINIMAP_MAX_HEIGHT } from './markdownMinimap';
 
 describe('Markdown full-document minimap', () => {
   it('samples the full source with bounded rows, retaining far-away structure without parsing another model', () => {
@@ -37,6 +37,16 @@ describe('Markdown full-document minimap', () => {
     const doc = Text.of(['first', '', 'last']);
     expect(minimapViewport(doc, { from: 6, to: 7 })).toEqual({ top: 1 / 3, height: 2 / 3 });
     expect(minimapViewport(Text.of(['']), { from: 0, to: 0 })).toEqual({ top: 0, height: 1 });
+  });
+
+  it('uses the document column as source width and only grows for measured rendered overflow', () => {
+    expect(minimapSourceWidth(700, 700)).toEqual({ column: 700, source: 700 });
+    expect(minimapSourceWidth(700, 640)).toEqual({ column: 700, source: 700 });
+    expect(minimapSourceWidth(700, 701)).toEqual({ column: 700, source: 700 });
+    expect(minimapSourceWidth(700, 1180)).toEqual({ column: 700, source: 1180 });
+    expect(minimapSourceWidth(327.6)).toEqual({ column: 328, source: 328 });
+    expect(minimapSourceWidth(0, 900)).toEqual({ column: 1, source: 1 });
+    expect(minimapSourceWidth(Number.NaN, 900)).toEqual({ column: 1, source: 1 });
   });
 
   it('merges dense CM query hits by pixel across the whole document including its tail', () => {

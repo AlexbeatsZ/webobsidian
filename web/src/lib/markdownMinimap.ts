@@ -4,7 +4,15 @@ import { mathRegions, type MarkdownModel, type SourceSpan } from '@webobsidian/m
 import type { NoteMatches } from './api';
 
 export const MINIMAP_MAX_HEIGHT = 2048;
+const OVERFLOW_TOLERANCE = 1;
 export interface MinimapRow { line: number; text: string; kind: 'text' | 'heading' | 'code' | 'image' | 'math' | 'table'; endLine: number }
+export interface MinimapWidth { column: number; source: number }
+export function minimapSourceWidth(columnWidth: number, renderedWidth = 0): MinimapWidth {
+  const column = Number.isFinite(columnWidth) ? Math.max(1, Math.round(columnWidth)) : 1;
+  if (!Number.isFinite(columnWidth) || columnWidth <= 0) return { column: 1, source: 1 };
+  const rendered = Number.isFinite(renderedWidth) ? Math.round(renderedWidth) : column;
+  return { column, source: rendered > column + OVERFLOW_TOLERANCE ? rendered : column };
+}
 export function minimapRows(model: MarkdownModel, doc: Text, height: number): MinimapRow[] {
   const count = Math.min(doc.lines, Math.max(1, Math.floor(Math.min(MINIMAP_MAX_HEIGHT, height) / 3)));
   const structures = model.nodes.flatMap(node => {

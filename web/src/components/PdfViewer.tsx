@@ -23,14 +23,25 @@ function PageSlot({ session, page, width, root }: {
   </div>;
 }
 
-function Reader({ session }: { session: PdfSession }) {
+function Reader({ session, main }: { session: PdfSession; main: boolean }) {
   const state = usePdfSnapshot(session);
   const viewport = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const focusSearch = useRef(false);
+  const navigationTop = useRef<number>();
+  const toolbarOpen = useStore(s => s.pdfToolbarOpen);
+  const setToolbarOpen = useStore(s => s.setPdfToolbarOpen);
+  const toolbarVisible = !main || toolbarOpen;
   const [available, setAvailable] = useState(780);
   const [zoom, setZoom] = useState(1);
   const [pageInput, setPageInput] = useState('1');
   const width = Math.max(180, Math.min(available - 40, 900) * zoom);
+  useEffect(() => {
+    if (!toolbarVisible || !focusSearch.current) return;
+    focusSearch.current = false;
+    search.current?.focus();
+    search.current?.select();
+  }, [toolbarVisible]);
   useEffect(() => {
     if (!viewport.current) return;
     const observer = new ResizeObserver(entries => setAvailable(entries[0].contentRect.width));
@@ -40,7 +51,10 @@ function Reader({ session }: { session: PdfSession }) {
   useEffect(() => {
     if (!state.navigation || !viewport.current) return;
     const target = viewport.current.querySelector<HTMLElement>(`[data-page-number="${state.currentPage}"]`);
-    if (target) viewport.current.scrollTop = target.offsetTop - 16;
+    if (!target) { navigationTop.current = undefined; return; }
+    viewport.current.scrollTop = target.offsetTop - 16;
+    navigationTop.current = viewport.current.scrollTop;
+    session.observePage(state.currentPage);
   }, [state.navigation]);
   useEffect(() => {
     const element = viewport.current;
@@ -49,6 +63,10 @@ function Reader({ session }: { session: PdfSession }) {
     const scroll = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        if (navigationTop.current !== undefined) {
+          if (Math.abs(element.scrollTop - navigationTop.current) < 1) return;
+          navigationTop.current = undefined;
+        }
         const top = element.scrollTop + 32;
         const slots = element.querySelectorAll<HTMLElement>('[data-page-number]');
         let low = 0, high = slots.length - 1;
@@ -65,9 +83,13 @@ function Reader({ session }: { session: PdfSession }) {
   const selected = state.activeMatch >= 0 ? state.activeMatch + 1 : 0;
   return <section className="pdf-viewer" data-pdf-path={session.path} onPointerDown={() => activatePdfSession(session)}
     onFocusCapture={() => activatePdfSession(session)} onKeyDown={event => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); event.stopPropagation(); search.current?.focus(); search.current?.select(); }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault(); event.stopPropagation();
+        if (main && !toolbarOpen) { focusSearch.current = true; setToolbarOpen(true); }
+        else { search.current?.focus(); search.current?.select(); }
+      }
     }}>
-    <div className="pdf-toolbar" role="toolbar" aria-label="PDF 阅读工具">
+    {toolbarVisible && <div id={main ? 'pdf-toolbar' : undefined} className={`pdf-toolbar${main ? ' is-overlay' : ''}`} role="toolbar" aria-label="PDF 阅读工具">
       <span className="pdf-filename" title={session.path}>{session.path.split('/').pop()}</span>
       <button className="tool-btn" aria-label="上一页" disabled={state.currentPage <= 1} onClick={() => session.goToPage(state.currentPage - 1)}><Icon name="chevron-up" /></button>
       <label className="pdf-page-control"><input aria-label="PDF 页码" inputMode="numeric" value={pageInput} onChange={event => setPageInput(event.target.value)}
@@ -83,11 +105,11 @@ function Reader({ session }: { session: PdfSession }) {
         <button className="tool-btn" aria-label="上一个 PDF 匹配" disabled={!state.matches.length} onClick={() => session.nextMatch(-1)}><Icon name="chevron-up" /></button>
         <button className="tool-btn" aria-label="下一个 PDF 匹配" disabled={!state.matches.length} onClick={() => session.nextMatch(1)}><Icon name="chevron-down" /></button>
       </div>
-    </div>
+    </div>}
     {state.searchPending && <div className="pdf-message" role="status">正在搜索 {state.searchedPages}/{state.pageCount} 页…</div>}
     {!state.searchPending && state.query && !state.matches.length && <div className="pdf-message" role="status">未找到匹配文字。扫描图像 PDF 需要先有文字层。</div>}
     {state.error && <div className="pdf-message" role="alert">{state.error}</div>}
-    <div className="pdf-pages" ref={viewport} aria-label="PDF 页面">
+    <div className="pdf-pages" ref={viewport} role="region" tabIndex={0} aria-label="PDF 页面">
       {state.status === 'loading' && <p className="pdf-message" role="status">正在打开 PDF…</p>}
       {state.status === 'ready' && Array.from({ length: state.pageCount }, (_, index) =>
         <PageSlot key={index} session={session} page={index + 1} width={width} root={viewport} />)}
@@ -109,5 +131,5 @@ export default function PdfViewer({ path, viewId = 'main' }: { path: string; vie
   }, [path, viewId, stale]);
   if (stale) return <div className="pdf-message" role="alert">Vault 已切换，请重新加载应用；旧文档会话保留</div>;
   if (!session || session.path !== path) return <p className="pdf-message">正在打开 PDF…</p>;
-  return <Reader key={path + viewId} session={session} />;
+  return <Reader key={path + viewId} session={session} main={viewId === 'main'} />;
 }

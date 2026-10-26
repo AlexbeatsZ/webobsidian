@@ -8,6 +8,7 @@ import { createVaultRenderContext } from './vaultRenderContext';
 import { requestHotkeySettings } from './search';
 
 const activePath = () => { const view = getActiveEditor(); return view ? contextOf(view).sourcePath : useStore.getState().activePath; };
+const hasPdf = () => /\.pdf$/i.test(useStore.getState().activePath ?? '');
 const selectTab = (index: number) => { const state = useStore.getState(), tab = state.tabs.at(index); if (tab) return state.openFile(tab.path); };
 function moveTab(direction: number) { const state = useStore.getState(), index = state.tabs.findIndex(tab => tab.path === state.activePath); return selectTab((index + direction + state.tabs.length) % state.tabs.length); }
 async function focusPane(direction: number) {
@@ -40,6 +41,7 @@ export const nativeWorkspaceCommands: NativeCommand[] = [
   { id: 'app:go-forward', title: '前进', run: () => useStore.getState().goForward() },
   { id: 'app:toggle-left-sidebar', title: '显示或隐藏左侧栏', hotkeys: [{ modifiers: ['Mod'], key: '\\' }], run: () => useStore.getState().toggleLeft() },
   { id: 'app:toggle-right-sidebar', title: '显示或隐藏右侧栏', run: () => useStore.getState().toggleRight() },
+  { id: 'pdf:toggle-toolbar', title: '显示或隐藏 PDF 工具栏', available: () => hasPdf(), run: () => useStore.getState().togglePdfToolbar() },
   { id: 'file-explorer', title: '打开文件列表', run: () => useStore.getState().setLeftPanel('files') },
   { id: 'tags', title: '打开标签面板', run: () => useStore.getState().setRightPanel('tags') },
   { id: 'outline', title: '打开大纲', run: () => useStore.getState().setRightPanel('outline') },

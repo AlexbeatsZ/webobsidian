@@ -127,6 +127,9 @@ interface AppState {
   pendingCanvasEdits: number;
   viewMode: ViewMode;
   setViewMode: (m: ViewMode) => void;
+  pdfToolbarOpen: boolean;
+  setPdfToolbarOpen: (open: boolean) => void;
+  togglePdfToolbar: () => void;
 
   // expanded folders in the file tree (persisted)
   expanded: string[];
@@ -512,6 +515,9 @@ export const useStore = create<AppState>()(
       pendingCanvasEdits: 0,
       viewMode: 'live',
       setViewMode: (m) => set({ viewMode: m }),
+      pdfToolbarOpen: false,
+      setPdfToolbarOpen: (open) => set({ pdfToolbarOpen: open }),
+      togglePdfToolbar: () => set((s) => ({ pdfToolbarOpen: !s.pdfToolbarOpen })),
 
       expanded: [],
       toggleFolder: (path) =>

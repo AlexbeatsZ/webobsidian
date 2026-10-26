@@ -41,6 +41,12 @@ try {
   }
   await page.goto(base);
   await expect(page.getByRole('button', { name: /Chapter Two/ })).toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'PDF 阅读工具' })).toHaveCount(0);
+  await page.screenshot({ path: path.join(temporary, 'pdf-toolbar-hidden.png') });
+  const readerBounds = await page.locator('.main-pane .pdf-pages').boundingBox();
+  await page.getByRole('button', { name: '显示/隐藏 PDF 工具栏' }).click();
+  await expect(page.getByRole('toolbar', { name: 'PDF 阅读工具' })).toBeVisible();
+  expect(await page.locator('.main-pane .pdf-pages').boundingBox()).toEqual(readerBounds);
   await page.getByRole('button', { name: /Chapter Two/ }).click();
   await expect(page.getByRole('textbox', { name: 'PDF 页码' })).toHaveValue('2');
   await page.getByRole('button', { name: '缩略图', exact: true }).click();
@@ -49,6 +55,9 @@ try {
   await expect(page.locator('.pdf-search [role="status"]')).toHaveText('1/12');
   await expect(page.locator('[data-thumbnail-page="2"] .pdf-match')).not.toHaveCount(0);
   await page.screenshot({ path: path.join(temporary, 'production-pdf.png') });
+  await page.getByRole('toolbar', { name: 'PDF 阅读工具' }).screenshot({ path: path.join(temporary, 'pdf-toolbar-search.png') });
+  await page.getByRole('searchbox', { name: '搜索 PDF' }).fill('');
+  await page.getByRole('toolbar', { name: 'PDF 阅读工具' }).screenshot({ path: path.join(temporary, 'pdf-toolbar-idle.png') });
   expect(errors).toEqual([]); expect(failedAssets).toEqual([]);
   expect(assetUrls.some(url => /pdf\.worker.*\.mjs/.test(url))).toBe(true);
   await fs.writeFile(path.join(temporary, 'result.json'), JSON.stringify({ passed: true, errors, failedAssets, assetUrls, serverBundle, webBuild }, null, 2));

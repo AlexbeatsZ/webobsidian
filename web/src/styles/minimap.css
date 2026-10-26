@@ -4,11 +4,6 @@
   flex: 1;
   min-height: 0;
 }
-.markdown-minimap-description {
-  padding: 6px 10px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
 .markdown-minimap {
   --minimap-match: #d79923;
   position: relative;

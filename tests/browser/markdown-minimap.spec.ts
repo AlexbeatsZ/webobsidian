@@ -31,6 +31,52 @@ test.beforeEach(async ({ page }) => {
   });
   await expect(page.locator('.markdown-minimap')).toHaveAttribute('data-ready', 'true');
   await expect.poll(() => page.locator('.markdown-minimap canvas').getAttribute('data-paint-count')).not.toBeNull();
+  await expect(page.locator('.markdown-minimap-description')).toHaveCount(0);
+  await expect(page.getByRole('slider', { name: '文档缩略图位置' })).toBeVisible();
+});
+
+test('source width follows the document column, scales uniformly, and only grows for rendered overflow', async ({ page }) => {
+  const image = page.locator('.markdown-minimap canvas');
+  const measure = () => page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    const view = fixture.navigation.navigationView('a.md', 'main');
+    const canvas = document.querySelector('.markdown-minimap canvas') as HTMLCanvasElement;
+    return { column: view.contentDOM.getBoundingClientRect().width, source: Number(canvas.dataset.sourceWidth),
+      backing: canvas.width, scale: Number(canvas.dataset.widthScale) };
+  });
+  const initial = await measure();
+  expect(Math.abs(initial.source - initial.column)).toBeLessThanOrEqual(2);
+  expect(initial.source).toBeGreaterThan(initial.backing + 100);
+  expect(initial.scale).toBeGreaterThan(0.2);
+  const firstPaint = Number(await image.getAttribute('data-paint-count'));
+  await page.evaluate(() => document.body.style.setProperty('--file-line-width', '450px'));
+  await expect.poll(async () => Number(await image.getAttribute('data-source-width'))).toBeLessThan(500);
+  const narrowColumn = await measure();
+  expect(Math.abs(narrowColumn.source - narrowColumn.column)).toBeLessThanOrEqual(2);
+  const beforeFont = Number(await image.getAttribute('data-paint-count'));
+  await page.evaluate(() => document.body.style.setProperty('--font-text-size', '26px'));
+  await expect.poll(async () => Number(await image.getAttribute('data-paint-count'))).toBeGreaterThan(beforeFont);
+  await page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    const headers = Array.from({ length: 24 }, (_, index) => `LongHeader${index}Text`);
+    const table = [`| ${headers.join(' | ')} |`, `| ${headers.map(() => '---').join(' | ')} |`,
+      `| ${headers.map(() => 'value').join(' | ')} |`].join('\n');
+    fixture.documents.get('a.md').setRawText(`# Wide table\n\n${table}\n\nafter`);
+    fixture.store.getState().setViewMode('live');
+  });
+  await expect(page.locator('.cm-table')).toBeVisible();
+  await expect.poll(async () => Number(await image.getAttribute('data-source-width'))).toBeGreaterThan(900);
+  const overflow = await measure();
+  expect(overflow.source).toBeGreaterThan(overflow.column + 100);
+  expect(overflow.scale).toBeLessThan(initial.scale);
+  expect(overflow.scale).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    fixture.documents.get('a.md').setRawText('# Ordinary\n\n' + 'ordinary text\n'.repeat(120));
+    fixture.store.getState().setViewMode('source');
+  });
+  await expect.poll(async () => Number(await image.getAttribute('data-source-width'))).toBeLessThan(500);
+  expect(Number(await image.getAttribute('data-paint-count'))).toBeGreaterThan(firstPaint);
 });
 
 test('scroll changes only viewport, and click/drag target the main view without changing cursor, source or Undo', async ({ page }) => {
@@ -127,6 +173,14 @@ test('panel persistence, full long-note sampling, themes, resize and fast file s
   await expect.poll(async () => Number(await page.locator('.markdown-minimap canvas').getAttribute('data-paint-count'))).toBeGreaterThan(before);
   await page.setViewportSize({ width: 520, height: 600 });
   await expect(page.locator('.markdown-minimap')).toBeVisible();
+  await expect.poll(async () => Number(await page.locator('.markdown-minimap canvas').getAttribute('data-source-width'))).toBeLessThanOrEqual(520);
+  const narrow = await page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    const view = fixture.navigation.navigationView('a.md', 'main');
+    const canvas = document.querySelector('.markdown-minimap canvas') as HTMLCanvasElement;
+    return { column: view.contentDOM.getBoundingClientRect().width, source: Number(canvas.dataset.sourceWidth) };
+  });
+  expect(Math.abs(narrow.source - narrow.column)).toBeLessThanOrEqual(2);
   await page.screenshot({ path: test.info().outputPath('minimap-narrow-dark.png') });
   await page.evaluate(async () => {
     const fixture = (window as any).minimapFixture;

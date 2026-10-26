@@ -11,6 +11,7 @@ import { extendFileMenu } from '../lib/obsidian/menus';
 import { nativeBatchTagMenuItems } from '../lib/tags/actions';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import { useIsMobile } from '../lib/useIsMobile';
+import { useMainPdfSession } from '../lib/pdf/react';
 import Icon from './Icon';
 
 export default function WorkspaceTabs() {
@@ -37,6 +38,9 @@ export default function WorkspaceTabs() {
   const setVersionHistory = useStore((s) => s.setVersionHistory);
   const revealInTree = useStore((s) => s.revealInTree);
   const loadTree = useStore((s) => s.loadTree);
+  const pdfToolbarOpen = useStore((s) => s.pdfToolbarOpen);
+  const togglePdfToolbar = useStore((s) => s.togglePdfToolbar);
+  const mainPdf = useMainPdfSession(activePath && /\.pdf$/i.test(activePath) ? activePath : null);
   const isMobile = useIsMobile();
   const scroll = useRef<HTMLDivElement>(null);
 
@@ -254,6 +258,11 @@ export default function WorkspaceTabs() {
         <Icon name="plus" size={16} />
       </button>
       <div className="titlebar-drag-space" />
+      {mainPdf && <button type="button" className={`tab-new tab-ctl pdf-toolbar-toggle${pdfToolbarOpen ? ' is-active' : ''}`}
+        title="显示/隐藏 PDF 工具栏" aria-label="显示/隐藏 PDF 工具栏" aria-expanded={pdfToolbarOpen}
+        onClick={togglePdfToolbar}>
+        <Icon name="panel-top" size={16} />
+      </button>}
       <button type="button" className="tab-new tab-ctl" title="折叠/展开右侧边栏"
         aria-label="折叠/展开右侧边栏" aria-expanded={isMobile ? mobileDrawer === 'right' : rightOpen}
         onClick={() => (isMobile ? setMobileDrawer(mobileDrawer === 'right' ? null : 'right') : toggleRight())}>

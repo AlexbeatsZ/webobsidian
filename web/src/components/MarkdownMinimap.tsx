@@ -3,9 +3,11 @@ import { getSearchQuery, searchPanelOpen, type SearchQuery } from '@codemirror/s
 import type { EditorView } from '@codemirror/view';
 import { useDocumentSession } from '../lib/useDocumentSession';
 import { navigationView, navigationViewport, navigateTo, subscribeNavigationViews } from '../lib/fragmentNavigation';
-import { MINIMAP_MAX_HEIGHT, minimapRows, minimapViewport, minimapSearchRows, workspaceMatchRanges } from '../lib/markdownMinimap';
+import { MINIMAP_MAX_HEIGHT, minimapRows, minimapSourceWidth, minimapViewport, minimapSearchRows, workspaceMatchRanges, type MinimapRow } from '../lib/markdownMinimap';
 import { getSearchResultHighlights, subscribeSearchResultHighlights } from '../lib/search';
 import '../styles/minimap.css';
+
+const OVERFLOW_SELECTOR = 'img, table, pre, mjx-container, .cm-table-wrap, .cm-image-wrap, .cm-math-rendered, .cm-note-embed, .cm-html-block';
 
 export default function MarkdownMinimap({ path }: { path: string }) {
   const { session, snapshot, error } = useDocumentSession(path);
@@ -20,24 +22,59 @@ export default function MarkdownMinimap({ path }: { path: string }) {
     const element = host.current, image = canvas.current, box = viewport.current;
     if (!element || !image || !box || !session) return;
     let view: EditorView | undefined;
-    let frame = 0, paint = true, paints = 0;
+    let frame = 0, paint = true, paints = 0, mode: string | null = null;
     let query: SearchQuery | undefined, searchOpen = false;
     let drag: { pointer: number; offset: number } | undefined;
     let jumpFrame = 0, jumpLine = 0;
+    let lastColumn = 0;
+    const mediaWidths = new WeakMap<Element, number>();
     const schedule = (redraw = false) => {
       paint ||= redraw;
       if (!frame) frame = requestAnimationFrame(update);
     };
     const scroll = () => schedule();
+    const columnResize = new ResizeObserver(entries => {
+      const width = entries.at(-1)?.contentRect.width ?? lastColumn;
+      if (Math.abs(width - lastColumn) < 0.5) return;
+      lastColumn = width;
+      schedule(true);
+    });
+    const mediaResize = new ResizeObserver(entries => {
+      let changed = false;
+      for (const entry of entries) {
+        const width = entry.contentRect.width, previous = mediaWidths.get(entry.target);
+        if (previous !== undefined && Math.abs(previous - width) < 0.5) continue;
+        mediaWidths.set(entry.target, width);
+        changed = true;
+      }
+      if (changed) schedule(true);
+    });
+    const watchMedia = () => {
+      if (!view) return;
+      mediaResize.disconnect();
+      for (const node of view.contentDOM.querySelectorAll(OVERFLOW_SELECTOR)) mediaResize.observe(node);
+    };
     const editorResize = new ResizeObserver(scroll);
     const bind = () => {
       const next = navigationView(path, 'main');
       if (view === next) return;
-      if (view) { view.scrollDOM.removeEventListener('scroll', scroll); editorResize.unobserve(view.scrollDOM); }
+      if (view) {
+        view.scrollDOM.removeEventListener('scroll', scroll);
+        editorResize.unobserve(view.scrollDOM);
+        columnResize.unobserve(view.contentDOM);
+        mediaResize.disconnect();
+      }
       view = next;
       query = undefined;
       paint = true;
-      if (view) { view.scrollDOM.addEventListener('scroll', scroll, { passive: true }); editorResize.observe(view.scrollDOM); }
+      mode = view?.dom.closest('[data-mode]')?.getAttribute('data-mode') ?? null;
+      if (view) {
+        view.scrollDOM.addEventListener('scroll', scroll, { passive: true });
+        editorResize.observe(view.scrollDOM);
+        lastColumn = view.contentDOM.getBoundingClientRect().width;
+        columnResize.observe(view.contentDOM);
+        watchMedia();
+      }
     };
     const draw = () => {
       if (!view) return;
@@ -54,16 +91,42 @@ export default function MarkdownMinimap({ path }: { path: string }) {
         search: style.getPropertyValue('--minimap-match').trim() || '#ddaa33' };
       context.clearRect(0, 0, width, height);
       const rows = minimapRows(model, view.state.doc, height);
-      context.font = '3px monospace';
+      const columnStyle = getComputedStyle(view.contentDOM);
+      const widthMetrics = minimapSourceWidth(view.contentDOM.getBoundingClientRect().width, view.contentDOM.scrollWidth);
+      const scale = width / widthMetrics.source;
+      const paddingLeft = Math.max(0, parseFloat(columnStyle.paddingLeft) || 0);
+      const paddingRight = Math.max(0, parseFloat(columnStyle.paddingRight) || 0);
+      const textLeft = Math.min(width - 1, paddingLeft * scale);
+      const columnText = Math.max(1, widthMetrics.column - paddingLeft - paddingRight);
+      const textWidth = Math.max(1, Math.min(width - textLeft, columnText * scale));
+      const rowPitch = height / Math.max(1, rows.length);
+      const fontPx = Math.max(1, Math.min((parseFloat(columnStyle.fontSize) || 18) * scale, rowPitch * 0.85));
+      const textRows: MinimapRow[] = [];
       for (const row of rows) {
         const top = (row.line - 1) / view.state.doc.lines * height;
         const rowHeight = Math.max(1, (row.endLine - row.line + 1) / view.state.doc.lines * height - 1);
-        context.fillStyle = row.kind === 'text' ? colors.text : colors.accent;
-        context.globalAlpha = row.kind === 'text' ? 0.75 : 0.55;
         if (['image', 'math', 'table', 'code'].includes(row.kind)) {
-          const inset = row.kind === 'math' ? width * 0.2 : 6;
-          context.fillRect(inset, top, width - inset * 2, Math.min(5, rowHeight));
-        } else context.fillText(row.text, 6, top + 3, width - 12);
+          const barWidth = row.kind === 'math' ? Math.max(1, textWidth * 0.6) : textWidth;
+          context.fillStyle = colors.accent;
+          context.globalAlpha = 0.55;
+          context.fillRect(textLeft + (textWidth - barWidth) / 2, top, barWidth, Math.min(5, rowHeight));
+          continue;
+        }
+        textRows.push(row);
+      }
+      if (textRows.length) {
+        context.save();
+        context.beginPath();
+        context.rect(textLeft, 0, textWidth, height);
+        context.clip();
+        context.font = `${fontPx}px monospace`;
+        context.textBaseline = 'top';
+        context.globalAlpha = 0.75;
+        for (const row of textRows) {
+          context.fillStyle = row.kind === 'heading' ? colors.accent : colors.text;
+          context.fillText(row.text, textLeft, (row.line - 1) / view.state.doc.lines * height);
+        }
+        context.restore();
       }
       context.globalAlpha = 1;
       const workspace = getSearchResultHighlights();
@@ -86,6 +149,10 @@ export default function MarkdownMinimap({ path }: { path: string }) {
       image.dataset.markerCount = String(searchRows.length);
       image.dataset.lastSearchLine = String(searchRows.at(-1) ?? 0);
       image.dataset.workspaceMarkerCount = String(ranges.length);
+      image.dataset.sourceWidth = String(widthMetrics.source);
+      image.dataset.columnWidth = String(widthMetrics.column);
+      image.dataset.widthScale = scale.toFixed(4);
+      watchMedia();
     };
     const update = () => {
       frame = 0;
@@ -104,8 +171,9 @@ export default function MarkdownMinimap({ path }: { path: string }) {
     const stopViews = subscribeNavigationViews(changed => {
       if (changed !== view && changed !== navigationView(path, 'main')) return;
       const nextQuery = getSearchQuery(changed.state), nextOpen = searchPanelOpen(changed.state);
-      const redraw = !query?.eq(nextQuery) || searchOpen !== nextOpen;
-      query = nextQuery; searchOpen = nextOpen;
+      const nextMode = changed.dom.closest('[data-mode]')?.getAttribute('data-mode') ?? null;
+      const redraw = !query?.eq(nextQuery) || searchOpen !== nextOpen || nextMode !== mode;
+      query = nextQuery; searchOpen = nextOpen; mode = nextMode;
       schedule(redraw);
     });
     const stopSearch = subscribeSearchResultHighlights(() => schedule(true));
@@ -113,6 +181,7 @@ export default function MarkdownMinimap({ path }: { path: string }) {
     resize.observe(element);
     const theme = new MutationObserver(() => schedule(true));
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+    theme.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
     const app = element.closest('.app');
     if (app) theme.observe(app, { attributes: true, attributeFilter: ['class', 'style'] });
     const jump = (line: number) => {
@@ -165,23 +234,25 @@ export default function MarkdownMinimap({ path }: { path: string }) {
     schedule(true);
     return () => {
       if (invalidate.current === redraw) invalidate.current = undefined;
-      stopViews(); stopSearch(); resize.disconnect(); editorResize.disconnect(); theme.disconnect(); events.abort();
-      if (view) view.scrollDOM.removeEventListener('scroll', scroll);
+      stopViews(); stopSearch(); resize.disconnect(); editorResize.disconnect(); columnResize.disconnect();
+      mediaResize.disconnect(); theme.disconnect(); events.abort();
+      if (view) {
+        view.scrollDOM.removeEventListener('scroll', scroll);
+        columnResize.unobserve(view.contentDOM);
+      }
       cancelAnimationFrame(frame); cancelAnimationFrame(jumpFrame);
       if (drag && element.hasPointerCapture(drag.pointer)) element.releasePointerCapture(drag.pointer);
     };
   }, [path, session]);
   useEffect(() => { invalidate.current?.(); }, [snapshot.version]);
 
-  return <section className="markdown-minimap-panel" aria-label="Markdown 缩略图">
+  return <section className="markdown-minimap-panel" aria-label="Markdown 缩略图" aria-busy={!session && !error}>
     <div className="nav-header"><span className="nav-title">缩略图</span></div>
-    <div className="markdown-minimap-description">全文结构概览 · 点击或拖动定位</div>
     {error && <div role="alert">{error.message}</div>}
     <div ref={host} className="markdown-minimap" role="slider" tabIndex={0} aria-label="文档缩略图位置"
       aria-orientation="vertical" aria-valuemin={1} aria-valuenow={1} aria-valuemax={1}>
       <canvas ref={canvas} aria-hidden="true" />
       <div ref={viewport} className="markdown-minimap-viewport" aria-hidden="true" />
     </div>
-    <div className="markdown-minimap-description">公式、图片与代码以结构缩略显示<br />横条：仓库搜索 · 右侧标记：当前查找（按像素合并）</div>
   </section>;
 }

@@ -36,7 +36,7 @@ test.beforeEach(async ({ page, expectedErrors }) => {
     host.style.cssText = 'position:fixed;inset:0';
     const tree = { name: 'Fixture', path: '', type: 'folder', children: ['note.md', 'paper.pdf', 'archive.zip'].map(path => ({ name: path, path, type: 'file' })) };
     await store.useStore.getState().loadUiState();
-    store.useStore.setState({ tree, filePaths: ['note.md', 'paper.pdf', 'archive.zip'] });
+    store.useStore.setState({ tree, filePaths: ['note.md', 'paper.pdf', 'archive.zip'], pdfToolbarOpen: true });
     maintenance.bindVaultMaintenance(new EventTarget());
     await store.useStore.getState().openFile('note.md');
     const h = (React.default ?? React).createElement;
