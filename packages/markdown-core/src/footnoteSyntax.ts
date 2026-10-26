@@ -21,6 +21,7 @@ export const footnoteSyntax: MarkdownConfig = {
   } }],
   parseInline: [{ name: 'Footnote', before: 'Link', parse(cx, next, pos) {
     if (next === 91 && cx.char(pos + 1) === 94) {
+      if (pos > 0 && cx.char(pos - 1) === 91) return -1;
       const match = /^\[\^([^\]\s]+)\]/.exec(cx.slice(pos, cx.end));
       if (match) return cx.addElement(cx.elt('FootnoteReference', pos, pos + match[0].length));
     }

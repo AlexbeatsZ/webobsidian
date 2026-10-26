@@ -89,8 +89,8 @@ test('embeds use the shared readonly engine, subscribe to drafts and stop cycles
   });
   const reading = page.locator('[data-slot="1"]');
   await expect(reading.locator('.cm-note-embed').first()).toContainText('inside');
-  await expect(reading).toContainText('循环嵌入：b.md');
-  await expect(reading).not.toContainText('skip');
+  await expect(reading).toContainText('循环嵌入：c.md');
+  await expect(reading.locator('.cm-note-embed')).toHaveCount(4);
   await expect(reading.locator('.cm-note-embed [contenteditable="true"]')).toHaveCount(0);
   await page.evaluate(() => window.renderHarness.changeNote('b.md', '# Wanted\n\n**changed**'));
   await expect(reading.locator('.cm-note-embed').first()).toContainText('changed');

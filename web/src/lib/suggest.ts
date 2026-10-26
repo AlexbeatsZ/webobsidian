@@ -1,5 +1,6 @@
 import { searchEntries, searchSettings, subscribeSearch, matchName, fileCandidates } from './search';
 import { documents } from './documents';
+import { contentReferenceSuggestions, resolveContentLink } from './contentReferences';
 import { extractMetadata, mathRegions, equations, equationAnchor, equationLabel, equationReferenceName, type MarkdownModel, type Equation } from '@webobsidian/markdown-core';
 import { syntaxModel } from './syntaxModel';
 import { api } from './api';
@@ -223,6 +224,9 @@ class SuggestState {
     const ctx = detect(view);
     if (!ctx) return this.hide();
     this.ctx = ctx;
+    if (ctx.mode === 'link' && ctx.query.startsWith('^') && !ctx.query.includes('|')) {
+      void this.contentItems(ctx); return;
+    }
     if (ctx.mode === 'link' && ctx.query.includes('#^') && !ctx.query.includes('|')) {
       void this.formulaItems(ctx); return;
     }
@@ -230,6 +234,29 @@ class SuggestState {
     this.selected = 0;
     if (!this.items.length) return this.hide();
     this.show();
+  }
+
+  private async contentItems(ctx: Ctx) {
+    this.hide(); this.ctx = ctx;
+    const generation = this.generation, captured = this.view.state;
+    try {
+      const query = ctx.query.slice(1);
+      const targets = await contentReferenceSuggestions(query);
+      const ranked = targets.flatMap(target => {
+        const match = matchName(query, `${target.id} ${target.label} ${target.path}`);
+        return match ? [{ target, match }] : [];
+      }).sort((left, right) => right.match.score - left.match.score).slice(0, 20);
+      const resolved = await Promise.all(ranked.map(async item => ({ ...item,
+        resolved: await resolveContentLink('^' + item.target.id, contextOf(this.view).sourcePath) })));
+      if (this.destroyed || generation !== this.generation || this.view.state !== captured || this.ctx?.query !== ctx.query) return;
+      this.items = resolved.filter(item => item.resolved.status === 'resolved' && item.resolved.path === item.target.path)
+        .map(({ target, match }) => ({ label: target.label || target.id, note: `${target.kind} · ${target.path}`,
+          insert: '^' + target.id, match: { score: match.score, matches: [] } }));
+      this.selected = 0;
+      if (this.items.length) this.show(); else this.hide();
+    } catch (error) {
+      if (generation === this.generation && !this.destroyed) { this.hide(); contextOf(this.view).reportError?.(String(error)); }
+    }
   }
 
   private async formulaItems(ctx: Ctx) {

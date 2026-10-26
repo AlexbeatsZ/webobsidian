@@ -7,6 +7,7 @@ import { printDocument } from './printDocument';
 import { createVaultRenderContext } from './vaultRenderContext';
 import { requestHotkeySettings } from './search';
 import { getMainPdfSession } from './pdf/react';
+import { contentReferenceCommands } from './contentReferenceCommands';
 
 const activePath = () => { const view = getActiveEditor(); return view ? contextOf(view).sourcePath : useStore.getState().activePath; };
 const selectTab = (index: number) => { const state = useStore.getState(), tab = state.tabs.at(index); if (tab) return state.openFile(tab.path); };
@@ -20,6 +21,7 @@ async function focusPane(direction: number) {
   if (target) { const view = target.view as import('./obsidian/workspace').MarkdownView; view.editor?.focus(); }
 }
 export const nativeWorkspaceCommands: NativeCommand[] = [
+  ...contentReferenceCommands,
   { id: 'vault-switch', title: '切换仓库', run: () => {
     useStore.getState().setSettings(true);
     window.dispatchEvent(new Event('vault-settings-open'));

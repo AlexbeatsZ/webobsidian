@@ -13,6 +13,13 @@ import { getSettings } from '../services/settings.js';
 export const searchRouter = Router();
 
 searchRouter.get(
+  '/content-targets',
+  asyncHandler(async (req, res) => {
+    res.json({ targets: catalog.suggestContentTargets(String(req.query.query ?? ''), Number(req.query.limit ?? 50)) });
+  }),
+);
+
+searchRouter.get(
   '/search',
   asyncHandler(async (req, res) => {
     const q = String(req.query.q ?? '');
@@ -105,6 +112,7 @@ searchRouter.get(
       candidates: result.candidates,
       fragment: result.fragment,
       normalizedTarget: result.path,
+      ...(result.targetOccurrences ? { targetOccurrences: result.targetOccurrences } : {}),
     });
   }),
 );

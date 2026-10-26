@@ -29,7 +29,7 @@ import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
 import { sourceBlockReplacement, sourceBlockPresentation } from './blockLayout';
 import { RenderLifetime } from './obsidian/renderLifetime';
-import { equationLabel, equationReferenceLabel, equationReferenceName, equationTarget, equationAt, parseLinkTarget, type Equation, type MarkdownModel } from '@webobsidian/markdown-core';
+import { equationLabel, equationReferenceLabel, equationReferenceName, equationTarget, equationAt, parseLinkTarget, isGlobalContentTarget, contentTargets, type Equation, type MarkdownModel } from '@webobsidian/markdown-core';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -104,7 +104,7 @@ class WikilinkWidget extends WidgetType {
         a.textContent = preview ? equationReferenceLabel(preview.equation, this.alias) : this.label;
         a.classList.toggle('is-unresolved', !preview);
       };
-      if (!destination.path) {
+      if (!destination.path && !isGlobalContentTarget(this.target)) {
         mount.read = () => {
           const context = contextOf(view), formulas = equationsOf(view.state);
           const equation = equationTarget(formulas, destination.fragment);
@@ -122,6 +122,23 @@ class WikilinkWidget extends WidgetType {
         };
         mount.stop = note.subscribe(paint); paint();
       }).catch(paint);
+    }
+    if (equationReferenceName(destination.fragment) === undefined && isGlobalContentTarget(destination.fragment)) {
+      const controller = new AbortController();
+      const mount: EquationLinkMount = { controller, read: () => undefined }; equationLinkMounts.set(a, mount);
+      void contextOf(view).renderEmbed(this.target, controller.signal).then(note => {
+        if (controller.signal.aborted) return;
+        const paint = () => {
+          if (controller.signal.aborted) return;
+          const model = note?.read()?.mathSource?.model;
+          const target = model && contentTargets(model).targets.find(candidate => '^' + candidate.id === destination.fragment);
+          a.textContent = this.alias !== null ? this.alias.trim() || destination.fragment.slice(1) : target?.label || this.label;
+          a.title = target?.label ?? this.target;
+          a.classList.toggle('is-unresolved', !target);
+          view.requestMeasure();
+        };
+        mount.stop = note?.subscribe(paint); paint();
+      }).catch(() => { if (!controller.signal.aborted) a.classList.add('is-unresolved'); });
     }
     if (this.aria && equationReferenceName(destination.fragment) === undefined) a.setAttribute('aria-label', this.aria);
     bindRenderedLink(a, view, this.target);
@@ -597,7 +614,12 @@ class NoteEmbedWidget extends WidgetType {
     box.append(open, content);
     const lifetime = new RenderLifetime(); void lifetime.load(); noteEmbedMounts.set(box, lifetime);
     const context = contextOf(view);
-    const trail = context.embedTrail ?? [context.sourcePath];
+    const embedKey = (path: string, fragment: string) => {
+      try { fragment = decodeURIComponent(fragment); } catch {}
+      return JSON.stringify([path, fragment]);
+    };
+    const destination = parseLinkTarget(this.target);
+    const trail = context.embedTrail ?? [embedKey(context.sourcePath, '')];
     let active: RenderLifetime | undefined, pending: RenderLifetime | undefined;
     lifetime.register(() => { pending?.unload(); active?.unload(); delete box.dataset.renderPending; });
     if (trail.length > 4) { content.textContent = '嵌入层级已达上限'; return box; }
@@ -605,21 +627,46 @@ class NoteEmbedWidget extends WidgetType {
     void context.renderEmbed(this.target, lifetime.signal).then(res => {
       if (lifetime.signal.aborted) return;
       if (!res) { embedNotFound(content, this.target); return; }
-      if (trail.includes(res.path)) { content.textContent = '循环嵌入：' + res.path; return; }
-      let previous: string | undefined, revision: string | undefined;
+      let previous: string | undefined, revision: string | undefined, editing = false, composing = false, sourcePath = res.path;
+      let sourceSession = res.edit?.session;
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'cm-embed-edit';
+      edit.textContent = '编辑嵌入'; edit.setAttribute('aria-label', '编辑嵌入');
+      box.addEventListener('compositionstart', () => { composing = true; }, { signal: lifetime.signal });
+      box.addEventListener('compositionend', () => { composing = false; queueMicrotask(refresh); }, { signal: lifetime.signal });
+      edit.addEventListener('mousedown', event => event.preventDefault());
+      edit.addEventListener('click', event => {
+        event.preventDefault(); event.stopPropagation();
+        if (composing || lifetime.signal.aborted) return;
+        editing = !editing; box.dataset.embedEditing = String(editing);
+        edit.textContent = editing ? '完成' : '编辑嵌入'; edit.setAttribute('aria-label', edit.textContent);
+        previous = undefined; refresh();
+      });
       const refresh = () => {
         if (lifetime.signal.aborted) return;
-        const fragment = res.read();
+        if (composing) return;
+        if (sourcePath !== res.path || sourceSession !== res.edit?.session) {
+          sourceSession = res.edit?.session;
+          sourcePath = res.path; editing = false; previous = undefined;
+          box.dataset.embedEditing = 'false'; edit.textContent = '编辑嵌入'; edit.setAttribute('aria-label', edit.textContent);
+        }
+        const key = embedKey(res.path, destination.fragment);
+        const cyclic = !!res.path && trail.includes(key);
+        const fragment = cyclic ? null : res.read();
+        if (res.edit && fragment) box.insertBefore(edit, content); else edit.remove();
         if (!fragment) {
+          editing = false; box.dataset.embedEditing = 'false'; edit.textContent = '编辑嵌入'; edit.setAttribute('aria-label', edit.textContent);
           pending?.unload(); pending = undefined; active?.unload(); active = undefined;
           previous = undefined; revision = undefined; delete box.dataset.renderPending;
-          content.textContent = '找不到嵌入的章节或块'; view.requestMeasure(); return;
+          const missing = document.createElement('span'); missing.setAttribute('role', 'alert');
+          missing.textContent = cyclic ? '循环嵌入：' + res.path : '找不到嵌入的章节或块'; content.replaceChildren(missing); view.requestMeasure(); return;
         }
+        if (editing && active && box.dataset.embedEditing === 'true' && previous !== undefined) return;
         if (fragment.source === previous && fragment.equations?.revision === revision) return;
         previous = fragment.source; revision = fragment.equations?.revision; pending?.unload();
         const render = new RenderLifetime(); void render.load(); pending = render;
         box.dataset.renderPending = 'true';
         const host = document.createElement('div'); host.className = 'cm-note-fragment';
+        if (/^\^heading-/.test(destination.fragment)) host.classList.add('cm-typed-heading-fragment');
         Object.assign(host.style, { height: '0', overflow: 'hidden', visibility: 'hidden', pointerEvents: 'none' });
         content.appendChild(host);
         render.register(() => host.remove());
@@ -634,7 +681,8 @@ class NoteEmbedWidget extends WidgetType {
           context.reportError?.(String(error)); view.requestMeasure();
         };
         const options = { id: res.path, sourceFrom: fragment.from, equations: fragment.equations, mathSource: fragment.mathSource,
-          context: { ...res.context, embedTrail: [...trail, res.path] },
+          mode: editing ? 'live' as const : 'reading' as const, edit: editing ? res.edit : undefined, autoFocus: editing,
+          context: { ...res.context, embedTrail: [...trail, key] },
           onError: failed,
           onReady: () => {
             if (render.signal.aborted || lifetime.signal.aborted || pending !== render) return;
@@ -1922,6 +1970,8 @@ function buildDecorations(view: EditorView): DecorationSet {
   };
 
   const tree = view.state.field(syntaxModel).tree;
+  const boundaryMarkers = contentTargets(model).targets.filter(target => target.kind === 'range')
+    .flatMap(target => [target.startAnchor!, target.endAnchor!]);
 
   for (const { from, to } of view.visibleRanges) {
     tree.iterate({
@@ -2092,6 +2142,10 @@ function buildDecorations(view: EditorView): DecorationSet {
       }
 
       // Skip lines covered by a rendered table / HTML block widget.
+      const boundary = boundaryMarkers.find(marker => marker.from >= line.from && marker.to <= line.to);
+      if (boundary && !sourceLine && !lineActive(line.from)) {
+        pushReplace(boundary.from, boundary.to, Decoration.replace({})); continue;
+      }
       if (renderedTable(line.from, line.to) || renderedHtml(line.from, line.to)) continue;
       // Skip the frontmatter block (rendered by frontmatterField).
       if (line.to <= fmEnd) continue;
@@ -2329,7 +2383,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           // LP shows the raw target text (`Note#Head`); the `Note > Head` display
           // form is reading-view behaviour and goes into aria-label like Obsidian.
           const destination = parseLinkTarget(href), referenceName = equationReferenceName(destination.fragment);
-          const equation = referenceName !== undefined && !destination.path ? equationTarget(equationsOf(view.state), destination.fragment) : undefined;
+          const equation = referenceName !== undefined && !destination.path && !isGlobalContentTarget(href) ? equationTarget(equationsOf(view.state), destination.fragment) : undefined;
           const label = equation ? equationReferenceLabel(equation, alias) : alias || (alias === '' && referenceName !== undefined ? referenceName : href);
           pushReplace(
             s,

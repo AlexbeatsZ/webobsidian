@@ -1,19 +1,13 @@
 import type { MarkdownModel, SourceSpan } from './syntax.js';
 import { extractMetadata } from './metadata.js';
 import { legacySubheadings } from './legacySubheadings.js';
-import { equationContext, equationTarget, equationReferenceName } from './equations.js';
 import { footnotes, footnoteFragment } from './footnotes.js';
+import { contentTargets } from './contentTargets.js';
 
 export interface FragmentRange extends SourceSpan {
-  kind: 'document' | 'heading' | 'block' | 'equation' | 'footnote' | 'reference';
+  kind: 'document' | 'heading' | 'block' | 'equation' | 'footnote' | 'reference' | 'code' | 'callout' | 'range';
   /** The landing mark may be smaller than the section used for a preview/embed. */
   focus: SourceSpan;
-}
-
-function formulaRange(model: MarkdownModel, formula: SourceSpan & { anchor?: SourceSpan }): SourceSpan {
-  const start = model.text.lastIndexOf('\n', formula.from - 1) + 1;
-  const prefix = model.text.slice(start, formula.from);
-  return { from: /^(?:[\t ]*> ?)*[\t ]*$/.test(prefix) ? start : formula.from, to: formula.anchor?.to ?? formula.to };
 }
 
 export function fragmentRange(model: MarkdownModel, fragment: string): FragmentRange | null {
@@ -32,11 +26,12 @@ export function fragmentRange(model: MarkdownModel, fragment: string): FragmentR
     return result(note.inline ? { from: definition.bodyFrom, to: definition.to - 1 } : definition, 'footnote', definition);
   }
   if (decoded.startsWith('^')) {
+    if (/^\^(?:heading|eq|code|callout|range)-/.test(decoded)) {
+      const target = contentTargets(model).targets.find(candidate => candidate.id === decoded.slice(1));
+      return target ? result(target, target.kind, target.focus) : null;
+    }
     const matches = meta.blockIds.filter(candidate => candidate.id === decoded.slice(1));
     if (matches.length !== 1) return null;
-    const formula = equationTarget(equationContext(model), decoded);
-    if (formula) return result(formulaRange(model, formula), 'equation');
-    if (equationReferenceName(decoded) !== undefined) return null;
     const block = matches[0];
     if (!block) return null;
     const paragraph = model.nodes.filter((node) => ['Paragraph', 'ListItem', 'Blockquote'].includes(node.name) && node.from <= block.from && node.to >= block.to)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { DocumentSession, analyzeMarkdown, fragmentRange, parseLinkTarget, type SourceChange } from '@webobsidian/markdown-core';
-import type { EditorView } from '@codemirror/view';
+import { DocumentSession, analyzeMarkdown, fragmentRange, parseLinkTarget, isGlobalContentTarget, contentTargets, type SourceChange } from '@webobsidian/markdown-core';
+import { EditorView } from '@codemirror/view';
 import CanvasView from '../components/CanvasView';
 import { useStore } from '../lib/store';
 import { preparePrintDocument } from '../lib/printDocument';
@@ -36,6 +36,10 @@ export interface RenderHarnessApi {
   preparePrint: () => Promise<void>;
   notes: (notes: Record<string, string>) => void;
   changeNote: (path: string, source: string) => void;
+  noteSource: (path: string) => string | undefined;
+  noteUndo: (path: string, redo?: boolean) => void;
+  editEmbed: (slot: number, changes: SourceChange[]) => void;
+  embedText: (slot: number) => string | undefined;
   crashPlugin: (slot: number) => void;
   links: string[];
   writes: string[];
@@ -82,6 +86,11 @@ export default function RenderHarness() {
   const links = useRef<string[]>([]);
   const writes = useRef<string[]>([]);
   const notes = useRef(new Map<string, DocumentSession>());
+  const noteListeners = useRef(new Set<() => void>());
+  const embedView = (slot: number) => {
+    const host = refs.current[slot]?.dom.querySelector<HTMLElement>('.cm-note-embed[data-embed-editing="true"] .cm-note-fragment .cm-editor');
+    return host ? EditorView.findFromDOM(host) : undefined;
+  };
   const sessions = useMemo(() => {
     const writer = async (_id: string, raw: string) => { writes.current.push(raw); return { revision: String(writes.current.length) }; };
     const a = new DocumentSession('a.md', config.source, 'r0', writer);
@@ -93,9 +102,23 @@ export default function RenderHarness() {
     rawUrl: (target) => target, files: () => [], tags: async () => [], properties: async () => [],
     propertyTypes: () => ({}), setPropertyType: async () => ({}), renderEmbed: async target => {
       const parsed = parseLinkTarget(target);
-      const id = parsed.path ? (parsed.path.endsWith('.md') ? parsed.path : parsed.path + '.md') : path;
-      const note = notes.current.get(id); if (!note) return null;
-      return { path: id, context: contextFor(id), subscribe: note.subscribe, read: () => {
+      const resolve = () => {
+        const matches = isGlobalContentTarget(target) ? [...notes.current].filter(([, note]) => contentTargets(note.analysis).targets.some(candidate => '^' + candidate.id === parsed.fragment)) : [];
+        if (isGlobalContentTarget(target) && matches.length !== 1) return undefined;
+        const id = isGlobalContentTarget(target) ? matches[0][0] : parsed.path ? (parsed.path.endsWith('.md') ? parsed.path : parsed.path + '.md') : path;
+        return notes.current.get(id) ?? sessions.find(session => session.id === id);
+      };
+      if (!resolve() && !isGlobalContentTarget(target)) return null;
+      let lastPath = resolve()?.id ?? '';
+      return { get path() { lastPath = resolve()?.id ?? lastPath; return lastPath; },
+        get edit() { const session = resolve(); return session ? { session, resolveRange: (model: typeof session.analysis) => resolve() === session ? fragmentRange(model, parsed.fragment) : null } : undefined; },
+        get context() { return contextFor(resolve()?.id ?? lastPath); },
+        subscribe: listener => {
+          noteListeners.current.add(listener);
+          const stops = sessions.map(session => session.subscribe(listener));
+          return () => { noteListeners.current.delete(listener); stops.forEach(stop => stop()); };
+        }, read: () => {
+        const note = resolve(); if (!note) return null;
         const model = note.analysis, range = fragmentRange(model, parsed.fragment);
         return range ? { source: model.text.slice(range.from, range.to), from: range.from, mathSource: { model, from: range.from }, equations: equationContext(model, range.from) } : null;
       } };
@@ -112,8 +135,16 @@ export default function RenderHarness() {
       },
       canvasRaw: () => useStore.getState().content,
       preparePrint: async () => { await preparePrintDocument(sessions[0].snapshot, contexts[0]); },
-      notes: entries => { notes.current = new Map(Object.entries(entries).map(([path, source]) => [path, new DocumentSession(path, source, undefined, async () => ({}))])); },
+      notes: entries => { notes.current = new Map(Object.entries(entries).map(([path, source]) => {
+        const session = new DocumentSession(path, source, undefined, async () => ({}));
+        session.subscribe(() => { for (const listener of noteListeners.current) listener(); });
+        return [path, session];
+      })); },
       changeNote: (path, source) => { notes.current.get(path)?.setText(source); },
+      noteSource: path => notes.current.get(path)?.snapshot.raw,
+      noteUndo: (path, redo = false) => { if (redo) notes.current.get(path)?.redo(); else notes.current.get(path)?.undo(); },
+      editEmbed: (slot, changes) => embedView(slot)?.dispatch({ changes }),
+      embedText: slot => embedView(slot)?.state.doc.toString(),
       reset: (source, shared = true) => {
         setCanvas(false); links.current.length = 0; writes.current.length = 0;
         setModes(['live', 'reading']); setSecondary(true);

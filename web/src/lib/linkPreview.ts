@@ -1,5 +1,5 @@
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
-import { equationContext, extractMetadata, footnotes, footnoteFragment, fragmentRange, parseLinkTarget } from '@webobsidian/markdown-core';
+import { equationContext, extractMetadata, footnotes, footnoteFragment, fragmentRange, isGlobalContentTarget, parseLinkTarget } from '@webobsidian/markdown-core';
 import { contextOf, nonExecutingContext, renderContext, type RenderContext } from './renderContext';
 import { followRenderedLink, linkIntent } from './fragmentNavigation';
 import { syntaxModel, sourceOf } from './syntaxModel';
@@ -56,7 +56,7 @@ export function mountLinkPreview(host: HTMLElement, context: RenderContext, targ
     } catch (error) { failed(error); }
   };
   const destination = parseLinkTarget(target);
-  const local = !destination.path || destination.path === context.sourcePath;
+  const local = !isGlobalContentTarget(target) && (!destination.path || destination.path === context.sourcePath);
   if (local && context.mathSource) {
     const model = context.mathSource.model, range = fragmentRange(model, destination.fragment);
     if (range) mount(model.text.slice(range.from, range.to), range.from, model, context);

@@ -20,6 +20,7 @@ export * from './blockEffects.js';
 
 export * from './equations.js';
 export * from './fragments.js';
+export * from './contentTargets.js';
 export * from './footnoteSyntax.js';
 export * from './footnotes.js';
 export * from './review.js';

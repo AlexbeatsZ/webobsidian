@@ -4,13 +4,18 @@ export interface ResolvedTarget extends LinkTarget {
   candidates: string[];
 }
 
+export function isGlobalContentTarget(raw: string): boolean {
+  const destination = raw.split(/(?<!\\)\|/, 1)[0].trim();
+  return /^\^(?:heading|eq|code|callout|range)-/.test(destination);
+}
+
 export function parseLinkTarget(raw: string): LinkTarget {
   const aliasAt = raw.search(/(?<!\\)\|/);
   const destination = (aliasAt < 0 ? raw : raw.slice(0, aliasAt)).trim();
   const hashAt = destination.indexOf('#');
   return {
-    path: (hashAt < 0 ? destination : destination.slice(0, hashAt)).replace(/\\\|/g, '|').trim(),
-    fragment: hashAt < 0 ? '' : destination.slice(hashAt + 1),
+    path: (isGlobalContentTarget(destination) ? '' : hashAt < 0 ? destination : destination.slice(0, hashAt)).replace(/\\\|/g, '|').trim(),
+    fragment: isGlobalContentTarget(destination) ? destination : hashAt < 0 ? '' : destination.slice(hashAt + 1),
     alias: aliasAt < 0 ? null : raw.slice(aliasAt + 1).replace(/\\\|/g, '|'),
   };
 }
@@ -30,6 +35,7 @@ function prepareTarget(raw: string, sourcePath: string) {
   const target = parseLinkTarget(raw);
   const result = (status: ResolvedTarget['status'], path = target.path, candidates: string[] = []): ResolvedTarget =>
     ({ ...target, path, status, candidates });
+  if (isGlobalContentTarget(raw)) return { terminal: result('missing') };
   if (/^(?:https?|mailto):/i.test(target.path)) return { terminal: result('external') };
   if (/^[a-z][a-z\d+.-]*:/i.test(target.path) || target.path.includes('\0')) return { terminal: result('denied') };
   if (!target.path) return { terminal: result('resolved', sourcePath) };

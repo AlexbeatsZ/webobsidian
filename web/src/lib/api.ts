@@ -202,7 +202,9 @@ export const api = {
       fragment?: string;
       candidates?: string[];
       normalizedTarget?: string;
+      targetOccurrences?: { path: string; valid: boolean }[];
     }>(`/api/resolve?target=${encodeURIComponent(target)}&sourcePath=${encodeURIComponent(sourcePath)}`),
+  contentTargets: (query = '') => req<{ targets: { id: string; kind: string; label: string; path: string }[] }>(`/api/content-targets?query=${encodeURIComponent(query)}&limit=100`),
   graph: () =>
     req<{
       nodes: { id: string; label: string; kind: 'note' | 'attachment' | 'unresolved'; tags: string[] }[];

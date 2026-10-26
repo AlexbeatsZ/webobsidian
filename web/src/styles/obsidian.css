@@ -619,7 +619,10 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-note-embed { position: relative; border: 0; padding: 0; margin: 4px 0; white-space: normal; width: fit-content; min-width: 100%; max-width: none; }
 .cm-html-block, .cm-mermaid { white-space: normal; }
 .cm-note-embed .markdown-embed-content { padding: 0; max-height: none; overflow: visible; }
-.cm-note-fragment > div > .markdown-embedded-view > .cm-editor > .cm-scroller > .cm-content > .cm-leading-heading { display: none; }
+.cm-note-fragment:not(.cm-typed-heading-fragment) > div > .markdown-embedded-view > .cm-editor > .cm-scroller > .cm-content > .cm-leading-heading { display: none; }
+.cm-note-embed > .cm-embed-edit { border: 0; border-radius: var(--radius-s); padding: 3px 7px; margin: 0 0 4px;
+  background: transparent; color: var(--text-muted); font: 12px var(--font-ui); cursor: pointer; }
+.cm-note-embed > .cm-embed-edit:hover, .cm-note-embed > .cm-embed-edit:focus-visible { color: var(--text-normal); background: var(--background-modifier-hover); }
 .cm-note-embed .markdown-embed-link { position: absolute; top: 6px; right: 8px; width: 16px; height: 16px;
   color: var(--text-faint); cursor: pointer; opacity: 0; transition: opacity var(--transition); z-index: 1; }
 .cm-note-embed:hover > .markdown-embed-link { opacity: 1; }

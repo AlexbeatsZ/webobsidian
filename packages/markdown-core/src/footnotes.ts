@@ -1,5 +1,6 @@
 import { markdownComments, type MarkdownModel, type SourceSpan } from './syntax.js';
 import { mathRegions } from './math.js';
+import { extractMetadata } from './metadata.js';
 
 export interface FootnoteDefinition extends SourceSpan { bodyFrom: number; markerTo: number }
 export interface Footnote {
@@ -20,7 +21,8 @@ export const footnoteReferenceFragment = (note: Footnote, occurrence: number) =>
 export function footnotes(model: MarkdownModel): Footnotes {
   const cached = cache.get(model); if (cached) return cached;
   const excluded = [...model.literal, ...model.html, ...model.htmlBlocks, ...markdownComments(model), ...mathRegions(model),
-    ...(model.frontmatter ? [model.frontmatter] : [])];
+    ...(model.frontmatter ? [model.frontmatter] : []),
+    ...extractMetadata(model).linkOccurrences.filter(link => link.kind === 'wiki')];
   const allowed = (span: SourceSpan) => !excluded.some(r => span.from < r.to && span.to > r.from);
   const byId = new Map<string, Footnote>(), references = new Map<number, Footnote>(), definitions = new Map<number, Footnote>();
   const markers = new Map<number, SourceSpan>();

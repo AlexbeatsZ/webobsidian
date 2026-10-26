@@ -4,6 +4,12 @@
 
 Formula references use the `eq-` block-ID namespace and ordinary wiki links:
 
+Vault-global stable references additionally accept `[[^eq-ID]]` and `![[^eq-ID]]`.
+They reuse the same formula anchor/type rules and full source-document numbering;
+global duplicate IDs are unresolved, not silently selected. Existing `[[#^eq-ID]]`
+and `[[file#^eq-ID]]` remain document scoped. See `content-references.md` for
+catalog lookup, copying/moving identities, and source-session embedded editing.
+
 ```markdown
 $$
 E = mc^2

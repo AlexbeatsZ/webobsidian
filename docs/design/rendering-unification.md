@@ -1,5 +1,17 @@
 # Rendering unification
 
+## Source-backed embedded editing
+
+Explicit note embeds can lazily enter live editing through an `EmbeddedProjection`
+of the source `DocumentSession`. The projection owns no content, history or writer:
+local deltas are version-checked, mapped to the current core fragment range, and
+validated against protected identity spans and the resulting structural boundary.
+Source undo/redo and existing autosave remain authoritative. View-local selection
+and scroll stay independent; disappearance or identity conflicts stop writing.
+`MarkdownFragment` retains its local draft mode for existing cell consumers, but
+source-backed embeds do not use the blur/whole-fragment commit path. Restricted
+preview/print contexts remove edit bindings recursively. See `content-references.md`.
+
 ## Ownership follow-up (2026-10-25, after 0.1.26)
 
 Review toolbar/candidate resources belong to their mounted DOM, never WidgetType

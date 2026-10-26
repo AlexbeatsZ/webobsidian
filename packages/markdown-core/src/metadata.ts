@@ -1,5 +1,5 @@
 import { analyzeMarkdown, markdownComments, type MarkdownModel, type SourceSpan } from './syntax.js';
-import { parseLinkTarget } from './links.js';
+import { isGlobalContentTarget, parseLinkTarget } from './links.js';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts } from './bodyHeadings.js';
 import { mathRegions } from './math.js';
 import { decodeHtmlEntity } from './html.js';
@@ -30,7 +30,7 @@ export function extractMetadata(source: string | MarkdownModel): Metadata {
   for (const match of text.matchAll(/!?\[\[([^\]\n]+?)\]\]/g)) {
     if (intersects(match.index!, match.index! + match[0].length) || escaped(match.index!) || match[1].includes('[[')) continue;
     const target = parseLinkTarget(match[1]);
-    const destination = target.path + (target.fragment ? '#' + target.fragment : '');
+    const destination = isGlobalContentTarget(match[1]) ? target.fragment : target.path + (target.fragment ? '#' + target.fragment : '');
     linkOccurrences.push({ from: match.index!, to: match.index! + match[0].length, target: destination,
       label: target.alias ?? destination, kind: 'wiki', embed: match[0].startsWith('!') });
     links.add(destination);
@@ -79,13 +79,16 @@ export function extractMetadata(source: string | MarkdownModel): Metadata {
     if ((!match && !body) || intersects(node.from, node.to)) continue;
     const raw = text.slice(node.from, node.to);
     const parts = body ? bodyHeadingParts(raw)! : null;
-    const label = parts ? raw.slice(parts.contentFrom, parts.contentTo).trim() : raw.replace(/^#{1,6}[ \t]+/, '')
+    const content = parts ? raw.slice(parts.contentFrom, parts.contentTo).trim() : raw.replace(/^#{1,6}[ \t]+/, '')
       .replace(/\n[ \t]*[=-]+[ \t]*$/, '').replace(/[ \t]+#+[ \t]*$/, '').trim();
+    const anchor = content.match(/[\t ]+\^heading-[\p{L}\p{N}-]+[\t ]*$/u);
+    const label = anchor ? content.slice(0, anchor.index).replace(/[\t ]+#+[\t ]*$/, '').trim() : content;
     headings.push({ from: node.from, to: node.to, level: body ? BODY_HEADING_LEVEL : Number(match![1]), text: label, ...(body ? { kind: 'body' as const } : {}) });
   }
   const blockIds: Metadata['blockIds'] = [];
-  for (const match of text.matchAll(/(?:^|[ \t])(\^[\p{L}\p{N}-]+)[ \t]*$/gmu)) {
+  for (const match of text.matchAll(/(?:^|[ \t])(\^[\p{L}\p{N}-]+)([ \t]+#+)?[ \t]*$/gmu)) {
     const from = match.index! + match[0].indexOf(match[1]);
+    if (match[2] && !model.nodes.some(node => (/^ATXHeading[1-6]$/.test(node.name) || node.name === BODY_HEADING_NODE) && node.from <= from && node.to >= from + match[0].trimStart().length)) continue;
     if (!intersects(from, from + match[1].length)) blockIds.push({ from, to: from + match[1].length, id: match[1].slice(1) });
   }
   const result = { tags: [...tags], links: [...links], headings, comments, blockIds, linkOccurrences, linkDefinitions };

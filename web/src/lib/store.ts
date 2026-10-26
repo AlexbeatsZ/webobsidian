@@ -3,7 +3,8 @@ import { create } from 'zustand';
 import { api, pendingMutations, type TreeNode } from './api';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
-import { parseLinkTarget } from '@webobsidian/markdown-core';
+import { isGlobalContentTarget, parseLinkTarget } from '@webobsidian/markdown-core';
+import { resolveContentLink } from './contentReferences';
 import { navigateTo, captureLocation, cancelNavigation, type NavigationLocation, type NavigationRequest, type LinkIntent } from './fragmentNavigation';
 import { sidebarTab, restoreSidebarTabs, type SidebarTab } from './sidebarTabs';
 import { getActiveEditor } from './activeEditor';
@@ -727,7 +728,7 @@ export const useStore = create<AppState>()(
         linkGenerations.set(viewId, generation);
         try {
           const origin = sourcePath ?? get().activePath ?? '';
-          const resolved = target.startsWith('#') ? { path: origin } : await api.resolve(target, origin);
+          const resolved = target.startsWith('#') ? { path: origin } : await resolveContentLink(target, origin);
           if (linkGenerations.get(viewId) !== generation) return;
           const { path } = resolved;
           if (resolved.status === 'ambiguous' || resolved.status === 'denied') {
@@ -739,6 +740,7 @@ export const useStore = create<AppState>()(
             await get().navigate(path, { ...intent, fragment });
           }
           else {
+            if (isGlobalContentTarget(target)) { get().notify('未找到引用目标：' + target); return; }
             // Only append `.md` when the target has no extension at all — a target
             // like `Foo.canvas` must stay `Foo.canvas`, not become `Foo.canvas.md`.
             const destination = resolved.normalizedTarget ?? parseLinkTarget(target).path;

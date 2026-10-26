@@ -8,17 +8,22 @@ interface LinkGraph {
   incoming: Map<string, Set<string>>;
   dependencies: Map<string, Set<string>>;
   sourceKeys: Map<string, Set<string>>;
+  targetKeys: Map<string, string[]>;
 }
 const emptyGraph = (): LinkGraph => ({
   resolved: new Map(),
   incoming: new Map(),
   dependencies: new Map(),
   sourceKeys: new Map(),
+  targetKeys: new Map(),
 });
 let graph = emptyGraph();
 export function rebuildGraphFromCatalog() {
   graph = emptyGraph();
-  for (const rel of catalog.notes.keys()) updateResolvedSource(rel);
+  for (const rel of catalog.notes.keys()) {
+    graph.targetKeys.set(rel, catalog.dependencyKeysFor(rel));
+    updateResolvedSource(rel);
+  }
 }
 export async function buildLinkGraph() {
   const { rebuildVaultIndex } = await import('./vaultindex.js');
@@ -44,7 +49,7 @@ function updateResolvedSource(rel: string) {
   const targets = new Set<string>(),
     keys = new Set<string>();
   for (const raw of catalog.notes.get(rel)?.links ?? []) {
-    for (const key of catalog.targets.dependencies(raw, rel)) keys.add(key);
+    for (const key of catalog.dependencies(raw, rel)) keys.add(key);
     const target = resolveLink(raw, rel);
     if (target) targets.add(target);
   }
@@ -82,13 +87,18 @@ export async function updateLinkGraphForFile(rel: string, removed = false): Prom
 export function updateLinkGraphFromNote(rel: string, note?: ParsedNote, removed = false): void {
   if (rel.split('/').some((seg) => seg.startsWith('.'))) return;
   const affected = new Set<string>([rel]);
-  for (const key of catalog.targets.keysFor(rel))
+  const priorKeys = graph.targetKeys.get(rel) ?? [];
+  for (const key of [...priorKeys, ...catalog.dependencyKeysFor(rel)])
     for (const source of graph.dependencies.get(key) ?? []) affected.add(source);
   if (removed) {
     catalog.remove(rel);
     removeResolvedSource(rel);
     affected.delete(rel);
   } else if (note && catalog.notes.get(rel)?.links !== note.links) catalog.putNote(rel, note);
+  if (removed) graph.targetKeys.delete(rel);
+  else graph.targetKeys.set(rel, catalog.dependencyKeysFor(rel));
+  for (const key of catalog.dependencyKeysFor(rel))
+    for (const source of graph.dependencies.get(key) ?? []) affected.add(source);
   for (const source of affected) if (catalog.notes.has(source)) updateResolvedSource(source);
 }
 export function resolveLink(target: string, sourcePath = ''): string | undefined {

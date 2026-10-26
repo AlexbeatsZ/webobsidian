@@ -1,7 +1,7 @@
 import { Facet } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { MenuContext } from './configuredMenus/types';
-import type { EquationContext, MarkdownModel } from '@webobsidian/markdown-core';
+import type { DocumentSession, EquationContext, FragmentRange, MarkdownModel } from '@webobsidian/markdown-core';
 import type { LinkIntent, NavigationLocation } from './fragmentNavigation';
 
 export interface RenderMenuItem {
@@ -11,6 +11,7 @@ export interface RenderMenuItem {
 }
 export interface PropertySuggestion { key: string; type: string; count: number }
 export interface FragmentOptions {
+  edit?: FragmentEditBinding;
   id: string; mode?: 'live' | 'reading'; sourceFrom?: number; autoFocus?: boolean;
   context?: RenderContext; onCommit?: (source: string) => void;
   onReady?: () => void;
@@ -18,7 +19,12 @@ export interface FragmentOptions {
   equations?: EquationContext;
   mathSource?: { model: MarkdownModel; from: number };
 }
+export interface FragmentEditBinding {
+  session: DocumentSession;
+  resolveRange: (model: MarkdownModel) => FragmentRange | null;
+}
 export interface EmbeddedNote {
+  edit?: FragmentEditBinding;
   path: string; context: RenderContext;
   read: () => { source: string; from: number; equations?: EquationContext; mathSource?: { model: MarkdownModel; from: number } } | null;
   subscribe: (listener: () => void) => () => void;
@@ -76,7 +82,8 @@ export function nonExecutingContext(context: RenderContext): RenderContext {
   return { ...context, bindEditor: undefined, allowScriptExecution: false, allowPlugins: false, allowHtmlExecution: false,
     renderEmbed: async (target, signal) => {
       const note = await context.renderEmbed(target, signal);
-      return note ? { ...note, context: nonExecutingContext(note.context) } : null;
+      return note ? { get path() { return note.path; }, get context() { return nonExecutingContext(note.context); },
+        read: note.read, subscribe: note.subscribe } : null;
     },
   };
 }

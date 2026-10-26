@@ -14,6 +14,8 @@ import { nativeWritingExtensions } from '../lib/writing/extensions';
 import { mathEditingExtensions } from '../lib/writing/latex/editor_extensions/math_tooltip';
 import { captureWritingState, restoreWritingState, snippetChangeEffects, writingOperation, snippetGroup, type WritingViewState } from '../lib/writing/editing';
 import { formatPaste } from '../lib/writing/format';
+import { contentClipboard } from '../lib/contentClipboard';
+import { documents } from '../lib/documents';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { search, searchKeymap } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
@@ -23,7 +25,7 @@ import { analyzeMarkdown, bodyHeadingSyntax, changesBetween, type DocumentSessio
 import { obsidianHighlightStyle } from '../lib/highlight';
 import { obsidianKeymap, markdownListKeymap, toggleInline, toggleLineStyle, toggleChecklist, surroundSelection } from '../lib/editorCommands';
 import { suggesterPlugin } from '../lib/suggest';
-import { syntaxModel, adoptSyntaxModel, documentMetadata, blockModel } from '../lib/syntaxModel';
+import { syntaxModel, adoptSyntaxModel, documentMetadata, blockModel, sourceOf } from '../lib/syntaxModel';
 import { inlineHtml } from '../lib/inlineHtml';
 import { sourceControls } from '../lib/sourceControls';
 import { semanticDecorations } from '../lib/semanticDecorations';
@@ -83,6 +85,26 @@ export default function MarkdownView(props: MarkdownViewProps) {
   const extraComp = useRef(new Compartment()).current;
   const openContextMenu = context.openMenu;
   const setLeftPanel = (_panel: string) => props.onSearch?.();
+  const clipboard = useMemo(() => contentClipboard({
+    source: () => {
+      const current = view.current;
+      const session = latest.current.documentSession;
+      const path = latest.current.context.sourcePath;
+      const registered = !!session && documents.get(path) === session;
+      const source = current ? sourceOf(current.state) : { model: latest.current.analysis ?? analyzeMarkdown(latest.current.snapshot.text), from: 0 };
+      return { identity: path, model: source.model, offset: source.from,
+        read: () => current && current === view.current && latest.current.documentSession === session &&
+          latest.current.context.sourcePath === path && (!registered || documents.get(path) === session)
+          ? session?.analysis ?? sourceOf(current.state).model : undefined };
+    },
+    writable: () => latest.current.mode !== 'reading' && !latest.current.snapshot.locked && !latest.current.documentSession?.snapshot.locked,
+    projection: () => !!latest.current.context.sourceFragment,
+    format: (text, current) => {
+      const selection = current.state.selection.main;
+      return formatPaste(text, latest.current.context.sourcePath, current.state.doc.lineAt(selection.from).text, current.state.sliceDoc(selection.from, selection.to));
+    },
+    reportError: error => latest.current.context.reportError?.(String(error)),
+  }), []);
 
   const sync = (next: DocumentSnapshot) => {
     const v = view.current;
@@ -105,24 +127,15 @@ export default function MarkdownView(props: MarkdownViewProps) {
   };
   const copy = async () => {
     const v = view.current;
-    if (!v) return;
-    const { from, to } = v.state.selection.main;
-    await navigator.clipboard.writeText(v.state.sliceDoc(from, to)).catch(() => {});
+    if (v) await clipboard.copy(v);
   };
   const cut = async () => {
     const v = view.current;
-    if (!v) return;
-    const { from, to } = v.state.selection.main;
-    await navigator.clipboard.writeText(v.state.sliceDoc(from, to)).catch(() => {});
-    v.dispatch({ changes: { from, to, insert: '' } });
-    v.focus();
+    if (v) await clipboard.copy(v, true);
   };
   const paste = async () => {
-    const t = await navigator.clipboard.readText().catch(() => '');
-    const v=view.current;if(!t||!v||v.state.readOnly)return;
-    try{const s=v.state.selection.main;const result=formatPaste(t,latest.current.context.sourcePath,v.state.doc.lineAt(s.from).text,v.state.sliceDoc(s.from,s.to));
-      v.dispatch({...v.state.replaceSelection(result),annotations:writingOperation.of('paste'),userEvent:'input.paste'});}
-    catch(error){latest.current.context.reportError?.(String(error));}
+    const v = view.current;
+    if (v) await clipboard.paste(v);
   };
   const selectAll = () => {
     const v = view.current;
@@ -247,6 +260,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         indentUnit.of('    '), EditorState.tabSize.of(4), editorPhrases, navigationExtensions, linkPreview,
         editorSelection, editorDebugging, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
+        clipboard.extension,
         extraComp.of(p.extensions ?? []),
         readonlyComp.of(readonlyExt(p.mode === 'reading' || !!p.snapshot.locked)),
         EditorState.transactionFilter.of((tr) =>
