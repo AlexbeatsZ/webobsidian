@@ -62,6 +62,17 @@ const rightToggle = (page: Page) => page.getByRole('button', { name: '折叠/展
 
 test.beforeEach(async ({ page }) => { await openFixture(page); });
 
+test('toolbar command and button both require a live main PDF session', async ({ page }) => {
+  expect(await page.evaluate(() => (window as any).pdfToolbarFixture.commands.canExecute('pdf:toggle-toolbar'))).toBe(false);
+  await expect(toggle(page)).toHaveCount(0);
+  await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().openFile('paper.pdf'));
+  await expect(toggle(page)).toBeVisible();
+  expect(await page.evaluate(() => (window as any).pdfToolbarFixture.commands.canExecute('pdf:toggle-toolbar'))).toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('vault-identity-invalidated')));
+  await expect(toggle(page)).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).pdfToolbarFixture.commands.canExecute('pdf:toggle-toolbar'))).toBe(false);
+});
+
 test('button sits immediately left of the sidebar toggle and the toolbar defaults hidden', async ({ page }) => {
   await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().openFile('paper.pdf'));
   await expect(main(page).locator('.pdf-page-surface.is-ready').first()).toBeVisible();
@@ -192,6 +203,26 @@ test('native command is assignable, shares the button action and Ctrl+F reveals 
   await expect(toolbar(page)).toBeVisible();
   await expect(main(page).getByRole('searchbox', { name: '搜索 PDF' })).toHaveValue('needle');
   await expect(main(page).locator('.pdf-search [role="status"]')).toHaveText('1/8');
+});
+
+test('explicit PDF navigation yields to later scrolling after zoom and toolbar changes', async ({ page }) => {
+  await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().openFile('paper.pdf'));
+  await expect(main(page).locator('.pdf-page-surface.is-ready').first()).toBeVisible();
+  await toggle(page).click();
+  const pageNumber = main(page).getByRole('textbox', { name: 'PDF 页码' });
+  await pageNumber.fill('6');
+  await pageNumber.press('Enter');
+  await expect(pageNumber).toHaveValue('6');
+  await main(page).getByRole('button', { name: '放大 PDF' }).click();
+  await expect(main(page).locator('[data-pdf-page="6"].is-ready')).toBeVisible();
+  await toggle(page).click();
+  await main(page).locator('.pdf-pages').evaluate(element => { element.scrollTop = 0; });
+  await expect.poll(() => page.evaluate(() => (window as any).pdfToolbarFixture.pdf.getMainPdfSession('paper.pdf').getSnapshot().currentPage)).toBe(1);
+  await toggle(page).click();
+  await expect(pageNumber).toHaveValue('1');
+  await pageNumber.fill('4');
+  await pageNumber.press('Enter');
+  await expect(pageNumber).toHaveValue('4');
 });
 
 test('narrow touch layout keeps the control, split and sidebar views do not steal main ownership', async ({ page }) => {

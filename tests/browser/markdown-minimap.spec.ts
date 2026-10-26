@@ -4,6 +4,33 @@ const source = ['# First heading', '', ...Array.from({ length: 1200 }, (_, index
   index % 40 === 0 ? `## Heading ${index}\nneedle ${index}` : `Paragraph ${index} with text content.`), '', '# Last heading'].join('\n');
 
 test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const records: { observer: ResizeObserver; targets: Set<Element>; observes: Element[]; unobserves: Element[]; disconnects: number }[] = [];
+    const nativeObserve = ResizeObserver.prototype.observe;
+    const nativeUnobserve = ResizeObserver.prototype.unobserve;
+    const nativeDisconnect = ResizeObserver.prototype.disconnect;
+    const record = (observer: ResizeObserver) => {
+      let entry = records.find(entry => entry.observer === observer);
+      if (!entry) records.push(entry = { observer, targets: new Set(), observes: [], unobserves: [], disconnects: 0 });
+      return entry;
+    };
+    ResizeObserver.prototype.observe = function(target, options) {
+      const entry = record(this);
+      entry.targets.add(target); entry.observes.push(target);
+      return nativeObserve.call(this, target, options);
+    };
+    ResizeObserver.prototype.unobserve = function(target) {
+      const entry = record(this);
+      entry.targets.delete(target); entry.unobserves.push(target);
+      return nativeUnobserve.call(this, target);
+    };
+    ResizeObserver.prototype.disconnect = function() {
+      const entry = record(this);
+      entry.targets.clear(); entry.disconnects++;
+      return nativeDisconnect.call(this);
+    };
+    (window as any).minimapObservers = records;
+  });
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     if (['/api/vault-identity', '/api/writing'].includes(url.pathname)) return route.fallback();
@@ -33,6 +60,135 @@ test.beforeEach(async ({ page }) => {
   await expect.poll(() => page.locator('.markdown-minimap canvas').getAttribute('data-paint-count')).not.toBeNull();
   await expect(page.locator('.markdown-minimap-description')).toHaveCount(0);
   await expect(page.getByRole('slider', { name: '文档缩略图位置' })).toBeVisible();
+});
+
+test('repaints retain media subscriptions and removed targets and closed panels release their observers', async ({ page }) => {
+  await page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    fixture.documents.get('a.md').setRawText('# Table\n\n| first | second |\n| --- | --- |\n| value | value |\n\nend');
+    fixture.store.getState().setViewMode('live');
+  });
+  await expect(page.locator('.cm-table')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const table = document.querySelector('.cm-content table');
+    const record = (window as any).minimapObservers.find((entry: any) => entry.targets.has(table));
+    if (!record) return false;
+    (window as any).minimapFixture.mediaRecord = record;
+    (window as any).minimapFixture.table = table;
+    return true;
+  })).toBe(true);
+  const image = page.locator('.markdown-minimap canvas');
+  const before = await page.evaluate(() => {
+    const record = (window as any).minimapFixture.mediaRecord;
+    return { observes: record.observes.length, disconnects: record.disconnects };
+  });
+  for (const color of ['red', 'blue', 'green']) {
+    const paints = Number(await image.getAttribute('data-paint-count'));
+    await page.evaluate(color => document.body.style.setProperty('--minimap-match', color), color);
+    await expect.poll(async () => Number(await image.getAttribute('data-paint-count'))).toBeGreaterThan(paints);
+  }
+  expect(await page.evaluate(() => {
+    const record = (window as any).minimapFixture.mediaRecord;
+    return { observes: record.observes.length, disconnects: record.disconnects };
+  })).toEqual(before);
+  await page.evaluate(() => (window as any).minimapFixture.documents.get('a.md').setRawText('# No media\n\nordinary text'));
+  await expect.poll(() => page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    return { observed: fixture.mediaRecord.targets.has(fixture.table),
+      removed: fixture.mediaRecord.unobserves.includes(fixture.table),
+      connected: [...fixture.mediaRecord.targets].every((target: any) => target.isConnected) };
+  })).toEqual({ observed: false, removed: true, connected: true });
+  await page.evaluate(() => (window as any).minimapFixture.store.getState().setRightPanel('outline'));
+  await expect(image).toHaveCount(0);
+  expect(await page.evaluate(() => {
+    const record = (window as any).minimapFixture.mediaRecord;
+    return { targets: record.targets.size, disconnects: record.disconnects };
+  })).toEqual({ targets: 0, disconnects: before.disconnects + 1 });
+});
+
+test('virtual scrolling discovers mounted overflow, releases unmounted media and keeps ordinary scrolls paint-free', async ({ page }) => {
+  await page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    const headers = Array.from({ length: 24 }, (_, index) => `LongHeader${index}Text`);
+    const table = [`| ${headers.join(' | ')} |`, `| ${headers.map(() => '---').join(' | ')} |`,
+      `| ${headers.map(() => 'value').join(' | ')} |`].join('\n');
+    fixture.documents.get('a.md').setRawText('# Start\n\n' + 'ordinary text\n\n'.repeat(500) + table + '\n\n' + 'tail\n\n'.repeat(500));
+    fixture.store.getState().setViewMode('reading');
+  });
+  const image = page.locator('.markdown-minimap canvas');
+  await expect(page.locator('.cm-content table')).toHaveCount(0);
+  await expect.poll(async () => Number(await image.getAttribute('data-source-width'))).toBeLessThan(900);
+  const ordinaryWidth = Number(await image.getAttribute('data-source-width'));
+  const paints = Number(await image.getAttribute('data-paint-count'));
+  await page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    fixture.navigation.navigationView('a.md', 'main').scrollDOM.scrollTop = 2000;
+  });
+  await expect.poll(() => page.getByRole('slider').getAttribute('aria-valuenow')).not.toBe('1');
+  expect(await image.getAttribute('data-paint-count')).toBe(String(paints));
+  await page.evaluate(async () => {
+    const fixture = (window as any).minimapFixture;
+    const view = fixture.navigation.navigationView('a.md', 'main');
+    const line = view.state.doc.lineAt(view.state.doc.toString().indexOf('| LongHeader')).number - 1;
+    await fixture.navigation.navigateTo('a.md', { line, viewId: 'main', focus: false, history: false, scrollOnly: true }, view);
+  });
+  await expect(page.locator('.cm-content table')).toBeVisible();
+  await expect.poll(async () => Number(await image.getAttribute('data-source-width'))).toBeGreaterThan(ordinaryWidth + 100);
+  await page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    fixture.mountedTable = document.querySelector('.cm-content table');
+    fixture.mediaRecord = (window as any).minimapObservers.find((entry: any) => entry.targets.has(fixture.mountedTable));
+    fixture.navigation.navigationView('a.md', 'main').scrollDOM.scrollTop = 0;
+  });
+  await expect(page.locator('.cm-content table')).toHaveCount(0);
+  await expect.poll(async () => Number(await image.getAttribute('data-source-width'))).toBe(ordinaryWidth);
+  expect(await page.evaluate(() => {
+    const fixture = (window as any).minimapFixture;
+    return { removed: fixture.mediaRecord.unobserves.includes(fixture.mountedTable), observed: fixture.mediaRecord.targets.has(fixture.mountedTable) };
+  })).toEqual({ removed: true, observed: false });
+});
+
+test('layout measures one border box and ignores height-only resizes and disposed media', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const load = (path: string) => import(path);
+    const { observeMinimapLayout } = await load('/src/lib/markdownMinimapLayout.ts');
+    const scroll = document.createElement('div'), content = document.createElement('div');
+    scroll.style.cssText = 'position:fixed;left:0;top:0;width:500px;height:100px;overflow:auto';
+    content.style.cssText = 'box-sizing:border-box;width:400px;padding:16px;border:3px solid;height:300px';
+    scroll.append(content); document.body.append(scroll);
+    let callbacks = 0;
+    const layout = observeMinimapLayout({ contentDOM: content, scrollDOM: scroll }, () => { callbacks++; });
+    const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await settle();
+    const first = { changed: layout.measure(), ...layout.width };
+    content.style.height = '350px';
+    await settle();
+    const heightChanged = layout.measure();
+    const media = document.createElement('img');
+    media.style.cssText = 'display:block;width:900px;height:10px;max-width:none';
+    content.append(media);
+    await settle();
+    const overflow = { changed: layout.measure(), ...layout.width };
+    media.style.width = '1100px';
+    await settle();
+    const resized = { changed: layout.measure(), ...layout.width };
+    media.remove();
+    await settle();
+    const restored = { changed: layout.measure(), ...layout.width };
+    layout.dispose();
+    const disposedCallbacks = callbacks;
+    content.append(media); content.style.width = '420px'; scroll.scrollTop = 20;
+    await settle();
+    scroll.remove();
+    return { first, heightChanged, overflow, resized, restored, disposedCallbacks, callbacks };
+  });
+  expect(result.first).toEqual({ changed: true, column: 400, source: 400 });
+  expect(result.heightChanged).toBe(false);
+  expect(result.overflow.changed).toBe(true);
+  expect(result.overflow.source).toBeGreaterThan(900);
+  expect(result.resized.source).toBeGreaterThan(result.overflow.source + 100);
+  expect(result.restored).toEqual({ changed: true, column: 400, source: 400 });
+  expect(result.callbacks).toBe(result.disposedCallbacks);
 });
 
 test('source width follows the document column, scales uniformly, and only grows for rendered overflow', async ({ page }) => {

@@ -40,7 +40,7 @@ export default function WorkspaceTabs() {
   const loadTree = useStore((s) => s.loadTree);
   const pdfToolbarOpen = useStore((s) => s.pdfToolbarOpen);
   const togglePdfToolbar = useStore((s) => s.togglePdfToolbar);
-  const mainPdf = useMainPdfSession(activePath && /\.pdf$/i.test(activePath) ? activePath : null);
+  const mainPdf = useMainPdfSession(activePath);
   const isMobile = useIsMobile();
   const scroll = useRef<HTMLDivElement>(null);
 
