@@ -164,7 +164,7 @@ try {
   checkpoint('reading/source modes, pinyin search, configured menu and attachment protection');
   await page.getByRole('button', { name: '新建右侧标签页' }).click();
   await page.getByRole('tab', { name: 'Homepage', exact: true }).waitFor();
-  assert.equal(await page.locator('.ribbon-fixed button').count(), 4);
+  assert.deepEqual(await page.locator('.ribbon-right .ribbon-fixed button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['反向链接', '出链', '标签', '大纲', '缩略图']);
   assert.equal(await page.getByRole('button', { name: /Daily note/i }).count(), 0);
   assert.deepEqual(errors, [], 'No renderer errors during production load/edit/save');
   checkpoint('right Homepage tab, fixed ribbon and zero renderer errors');
