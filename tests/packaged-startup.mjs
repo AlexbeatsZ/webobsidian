@@ -110,14 +110,14 @@ try {
   checkpoint('tag queries and filename validation with scoped file writes');
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('.workspace-launcher').waitFor();
-  await page.keyboard.press('Control+o');
+  await page.keyboard.press('ControlOrMeta+o');
   await page.locator('.palette-input').fill('acceptance');
   await page.keyboard.press('Enter');
   await page.locator('.cm-content').first().waitFor();
   await page.locator('.cm-content').first().click();
-  await page.keyboard.press('Control+End');
+  await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type(' Saved through production UI.');
-  await page.keyboard.press('Control+s');
+  await page.keyboard.press('ControlOrMeta+s');
   await page.waitForTimeout(1000);
   assert.match(await fs.readFile(path.join(vault, 'acceptance.md'), 'utf8'), /Saved through production UI\./);
   await page.keyboard.press('Enter');
@@ -125,15 +125,15 @@ try {
   await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent.includes('SNIPPET-OK'));
   checkpoint('real editor input, disk save and explicitly configured native snippet');
   const runCommand = async name => {
-    await page.keyboard.press('Control+p');
+    await page.keyboard.press('ControlOrMeta+p');
     await page.locator('.palette-input').fill(name);
     await page.getByText(name, { exact: true }).click();
   };
   await runCommand('Acceptance template');
   await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent.includes('TEMPLATE-OK COMMAND-OK'));
-  await page.keyboard.press('Control+s');
+  await page.keyboard.press('ControlOrMeta+s');
   checkpoint('command-backed template');
-  await page.keyboard.press('Control+o');
+  await page.keyboard.press('ControlOrMeta+o');
   await page.locator('.palette-input').fill('features');
   await page.keyboard.press('Enter');
   await page.locator('.cm-body-heading').waitFor();
