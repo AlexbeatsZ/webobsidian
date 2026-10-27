@@ -1,14 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DocumentSession } from '@webobsidian/markdown-core';
-import { resolveContentLink } from './contentReferences';
+import { contentReferenceSuggestions, resolveContentLink } from './contentReferences';
 
-const state = vi.hoisted(() => ({ sessions: new Map<string, DocumentSession>(), resolve: vi.fn() }));
-vi.mock('./api', () => ({ api: { resolve: state.resolve } }));
+const state = vi.hoisted(() => ({ sessions: new Map<string, DocumentSession>(), resolve: vi.fn(), targets: vi.fn() }));
+vi.mock('./api', () => ({ api: { resolve: state.resolve, contentTargets: state.targets } }));
 vi.mock('./documents', () => ({ documents: {
   snapshots: () => [...state.sessions.values()].map(session => session.snapshot),
   get: (path: string) => state.sessions.get(path),
 } }));
-beforeEach(() => { state.sessions.clear(); state.resolve.mockReset(); });
+beforeEach(() => { state.sessions.clear(); state.resolve.mockReset(); state.targets.mockReset(); });
+
+it('scopes saved and dirty suggestions to the uniquely resolved file', async () => {
+  state.resolve.mockResolvedValue({ status: 'resolved', path: 'folder/note.md' });
+  state.targets.mockResolvedValue({ targets: [] });
+  state.sessions.set('folder/note.md', draft('folder/note.md', '# Chosen ^heading-chosen'));
+  state.sessions.set('other.md', draft('other.md', '# Other ^heading-other'));
+  expect(await contentReferenceSuggestions('', 'note', 'source.md')).toMatchObject([{ id: 'heading-chosen', path: 'folder/note.md' }]);
+  expect(state.resolve).toHaveBeenCalledWith('note', 'source.md');
+  expect(state.targets).toHaveBeenCalledWith('', 'folder/note.md');
+});
+
+it.each(['missing', 'ambiguous', 'denied'])('does not fall back to global suggestions for a %s file', async status => {
+  state.resolve.mockResolvedValue({ status, path: null });
+  expect(await contentReferenceSuggestions('', 'note')).toEqual([]);
+  expect(state.targets).not.toHaveBeenCalled();
+});
 
 function draft(path: string, text: string) {
   const session = new DocumentSession(path, 'saved contents', undefined, async () => ({}));

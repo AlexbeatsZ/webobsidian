@@ -22,11 +22,18 @@ export async function resolveContentLink(target: string, sourcePath: string) {
     targetOccurrences: occurrences };
 }
 
-export async function contentReferenceSuggestions(query: string) {
-  const result = await api.contentTargets(query);
+export async function contentReferenceSuggestions(query: string, file?: string, sourcePath = '') {
+  let selectedPath: string | undefined;
+  if (file) {
+    const resolved = await api.resolve(file, sourcePath);
+    if (resolved.status !== 'resolved' || !resolved.path || !/\.(md|markdown)$/i.test(resolved.path)) return [];
+    selectedPath = resolved.path;
+  }
+  const result = await api.contentTargets(query, selectedPath);
   const opened = new Set(documents.snapshots().filter(snapshot => snapshot.dirty).map(snapshot => snapshot.id));
-  const targets = result.targets.filter(target => !opened.has(target.path));
+  const targets = result.targets.filter(target => !opened.has(target.path) && (selectedPath === undefined || target.path === selectedPath));
   for (const path of opened) {
+    if (selectedPath !== undefined && path !== selectedPath) continue;
     const session = documents.get(path);
     if (!session) continue;
     for (const target of contentTargets(session.analysis).targets) targets.push({ ...target, path });

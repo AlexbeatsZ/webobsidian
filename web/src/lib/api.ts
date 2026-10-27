@@ -204,7 +204,7 @@ export const api = {
       normalizedTarget?: string;
       targetOccurrences?: { path: string; valid: boolean }[];
     }>(`/api/resolve?target=${encodeURIComponent(target)}&sourcePath=${encodeURIComponent(sourcePath)}`),
-  contentTargets: (query = '') => req<{ targets: { id: string; kind: string; label: string; path: string }[] }>(`/api/content-targets?query=${encodeURIComponent(query)}&limit=100`),
+  contentTargets: (query = '', path?: string) => req<{ targets: { id: string; kind: string; label: string; path: string }[] }>(`/api/content-targets?query=${encodeURIComponent(query)}&limit=100${path === undefined ? '' : '&path=' + encodeURIComponent(path)}`),
   graph: () =>
     req<{
       nodes: { id: string; label: string; kind: 'note' | 'attachment' | 'unresolved'; tags: string[] }[];

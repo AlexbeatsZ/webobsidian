@@ -5,6 +5,21 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => !!window.renderHarness);
 });
 
+for (const prefix of ['[[', '![[']) test(`file-scoped ${prefix} completion inserts a movable identity`, async ({ page }) => {
+  await page.route('**/api/content-targets?**', route => {
+    expect(new URL(route.request().url()).searchParams.get('path')).toBe('folder/note.md');
+    return route.fulfill({ json: { targets: [{ id: 'heading-one', kind: 'heading', label: 'Readable heading', path: 'folder/note.md' }] } });
+  });
+  await page.route('**/api/resolve?**', route => route.fulfill({ json: { path: 'folder/note.md', status: 'resolved', targetOccurrences: [{ path: 'folder/note.md', valid: true }] } }));
+  await page.evaluate(() => window.renderHarness.reset('end\n\n'));
+  await expect(page.locator('[data-slot="0"] .cm-content')).toContainText('end');
+  await page.evaluate(() => { window.renderHarness.cursor(0, 5); window.renderHarness.focus(0); });
+  await page.keyboard.type(prefix + 'folder/note^heading');
+  await expect(page.locator('.suggestion-title')).toHaveText('Readable heading');
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toContain(prefix + '^heading-one]]');
+});
+
 test('commands create a stable heading identity and reuse it for an embed', async ({ page }) => {
   await page.evaluate(() => window.renderHarness.reset('# Same\n\nbody\n\n# Same\n\nother'));
   await expect(page.locator('[data-slot="0"] .cm-content')).toContainText('body');

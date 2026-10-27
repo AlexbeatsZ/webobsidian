@@ -25,6 +25,15 @@ function linkSource(target: string) {
   updateLinkGraphFromNote('source.md', note);
 }
 
+it('filters by exact file before applying the suggestion limit', () => {
+  put('other.md', '# Other ^heading-other');
+  put('folder/wanted.md', '# Wanted ^heading-wanted');
+  expect(catalog.suggestContentTargets('', 1, 'folder/wanted.md')).toEqual([
+    { id: 'heading-wanted', kind: 'heading', label: 'Wanted', path: 'folder/wanted.md' },
+  ]);
+  expect(catalog.suggestContentTargets('', 1, 'missing.md')).toEqual([]);
+});
+
 it('resolves typed global targets independently of source and preserves explicit local fragments', () => {
   put('folder/target.md', '# Title ^heading-title\n\ntext');
   put('source.md', 'legacy ^old\n');

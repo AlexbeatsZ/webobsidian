@@ -15,7 +15,7 @@ export const searchRouter = Router();
 searchRouter.get(
   '/content-targets',
   asyncHandler(async (req, res) => {
-    res.json({ targets: catalog.suggestContentTargets(String(req.query.query ?? ''), Number(req.query.limit ?? 50)) });
+    res.json({ targets: catalog.suggestContentTargets(String(req.query.query ?? ''), Number(req.query.limit ?? 50), typeof req.query.path === 'string' ? req.query.path : undefined) });
   }),
 );
 

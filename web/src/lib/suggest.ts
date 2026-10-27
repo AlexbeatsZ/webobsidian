@@ -224,7 +224,7 @@ class SuggestState {
     const ctx = detect(view);
     if (!ctx) return this.hide();
     this.ctx = ctx;
-    if (ctx.mode === 'link' && ctx.query.startsWith('^') && !ctx.query.includes('|')) {
+    if (ctx.mode === 'link' && ctx.query.includes('^') && !/[#|]/.test(ctx.query)) {
       void this.contentItems(ctx); return;
     }
     if (ctx.mode === 'link' && ctx.query.includes('#^') && !ctx.query.includes('|')) {
@@ -240,8 +240,9 @@ class SuggestState {
     this.hide(); this.ctx = ctx;
     const generation = this.generation, captured = this.view.state;
     try {
-      const query = ctx.query.slice(1);
-      const targets = await contentReferenceSuggestions(query);
+      const caret = ctx.query.indexOf('^');
+      const file = ctx.query.slice(0, caret).trim(), query = ctx.query.slice(caret + 1);
+      const targets = await contentReferenceSuggestions(query, file, contextOf(this.view).sourcePath);
       const ranked = targets.flatMap(target => {
         const match = matchName(query, `${target.id} ${target.label} ${target.path}`);
         return match ? [{ target, match }] : [];

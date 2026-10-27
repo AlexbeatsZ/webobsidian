@@ -121,11 +121,12 @@ export class VaultCatalog {
       scope === 'markdown' ? (p) => /\.(md|markdown)$/i.test(p) : undefined,
     );
   }
-  suggestContentTargets(query = '', limit = 50) {
+  suggestContentTargets(query = '', limit = 50, sourceFile?: string) {
     const needle = query.trim().replace(/^\^/, '').toLocaleLowerCase();
     const bound = Number.isFinite(limit) ? Math.min(100, Math.max(1, Math.floor(limit))) : 50;
     const results: { id: string; kind: ParsedNote['contentTargets']['targets'][number]['kind']; label: string; path: string }[] = [];
     for (const [path, note] of this.notes) {
+      if (sourceFile !== undefined && path !== sourceFile) continue;
       const seen = new Set<string>();
       for (const target of note.contentTargets.targets) {
         if (seen.has(target.id)) continue;
