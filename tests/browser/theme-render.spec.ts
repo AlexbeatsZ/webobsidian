@@ -133,10 +133,10 @@ test('Mermaid uses document typography and native surface colors inside callouts
   for (const [theme, outer, inner, text] of [['light', 'rgb(250, 250, 250)', 'rgb(245, 245, 245)', 'rgb(0, 0, 0)'], ['dark', 'rgb(37, 37, 37)', 'rgb(44, 44, 44)', 'rgb(255, 255, 255)']]) {
     await page.evaluate(theme => { document.querySelector('.theme-light,.theme-dark')!.className = 'theme-' + theme; }, theme);
     const diagrams = host.locator('.cm-mermaid');
-    await expect(diagrams.nth(0).locator('.node .label-container').first()).toHaveCSS('fill', outer);
-    await expect(diagrams.nth(1).locator('.node .label-container').first()).toHaveCSS('fill', inner);
-    await expect(diagrams.nth(0).locator('.nodeLabel').first()).toHaveCSS('color', text);
-    await expect(diagrams.nth(1).locator('foreignObject div').first()).toHaveCSS('font-size', '16px');
+    await expect(diagrams.nth(0).locator('.pele-node > rect').first()).toHaveCSS('fill', outer);
+    await expect(diagrams.nth(1).locator('.pele-node > rect').first()).toHaveCSS('fill', inner);
+    await expect(diagrams.nth(0).locator('.pele-label').first()).toHaveCSS('fill', text);
+    await expect(diagrams.nth(1).locator('.pele-label').first()).toHaveCSS('font-size', '16px');
   }
   await page.screenshot({ path: test.info().outputPath('mermaid-surfaces.png') });
 });

@@ -1,4 +1,5 @@
 import { matchName, hotkeySettings } from '../search';
+import { diagramRenderer } from '../diagrams';
 import { nativeCommands, resolveNativeCommandId } from '../nativeCommands';
 import { CommandManager, type Command } from '../commands';
 import { Automation } from '../userCommands';
@@ -538,7 +539,7 @@ export const obsidianModule: Record<string, any> = {
   finishRenderMath: async () => {
     await Promise.all(mathPromises);
   },
-  loadMermaid: async () => (await import('mermaid')).default,
+  loadMermaid: async () => diagramRenderer,
   sanitizeHTMLToDom: (html: string) => {
     const template = document.createElement('template');
     template.innerHTML = sanitizeHtmlFragment(html, (path) => path);

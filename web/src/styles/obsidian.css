@@ -633,12 +633,11 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 /* Mermaid */
 .cm-mermaid { text-align: center; padding: 8px 0; --diagram-node-surface: var(--document-surface); --diagram-edge-surface: var(--background-primary); }
 .md-callout .cm-mermaid { --diagram-node-surface: var(--document-nested-surface); --diagram-edge-surface: var(--document-surface); }
-/* Mermaid generates its own inline SVG stylesheet. Only its visual slots need precedence. */
-.cm-mermaid foreignObject div { font-family: var(--font-text); font-size: 16px; }
-.cm-mermaid .node .label-container { fill: var(--diagram-node-surface) !important; }
-.cm-mermaid .nodeLabel, .cm-mermaid .edgeLabel { color: var(--document-pure) !important; }
-.cm-mermaid .edgeLabel p { background: var(--diagram-edge-surface) !important; }
-.cm-mermaid .node text, .cm-mermaid .edgeLabel text { fill: var(--document-pure) !important; }
+.cm-mermaid { --pele-bg: var(--diagram-edge-surface); --pele-fg: var(--document-pure);
+  --pele-muted: var(--text-muted); --pele-line: var(--text-muted); --pele-surface: var(--diagram-node-surface);
+  --pele-surface-alt: var(--document-nested-surface); --pele-border: var(--background-modifier-border);
+  --pele-accent: var(--interactive-accent); --pele-font: var(--font-text); --pele-font-mono: var(--font-mono); }
+.cm-mermaid > div > svg { max-width: 100%; height: auto; }
 .cm-mermaid.mod-error { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-smaller); }
 /* Fenced HTML execution stays opt-in; editing uses the common source entry. */
 .cm-html-preview { white-space: normal; margin: 4px 0 8px; }
@@ -2007,3 +2006,31 @@ audio.media-embed { display: block; width: min(100%, 480px); max-width: 100%; ma
 }
 .image-lightbox-close:hover { background: rgba(255, 255, 255, .18); }
 .image-lightbox-close svg { width: 22px; height: 22px; }
+
+/* ---- MCP sidebar context items ---- */
+.mcp-context-item { display: flex; flex-direction: column; gap: 4px; }
+.mcp-context-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.mcp-context-link {
+  display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0;
+  padding: 0; border: 0; background: none; color: var(--text-normal);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.mcp-context-link:hover .mcp-context-title { color: var(--interactive-accent); }
+.mcp-context-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-context-meta {
+  font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);
+  background: var(--background-primary-alt); border-radius: var(--radius-s);
+  padding: 1px 5px; flex-shrink: 0;
+}
+.mcp-context-actions { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.mcp-pin-btn.is-active { color: var(--interactive-accent); background: var(--background-modifier-hover); }
+.mcp-context-path { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-context-snippet {
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 12px; color: var(--text-muted); cursor: pointer;
+  padding: 4px 6px; border-radius: var(--radius-s);
+  background: var(--background-primary-alt);
+}
+.mcp-context-snippet:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.mcp-context-range { font-size: 11px; font-family: var(--font-mono); color: var(--interactive-accent); }
+.mcp-review-item { cursor: pointer; }

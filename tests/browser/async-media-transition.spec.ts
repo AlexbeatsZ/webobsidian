@@ -67,10 +67,7 @@ async function open(page: Page, source: string) {
 
 async function mermaidGate(page: Page) {
   await page.evaluate(async () => {
-    const script = await (await fetch('/src/lib/livePreview.ts')).text();
-    const url = script.match(/import\("([^"]*\/mermaid\.js[^\"]*)"\)/)?.[1];
-    if (!url) throw new Error('Mermaid module import was not found');
-    const mermaid = (await import(/* @vite-ignore */ url)).default;
+    const { diagramRenderer: mermaid } = await import('/src/lib/diagrams.ts');
     const render = mermaid.render.bind(mermaid);
     const gate = { blocked: true, jobs: [] as any[] };
     (window as any).mediaGate = gate;
@@ -129,9 +126,9 @@ for (const prefix of ['', '> ']) test(`Mermaid delayed update retains successful
   expect(pending.every(host => Math.abs(host.height - heights[Number(host.slot)]) < 1)).toBe(true);
   await page.evaluate(() => { const gate = (window as any).mediaGate; gate.blocked = false; gate.jobs.forEach((job: any) => job.resolve()); });
   await expect(page.locator('[data-render-pending]')).toHaveCount(0);
-  await expect(page.locator('.cm-mermaid .nodeLabel')).toHaveText(['新图', '目标', '新图', '目标']);
+  await expect(page.locator('.cm-mermaid .pele-label')).toHaveText(['新图', '目标', '新图', '目标']);
   await page.evaluate(() => window.renderHarness.undo(0));
-  await expect(page.locator('.cm-mermaid .nodeLabel')).toHaveText(['原图', '目标', '原图', '目标']);
+  await expect(page.locator('.cm-mermaid .pele-label')).toHaveText(['原图', '目标', '原图', '目标']);
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
   expect(await page.evaluate(() => window.renderHarness.writes)).toEqual([]);
 });
@@ -150,10 +147,10 @@ test('Mermaid stale completion and rejection cannot overwrite the latest pending
   await tick(page);
   await expect(page.locator('.cm-mermaid[data-render-pending]')).toHaveCount(2);
   await expect(page.locator('.cm-mermaid.mod-error')).toHaveCount(0);
-  await expect(page.locator('.cm-mermaid .nodeLabel')).toHaveText(['原图', '目标', '原图', '目标']);
+  await expect(page.locator('.cm-mermaid .pele-label')).toHaveText(['原图', '目标', '原图', '目标']);
   await page.evaluate(() => { const gate = (window as any).mediaGate; gate.blocked = false; gate.jobs.slice(2).forEach((job: any) => job.resolve()); });
   await expect(page.locator('[data-render-pending]')).toHaveCount(0);
-  await expect(page.locator('.cm-mermaid .nodeLabel')).toHaveText(['终图', '目标', '终图', '目标']);
+  await expect(page.locator('.cm-mermaid .pele-label')).toHaveText(['终图', '目标', '终图', '目标']);
   await page.screenshot({ path: info.outputPath('latest-render.png'), fullPage: true });
 });
 
@@ -286,7 +283,7 @@ test('Mermaid native source controls retain editable source and exact Undo', asy
   await page.evaluate(() => window.renderHarness.undo(0));
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('新增前言\n\n' + source);
   await page.keyboard.press('Escape');
-  await expect(page.locator('[data-slot="0"] .cm-mermaid .nodeLabel')).toHaveText(['原图', '目标']);
+  await expect(page.locator('[data-slot="0"] .cm-mermaid .pele-label')).toHaveText(['原图', '目标']);
   await page.evaluate(() => window.renderHarness.undo(0));
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
   expect(await page.evaluate(() => window.renderHarness.writes)).toEqual([]);

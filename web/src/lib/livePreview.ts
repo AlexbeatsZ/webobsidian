@@ -11,6 +11,7 @@ import { getIndentUnit, foldedRanges } from '@codemirror/language';
 import { markdownListLine } from './listLayout';
 import { CALLOUT_SLOT, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { iconPaths, setIcon } from './icons';
+import { diagramRenderer } from './diagrams';
 import { openLightbox } from './imageLightbox';
 import { applyImagePresentation, presentHtmlImages, markdownImageAt } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
@@ -709,20 +710,6 @@ class NoteEmbedWidget extends WidgetType {
 
 /* ---------------- mermaid (lazy, like Obsidian) ---------------- */
 
-let mermaidPromise: Promise<typeof import('mermaid')['default']> | null = null;
-function ensureMermaid() {
-  if (!mermaidPromise) {
-    mermaidPromise = import('mermaid').then((m) => {
-      m.default.initialize({
-        startOnLoad: false, securityLevel: 'strict',
-        theme: 'base', fontFamily: '"MathJax_Main", "MathJax_Math", "Noto Serif SC", serif',
-        themeVariables: { fontSize: '16px', primaryColor: '#fafafa', primaryTextColor: '#000000', lineColor: '#888888' },
-      });
-      return m.default;
-    });
-  }
-  return mermaidPromise;
-}
 let mermaidSeq = 0;
 const mermaidMounts = new WeakMap<HTMLElement, { update: (widget: MermaidWidget) => void; destroy: () => void }>();
 
@@ -753,20 +740,12 @@ class MermaidWidget extends WidgetType {
       current?.unload();
       const lifetime = new RenderLifetime(), renderId = `cm-mmd-${++mermaidSeq}`;
       current = lifetime; void lifetime.load();
-      const code = widget.code, stage = doc.createElement('div');
-      Object.assign(stage.style, { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' });
-      lifetime.register(() => stage.remove());
+      const code = widget.code;
       div.dataset.renderPending = 'true'; div.setAttribute('aria-busy', 'true');
       div.classList.remove('mod-error'); div.removeAttribute('title');
       if (body.querySelector('svg')) status.remove();
       else { status.setAttribute('role', 'status'); status.textContent = '正在渲染图表…'; body.replaceChildren(status); }
-      void ensureMermaid()
-        .then(async mermaid => {
-          lifetime.assertActive();
-          await Promise.all(['MathJax_Main', 'MathJax_Math', 'Noto Serif SC'].map(font => doc.fonts.load('16px "' + font + '"')));
-          lifetime.assertActive(); doc.body.appendChild(stage);
-          return mermaid.render(renderId, code, stage);
-        })
+      void diagramRenderer.render(renderId, code, div, lifetime.signal)
         .then(({ svg }) => {
           if (!lifetime.signal.aborted) { body.innerHTML = svg; view.requestMeasure(); }
         })
@@ -778,7 +757,6 @@ class MermaidWidget extends WidgetType {
           body.appendChild(status);
           view.requestMeasure();
         }).finally(() => {
-          stage.remove();
           if (lifetime.signal.aborted || current !== lifetime) return;
           delete div.dataset.renderPending; div.removeAttribute('aria-busy'); view.requestMeasure();
         });

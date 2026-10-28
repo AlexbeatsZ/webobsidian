@@ -38,6 +38,7 @@ import { renderContext, type FragmentOptions, type RenderContext } from '../lib/
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import { attachMenuContext } from '../lib/configuredMenus/transform';
 import type { RenderMenuItem } from '../lib/renderContext';
+import { captureMcpContextTarget, queueMcpContext } from '../lib/review/client';
 import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField,
   tableField, htmlBlockField, mermaidField, htmlRenderedState, htmlPreviewField,
   calloutFoldState, calloutFoldDeco, mathBlockField, noteTitleField, inlineTitle,
@@ -177,10 +178,19 @@ export default function MarkdownView(props: MarkdownViewProps) {
       { id: 'link:side', label: '在分栏打开', onClick: () => followRenderedLink(v, link, { disposition: 'side' }) },
       { id: 'link:copy', label: '复制链接', onClick: () => { void navigator.clipboard.writeText(link); } },
     ] : [];
+    const mcpTarget = captureMcpContextTarget(v, context.sourcePath);
+    const mcpItem: RenderMenuItem = {
+      id: 'editor:add-mcp-context',
+      label: mcpTarget.selections.length ? '添加选中内容到 MCP 上下文' : '添加当前页面到 MCP 上下文',
+      icon: 'cpu',
+      onClick: () => { void queueMcpContext(mcpTarget); },
+    };
     if (latest.current.mode === 'reading') {
       showMenu({ x: e.clientX, y: e.clientY, items: [
         ...linkItems,
         { id: 'editor:copy', label: "复制", onClick: copy }, { id: 'editor:select-all', label: "全选", onClick: selectAll },
+        { label: '', separator: true },
+        mcpItem,
       ] });
       return;
     }
@@ -228,6 +238,8 @@ export default function MarkdownView(props: MarkdownViewProps) {
         { id: 'editor:copy', label: "复制", onClick: copy },
         { id: 'editor:paste', label: "粘贴", onClick: paste },
         { id: 'editor:select-all', label: "全选", onClick: selectAll },
+        { label: '', separator: true },
+        mcpItem,
         ...(sel
           ? [
               { label: '', separator: true },

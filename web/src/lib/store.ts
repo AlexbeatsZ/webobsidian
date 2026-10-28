@@ -172,8 +172,8 @@ interface AppState {
 
   leftPanel: 'files' | 'search';
   setLeftPanel: (p: 'files' | 'search') => void;
-  rightPanel: 'backlinks' | 'outgoing' | 'tags' | 'outline' | 'minimap';
-  setRightPanel: (p: 'backlinks' | 'outgoing' | 'tags' | 'outline' | 'minimap') => void;
+  rightPanel: 'backlinks' | 'outgoing' | 'tags' | 'outline' | 'minimap' | 'mcp';
+  setRightPanel: (p: 'backlinks' | 'outgoing' | 'tags' | 'outline' | 'minimap' | 'mcp') => void;
   rightTabs: SidebarTab[];
   rightActiveId: string | null;
   leftActiveId: string | null;
@@ -327,7 +327,7 @@ function applyPersisted(s: any, set: (p: any) => void): void {
     recent: Array.isArray(s.recent) ? s.recent : [],
     bookmarks: Array.isArray(s.bookmarks) ? s.bookmarks : [],
     leftPanel: s.leftPanel === 'search' ? 'search' : 'files',
-    rightPanel: s.leftPanel === 'tags' ? 'tags' : ['backlinks', 'outgoing', 'tags', 'outline', 'minimap'].includes(s.rightPanel) ? s.rightPanel : 'backlinks',
+    rightPanel: s.leftPanel === 'tags' ? 'tags' : ['backlinks', 'outgoing', 'tags', 'outline', 'minimap', 'mcp'].includes(s.rightPanel) ? s.rightPanel : 'backlinks',
     rightTabs,
     leftActiveId: rightTabs.some(tab => tab.side === 'left' && tab.id === s.leftActiveId) ? s.leftActiveId : null,
     rightActiveId: s.leftPanel === 'bookmarks' ? rightTabs.find(tab => tab.type === 'bookmarks')!.id

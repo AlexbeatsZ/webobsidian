@@ -8,6 +8,7 @@ import { createVaultRenderContext } from './vaultRenderContext';
 import { requestHotkeySettings } from './search';
 import { getMainPdfSession } from './pdf/react';
 import { contentReferenceCommands } from './contentReferenceCommands';
+import { addCurrentMcpContext } from './review/client';
 
 const activePath = () => { const view = getActiveEditor(); return view ? contextOf(view).sourcePath : useStore.getState().activePath; };
 const selectTab = (index: number) => { const state = useStore.getState(), tab = state.tabs.at(index); if (tab) return state.openFile(tab.path); };
@@ -49,6 +50,8 @@ export const nativeWorkspaceCommands: NativeCommand[] = [
   { id: 'outline', title: '打开大纲', run: () => useStore.getState().setRightPanel('outline') },
   { id: 'backlinks', title: '打开反向链接', run: () => useStore.getState().setRightPanel('backlinks') },
   { id: 'outgoing', title: '打开出链面板', run: () => useStore.getState().setRightPanel('outgoing') },
+  { id: 'mcp:open-panel', title: '打开 MCP 面板', run: () => useStore.getState().setRightPanel('mcp') },
+  { id: 'mcp:add-context', title: '添加选中内容或当前页面到 MCP 上下文', hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'M' }], run: () => addCurrentMcpContext() },
   { id: 'editor:focus-right', title: '聚焦右侧窗格', run: () => focusPane(1) },
   { id: 'editor:focus-left', title: '聚焦左侧窗格', run: () => focusPane(-1) },
   { id: 'workspace:edit-file-title', title: '重命名当前文件', run: () => { const path = activePath(); if (path) { useStore.getState().revealInTree(path); useStore.getState().setRenamingPath(path); } } },

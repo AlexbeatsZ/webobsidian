@@ -45,3 +45,20 @@ export interface NoteMatches {
 export type FileUpdateResult = { status: 'indexed'; path: string } |
   { status: 'failed'; path: string; error: string } |
   { status: 'skipped'; path: string; reason: 'disabled' | 'ignored' };
+
+export interface McpSelection {
+  kind: 'source' | 'rendered';
+  text: string;
+  from?: { line: number; ch: number };
+  to?: { line: number; ch: number };
+}
+
+export interface McpContextItem {
+  id: string;
+  kind: 'page' | 'selection';
+  path: string;
+  pinned: boolean;
+  createdAt: string;
+  revision?: string;
+  selections?: McpSelection[];
+}

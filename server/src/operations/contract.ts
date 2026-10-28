@@ -1,7 +1,7 @@
 import { z } from 'zod';
 const point = z.object({ line: z.number().int().min(1), ch: z.number().int().min(0) });
 export const operationContract = {
-  obsidian_get_context: { description: 'Read the last local note/selection, cursor, nearby text, open/recent/linked notes. Use for here/this requests. Requires a connected native workspace.',
+  obsidian_get_context: { description: 'Read user-queued MCP context first: explicit selections with captured source positions/revisions, or page paths without body text. Successfully delivered unpinned items are removed; pinned items remain. Otherwise read the last local note/selection. Call at the start of each user request and for here/this requests.',
     schema: z.object({ nearby_lines: z.number().int().min(0).max(100).default(12) }) },
   obsidian_list_files: { description: 'List saved visible VaultCatalog file metadata, paginated; no full Vault body scan.',
     schema: z.object({ path: z.string().default(''), type: z.enum(['all', 'text', 'attachment', 'markdown']).default('all'), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(500).default(100) }) },

@@ -157,7 +157,7 @@ test('Mermaid cancelled during fonts cannot write late output', async ({ page })
     const result = { calls, pending: dom.hasAttribute('data-render-pending'), svg: dom.querySelectorAll('svg').length, orphans: document.querySelectorAll('[id^="dcm-mmd-"]').length };
     host.remove(); return result;
   });
-  expect(result).toEqual({ calls: 3, pending: false, svg: 0, orphans: 0 });
+  expect(result).toEqual({ calls: 1, pending: false, svg: 0, orphans: 0 });
 });
 
 test('concurrent Mermaid parse failures remove only their own stages', async ({ page }) => {
@@ -169,14 +169,18 @@ test('concurrent Mermaid parse failures remove only their own stages', async ({ 
 });
 
 test('Mermaid completion after destroy cannot reinsert SVG or orphan its render stage', async ({ page }) => {
-  await page.route('**/mermaid.js*', route => route.fulfill({ contentType: 'application/javascript', body: `
-    export default { initialize() {}, render(id, code, stage) {
-      const marker = stage.ownerDocument.createElement('div'); marker.id = 'd' + id; stage.append(marker);
-      return new Promise(resolve => { (window.architectureMermaids ||= []).push({ stage, finish: () => resolve({svg:'<svg id="late-diagram"></svg>'}) }); });
-    } };
-  ` }));
+  await page.evaluate(async () => {
+    const { diagramRenderer } = await import('/src/lib/diagrams.ts');
+    diagramRenderer.render = async (_id: string, _code: string, stage?: HTMLElement, signal?: AbortSignal) => {
+      await Promise.resolve();
+      if (signal?.aborted) return { svg: '' };
+      return new Promise(resolve => {
+        ((window as any).architectureMermaids ||= []).push({ stage, finish: () => resolve({ svg: '<svg id="late-diagram"></svg>' } as any) });
+      });
+    };
+  });
   await page.evaluate(() => window.renderHarness.reset('```mermaid\nflowchart TD\nA-->B\n```\n\nend'));
-  await expect.poll(() => page.evaluate(() => window.renderHarness.source(0))).toBe('```mermaid\nflowchart TD\nA-->B\n```\n\nend');
+  await expect(page.locator('[data-slot="0"] .cm-content')).toContainText('end');
   await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
   await page.waitForFunction(() => (window as any).architectureMermaids?.length === 2);
   await page.evaluate(() => {
