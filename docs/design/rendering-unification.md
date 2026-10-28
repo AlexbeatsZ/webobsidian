@@ -87,9 +87,10 @@ Report: tests/reports/math-transition-20261025.md. No new installed EXE acceptan
 ## Lifecycle and complex rendering (2026-10-24)
 
 The mounted DOM owns footnote cleanup in a WeakMap, so CodeMirror replacing an
-equal WidgetType instance does not lose the disposer. Mermaid owns its render
-identifier and temporary stage; cancellation is checked after fonts and render
-settle, and only that stage is removed. Existing RenderLifetime remains the
+equal WidgetType instance does not lose the disposer. Diagram widgets own their
+render identifier. Since 2026-10-28 the shared Pele engine generates SVG without
+a hidden temporary DOM stage; cancellation is checked after import/fonts and
+before applying output. Existing RenderLifetime remains the
 terminal owner; Component itself remains reloadable and cleans registrations
 arriving after an in-flight load was unloaded. A reload waits for that load.
 
@@ -305,8 +306,8 @@ font readiness is awaited after scrolling. Human real-vault acceptance remains p
 
 - The shared MathWidget uses MathJax 4.1.3 instead of KaTeX. The web dependency is
   pinned exactly; the lockfile also pins New Computer Modern and the 4.1.3 bbm,
-  bboldx, dsfont and mhchem SVG font extensions. Mermaid retains its own KaTeX
-  dependency for its diagram syntax.
+  bboldx, dsfont and mhchem SVG font extensions. The 2026-10-28 Pele replacement
+  removes the old Mermaid runtime and its diagram-only KaTeX dependency.
 - mathjaxAssets.ts serves the official startup/core/TeX/SVG components, TeX
   extensions and SVG font data locally in development and emits the same relative
   directory tree into production assets. No CDN is needed for these components.

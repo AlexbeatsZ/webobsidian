@@ -119,6 +119,39 @@ an additional sandbox against a malicious process already able to call its
 normal local file endpoints. There is no accept/restore operation in the machine
 tool catalog.
 
+## Explicit MCP context (2026-10-28)
+
+The native command `mcp:add-context` (default Mod+Shift+M), editor context menu,
+and MCP panel add button share one capture owner in review/client. Full-note
+source selections carry exact normalized line/UTF-16-column ranges, selected
+text and raw revision; reading selections are explicitly rendered text without
+invented source coordinates. Fragment-local editors cannot pretend to provide
+whole-note ranges. Oversized selections fail instead of silently truncating.
+With no selection, only the focused page path is enqueued, never its body.
+
+`DATA_DIR/mcp-context/<vault-root-digest>.json` holds at most 50 items and 512 Ki
+characters of serialized context. Local context routes add, remove and pin;
+they are not exposed as remote mutation tools. Workspace capture and the
+existing DocumentSession/SourceDocument preflight validate source selection.
+The sixth fixed right ribbon panel shows pending context and native review
+candidates. Socket mutation notifications update other windows without polling.
+Selection links use the existing navigation range/text fallback, not a second
+coordinate/history pipeline; ambiguous changed text does not jump speculatively.
+
+`obsidian_get_context` delivers queued items before its normal active-page
+fallback. Explicit path-only context does not include nearby text. Successful
+HTTP response completion consumes exactly the captured, still-unpinned IDs.
+Failed/aborted reads, initialization, discovery and tool listing do not drain
+the queue; items added during delivery and pinned items survive. Context reads
+are serialized so two callers cannot consume the same one-shot snapshot.
+Persistence failures retain context and are logged, not answered twice.
+
+MCP server instructions tell clients to call get_context at each user request.
+Connecting alone cannot force a model to read it: transport completion is not
+proof of remote model receipt. No remote ChatGPT acceptance is claimed by local
+HTTP/browser tests. Manual recovery delegates scripts/start-mcp.ps1 to the
+existing obsidian-context-mcp launcher, preserving its host-local identity.
+
 ## Editing performance
 
 Selection-only changes return the same review decoration state. Text changes map
