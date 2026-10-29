@@ -65,13 +65,37 @@ delivery builds use temporary isolated output only.
   endpoint unavailable, correctly exit1. Nothing restarted. Original intermittent
   startup/exit cause remains unconfirmed.
 
-## Delivery boundary
+## Delivery and remaining boundaries
 
-Windows0.1.29 and companion MCP0.2.1 are prepared for exact-source publication.
-Installer/production-smoke/remote asset results must be recorded after completion.
-Installed0.1.28 is not upgraded here. No live Vault migration/write, physicalIME,
-nativeElectronUI, remoteChatGPT, other-platform installer or long-run acceptance.
-
-Gemini backed up the DOCX and added F03/F04 comments. Its inaccurate parameters,
-limits and column wording require corrected anchored comments while preserving
-original prose/images/F01/F02.
+- Published AlexbeatsZ/webobsidian v0.1.29, non-draft/non-prerelease, exact product
+  source b3b3fd6. Windows x64 NSIS is105608457bytes, PE0.1.29; blockmap110117bytes
+  and BUILD-INFO.json1009bytes uploaded and remote asset states/sizes verified.
+- Exact git archive isolated production/core/server/desktop build, standalone
+  bundle guard and NSIS pass. Initial fixture omitted workspace dependency
+  junctions, then supplied a split PowerShell electronDist argument; both build
+  harness issues were corrected without product changes. Existing chunk-size
+  and static/dynamic-import warnings remain, not build failures. Root public
+  size/UTCmtime unchanged during this final isolated build, unlike Gemini's
+  earlier root build. No code-signing certificate configured.
+- Actual win-unpacked resources pass production SPA+server smoke twice. Extended
+  production check proves Pele SVG, keyboard path-only MCP entry, pin retention,
+  unpin/one-shot removal, local saved edits and existing native features in5193ms,
+  renderer errors0. The regression harness was extended after the product build;
+  no application source changed. Screenshot inspected. Evidence copied to
+  .local/feedback-review-20261028/feedback-production-smoke and build.log.
+- Published companion MCP v0.2.1 from7cfe2c3 with both ZIPs, plugin assets and
+  notices. Uploaded states/sizes verified; all three platform CI jobs succeeded
+  in run40797479213. No new live plugin install or Tunnel restart.
+- Corrected existing F03/F04 Word comments only, with fresh reread/backup and
+  stale-write guard. Every other DOCX ZIP part (including body/media) is byte
+  identical and F01/F02 comment elements unchanged. Backup:
+  Temp/.agents/obsidian-feedback-review-20261028/before-review.docx.
+  DOCX rasterization attempted but unavailable: bundled renderer found no
+  LibreOffice soffice.exe. No visual-layout acceptance or global installation.
+- Cleanup of old local desktop release0.1.22-0.1.28/MCP ZIPs was rejected before
+  execution by environment policy. Independent cleanup of this task's exact
+  Temp/.agents/webobsidian-release-0129-98ea01d4 source/archive/build was also
+  rejected. Neither was retried via another deletion mechanism; old artifacts
+  and temporary source still remain. No claim of completed cleanup.
+- Installed0.1.28 is not upgraded. No live Vault migration/write, physicalIME,
+  nativeElectronUI, remoteChatGPT, other-platform installer or long-run acceptance.

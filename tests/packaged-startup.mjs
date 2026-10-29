@@ -47,7 +47,8 @@ await fs.writeFile(path.join(vault, 'image-reference.md'), '![[used.png]]');
 await fs.writeFile(path.join(vault, 'features.md'), [
   '# Features', '', '$$x^2$$ ^eq-fixture', '', 'Reference [[#^eq-fixture]]', '',
   '> $$', '> \\frac{a}{b}', '> $$', '', '####### Local title', '',
-  '[acceptance-card]', 'Styled block.', '', '```js-widget', 'container.textContent = "JS-WIDGET-OK";', '```', '', 'end',
+  '[acceptance-card]', 'Styled block.', '', '```js-widget', 'container.textContent = "JS-WIDGET-OK";', '```', '',
+  '```mermaid', 'flowchart LR', 'A[Context] --> B[Pele]', '```', '', 'end',
 ].join('\n'));
 const probe = createServer();
 await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
@@ -142,6 +143,33 @@ try {
   await page.locator('.cm-equation-number').first().waitFor();
   assert.equal(await page.locator('.cm-wikilink').filter({ hasText: '(1-1)' }).count(), 1);
   checkpoint('body title, executable widget, native block and equation reference');
+  await page.locator('.cm-mermaid svg.pele').waitFor();
+  await page.locator('.main-pane .cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.press('ControlOrMeta+Shift+m');
+  await page.getByRole('button', { name: 'MCP', exact: true }).click();
+  await page.locator('.mcp-context-item').waitFor();
+  const context = await (await api.get('/api/operations/context')).json();
+  assert.equal(context.items.length, 1);
+  assert.equal(context.items[0].kind, 'page');
+  assert.equal(context.items[0].path, 'features.md');
+  assert.equal(context.items[0].selections, undefined);
+  await page.getByRole('button', { name: '固定保留', exact: true }).click();
+  await page.getByRole('button', { name: '取消固定', exact: true }).waitFor();
+  const readContext = async () => {
+    const response = await api.post('/api/operations/call', { data: { name: 'obsidian_get_context', arguments: {} } });
+    assert.equal(response.status(), 200); return response.json();
+  };
+  assert.equal((await readContext()).queued_context[0].pinned, true);
+  assert.equal((await (await api.get('/api/operations/context')).json()).items.length, 1);
+  await page.screenshot({ path: path.join(artifacts, 'mcp-pele-production.png') });
+  await page.getByRole('button', { name: '取消固定', exact: true }).click();
+  await page.getByRole('button', { name: '固定保留', exact: true }).waitFor();
+  const delivered = await readContext();
+  assert.equal(delivered.queued_context.length, 1);
+  assert.equal(delivered.nearby_text, undefined);
+  await page.waitForFunction(() => document.querySelectorAll('.mcp-context-item').length === 0);
+  checkpoint('packaged Pele SVG, path-only MCP context, pin retention and one-shot delivery');
   await page.locator('.view-mode-trigger').click();
   await page.getByRole('menuitemcheckbox', { name: '阅读视图', exact: true }).click();
   assert.equal(await page.locator('.cm-content').first().getAttribute('contenteditable'), 'false');
