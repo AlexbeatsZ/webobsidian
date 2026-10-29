@@ -146,9 +146,9 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
       </div>}
       {progress && <p role="status">{progress}</p>}
       {results.length > 0 && <ul className="native-tags-results">{results.map((result, i) => <li key={i}>{result}</li>)}</ul>}
-      <div className="native-tags-actions"><button onClick={cancel}>{running ? '停止后续文件' : '关闭'}</button>
-        <button disabled={busy} onClick={() => { void prepare(); }}>预览改动</button>
-        {preview && <button className="mod-cta" disabled={busy || !ready.length || Boolean(preview.collisions.length && !confirmed)} onClick={() => { void apply(); }}>应用并保存 {ready.length} 个文件</button>}
+      <div className="native-tags-actions"><button className="btn secondary" onClick={cancel}>{running ? '停止后续文件' : '关闭'}</button>
+        <button className="btn secondary" disabled={busy} onClick={() => { void prepare(); }}>预览改动</button>
+        {preview && <button className="btn mod-cta" disabled={busy || !ready.length || Boolean(preview.collisions.length && !confirmed)} onClick={() => { void apply(); }}>应用并保存 {ready.length} 个文件</button>}
       </div>
     </section>
   </div>;
@@ -179,9 +179,9 @@ function TagPageDialog({ request }: { request: Extract<TagDialogRequest, { kind:
   }
   return <div className="modal-backdrop native-tags-backdrop"><section role="dialog" aria-modal="true" aria-label="标签页" className="native-tags-dialog">
     <h2>#{request.tag} 的标签页</h2>
-    {request.pages.length > 1 ? <><p>多个文件声明此标签别名，请选择：</p><ul>{request.pages.map((page) => <li key={page}><button disabled={busy} onClick={() => { void open(page).catch((e) => setError(String(e))); }}>{page}</button></li>)}</ul></> :
-      <><p>{createdPath ? '文件已保存，可重试打开：' : '创建一个带有此标签 alias 的笔记：'}</p><input aria-label="标签页文件路径" value={path} disabled={busy || !!createdPath} onChange={(e) => setPath(e.target.value)} /><button disabled={busy} onClick={() => { void create(); }}>{createdPath ? '打开已创建文件' : '创建并打开'}</button></>}
+    {request.pages.length > 1 ? <><p>多个文件声明此标签别名，请选择：</p><ul>{request.pages.map((page) => <li key={page}><button className="btn secondary" disabled={busy} onClick={() => { void open(page).catch((e) => setError(String(e))); }}>{page}</button></li>)}</ul></> :
+      <><p>{createdPath ? '文件已保存，可重试打开：' : '创建一个带有此标签 alias 的笔记：'}</p><input aria-label="标签页文件路径" value={path} disabled={busy || !!createdPath} onChange={(e) => setPath(e.target.value)} /><button className="btn" disabled={busy} onClick={() => { void create(); }}>{createdPath ? '打开已创建文件' : '创建并打开'}</button></>}
     {error && <p role="alert" className="native-tags-error">{error}</p>}
-    <div className="native-tags-actions"><button disabled={busy} onClick={closeTagDialog}>关闭</button></div>
+    <div className="native-tags-actions"><button className="btn secondary" disabled={busy} onClick={closeTagDialog}>关闭</button></div>
   </section></div>;
 }

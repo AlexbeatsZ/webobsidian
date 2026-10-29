@@ -33,6 +33,7 @@ export class ItemView extends View {
   contentEl = createDiv({ cls: 'view-content', parent: this.containerEl });
   addAction(icon: string, title: string, cb: (e: MouseEvent) => void) {
     const el = createEl('button', {
+      cls: 'tool-btn',
       title,
       text: icon,
       parent: this.containerEl,

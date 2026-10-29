@@ -22,6 +22,27 @@ present. Closing drops its DOM/position; reopening centers it. Small windows kee
 the full-screen layout and horizontal navigation and disable title dragging.
 No editor selection/input subscriptions are added.
 
+### Shared buttons (2026-10-28)
+
+The existing obsidian.css button block owns ordinary native settings controls,
+the plugin ButtonComponent adapter (.btn) and the native file picker's
+::file-selector-button. They share UI typography, 28px minimum height, padding,
+border and radius; file inputs retain the real browser picker, filename, keyboard
+access and disabled semantics. File selection is not replaced by a hidden input
+and a second JavaScript-triggered button. Submit/reset/button inputs in settings
+use this same block, not the text-input presentation.
+
+.btn keeps the primary action, .secondary keeps neutral actions and .danger keeps
+warning actions. Hover applies only to enabled controls, including file pickers
+and fieldset-disabled controls; focus-visible uses the shared accent outline.
+Tag and prompt dialogs and formula retry actions reuse these classes rather than
+leaving ordinary buttons to the platform appearance.
+
+Toolbar/icon actions keep the existing .tool-btn family, including plugin search
+clear and ItemView actions. Ordinary settings rules exclude that family. Ribbon,
+tab, navigation, menu, table-handle, source-control and content-tree buttons keep
+their contextual styles; there is no global reset of every button.
+
 ## Configuration ownership
 
 ### Document typography (2026-10-25)

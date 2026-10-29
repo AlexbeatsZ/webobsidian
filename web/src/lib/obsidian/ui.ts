@@ -240,7 +240,7 @@ export function promptInput(app: unknown, message: string, initial = '', signal?
     const abort = () => modal.close();
     modal.setTitle(message);
     const input = document.createElement('input'); input.className = 'text-input'; input.value = initial;
-    const button = document.createElement('button'); button.textContent = '确定';
+    const button = document.createElement('button'); button.className = 'btn'; button.textContent = '确定';
     const submit = () => { accepted = true; resolve(input.value); modal.close(); };
     input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); submit(); } });
     button.onclick = submit; modal.contentEl.append(input, button);
@@ -378,6 +378,7 @@ export class SearchComponent extends TextComponent {
     super(wrapper);
     this.inputEl.type = 'search';
     this.clearButtonEl = createEl('button', {
+      cls: 'tool-btn',
       text: '×',
       title: "清除搜索",
       parent: wrapper,

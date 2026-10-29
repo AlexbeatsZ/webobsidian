@@ -541,7 +541,7 @@ class MathWidget extends WidgetType {
           if (controller.signal.aborted) return;
           span.classList.add('mod-error');
           span.title = `Formula rendering failed: ${error instanceof Error ? error.message : String(error)}`;
-          const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = '重试';
+          const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'btn secondary'; retry.textContent = '重试';
           retry.addEventListener('mousedown', event => { event.preventDefault(); event.stopPropagation(); });
           retry.addEventListener('click', event => {
             event.preventDefault(); event.stopPropagation(); invalid = true; scheduleMathMeasure(view);

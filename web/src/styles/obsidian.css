@@ -1216,10 +1216,15 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   padding: 5px 9px; background: var(--bg-modifier-hover); color: var(--text-normal); font: inherit; box-shadow: none; }
 .settings-content :where(textarea) { width: 100%; resize: vertical; font: 12px/1.6 var(--font-mono); }
 .settings-content :where(input, select, textarea):focus-visible { outline: 1px solid var(--interactive-accent); outline-offset: 1px; }
-.settings-content :where(button) { min-height: 28px; padding: 4px 10px; border: 1px solid var(--bg-modifier-border); border-radius: 5px;
-  background: var(--bg-modifier-active); color: var(--text-normal); font: inherit; cursor: pointer; }
-.settings-content :where(button):hover { background: var(--bg-modifier-hover); }
-.settings-content :where(button, input, select, textarea):disabled { opacity: .5; cursor: default; }
+.settings-content :where(input[type="file"]) { min-width: 0; max-width: 100%; color: var(--text-normal); font: inherit; }
+.btn, .settings-content :where(button:not(.tool-btn), input[type="button"], input[type="submit"], input[type="reset"]), .settings-content ::file-selector-button {
+  appearance: none; box-sizing: border-box; min-height: 28px; padding: 4px 10px; border: 1px solid var(--bg-modifier-border); border-radius: 5px;
+  background: var(--bg-modifier-active); color: var(--text-normal); font: var(--font-ui-small)/1.5 var(--font-ui); cursor: pointer; }
+.settings-content ::file-selector-button { margin-inline-end: 8px; }
+.btn:enabled:hover, .settings-content :where(button:not(.tool-btn), input[type="button"], input[type="submit"], input[type="reset"]):enabled:hover,
+.settings-content input[type="file"]:enabled::file-selector-button:hover { background: var(--bg-modifier-hover); }
+.btn:disabled, .settings-content :where(button, input, select, textarea):disabled { opacity: .5; cursor: default; }
+.settings-content input[type="file"]:disabled::file-selector-button { cursor: default; }
 .settings-content fieldset { min-width: 0; margin: 0; border: 0; padding: 0; }
 .settings-content details { border: 1px solid var(--bg-modifier-border); border-radius: 8px; padding: 0 12px; margin-block: 12px; }
 .settings-content summary { padding-block: 10px; cursor: pointer; color: var(--text-normal); }
@@ -1233,7 +1238,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .settings-content .setting-item-name { font-weight: 500; }
 .settings-content .setting-item-description { color: var(--text-muted); font-size: 12px; }
 .settings-content .setting-item-control { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
-.settings-header button:focus-visible, .settings-nav button:focus-visible, .settings-content button:focus-visible { outline: 1px solid var(--interactive-accent); outline-offset: 1px; }
+.btn:focus-visible, .tool-btn:focus-visible, .settings-header button:focus-visible, .settings-nav button:focus-visible, .settings-content button:focus-visible { outline: 1px solid var(--interactive-accent); outline-offset: 1px; }
 .settings-content .setting-row:has(textarea) { flex-direction: column; align-items: stretch; gap: 8px; }
 .settings-content .setting-row:has(textarea) > .control { width: 100%; max-width: none; }
 .settings-content input[type="checkbox"], .setting-item-control input[type="checkbox"] { appearance: none; width: 36px; height: 20px; flex: 0 0 36px; border: 0; border-radius: 12px; background: var(--color-base-40); cursor: pointer; position: relative; vertical-align: middle; }
@@ -1241,11 +1246,10 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .settings-content input[type="checkbox"]:checked, .setting-item-control input[type="checkbox"]:checked { background: var(--interactive-accent); }
 .settings-content input[type="checkbox"]:checked::before, .setting-item-control input[type="checkbox"]:checked::before { transform: translateX(16px); }
 .settings-content input[type="checkbox"]:focus-visible { outline: 2px solid var(--text-accent); outline-offset: 2px; }
-.btn { background: var(--interactive-accent); color: var(--text-on-accent); border: 0; padding: 7px 14px;
-  border-radius: var(--radius); cursor: pointer; font-size: 13px; }
-.btn:hover { background: var(--interactive-accent-hover); }
-.btn.secondary { background: var(--bg-modifier-active); color: var(--text-normal); }
-.btn.danger { background: #d6453d; color: #fff; }
+.btn { background: var(--interactive-accent); color: var(--text-on-accent); border-color: transparent; }
+.btn:not(.secondary):enabled:hover { background: var(--interactive-accent-hover); }
+.btn.secondary { background: var(--bg-modifier-active); color: var(--text-normal); border-color: var(--bg-modifier-border); }
+.btn.danger, .btn.danger:enabled:hover { background: var(--text-error, #d6453d); color: var(--text-on-accent); border-color: transparent; }
 
 .empty-state { flex: 1; display: grid; place-items: center; color: var(--text-faint); text-align: center; }
 .empty-state .big { display: flex; justify-content: center; color: var(--base-40); margin-bottom: 12px; }
