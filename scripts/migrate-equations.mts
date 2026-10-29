@@ -3,16 +3,21 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { createHash } from 'node:crypto';
 import { createTwoFilesPatch } from 'diff';
 import {
   SourceDocument, analyzeMarkdown, equations, equationAnchor, equationReferenceName,
   extractMetadata, mathRegions, markdownComments, isEscaped,
   TargetIndex, parseLinkTarget, mathBodyOffset, tableModels,
-  type Equation, type SourceChange, type SourceSpan,
+  contentTargets, createContentTarget, fragmentRange, isGlobalContentTarget, legacySubheadings,
+  type Equation, type SourceChange, type SourceSpan, type Heading,
 } from '../packages/markdown-core/src/index.ts';
 
 type Issue = { file: string; line: number; reason: string; source: string };
-type Options = { files?: string[]; keepTags?: boolean; dropNumberAliases?: boolean };
+type Repair = { file: string; source: string; insert: string; reason: string };
+type Resolution = { file: string; source: string; occurrence?: number; targetFile: string; targetText: string; targetKind?: 'callout' | 'range'; reason: string };
+type Review = { repairs?: Repair[]; resolutions?: Resolution[]; paths?: { sourcePath: string; targetFile: string; reason: string }[] };
+type Options = { files?: string[]; keepTags?: boolean; dropNumberAliases?: boolean; globalReferences?: boolean; review?: Review };
 type Entry = { file: string; before: string; after: string; changes: SourceChange[] };
 const normalize = (s: string) => s.normalize('NFC').replace(/[\u2010-\u2014\u2212]/g, '-').replace(/\s+/g, '');
 const numeric = (s: string) => /^\d+(?:[-.]\d+)*$/.test(normalize(s));
@@ -24,12 +29,78 @@ export function planMigration(input: Map<string, string>, options: Options = {})
   const selected = new Set(options.files?.length ? options.files : input.keys());
   for (const file of selected) if (!input.has(file)) throw new Error(`File not found in vault: ${file}`);
   const index = new TargetIndex(input.keys());
+  const reviewedPaths = new Map<string, string>();
+  for (const entry of options.review?.paths ?? []) {
+    if (!entry.sourcePath || !entry.reason || !input.has(entry.targetFile) || reviewedPaths.has(entry.sourcePath)) throw new Error(`Invalid reviewed path: ${entry.sourcePath}`);
+    reviewedPaths.set(entry.sourcePath, entry.targetFile);
+  }
+  const resolve = (raw: string, sourceFile: string) => {
+    const target = parseLinkTarget(raw), reviewed = reviewedPaths.get(target.path);
+    return reviewed ? { status: 'resolved' as const, path: reviewed } : index.resolve(raw, sourceFile);
+  };
+  const repairs: Repair[] = [];
   const notes = new Map([...input].map(([file, raw]) => {
-    const doc = new SourceDocument(raw), model = analyzeMarkdown(doc.text, file);
+    const doc = new SourceDocument(raw);
+    for (const repair of options.review?.repairs?.filter(candidate => candidate.file === file) ?? []) {
+      if (!selected.has(file) || !repair.source || !repair.reason) throw new Error(`Invalid reviewed repair: ${file}`);
+      const from = doc.text.indexOf(repair.source);
+      if (from < 0 || doc.text.indexOf(repair.source, from + 1) >= 0) throw new Error(`Reviewed repair must match exactly once: ${file}: ${repair.source}`);
+      doc.apply([{ from, to: from + repair.source.length, insert: repair.insert }]);
+      repairs.push(repair);
+    }
+    const model = analyzeMarkdown(doc.text, file);
     return [file, { doc, model, formulas: equations(model), changes: [] as SourceChange[],
+      headings: Array.from(extractMetadata(model).headings), headingAnchors: new Map<Heading, string>(),
       anchors: new Map<Equation, string>(), blocked: new Set<Equation>() }] as const;
   }));
-  const issues: Issue[] = [], references: { file: string; line: number; before: string; after: string; target: string }[] = [];
+  for (const repair of options.review?.repairs ?? []) if (!notes.has(repair.file)) throw new Error(`Reviewed repair file missing: ${repair.file}`);
+  const issues: Issue[] = [], retained: Issue[] = [], references: { file: string; line: number; before: string; after: string; target: string; reason?: string }[] = [];
+  const globalIds = new Map<string, number>();
+  for (const note of notes.values()) for (const anchor of extractMetadata(note.model).blockIds) globalIds.set(anchor.id, (globalIds.get(anchor.id) ?? 0) + 1);
+  const allocated = new Set(globalIds.keys());
+  const allocate = (file: string, kind: string, from: number) => {
+    const base = `${kind}-${createHash('sha256').update(`${file}\0${kind}\0${from}`).digest('hex').slice(0, 16)}`;
+    let id = base, suffix = 1;
+    while (allocated.has(id)) id = `${base}-${suffix++}`;
+    allocated.add(id); return id;
+  };
+  const manual = new Map<string, { decision: Resolution; equation?: Equation; heading?: Heading; block?: { file: string; id: string }; used: boolean }>();
+  const reviewedBlocks = new Map<string, { file: string; id: string }>();
+  const manualEquations = new Set<Equation>();
+  const sourceKey = (file: string, range: SourceSpan) => `${file}\0${range.from}\0${range.to}`;
+  for (const decision of options.review?.resolutions ?? []) {
+    const source = notes.get(decision.file), target = notes.get(decision.targetFile);
+    if (!source || !target || !selected.has(decision.targetFile) || !decision.source || !decision.reason || !Number.isSafeInteger(decision.occurrence ?? 1) || (decision.occurrence ?? 1) < 1) throw new Error(`Invalid reviewed resolution: ${decision.file}`);
+    let from = -1;
+    for (let count = 0; count < (decision.occurrence ?? 1); count++) {
+      from = source.model.text.indexOf(decision.source, from + 1);
+      if (from < 0) throw new Error(`Reviewed reference no longer matches: ${decision.file}: ${decision.source}`);
+    }
+    const key = sourceKey(decision.file, { from, to: from + decision.source.length });
+    if (manual.has(key)) throw new Error(`Duplicate reviewed reference: ${decision.file}`);
+    if (decision.targetKind) {
+      if (!options.globalReferences || !['callout', 'range'].includes(decision.targetKind) || !decision.targetText) throw new Error(`Invalid reviewed block kind: ${decision.targetFile}`);
+      const start = target.model.text.indexOf(decision.targetText);
+      if (start < 0 || target.model.text.indexOf(decision.targetText, start + 1) >= 0) throw new Error(`Reviewed block must match exactly once: ${decision.targetFile}`);
+      const selection = { from: start, to: start + decision.targetText.length };
+      const blockKey = `${sourceKey(decision.targetFile, selection)}\0${decision.targetKind}`;
+      let block = reviewedBlocks.get(blockKey);
+      if (!block) {
+        const prepared = createContentTarget(target.model, selection, decision.targetKind, allocate(decision.targetFile, decision.targetKind, start));
+        if (!prepared.changes.length && globalIds.get(prepared.id) !== 1) throw new Error(`Reviewed block ID is not globally unique: ${prepared.id}`);
+        target.changes.push(...prepared.changes);
+        block = { file: decision.targetFile, id: prepared.id };
+        reviewedBlocks.set(blockKey, block);
+      }
+      manual.set(key, { decision, block, used: false });
+    } else {
+      const candidates = target.formulas.filter(equation => target.model.text.slice(equation.from, equation.to) === decision.targetText);
+      const headings = target.headings.filter(heading => target.model.text.slice(heading.from, heading.to) === decision.targetText);
+      if (candidates.length + headings.length !== 1) throw new Error(`Reviewed target must match one structural target: ${decision.targetFile}`);
+      manual.set(key, { decision, equation: candidates[0], heading: headings[0], used: false });
+      if (candidates[0]) manualEquations.add(candidates[0]);
+    }
+  }
   const numbered: { file: string; id: string; old: string | null; current: string | null }[] = [];
   let anchorsAdded = 0, anchorsRenamed = 0, tagsRemoved = 0;
   const issue = (file: string, range: SourceSpan, reason: string) => {
@@ -42,10 +113,20 @@ export function planMigration(input: Map<string, string>, options: Options = {})
     const used = new Set(extractMetadata(note.model).blockIds.map(b => b.id));
     for (const [ordinal, eq] of note.formulas.entries()) {
       // Untagged formulas already use native numbering; migrate legacy targets only.
-      if (eq.tag === undefined && (!eq.id || equationReferenceName('^' + eq.id) !== undefined)) continue;
+      if (!manualEquations.has(eq) && eq.tag === undefined && (!eq.id || (!options.globalReferences && equationReferenceName('^' + eq.id) !== undefined))) continue;
       if (eq.ambiguous || !eq.referenceable) {
         note.blocked.add(eq);
-        issue(file, eq, eq.ambiguous ? 'Duplicate block ID' : 'Formula needs its own closing line (or is inside a table)');
+        if (options.globalReferences && !eq.ambiguous && !manualEquations.has(eq)) retained.push({ file, line: note.model.text.slice(0, eq.from).split('\n').length, reason: 'Non-referenceable formula retained unchanged', source: note.model.text.slice(eq.from, eq.to) });
+        else issue(file, eq, eq.ambiguous ? 'Duplicate block ID' : 'Formula needs its own closing line (or is inside a table)');
+        continue;
+      }
+      if (options.globalReferences) {
+        const id = eq.id && equationReferenceName('^' + eq.id) !== undefined && globalIds.get(eq.id) === 1 ? eq.id : allocate(file, 'eq', eq.from);
+        note.anchors.set(eq, id);
+        if (eq.id !== id) {
+          if (eq.anchor) { note.changes.push({ from: eq.anchor.from + 1, to: eq.anchor.to, insert: id }); anchorsRenamed++; }
+          else { note.changes.push(equationAnchor(note.model, eq.from, id.slice(3)).change!); anchorsAdded++; }
+        }
         continue;
       }
       if (eq.id && equationReferenceName('^' + eq.id) === undefined) {
@@ -66,12 +147,17 @@ export function planMigration(input: Map<string, string>, options: Options = {})
     }
   }
   function lookup(file: string, fragment: string, sourceFile: string, range: SourceSpan) {
+    const reviewed = manual.get(sourceKey(sourceFile, range));
+    if (reviewed) {
+      if (!reviewed.equation) return;
+      reviewed.used = true; file = reviewed.decision.targetFile;
+    }
     const note = notes.get(file)!;
     // Legacy interpretation belongs only to this explicit offline boundary.
     const key = decode(fragment), legacy = key.match(/^=\((.+)\)(?:§([1-9]\d*))?$/);
     const candidates = key.startsWith('^') ? note.formulas.filter(e => e.id === key.slice(1)) : legacy
       ? note.formulas.filter(e => e.tag !== undefined && normalize(e.tag) === normalize(legacy[1])) : [];
-    const eq = legacy?.[2] ? candidates[Number(legacy[2]) - 1] : candidates.length === 1 ? candidates[0] : undefined;
+    const eq = reviewed?.equation ?? (legacy?.[2] ? candidates[Number(legacy[2]) - 1] : candidates.length === 1 ? candidates[0] : undefined);
     if (!eq || eq.ambiguous || !note.anchors.has(eq)) {
       // Keep tags needed by an unresolved/ambiguous old reference.
       const label = decode(fragment).match(/^=\((.+)\)(?:§\d+)?$/)?.[1];
@@ -79,13 +165,50 @@ export function planMigration(input: Map<string, string>, options: Options = {})
       issue(sourceFile, range, `Unresolved or ambiguous formula target: ${file}#${fragment}`);
       return;
     }
-    return { eq, id: note.anchors.get(eq)! };
+    return { eq, id: note.anchors.get(eq)!, file };
   }
   function record(file: string, range: SourceSpan, insert: string, target: string) {
     const note = notes.get(file)!;
     note.changes.push({ ...range, insert });
     references.push({ file, line: note.model.text.slice(0, range.from).split('\n').length,
-      before: note.model.text.slice(range.from, range.to), after: insert, target });
+      before: note.model.text.slice(range.from, range.to), after: insert, target,
+      ...(manual.get(sourceKey(file, range)) ? { reason: manual.get(sourceKey(file, range))!.decision.reason } : {}) });
+  }
+  function headingTarget(file: string, fragment: string, sourceFile: string, range: SourceSpan) {
+    const reviewed = manual.get(sourceKey(sourceFile, range));
+    if (reviewed) { if (!reviewed.heading) return; file = reviewed.decision.targetFile; reviewed.used = true; }
+    const note = notes.get(file)!;
+    const target = reviewed?.heading ? undefined : fragmentRange(note.model, fragment);
+    const oldHeadings = legacySubheadings(note.model, markdownComments(note.model));
+    const normalizeHeading = (value: string) => decode(value).normalize('NFC').replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+    const namedLegacy = oldHeadings.filter(candidate => normalizeHeading(candidate.text) === normalizeHeading(fragment));
+    const legacy = target?.kind === 'heading' ? oldHeadings.find(candidate => candidate.from === target.focus.from) : namedLegacy.length === 1 ? namedLegacy[0] : undefined;
+    let heading = reviewed?.heading ?? (target?.kind === 'heading' ? note.headings.find(candidate => candidate.from >= target.focus.from && candidate.to <= target.focus.to) : undefined);
+    if (!heading && legacy) {
+      heading = { from: legacy.from, to: legacy.to, text: legacy.text, level: 7, kind: 'body' };
+      note.headings.push(heading);
+    }
+    if (!heading) return;
+    if (!reviewed && !decode(fragment).startsWith('-') && note.headings.filter(candidate => candidate.text.normalize('NFC') === heading.text.normalize('NFC')).length > 1) {
+      issue(sourceFile, range, `Ambiguous heading target: ${file}#${fragment}`); return;
+    }
+    let id = note.headingAnchors.get(heading);
+    if (!id) {
+      const existing = contentTargets(note.model).targets.find(candidate => candidate.kind === 'heading' && candidate.focus.from === heading.from);
+      if (existing && globalIds.get(existing.id) === 1) id = existing.id;
+      else {
+        id = allocate(file, 'heading', heading.from);
+        if (existing) note.changes.push({ from: existing.anchor!.from + 1, to: existing.anchor!.to, insert: id });
+        else if (legacy) note.changes.push({ from: legacy.from, to: legacy.to, insert: `####### ${legacy.text} ^${id}` });
+        else {
+          const old = extractMetadata(note.model).blockIds.find(anchor => anchor.from >= heading.from && anchor.to <= heading.to);
+          if (old) note.changes.push({ from: old.from + 1, to: old.to, insert: id });
+          else note.changes.push(...createContentTarget(note.model, { from: heading.from, to: heading.from }, 'heading', id).changes);
+        }
+      }
+      note.headingAnchors.set(heading, id);
+    }
+    return { file, id };
   }
   for (const [file, note] of notes) {
     const { model } = note, text = model.text, math = mathRegions(model);
@@ -99,18 +222,36 @@ export function planMigration(input: Map<string, string>, options: Options = {})
       linkRanges.push(span);
       const tableAlias = tableModels(model).some(t => span.from >= t.from && span.to <= t.to) ? match[0].indexOf('\\|') : -1;
       const target = parseLinkTarget(tableAlias < 0 ? match[1] : match[1].replace(/\\\|/g, '|'));
+      if (/\.[^/.]+$/.test(target.path) && !/\.(?:md|markdown)$/i.test(target.path)) continue;
       const key = decode(target.fragment), legacy = /^=\(.+\)(?:§[1-9]\d*)?$/.test(key);
-      if (!legacy && !key.startsWith('^')) continue;
-      const resolved = index.resolve(`${target.path}#${target.fragment}`, file);
+      if (isGlobalContentTarget(match[1]) || (!legacy && !key.startsWith('^') && (!options.globalReferences || !key))) continue;
+      const reviewed = manual.get(sourceKey(file, span));
+      const resolved = reviewed ? { status: 'resolved' as const, path: reviewed.decision.targetFile } : resolve(`${target.path}#${target.fragment}`, file);
       if (resolved.status !== 'resolved') {
-        if (legacy && selected.has(file)) issue(file, span, `Target note ${resolved.status}: ${target.path}`);
+        if ((legacy || options.globalReferences) && selected.has(file) && resolved.status !== 'external') issue(file, span, `Target note ${resolved.status}: ${target.path}`);
         continue;
       }
       if (!selected.has(resolved.path)) {
         if (legacy && selected.has(file)) issue(file, span, `Target outside --file selection: ${resolved.path}`);
         continue;
       }
-      if (!legacy && !notes.get(resolved.path)!.formulas.some(eq => eq.id === key.slice(1) && notes.get(resolved.path)!.anchors.has(eq) && notes.get(resolved.path)!.anchors.get(eq) !== eq.id)) continue;
+      if (options.globalReferences && !notes.has(resolved.path)) continue;
+      if (reviewed?.block) {
+        reviewed.used = true;
+        const separator = tableAlias >= 0 ? '\\|' : '|';
+        record(file, span, `${match[0].startsWith('!') ? '!' : ''}[[^${reviewed.block.id}${target.alias === null ? '' : separator + target.alias}]]`, `${reviewed.block.file}#^${reviewed.block.id}`);
+        continue;
+      }
+      if (options.globalReferences && !legacy && !reviewed?.equation) {
+        const heading = headingTarget(resolved.path, target.fragment, file, span);
+        if (heading) {
+          const separator = tableAlias >= 0 ? '\\|' : '|';
+          record(file, span, `${match[0].startsWith('!') ? '!' : ''}[[^${heading.id}${target.alias === null ? '' : separator + target.alias}]]`, `${heading.file}#^${heading.id}`);
+          continue;
+        }
+        if (!key.startsWith('^')) { issue(file, span, `Unresolved heading target: ${resolved.path}#${target.fragment}`); continue; }
+      }
+      if (!legacy && !reviewed?.equation && !notes.get(resolved.path)!.formulas.some(eq => eq.id === key.slice(1) && notes.get(resolved.path)!.anchors.has(eq) && (options.globalReferences || notes.get(resolved.path)!.anchors.get(eq) !== eq.id))) continue;
       const found = lookup(resolved.path, target.fragment, file, span); if (!found) continue;
       // Patch the destination, preserving !, path spelling, whitespace and custom aliases.
       const hash = match[0].indexOf('#'), plainAlias = match[0].search(/(?<!\\)\|/);
@@ -122,23 +263,36 @@ export function planMigration(input: Map<string, string>, options: Options = {})
         const value = target.alias!.trim().replace(/^\$?\\text\{(.*)\}\$?$/, '$1');
         if (normalize(value) === `(${normalize(found.eq.tag ?? '')})`) tail = ']]';
       }
-      record(file, span, `${match[0].slice(0, hash + 1)}^${found.id}${trailing}${tail}`, `${resolved.path}#^${found.id}`);
+      record(file, span, options.globalReferences ? `${match[0].startsWith('!') ? '!' : ''}[[^${found.id}${tail}` : `${match[0].slice(0, hash + 1)}^${found.id}${trailing}${tail}`, `${found.file}#^${found.id}`);
     }
     // URL ranges come from Lezer, including balanced parentheses and reference definitions.
     // Preserve Markdown labels/titles; only replace the legacy fragment in the URL.
     for (const url of model.nodes.filter(n => n.name === 'URL')) {
       if (inside(url) || math.some(r => overlaps(r, url)) || linkRanges.some(r => overlaps(r, url))) continue;
       const raw = text.slice(url.from, url.to), target = parseLinkTarget(raw);
+      if (/\.[^/.]+$/.test(target.path) && !/\.(?:md|markdown)$/i.test(target.path)) continue;
       const key = decode(target.fragment), legacy = /^=\(.+\)(?:§[1-9]\d*)?$/.test(key);
-      if (!legacy && !key.startsWith('^')) continue;
-      const resolved = index.resolve(raw, file);
+      if (isGlobalContentTarget(raw) || (!legacy && !key.startsWith('^') && (!options.globalReferences || !key))) continue;
+      const reviewed = manual.get(sourceKey(file, url));
+      const resolved = reviewed ? { status: 'resolved' as const, path: reviewed.decision.targetFile } : resolve(raw, file);
       if (resolved.status !== 'resolved' || !selected.has(resolved.path)) {
         if (legacy && selected.has(file)) issue(file, url, `Markdown target ${resolved.status === 'resolved' ? 'outside --file selection' : resolved.status}: ${raw}`);
         continue;
       }
-      if (!legacy && !notes.get(resolved.path)!.formulas.some(eq => eq.id === key.slice(1) && notes.get(resolved.path)!.anchors.has(eq) && notes.get(resolved.path)!.anchors.get(eq) !== eq.id)) continue;
+      if (options.globalReferences && !notes.has(resolved.path)) continue;
+      if (reviewed?.block) {
+        reviewed.used = true;
+        record(file, url, `^${reviewed.block.id}`, `${reviewed.block.file}#^${reviewed.block.id}`);
+        continue;
+      }
+      if (options.globalReferences && !legacy && !reviewed?.equation) {
+        const heading = headingTarget(resolved.path, target.fragment, file, url);
+        if (heading) { record(file, url, `^${heading.id}`, `${heading.file}#^${heading.id}`); continue; }
+        if (!key.startsWith('^')) { issue(file, url, `Unresolved heading target: ${resolved.path}#${target.fragment}`); continue; }
+      }
+      if (!legacy && !reviewed?.equation && !notes.get(resolved.path)!.formulas.some(eq => eq.id === key.slice(1) && notes.get(resolved.path)!.anchors.has(eq) && (options.globalReferences || notes.get(resolved.path)!.anchors.get(eq) !== eq.id))) continue;
       const found = lookup(resolved.path, target.fragment, file, url); if (!found) continue;
-      record(file, url, `${raw.slice(0, raw.indexOf('#') + 1)}^${found.id}`, `${resolved.path}#^${found.id}`);
+      record(file, url, options.globalReferences ? `^${found.id}` : `${raw.slice(0, raw.indexOf('#') + 1)}^${found.id}`, `${found.file}#^${found.id}`);
     }
     if (!selected.has(file)) continue;
     for (const ref of math) {
@@ -147,7 +301,7 @@ export function planMigration(input: Map<string, string>, options: Options = {})
       const match = ref.tex.match(/^\s*\\text\s*\{\s*\(\s*([\d.\s\u2010-\u2014\u2212-]+)\s*\)\s*\}\s*$/);
       if (!match || !numeric(match[1])) continue;
       const found = lookup(file, `=(${normalize(match[1])})`, file, ref); if (!found) continue;
-      record(file, ref, `[[#^${found.id}]]`, `${file}#^${found.id}`);
+      record(file, ref, `[[${options.globalReferences ? '' : '#'}^${found.id}]]`, `${found.file}#^${found.id}`);
     }
   }
   for (const file of selected) {
@@ -178,7 +332,7 @@ export function planMigration(input: Map<string, string>, options: Options = {})
   }
   const entries: Entry[] = [];
   for (const [file, note] of notes) {
-    const before = note.doc.raw;
+    const before = input.get(file)!;
     note.doc.apply(note.changes);
     if (before !== note.doc.raw) entries.push({ file, before, after: note.doc.raw, changes: note.changes });
     if (selected.has(file)) {
@@ -194,10 +348,24 @@ export function planMigration(input: Map<string, string>, options: Options = {})
       });
     }
   }
+  for (const entry of manual.values()) if (!entry.used) throw new Error(`Reviewed reference was not consumed: ${entry.decision.file}: ${entry.decision.source}`);
+  if (options.globalReferences) {
+    const targets = new Map<string, { file: string; kind: string }[]>();
+    for (const [file, note] of notes) for (const target of contentTargets(analyzeMarkdown(note.doc.text, file)).targets) {
+      const group = targets.get(target.id) ?? []; group.push({ file, kind: target.kind }); targets.set(target.id, group);
+    }
+    for (const reference of references) {
+      const hash = reference.target.lastIndexOf('#^'), file = reference.target.slice(0, hash), id = reference.target.slice(hash + 2);
+      const candidates = targets.get(id) ?? [];
+      if (candidates.length !== 1 || candidates[0].file !== file) throw new Error(`Global target verification failed: ${reference.target}`);
+    }
+  }
   const tagged = [...selected].reduce((count, file) => count + notes.get(file)!.formulas.filter(eq => eq.tag !== undefined).length, 0);
-  return { entries, issues, references, numbered, summary: { scanned: input.size, selected: selected.size,
+  return { entries, issues, retained, repairs, references, numbered, summary: { scanned: input.size, selected: selected.size,
     changedFiles: entries.length, anchorsAdded, anchorsRenamed, tagsRemoved, tagsRetained: tagged - tagsRemoved,
-    referencesConverted: references.length, unresolved: issues.length } };
+    headingsAnchored: [...notes.values()].reduce((count, note) => count + note.headingAnchors.size, 0),
+    reviewedBlocksAnchored: reviewedBlocks.size,
+    referencesConverted: references.length, reviewedReferences: manual.size, sourceRepairs: repairs.length, retainedUnsafeFormulas: retained.length, unresolved: issues.length } };
 }
 
 function within(root: string, target: string) {
@@ -274,9 +442,10 @@ export async function main(args = process.argv.slice(2)) {
     vault: { type: 'string' }, file: { type: 'string', multiple: true }, out: { type: 'string' },
     apply: { type: 'boolean' }, restore: { type: 'string' }, 'keep-tags': { type: 'boolean' },
     'drop-number-aliases': { type: 'boolean' }, help: { type: 'boolean' },
+    'global-references': { type: 'boolean' }, review: { type: 'string' },
   } });
   if (values.help) {
-    console.log('node --import tsx scripts/migrate-equations.mts --vault <vault> --out <new-preview-dir> [--file <relative.md>] [--keep-tags] [--drop-number-aliases] [--apply]\nnode --import tsx scripts/migrate-equations.mts --restore <preview-dir>\nDefault: preview only. --file also updates inbound references elsewhere in the vault. --apply requires zero unresolved issues. Close editors before applying/restoring.');
+    console.log('node --import tsx scripts/migrate-equations.mts --vault <vault> --out <new-preview-dir> [--file <relative.md>] [--keep-tags] [--drop-number-aliases] [--global-references] [--review <review.json>] [--apply]\nnode --import tsx scripts/migrate-equations.mts --restore <preview-dir>\nDefault: preview only. --global-references migrates heading/equation references to Vault-global typed IDs. --review supplies exact, documented source repairs and target decisions. --file also updates inbound references elsewhere in the vault. --apply requires zero unresolved issues. Close editors before applying/restoring.');
     return;
   }
   if (values.restore) {
@@ -307,7 +476,8 @@ export async function main(args = process.argv.slice(2)) {
   if (!values.vault || !values.out) throw new Error('--vault and --out are required; use --help');
   const vault = await fs.realpath(values.vault), out = await canonicalDestination(path.resolve(values.out));
   if (within(vault, out)) throw new Error('--out must be outside the source vault');
-  const input = await readVault(vault), options = { files: values.file?.map(f => f.replace(/\\/g, '/')), keepTags: values['keep-tags'], dropNumberAliases: values['drop-number-aliases'] };
+  const input = await readVault(vault), options: Options = { files: values.file?.map(f => f.replace(/\\/g, '/')), keepTags: values['keep-tags'], dropNumberAliases: values['drop-number-aliases'],
+    globalReferences: values['global-references'], review: values.review ? JSON.parse(await fs.readFile(values.review, 'utf8')) : undefined };
   const plan = planMigration(input, options), report = await preview(out, vault, plan, options);
   console.log(JSON.stringify(plan.summary, null, 2)); console.log(`Preview: ${path.join(out, 'preview.html')}`);
   if (values.apply) {

@@ -18,6 +18,47 @@ $$E=mc^2 $$ ^eq-migrated1
 
 自动编号由 WebObsidian 按当前文档结构计算。旧编号与新编号的映射在预览报告中显示，可能发生变化。迁移后的固定 ID 不再随着编号变化而变化。没有手写标签的公式已经使用原生编号，不会被批量添加 ID。
 
+## 全库稳定引用模式
+
+显式添加 `--global-references` 后，公式与标题引用统一改为 Vault 全局的
+`[[^eq-ID]]` / `[[^heading-ID]]`，嵌入保留 `!`，不再绑定文件路径或标题文字。
+新增 ID 在原始快照上分配并避让全库块 ID；已有唯一规范 ID 复用，不因后续改名或移动而重新生成。
+需要保留教材原编号时同时使用 `--keep-tags`，不要求删除所有 `\tag` 才能迁移引用身份。
+
+```powershell
+node --import tsx scripts/migrate-equations.mts `
+  --vault 'C:\path\to\vault' `
+  --out '.local/equation-migration/global-preview' `
+  --global-references --keep-tags `
+  --review '.local/equation-migration/review.json'
+```
+
+`--review` 是人工核对后的精确决策，不是模糊匹配开关。可包含以下字段：
+
+```json
+{
+  "paths": [
+    {"sourcePath": "Old chapter", "targetFile": "Notes/Chapter.md", "reason": "Renamed chapter checked"}
+  ],
+  "repairs": [
+    {"file": "Notes/Chapter.md", "source": "\\tag2", "insert": "\\tag{2}", "reason": "Single-token TeX tag checked"}
+  ],
+  "resolutions": [
+    {"file": "Notes/Chapter.md", "source": "$\\text{(2)}$", "occurrence": 1, "targetFile": "Notes/Chapter.md", "targetText": "$$x \\tag{2}$$", "reason": "Derivation checked"}
+  ]
+}
+```
+
+- `source` 和 `targetText` 使用规范化换行后的原始 Markdown；修补依次执行，再分析目标和引用。
+- 修补必须恰好匹配一次；引用用从 1 开始的 `occurrence` 选择同一字面量的第几次出现。
+- 默认目标必须精确匹配唯一公式或核心标题元数据。只有人工指定的未标号公式才额外添加锚点。
+- `targetKind: "callout"` / `"range"` 接受完整结构块的精确原文，调用核心 `createContentTarget`，不另建块解析器。链接与嵌入共用同一目标；普通旧锚点保留。
+- 含数学而未进入核心标题元数据的章节可以人工选定完整范围；不得删改标题 TeX 来迁就匹配。
+- 失配、重复决策、未被消费的决策或不完整结构范围都会拒绝计划。预览成功后仍需查看差异，只有零问题才可写回。
+- 在全局模式中，没有被引用的表格内/闭合行带正文公式可原样保留并单列 `retained`；实际引用仍必须唯一解析，不能借此跳过断链。
+
+人工核对文件通常包含私人原文，应与预览一起留在忽略目录，不加入 Git。写回后不重复使用旧修补决策；检查幂等时省略 `--review`。
+
 ## 生成预览
 
 PowerShell 示例，`--vault` 替换成要处理的 Vault；`--out` 必须是 **Vault 外部的新目录**，已有目录不会被覆盖。
@@ -80,7 +121,7 @@ node --import tsx scripts/migrate-equations.mts `
 
 ## 不可自动判定的情况
 
-缺失目标、没有指定 occurrence 的重复编号、重复块 ID、表格中的带标签公式，以及结束 `$$` 后同一行还有正文等无法安全加入块 ID 的公式，会保留原状并列入问题。涉及不明确引用的原标签不会被删除。脚本不会改写段落结构、修补破损分隔符，或根据“看起来差不多”推断旧编号指向哪一条公式。
+缺失目标、没有指定 occurrence 的重复编号、重复块 ID、表格中的带标签公式，以及结束 `$$` 后同一行还有正文等无法安全加入块 ID 的公式，会保留原状并列入问题。涉及不明确引用的原标签不会被删除。脚本不会自行改写段落结构、修补破损分隔符，或根据“看起来差不多”推断旧编号指向哪一条公式；只有 `--review` 中带原因且精确匹配的人工修补可以改变这些源片段。
 
 出现这些问题时，可以从报告选取无问题的单篇/一组关联文档迁移，或者先人工纠正原始内容后重新生成全库预览。报告为零问题才允许 `--apply`，因此“预览已生成”不等于“全库可无损自动迁移”。
 
@@ -92,4 +133,4 @@ node --import tsx scripts/migrate-equations.mts `
 node --import tsx --test scripts/migrate-equations.test.mts
 ```
 
-覆盖格式转换、重复目标、跨文件入链、编号变化、代码/注释保护、混合源格式、幂等、原件备份、实际替换与恢复，以及拒绝覆盖迁移后用户修改的数据。测试目录创建在系统 Temp 的 `.agents` 下，结束后删除。2026-10-24 后续规范化修改只做源码检查，新增的非规范 ID 迁移断言尚未执行，前一版的 14 项通过结果不代表后续版本已验证。
+覆盖格式转换、重复目标、跨文件入链、编号变化、代码/注释保护、混合源格式、幂等、原件备份、实际替换与恢复，以及拒绝覆盖迁移后用户修改的数据。测试目录创建在系统 Temp 的 `.agents` 下，结束后删除。2026-10-29 全局身份、精确人工决策、标题、Callout/范围复用、旧锚点保留及全部原有检查共 24 项通过；真实全库写回与边界见 `tests/reports/reference-migration-20261029.md`。

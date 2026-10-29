@@ -181,8 +181,39 @@ later edits; journal states support recovery after an interrupted partial apply.
 The CLI requires a new output directory and rejects symlinks and invalid UTF-8.
 Unresolvable references/duplicate IDs/unsafe formula closings are reported rather
 than guessed. There is no claim that arbitrary damaged old notes can be fully
-migrated automatically. This user request authorizes targeted migration-script
-execution on copies; application/UI/MathJax acceptance is separate.
+migrated automatically. Live execution requires explicit user authorization;
+application/UI/MathJax acceptance is separate.
+
+### Reviewed global migration (2026-10-29)
+
+`--global-references` extends the same planner to Vault-global typed identities.
+It reuses the core heading/legacy-subheading, fragment and content-target owners,
+not a second Markdown parser or runtime index. Heading links, equation links,
+embeds and Markdown URLs retain their existing labels and alias separators.
+IDs are allocated against all existing Vault block IDs; unique canonical IDs are
+reused. Unreferenced unsafe table/trailing-text formulas may be retained in this
+mode, but any actual unresolved reference still blocks apply.
+
+`--review` records exact source repairs, old-to-current paths and manually checked
+reference/target pairs with reasons. Repairs run before immutable model analysis;
+stale/nonunique repairs or targets and unused decisions reject the plan. Explicit
+Callout/range targets reuse `createContentTarget`, with one ID shared by links and
+embeds. Math-bearing headings omitted by the current metadata owner can use an
+explicit reviewed complete-section range without rewriting title TeX.
+
+Cached core analysis remains authoritative; mutable migration heading lists are
+copies, not mutations of cached metadata. The final model must preserve formula
+membership and each assigned identity, and every generated global reference must
+resolve uniquely to the reviewed file. No editor/session/rendering contract changes.
+
+With explicit authorization, the full STEM writeback completed on 2026-10-29:
+386 notes scanned, 155 modified, 496 references converted, 63 exact target
+decisions, 19 exact repairs and zero unresolved migration references. Original
+tags were retained. Rehearsal write/restore, 24 migration tests, targeted types,
+exact final-byte comparisons and a zero-change repeat check pass. Eight unrelated
+preexisting typed-anchor errors remain unchanged. See
+`tests/reports/reference-migration-20261029.md`; no application build, restart or
+visual/native UI acceptance is inferred from this offline migration.
 
 ## Verification boundary
 

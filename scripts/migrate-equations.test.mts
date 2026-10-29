@@ -4,7 +4,116 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { planMigration, main } from './migrate-equations.mts';
-import { analyzeMarkdown, equationContext, equationTarget } from '../packages/markdown-core/src/index.ts';
+import { analyzeMarkdown, equationContext, equationTarget, contentTargets } from '../packages/markdown-core/src/index.ts';
+
+test('global migration allocates unique stable IDs across files and preserves labels, aliases and embeds', () => {
+  const input = new Map([
+    ['a.md', '# First\n$$x \\tag{1-1}$$\n$\\text{(1-1)}$\n[[b#=(1-1)|custom]] ![[b#Second]]'],
+    ['b.md', '# Second\n$$y \\tag{1-1}$$\n$\\text{(1-1)}$'],
+  ]);
+  const options = { globalReferences: true, keepTags: true };
+  const result = planMigration(input, options);
+  assert.equal(result.issues.length, 0);
+  assert.equal(result.summary.referencesConverted, 4);
+  assert.equal(result.summary.tagsRemoved, 0);
+  assert.equal(new Set(result.numbered.map(equation => equation.id)).size, 2);
+  assert.ok(result.entries[0].after.includes('![[^heading-'));
+  assert.ok(result.entries[0].after.includes('|custom]]'));
+  assert.ok(result.entries[0].after.includes('\\tag{1-1}'));
+  for (const entry of result.entries) input.set(entry.file, entry.after);
+  assert.equal(planMigration(input, options).entries.length, 0);
+});
+test('global heading references preserve escaped table aliases and Markdown labels', () => {
+  const result = plan('# First\n\n| A |\n|---|\n| [[#First\\|标题]] |\n\n[heading](#First "title")\n', { globalReferences: true });
+  assert.equal(result.issues.length, 0);
+  assert.equal(result.summary.headingsAnchored, 1);
+  assert.equal(result.summary.referencesConverted, 2);
+  assert.match(result.entries[0].after, /\[\[\^heading-[a-f0-9]+\\\|标题\]\]/);
+  assert.match(result.entries[0].after, /\[heading\]\(\^heading-[a-f0-9]+ "title"\)/);
+});
+test('global legacy body-heading links use the existing structural heading owner', () => {
+  const result = plan('> **Definition**\n\nbody\n\n![[#-Definition]]\n', { globalReferences: true });
+  assert.equal(result.issues.length, 0);
+  assert.match(result.entries[0].after, /####### Definition \^heading-/);
+  assert.match(result.entries[0].after, /!\[\[\^heading-/);
+});
+test('reviewed duplicate tags and untagged formulas are exact explicit decisions, not nearest guesses', () => {
+  const source = '$$x \\tag{1}$$\n$$y \\tag{1}$$\n$$z$$\n$\\text{(1)}$ $\\text{(2)}$';
+  const review = { resolutions: [
+    { file: 'a.md', source: '$\\text{(1)}$', targetFile: 'a.md', targetText: '$$y \\tag{1}$$', reason: 'Second derivation context' },
+    { file: 'a.md', source: '$\\text{(2)}$', targetFile: 'a.md', targetText: '$$z$$', reason: 'Missing tag, derivation checked' },
+  ] };
+  const result = plan(source, { globalReferences: true, keepTags: true, review });
+  assert.equal(result.issues.length, 0);
+  assert.equal(result.summary.reviewedReferences, 2);
+  assert.ok(result.references[0].target.endsWith(result.numbered[1].id));
+  assert.ok(result.references[1].target.endsWith(result.numbered[2].id));
+  assert.throws(() => plan(source.replace('$$z$$', '$$other$$'), { globalReferences: true, review }), /match one structural target/);
+});
+test('reviewed source repairs preserve untouched BOM/CRLF and refuse stale or nonunique matches', () => {
+  const source = '\ufeff$$x \\tag2$$\r\n$\\text{(2)}$\r\n';
+  const review = { repairs: [{ file: 'a.md', source: '\\tag2', insert: '\\tag{2}', reason: 'TeX single-token argument' }] };
+  const result = plan(source, { globalReferences: true, keepTags: true, review });
+  assert.equal(result.issues.length, 0);
+  assert.ok(result.entries[0].after.startsWith('\ufeff'));
+  assert.equal(result.entries[0].after.replaceAll('\r\n', '').includes('\n'), false);
+  assert.equal(result.summary.sourceRepairs, 1);
+  assert.throws(() => plan('$$y$$', { review }), /match exactly once/);
+  assert.throws(() => plan(source + source, { review }), /match exactly once/);
+});
+test('reviewed headings resolve exact wiki title source without guessing normalized names', () => {
+  const source = '# [[Title]]\n\n[[#outdated|label]]';
+  const result = plan(source, { globalReferences: true, review: { resolutions: [
+    { file: 'a.md', source: '[[#outdated|label]]', targetFile: 'a.md', targetText: '# [[Title]]', reason: 'Renamed heading checked' },
+  ] } });
+  assert.equal(result.issues.length, 0);
+  assert.match(result.entries[0].after, /\[\[\^heading-[a-f0-9]+\|label\]\]/);
+});
+test('reviewed callout and complete ranges reuse native creators and one ID for links and embeds', () => {
+  const callout = '> [!proof]- Derivation\n> $$x \\tag{1}$$\n> conclusion';
+  const range = '# Definition $y$\n\n$$y \\tag{2}$$\n\nconclusion ^old';
+  const input = new Map([['a.md', '[[short#lost|label]] ![[short#lost]] [range](short#^old "title") [[short#^old]]'], ['b.md', callout + '\n\n' + range + '\n']]);
+  const review = { resolutions: [
+    ...['[[short#lost|label]]', '![[short#lost]]'].map(source => ({ file: 'a.md', source, targetFile: 'b.md', targetText: callout, targetKind: 'callout' as const, reason: 'Derivation checked' })),
+    ...['short#^old', '[[short#^old]]'].map(source => ({ file: 'a.md', source, targetFile: 'b.md', targetText: range, targetKind: 'range' as const, reason: 'Complete definition checked' })),
+  ] };
+  const result = planMigration(input, { globalReferences: true, keepTags: true, review });
+  assert.equal(result.issues.length, 0);
+  assert.equal(result.summary.referencesConverted, 4);
+  assert.equal(result.summary.reviewedBlocksAnchored, 2);
+  assert.equal(result.references[0].target, result.references[1].target);
+  const after = result.entries.find(entry => entry.file === 'b.md')!.after;
+  const targets = contentTargets(analyzeMarkdown(after)).targets;
+  assert.equal(targets.filter(target => target.kind === 'callout').length, 1);
+  assert.equal(targets.filter(target => target.kind === 'range').length, 1);
+  assert.ok(after.includes('conclusion ^old'));
+  for (const entry of result.entries) input.set(entry.file, entry.after);
+  assert.equal(planMigration(input, { globalReferences: true, keepTags: true }).entries.length, 0);
+  const invalid = { resolutions: [{ ...review.resolutions[2], targetText: 'efinition' }] };
+  assert.throws(() => planMigration(new Map([['a.md', 'short#^old'], ['b.md', range]]), { globalReferences: true, review: invalid }), /not consumed|complete blocks/);
+});
+test('global migration retains unreferenced table/trailing-text tags without hiding unresolved references', () => {
+  const source = '$$x \\tag{1}$$ trailing\n\n| A |\n|---|\n| $$y \\tag{2}$$ |\n';
+  const result = plan(source, { globalReferences: true, keepTags: true });
+  assert.equal(result.entries.length, 0);
+  assert.equal(result.retained.length, 2);
+  const unresolved = plan(source + '$\\text{(1)}$', { globalReferences: true, keepTags: true });
+  assert.equal(unresolved.issues.length, 1);
+});
+test('global duplicate canonical IDs are renamed independently and local inbound references follow them', () => {
+  const input = new Map([
+    ['a.md', '$$x$$ ^eq-old\n[[#^eq-old]]'],
+    ['b.md', '$$y$$ ^eq-old\n![[#^eq-old]]'],
+  ]);
+  const result = planMigration(input, { globalReferences: true });
+  assert.equal(result.issues.length, 0);
+  assert.equal(result.summary.anchorsRenamed, 2);
+  assert.notEqual(result.numbered[0].id, result.numbered[1].id);
+});
+test('missing or duplicate headings remain blocking issues rather than silently selecting the first', () => {
+  assert.ok(plan('# Title\n# Title\n[[#Title]]', { globalReferences: true }).issues.length > 0);
+  assert.ok(plan('[[missing#Title]]', { globalReferences: true }).issues.length > 0);
+});
 
 const plan = (source: string, options = {}) => planMigration(new Map([['a.md', source]]), options);
 test('migrates raw number references, links, embeds, percent fragments; second run is empty', () => {
