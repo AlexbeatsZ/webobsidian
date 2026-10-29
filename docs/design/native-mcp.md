@@ -169,10 +169,10 @@ to the independent acceptance run, not compilation evidence.
 
 ### Desktop manual Tunnel controls
 
-Windows desktop exposes Start, Restart and Status in the right MCP panel. The
+Windows desktop exposes a single **连接** action in the right MCP panel. The
 main process calls the companion project's existing `scripts/manual-start-mcp.ps1`;
 it does not implement another Tunnel runtime or expose process execution over
-HTTP/MCP. Actions are allowlisted, single-flight, bounded to 60 seconds/32 KiB,
+HTTP/MCP. A parameter-free Connect IPC is single-flight, bounded to 60 seconds/32 KiB,
 and require the local application's top-level frame through `desktopWindow`.
 No command runs on panel mount; inspection only checks local files. Web/mobile
 and non-Windows desktop do not display unsupported launch controls.
@@ -185,7 +185,11 @@ Tunnel alias/identity or credentials are rewritten. The current instance's endpo
 file is passed explicitly for the script's health preflight. The companion still
 owns its configured stdio target; selecting a different instance does not retarget
 that configuration. External Node and an already configured companion installation
-are required. Restart is explicit; Start does not disconnect an existing runtime.
+are required (companion 0.2.2+). Only clicking Connect checks runtime status, once:
+healthy ready/running stays unchanged, stopped starts, unhealthy/stale running
+disconnects and starts once. Stop failure or unreadable status fails safely. The
+companion owns this decision and reuses its existing start/restart branches. No
+separate Start/Restart/Status commands are exposed through the desktop bridge.
 The UI reports command completion and retains bounded output, not remote ChatGPT
 end-to-end health. There is no watchdog or background status polling.
 

@@ -2,8 +2,6 @@ import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-export type McpLauncherAction = 'Start' | 'Restart' | 'Status';
-
 export interface McpLauncherState {
   projectPath: string;
   configured: boolean;
@@ -24,9 +22,8 @@ export class McpLauncher {
     return { projectPath, configured };
   }
 
-  async run(projectPath: string, endpointFile: string, action: unknown): Promise<McpLauncherState> {
+  async connect(projectPath: string, endpointFile: string): Promise<McpLauncherState> {
     if (process.platform !== 'win32') throw new Error('手动启动目前仅支持 Windows 桌面端');
-    if (!['Start', 'Restart', 'Status'].includes(action as string)) throw new Error('无效的 MCP 操作');
     if (this.busy) throw new Error('MCP 操作仍在进行，请稍候');
     this.busy = true;
     try {
@@ -38,9 +35,9 @@ export class McpLauncher {
         execFile(executable, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], {
           cwd: projectPath, windowsHide: true, timeout: 60_000, maxBuffer: 32 * 1024, encoding: 'utf8',
           env: { ...process.env, WEBOBSIDIAN_MCP_MANUAL: path.join(projectPath, 'scripts', 'manual-start-mcp.ps1'),
-            WEBOBSIDIAN_MCP_ACTION: action as string, WEBOBSIDIAN_MCP_ENDPOINT: endpointFile },
+            WEBOBSIDIAN_MCP_ACTION: 'Connect', WEBOBSIDIAN_MCP_ENDPOINT: endpointFile },
         }, (error, stdout, stderr) => {
-          const output = [stdout.trim(), stderr.trim(), error?.killed ? '操作超时，请检查状态后再重试' : error && !stdout && !stderr ? error.message : ''].filter(Boolean).join('\n');
+          const output = [stdout.trim(), stderr.trim(), error?.killed ? '连接操作超时；未自动重试，请稍后手动连接' : error && !stdout && !stderr ? error.message : ''].filter(Boolean).join('\n');
           resolve({ ...state, ok: !error, output });
         });
       });

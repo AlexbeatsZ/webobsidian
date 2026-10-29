@@ -62,12 +62,14 @@ an MCP client can launch `node --import tsx server/src/mcp.ts` with
 their actual address in `DATA_DIR/operations-endpoint.json`.
 See [native MCP contracts, examples and limits](docs/design/native-mcp.md).
 
-On Windows desktop, open **MCP** in the right sidebar for **启动 MCP**,
-**重新连接**, and **检查状态**. These controls reuse an already configured
+On Windows desktop, open **MCP** in the right sidebar and click **连接**.
+That one click checks the runtime once, starts it when stopped, or repairs an
+unhealthy running instance; a healthy connection is left untouched. It reuses an already configured
 `obsidian-context-mcp` installation and its existing manual startup script.
 The default location is `~/Project/Workspaces/obsidian-context-mcp`; use
-**选择项目** for a different location. This does not install Node or configure
-a new Tunnel, and opening the panel never starts or restarts one automatically.
+folder button for a different location. The companion must be version 0.2.2 or newer.
+This does not install Node or configure a new Tunnel. Opening the panel never
+checks the runtime, starts it or reconnects; there is no polling or background retry.
 
 ## Rendering and source preservation
 

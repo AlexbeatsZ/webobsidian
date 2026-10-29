@@ -520,9 +520,9 @@ function registerDesktopRequests(): void {
     desktopConfig = config;
     return state;
   });
-  ipcMain.handle('desktop:mcp-run', async (event, action: unknown) => {
+  ipcMain.handle('desktop:mcp-connect', async event => {
     if (!desktopWindow(event)) throw new Error('Local application frame required');
-    return mcp.run(mcpProject(), path.join(DATA_DIR(), 'operations-endpoint.json'), action);
+    return mcp.connect(mcpProject(), path.join(DATA_DIR(), 'operations-endpoint.json'));
   });
   ipcMain.on('desktop:close-result', (event, token: unknown, result: unknown) => {
     const window = desktopWindow(event);

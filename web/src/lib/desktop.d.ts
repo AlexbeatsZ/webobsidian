@@ -1,5 +1,5 @@
 import type { UserscriptBridge } from './userscripts/types';
-import type { McpLauncherAction, McpLauncherState } from '../../../desktop/src/mcpLauncher';
+import type { McpLauncherState } from '../../../desktop/src/mcpLauncher';
 
 declare global {
   interface Window {
@@ -10,7 +10,7 @@ declare global {
       mcp?: {
         inspect(): Promise<McpLauncherState>;
         selectProject(): Promise<McpLauncherState | null>;
-        run(action: McpLauncherAction): Promise<McpLauncherState>;
+        connect(): Promise<McpLauncherState>;
       };
       vaultPath?: string;
       openVaultPath(path: string): Promise<void>;

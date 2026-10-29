@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Start', 'Restart', 'Stop', 'Status')]
+    [ValidateSet('Connect', 'Start', 'Restart', 'Stop', 'Status')]
     [string]$Action = 'Start',
     [string]$TunnelProject = (Join-Path (Split-Path -Parent $PSScriptRoot | Split-Path -Parent) 'obsidian-context-mcp'),
     [string]$EndpointFile,

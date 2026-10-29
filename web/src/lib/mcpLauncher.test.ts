@@ -38,18 +38,15 @@ describe('native MCP manual launcher', () => {
     expect(execFile).not.toHaveBeenCalled();
   });
 
-  it.skipIf(process.platform !== 'win32')('allowlists actions before reading files or executing commands', async () => {
+  it.skipIf(process.platform !== 'win32')('rejects a missing project without executing commands', async () => {
     const launcher = new McpLauncher();
-    for (const action of ['Stop', 'start', 'Start; calc', {}, null]) {
-      await expect(launcher.run('missing', 'endpoint', action)).rejects.toThrow('无效');
-    }
-    await expect(launcher.run('missing', 'endpoint', 'Start')).rejects.toThrow('请选择');
+    await expect(launcher.connect('missing', 'endpoint')).rejects.toThrow('请选择');
     expect(execFile).not.toHaveBeenCalled();
   });
 
   it.skipIf(process.platform !== 'win32')('passes fixed encoded script and literal paths via environment, then returns UTF-8 output', async () => {
     const directory = await project(), endpoint = path.join(directory, "app's data", 'operations-endpoint.json');
-    const running = new McpLauncher().run(directory, endpoint, 'Start');
+    const running = new McpLauncher().connect(directory, endpoint);
     await vi.waitFor(() => expect(execFile).toHaveBeenCalledOnce());
     const [executable, args, options] = vi.mocked(execFile).mock.calls[0] as unknown as [string, string[], { cwd: string; windowsHide: boolean; timeout: number; maxBuffer: number; env: NodeJS.ProcessEnv }];
     expect(executable).toMatch(/System32.*powershell.exe$/);
@@ -61,19 +58,19 @@ describe('native MCP manual launcher', () => {
     expect(command).not.toContain(directory);
     expect(command).not.toContain('LaunchApp');
     expect(options).toMatchObject({ cwd: directory, windowsHide: true, timeout: 60000, maxBuffer: 32768,
-      env: { WEBOBSIDIAN_MCP_ACTION: 'Start', WEBOBSIDIAN_MCP_ENDPOINT: endpoint } });
+      env: { WEBOBSIDIAN_MCP_ACTION: 'Connect', WEBOBSIDIAN_MCP_ENDPOINT: endpoint } });
     complete(null, '已启动\n');
     expect(await running).toMatchObject({ ok: true, output: '已启动' });
   });
 
   it.skipIf(process.platform !== 'win32')('serializes every action and releases ownership after failure', async () => {
     const directory = await project(), launcher = new McpLauncher();
-    const running = launcher.run(directory, 'endpoint', 'Restart');
-    await expect(launcher.run(directory, 'endpoint', 'Start')).rejects.toThrow('进行');
+    const running = launcher.connect(directory, 'endpoint');
+    await expect(launcher.connect(directory, 'endpoint')).rejects.toThrow('进行');
     await vi.waitFor(() => expect(execFile).toHaveBeenCalledOnce());
     complete(new Error('exit 1'), 'preflight', 'offline');
     expect(await running).toMatchObject({ ok: false, output: 'preflight\noffline' });
-    const checking = launcher.run(directory, 'endpoint', 'Status');
+    const checking = launcher.connect(directory, 'endpoint');
     await vi.waitFor(() => expect(execFile).toHaveBeenCalledTimes(2));
     complete(null, 'ready');
     expect(await checking).toMatchObject({ ok: true, output: 'ready' });
@@ -81,7 +78,7 @@ describe('native MCP manual launcher', () => {
 
   it.skipIf(process.platform !== 'win32')('reports bounded-command timeouts instead of claiming startup succeeded', async () => {
     const directory = await project();
-    const running = new McpLauncher().run(directory, 'endpoint', 'Status');
+    const running = new McpLauncher().connect(directory, 'endpoint');
     await vi.waitFor(() => expect(execFile).toHaveBeenCalledOnce());
     complete(Object.assign(new Error('timeout'), { killed: true }));
     expect(await running).toMatchObject({ ok: false, output: expect.stringContaining('超时') });

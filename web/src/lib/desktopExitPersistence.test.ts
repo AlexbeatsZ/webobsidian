@@ -83,11 +83,11 @@ describe('desktop close coordinator against the production main implementation',
       { sender: host.window.webContents, senderFrame: { url: frame.url } },
       { sender: host.window.webContents, senderFrame: null },
     ];
-    for (const event of denied) for (const channel of ['desktop:mcp-inspect', 'desktop:mcp-run', 'desktop:mcp-select-project']) {
+    for (const event of denied) for (const channel of ['desktop:mcp-inspect', 'desktop:mcp-connect', 'desktop:mcp-select-project']) {
       await expect(host.invoke(channel, event, 'Start')).rejects.toThrow('Local application frame');
     }
     frame.url = 'https://untrusted.example/';
-    await expect(host.invoke('desktop:mcp-run', { sender: host.window.webContents, senderFrame: frame }, 'Start')).rejects.toThrow('Local application frame');
+    await expect(host.invoke('desktop:mcp-connect', { sender: host.window.webContents, senderFrame: frame })).rejects.toThrow('Local application frame');
   });
   it('intercepts the native close, ignores stale or guest replies and keeps the server until will-quit', async () => {
     const host = fixture();
