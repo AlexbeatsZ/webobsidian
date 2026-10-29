@@ -56,6 +56,8 @@ describe('native MCP manual launcher', () => {
     expect(args).toContain('Hidden');
     const command = Buffer.from(args.at(-1)!, 'base64').toString('utf16le');
     expect(command).toContain('$env:WEBOBSIDIAN_MCP_MANUAL');
+    expect(command).toContain('$ProgressPreference = "SilentlyContinue"');
+    expect(command).toContain('*>&1 | ForEach-Object');
     expect(command).not.toContain(directory);
     expect(command).not.toContain('LaunchApp');
     expect(options).toMatchObject({ cwd: directory, windowsHide: true, timeout: 60000, maxBuffer: 32768,

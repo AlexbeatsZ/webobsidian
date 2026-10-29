@@ -19,6 +19,8 @@ await fs.writeFile(path.join(profile, 'desktop-config.json'), JSON.stringify(con
 await fs.writeFile(path.join(project, 'package.json'), '{"name":"obsidian-context-mcp"}');
 await fs.writeFile(path.join(project, 'scripts', 'manual-start-mcp.ps1'), `param([string]$Action, [string]$EndpointFile)
 $ErrorActionPreference = 'Stop'
+Write-Host 'fixture host output'
+Write-Progress -Activity 'fixture progress' -Status 'running'
 $endpoint = Get-Content -LiteralPath $EndpointFile -Raw | ConvertFrom-Json
 $health = Invoke-RestMethod -Uri ($endpoint.url + '/healthz') -TimeoutSec 3
 if (-not $health.ok) { throw 'Fixture health failed' }
@@ -48,6 +50,8 @@ try {
   await expect(panel.locator('pre')).toContainText('fixture offline');
   await panel.getByRole('button', { name: '检查状态', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('状态检查完成', { timeout: 15000 });
+  await expect(panel.locator('pre')).toHaveText('fixture host output\nfixture ready: Status');
+  await expect(panel.locator('pre')).not.toContainText('CLIXML');
   assert.deepEqual((await fs.readFile(path.join(project, 'actions.log'), 'utf8')).trim().split(/\r?\n/), ['Start', 'Restart', 'Status']);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(profile, 'desktop-config.json'), 'utf8')), config);
   assert.equal(await fs.readFile(path.join(vault, 'fixture.md'), 'utf8'), '# MCP launcher acceptance\n\nDisposable document.\n');

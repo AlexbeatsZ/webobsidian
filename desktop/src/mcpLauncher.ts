@@ -32,7 +32,7 @@ export class McpLauncher {
     try {
       const state = await this.inspect(projectPath);
       if (!state.configured) throw new Error('请选择包含手动启动脚本的 obsidian-context-mcp 项目');
-      const command = '$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new(); & $env:WEBOBSIDIAN_MCP_MANUAL -Action $env:WEBOBSIDIAN_MCP_ACTION -EndpointFile $env:WEBOBSIDIAN_MCP_ENDPOINT; exit $LASTEXITCODE';
+      const command = '$ProgressPreference = "SilentlyContinue"; $OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new(); try { & $env:WEBOBSIDIAN_MCP_MANUAL -Action $env:WEBOBSIDIAN_MCP_ACTION -EndpointFile $env:WEBOBSIDIAN_MCP_ENDPOINT *>&1 | ForEach-Object { $_.ToString() }; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }';
       const executable = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
       return await new Promise(resolve => {
         execFile(executable, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], {

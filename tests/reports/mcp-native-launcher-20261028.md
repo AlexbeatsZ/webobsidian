@@ -23,6 +23,12 @@
 - Full units: 426/426 in 76 files passed (5.70s); Web/Server/Desktop types passed.
 - Adjacent sidebar regressions: 4/4 passed (8s).
 - Isolated build/package and real packaged Electron fixture acceptance pending.
+- First native fixture passed command mapping but screenshot inspection exposed
+  PowerShell CLIXML progress/information in output and inherited clickable-row
+  hover styling. Before publication, stream normalization now suppresses progress,
+  converts merged records to plain text and preserves script exit codes; the
+  launcher uses its own neutral layout and existing themed buttons. Native fixture
+  now asserts exact Write-Host/Write-Output text and absence of CLIXML.
 
 ## Boundaries
 
