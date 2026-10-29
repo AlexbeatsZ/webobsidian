@@ -44,8 +44,9 @@ await fs.writeFile(path.join(native, 'blocks/blocks.jsonc'), JSON.stringify({ ve
   ],
 }));
 const polymerTable = await fs.readFile(new URL('./fixtures/personal-polymer-table.md', import.meta.url), 'utf8');
+const surfaceTableSource = polymerTable + '\n\nend';
 await fs.copyFile(new URL('./fixtures/personal-merged-table.js', import.meta.url), path.join(native, 'blocks/merged-table.js'));
-await fs.writeFile(path.join(vault, 'surface-table.md'), polymerTable);
+await fs.writeFile(path.join(vault, 'surface-table.md'), surfaceTableSource);
 await fs.writeFile(path.join(vault, '化学实验.md'), '# 化学实验\n\n反应记录 #实验/化学\n');
 const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
 await fs.writeFile(path.join(vault, 'used.png'), pixel);
@@ -207,8 +208,12 @@ try {
   await page.locator('.palette-input').fill('surface-table');
   await page.keyboard.press('Enter');
   for (const mode of ['实时预览', '阅读视图']) {
-    await page.locator('.main-pane .view-mode-trigger').click();
+    await page.locator('.view-mode-trigger').click();
     await page.getByRole('menuitemcheckbox', { name: mode, exact: true }).click();
+    if (mode === '实时预览') {
+      await page.locator('.main-pane .cm-content').first().focus();
+      await page.keyboard.press('ControlOrMeta+End');
+    }
     const table = page.locator('.main-pane .native-block-effect .cm-table');
     await table.waitFor();
     await page.waitForFunction(() => !document.querySelector('.main-pane [data-render-pending]'));
@@ -227,7 +232,7 @@ try {
       await table.screenshot({ path: path.join(artifacts, `exTable-${theme}-${mode === '实时预览' ? 'live' : 'reading'}.png`) });
     }
   }
-  assert.equal(await fs.readFile(path.join(vault, 'surface-table.md'), 'utf8'), polymerTable);
+  assert.equal(await fs.readFile(path.join(vault, 'surface-table.md'), 'utf8'), surfaceTableSource);
   assert.deepEqual(errors, [], 'No renderer errors during generated table theme checks');
   checkpoint('personal merged table has uniform header surfaces in dark/light live/reading, source unchanged');
   passed = true;
