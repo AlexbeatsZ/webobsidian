@@ -1,5 +1,6 @@
 import type { CatalogEntry } from '@webobsidian/search-core';
 import { TEXT_EXT_RE } from './media';
+import { isReadOnlyAdapterOperation } from '../../../server/src/contracts';
 import type { VaultConfigurationSource, PropertyTypeExpectation, TreeNode, SearchHit, MatchContext, NoteMatches } from '../../../server/src/contracts';
 export type { VaultConfigurationSource, PropertyTypeExpectation, TreeNode, SearchHit, MatchContext, NoteMatches } from '../../../server/src/contracts';
 // Thin fetch wrapper around the WebObsidian server API.
@@ -63,7 +64,7 @@ async function req<T>(url: string, opts: RequestInit & { vault?: string } = {}, 
   }
   const mutation = trackMutation && !vaultSwitch && !['GET', 'HEAD', 'OPTIONS'].includes((opts.method ?? 'GET').toUpperCase()) &&
     url !== '/api/settings/debug' &&
-    !['/api/attachments/execute', '/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(url.split('?')[0]);
+    !['/api/attachments/execute', '/api/attachments/scan', '/api/tags/preview', '/api/search/matches', '/api/file-sync/run', '/api/file-sync/resolve'].includes(url.split('?')[0]);
   if (mutation) { mutations++; mutationChanged(); }
   try {
   const { headers: optHeaders, vault: _vault, ...rest } = opts;
@@ -277,7 +278,7 @@ export const api = {
       body: JSON.stringify({ data }),
     }),
   pluginAdapter: (op: string, path: string, body = {}) =>
-    req<any>('/api/plugins/adapter', { method: 'POST', body: JSON.stringify({ op, path, ...body }) }),
+    req<any>('/api/plugins/adapter', { method: 'POST', body: JSON.stringify({ op, path, ...body }) }, !isReadOnlyAdapterOperation(op)),
   setPluginEnabled: (id: string, enabled: boolean) =>
     req<{ ok: true }>(`/api/plugins/${id}/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
 };

@@ -43,6 +43,8 @@ import { vaultConfigurationIdentity } from './services/vaultConfiguration.js';
 import { asyncHandler } from './middleware/error.js';
 import { enableFileUpdates, queueFileUpdate, drainFileUpdates, rebuildFileIndexes } from './services/fileupdates.js';
 import { startAutoSync } from './services/autosync.js';
+import { fileSyncRouter } from './routes/fileSync.js';
+import { startFileSync, recoverFileSync, noteFileSyncChange } from './services/fileSync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -71,6 +73,7 @@ async function main() {
     if (path.resolve(previous) !== path.resolve(initialVault)) await selectVaultWorkspace(previous, initialVault);
   }
   await ensureVault();
+  await recoverFileSync();
 
   const app = express();
   app.use(requireLocal);
@@ -120,6 +123,7 @@ async function main() {
   app.use('/api/settings', settingsRouter);
   app.use('/api/writing', writingRouter);
   app.use('/api/git', gitRouter);
+  app.use('/api/file-sync', fileSyncRouter);
   app.use('/api/plugins', pluginsRouter);
   app.use('/api/menus', configuredMenusRouter);
   app.use('/api/tags', tagsRouter);
@@ -168,6 +172,7 @@ async function main() {
     await previousWatcher?.close();
     await drainFileUpdates();
     await commit();
+    await recoverFileSync();
     clearVaultStats();
     await rebuildFileIndexes(async () => {
       await setupWatcher();
@@ -176,6 +181,7 @@ async function main() {
     await drainFileUpdates();
   });
   startAutoSync();
+  startFileSync();
 
   server.listen(config.port, config.host, () => {
     const address = server.address();
@@ -299,6 +305,7 @@ function startWatcher(root: string, usePolling: boolean): Promise<void> {
     if (vaultWatcher !== watcher) return;
     const rel = path.relative(root, absPath).split(path.sep).join('/');
     if (isVaultConfigurationPath(rel)) {
+      noteFileSyncChange(rel);
       noteVaultMutation();
       broadcast({ type: 'vault-configuration-changed', path: rel, event: type });
       return;

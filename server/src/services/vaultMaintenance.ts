@@ -3,19 +3,22 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Request, RequestHandler } from 'express';
 import type { WebSocket } from 'ws';
 import { vaultConfigurationIdentity } from './vaultConfiguration.js';
+import { holdVaultNotifications } from './realtime.js';
+import { isReadOnlyAdapterOperation } from '../contracts.js';
 
 let epoch = 0;
 let activeWrites = 0;
 let clients: () => Iterable<WebSocket> = () => [];
-type Lease = { token: string; failure?: string; checks: Map<WebSocket, { id: string; blockers?: string[] }> };
+type Lease = { token: string; failure?: string; released?: Promise<void>; checks: Map<WebSocket, { id: string; blockers?: string[] }> };
 let lease: Lease | undefined;
 let inspection: Lease | undefined;
 const conflict = (message: string) => Object.assign(new Error(message), { status: 409 });
 const operations = new AsyncLocalStorage<{ active: boolean; vault?: string }>();
 const requestPath = (req: Request) => (req.originalUrl || req.url).split('?')[0].replace(/\/$/, '');
+const adapterReadRequest = (req: Request) => req.method === 'POST' && requestPath(req) === '/api/plugins/adapter' && isReadOnlyAdapterOperation(req.body?.op);
 const readOnlyRequest = (req: Request) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
-  req.method === 'POST' && ['/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(requestPath(req));
-const exclusiveRequest = (req: Request) => req.method === 'POST' && requestPath(req) === '/api/attachments/execute' ||
+  req.method === 'POST' && ['/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(requestPath(req)) || adapterReadRequest(req);
+const exclusiveRequest = (req: Request) => req.method === 'POST' && ['/api/attachments/execute', '/api/file-sync/run', '/api/file-sync/resolve'].includes(requestPath(req)) ||
   req.method === 'PUT' && requestPath(req) === '/api/settings' && typeof req.body?.vault?.path === 'string';
 
 export async function assertVaultIdentity(expected: string): Promise<void> {
@@ -30,6 +33,7 @@ export async function withVaultRequest<T>(req: Request, work: () => Promise<T>):
   if (requestPath(req).startsWith('/api/files') && !expected)
     throw Object.assign(conflict('缺少 Vault 身份，请重新加载应用'), { code: 'VAULT_CHANGED' });
   const exclusive = exclusiveRequest(req);
+  while (lease?.released && adapterReadRequest(req)) await lease.released;
   if (lease) throw conflict('正在维护仓库，请稍后重试');
   const release = exclusive ? () => {} : beginOperation(!readOnlyRequest(req));
   const operation = { active: !exclusive, vault: expected };
@@ -57,8 +61,7 @@ export function maintenanceClientMessage(client: WebSocket, message: unknown): v
 }
 
 export const guardVaultMutations: RequestHandler = (req, res, next) => {
-  const readOnlyPost = req.method === 'POST' && ['/api/attachments/scan', '/api/tags/preview', '/api/search/matches'].includes(req.path);
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || readOnlyPost || req.path === '/api/attachments/execute') {
+  if (readOnlyRequest(req) || req.path === '/api/attachments/execute') {
     next(); return;
   }
   if (lease) { res.status(409).json({ error: '正在复查和清理附件，请稍后保存' }); return; }
@@ -119,7 +122,9 @@ export async function assertMaintenanceWorkspaceSafe(): Promise<void> {
 
 export async function withVaultMaintenance<T>(drainUpdates: () => Promise<void>, work: () => Promise<T>): Promise<T> {
   if (lease) throw conflict('已有附件清理正在执行');
-  const current: Lease = { token: randomUUID(), checks: new Map() };
+  let releaseReaders!: () => void;
+  const current: Lease = { token: randomUUID(), checks: new Map(), released: new Promise<void>(resolve => { releaseReaders = resolve; }) };
+  const flushNotifications = holdVaultNotifications();
   lease = current;
   try {
     const deadline = Date.now() + 10000;
@@ -134,10 +139,12 @@ export async function withVaultMaintenance<T>(drainUpdates: () => Promise<void>,
     return await work();
   } finally {
     if (lease === current) lease = undefined;
+    releaseReaders();
     for (const client of clients())
       if (client.readyState === 1) {
         try { client.send(JSON.stringify({ type: 'maintenance', phase: 'release', token: current.token })); }
         catch { /* A closed socket releases the client UI through its close event. */ }
       }
+    flushNotifications();
   }
 }

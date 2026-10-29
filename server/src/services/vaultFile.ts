@@ -51,6 +51,10 @@ export function vaultPathKey(root: string): string {
 /** Resolve a vault-relative path to an absolute one, refusing traversal. */
 export async function resolveInVault(relPath: string): Promise<string> {
   const root = await getVaultRoot();
+  return resolveVaultPath(root, relPath);
+}
+
+export async function resolveVaultPath(root: string, relPath: string, rejectLinks = false): Promise<string> {
   const clean = relPath.replace(/^[/\\]+/, '');
   const abs = path.resolve(root, clean);
   const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
@@ -66,6 +70,15 @@ export async function resolveInVault(relPath: string): Promise<string> {
   // string-prefix check above can't catch. Resolve the real path of the deepest
   // existing ancestor and confirm it still lives under the vault root.
   await assertRealpathInVault(abs, root);
+  if (rejectLinks) {
+    let probe = root;
+    for (const segment of path.relative(root, abs).split(path.sep).filter(Boolean)) {
+      probe = path.join(probe, segment);
+      const info = await fs.lstat(probe).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null; throw error; });
+      if (!info) break;
+      if (info.isSymbolicLink()) throw new Error('同步不支持符号链接或联接目录');
+    }
+  }
   return abs;
 }
 

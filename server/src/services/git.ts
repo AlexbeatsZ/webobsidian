@@ -1,8 +1,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
 import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git';
 import { getSettings } from './settings.js';
-import { getVaultRoot } from './vaultFile.js';
+import { getVaultRoot, vaultPathKey } from './vaultFile.js';
+import type { ConflictSnapshot } from './fileSyncEngine.js';
 import { redactUrlCreds } from '../lib/redact.js';
 import { beginBackgroundVaultWrite } from './vaultMaintenance.js';
 
@@ -68,11 +71,11 @@ async function clearStaleLocks(): Promise<void> {
 
 /** Run `fn` with exclusive access to the vault repo, after self-healing any stale
  *  lock. Ops queue (never overlap); a rejecting op doesn't poison the queue. */
-function withGitLock<T>(fn: () => Promise<T>): Promise<T> {
+function withGitLock<T>(fn: () => Promise<T>, cleanupLocks = true): Promise<T> {
   const result = gitQueue.then(async () => {
     const release = beginBackgroundVaultWrite();
     try {
-      await clearStaleLocks();
+      if (cleanupLocks) await clearStaleLocks();
       return await fn();
     } finally { release(); }
   });
@@ -87,13 +90,74 @@ function withGitLock<T>(fn: () => Promise<T>): Promise<T> {
 // callers that already hold the lock (e.g. syncImpl) call the *Impl directly to
 // avoid re-entering the queue and dead-locking.
 export const status = (): Promise<GitStatus> => withGitLock(statusImpl);
-export const pull = (): Promise<string> => withGitLock(pullImpl);
+export const pull = (): Promise<string> => withGitLock(async () => { await requireGitTransport(); return pullImpl(); });
 export const push = (): Promise<string> => withGitLock(pushImpl);
 export const commitAll = (message?: string): Promise<string> => withGitLock(() => commitAllImpl(message));
 export const init = (): Promise<void> => withGitLock(initImpl);
-export const clone = (): Promise<void> => withGitLock(cloneImpl);
+export const clone = (): Promise<void> => withGitLock(async () => { await requireGitTransport(); return cloneImpl(); });
 export const sync = (message?: string): Promise<{ ok: boolean; log: string[] }> =>
-  withGitLock(() => syncImpl(message));
+  withGitLock(async () => await nativeSyncEnabled() ? backupImpl(message) : syncImpl(message));
+
+async function nativeSyncEnabled(): Promise<boolean> {
+  return (await getSettings()).fileSync[vaultPathKey(await getVaultRoot())]?.enabled === true;
+}
+
+async function requireGitTransport(): Promise<void> {
+  if (await nativeSyncEnabled()) throw Object.assign(new Error('文件同步已启用，Git 仅用于备份；请先停用文件同步再拉取或克隆'), { status: 409 });
+}
+
+async function backupImpl(message?: string): Promise<{ ok: boolean; log: string[] }> {
+  const client = await git();
+  if (!await isRepo(client)) await initImpl();
+  const output = [await commitAllImpl(message)];
+  const settings = await getSettings();
+  if (!settings.git.remote) return { ok: true, log: output };
+  const identity = createHash('sha256').update(`${hostname()}:${vaultPathKey(await getVaultRoot())}`).digest('hex').slice(0, 16);
+  const branch = `webobsidian-backups/${identity}`;
+  try {
+    await client.remote(['set-url', 'origin', await authedRemote()]);
+    const conflicts = (await client.raw(['for-each-ref', '--format=%(refname)', 'refs/heads/webobsidian-conflicts/'])).split('\n').filter(Boolean);
+    await client.raw(['push', 'origin', `HEAD:refs/heads/${branch}`, ...conflicts.map(reference => `${reference}:${reference}`)]);
+    output.push(`备份已推送到 ${branch}`);
+    return { ok: true, log: output };
+  } catch (error) { return { ok: false, log: [...output, `备份推送失败：${redactUrlCreds((error as Error).message)}`] }; }
+}
+
+export function recordSyncConflict(root: string, snapshot: ConflictSnapshot): Promise<string[]> {
+  return withGitLock(async () => {
+    if (vaultPathKey(await getVaultRoot()) !== vaultPathKey(root)) throw new Error('Vault 已切换，未创建冲突分支');
+    if (!(await getSettings()).git.enabled) return [];
+    const client = await git();
+    if (!await isRepo(client)) await client.init();
+    await configureIdentity(client);
+    const gitDirectory = (await client.raw(['rev-parse', '--absolute-git-dir'])).trim();
+    const indexFile = path.join(gitDirectory, `sync-index-${randomUUID()}`);
+    const environment = Object.fromEntries(Object.entries(process.env).filter(([name]) => /^(PATH|SYSTEMROOT|WINDIR|TEMP|TMP|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|LANG|LC_.*)$/i.test(name)));
+    const isolated = simpleGit({ baseDir: root, trimmed: true }).env({ ...environment, GIT_INDEX_FILE: indexFile });
+    const parent = await client.raw(['rev-parse', '--verify', 'HEAD']).then(value => value.trim(), () => null);
+    const branches: string[] = [];
+    try {
+      for (const side of ['local', 'remote'] as const) {
+        await isolated.raw(parent ? ['read-tree', parent] : ['read-tree', '--empty']);
+        for (const file of snapshot.files) {
+          const source = file[side];
+          if (source) {
+            const object = (await isolated.raw(['hash-object', '-w', '--no-filters', '--', source])).trim();
+            await isolated.raw(['update-index', '--add', '--cacheinfo', '100644', object, file.path]);
+          } else await isolated.raw(['update-index', '--force-remove', '--', file.path]);
+        }
+        const tree = (await isolated.raw(['write-tree'])).trim();
+        const commit = (await isolated.raw(['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', `sync(conflict): ${snapshot.id} ${side}`])).trim();
+        const branch = `webobsidian-conflicts/${snapshot.id}/${side}`;
+        await isolated.raw(['update-ref', `refs/heads/${branch}`, commit, '0'.repeat(commit.length)]);
+        branches.push(branch);
+      }
+      return branches;
+    } finally {
+      await fs.unlink(indexFile).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    }
+  }, false);
+}
 
 /** Compose an authenticated remote URL from settings (PAT embedded). */
 async function authedRemote(): Promise<string> {
@@ -397,7 +461,7 @@ export function scheduleAutoCommitOnSave(): void {
   autoCommitTimer = setTimeout(async () => {
     try {
       const s = await getSettings();
-      if (!s.git.enabled || !s.git.autoCommitOnSave) return;
+      if (!s.git.enabled || !s.git.autoCommitOnSave || await nativeSyncEnabled()) return;
       // Full sync (pull→merge→push), not a bare push: pushing without first
       // integrating the remote is exactly what left the repo permanently rejected
       // ("fetch first") once another device had pushed in the meantime.

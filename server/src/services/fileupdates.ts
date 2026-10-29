@@ -123,9 +123,13 @@ async function update(relative: string, event: Event) {
 }
 
 /** Routes and watcher share one latest-state drain per canonical path. */
+let fileSyncNotifier: (relative: string) => void = () => {};
+export function setFileSyncNotifier(notify: (relative: string) => void): void { fileSyncNotifier = notify; }
+
 export function queueFileUpdate(relative: string, event: Event = 'change'): Promise<FileUpdateResult> {
   noteVaultMutation();
   relative = path.posix.normalize(relative.replace(/\\/g, '/')).replace(/^\/+/, '');
+  fileSyncNotifier(relative);
   if (
     !enabled ||
     relative === '.' ||

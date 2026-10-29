@@ -3,6 +3,9 @@ import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+import type { AddressInfo } from 'node:net';
 
 const source = '\uFEFF# Context\r\n\r\nAlpha selected 😀 text.\r\n\r\nAlpha selected 😀 text.\r\n\r\nTail sentinel.\r\n';
 const test = base.extend<{ backend: { url: string; vault: string } }>({
@@ -73,6 +76,39 @@ test.beforeEach(async ({ page, backend }) => {
   await expect(page.locator('.main-pane .cm-content')).toContainText('Tail sentinel.');
   await expect.poll(() => clientReady).toBe(true);
   await page.getByRole('button', { name: 'MCP', exact: true }).click();
+});
+
+test('an open clean document refreshes native sync only after the workspace lease releases', async ({ page, backend }) => {
+  const token = 'fixture-only-browser-sync-token-0123456789';
+  const load = new Function('url', 'return import(url)') as (url: string) => Promise<typeof import('../../sync-server/server.mjs')>;
+  const { createSyncServer } = await load(pathToFileURL(path.resolve('sync-server/server.mjs')).href);
+  const hub = await createSyncServer({ root: path.join(path.dirname(backend.vault), 'sync-hub'), token });
+  try {
+    await new Promise<void>(resolve => hub.server.listen(0, '127.0.0.1', resolve));
+    const endpoint = `http://127.0.0.1:${(hub.server.address() as AddressInfo).port}/webobsidian-sync/v1/`;
+    const remote = async (resource: string, method = 'GET', body?: string) => {
+      const response = await fetch(endpoint + resource, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body ? { body } : {}) });
+      expect(response.ok).toBe(true); return response.json() as Promise<any>;
+    };
+    const manifest = await remote('manifest');
+    const update = async (text: string, expectedVersion: number) => {
+      const hash = createHash('sha256').update(text).digest('hex');
+      await remote(`blobs/${hash}`, 'PUT', text);
+      await remote('commit', 'POST', JSON.stringify({ workspaceId: manifest.workspaceId, deviceId: randomUUID(), operationId: randomUUID(),
+        changes: [{ path: 'context.md', hash, expectedVersion }] }));
+    };
+    await update(source, 0);
+    const identity = await (await page.request.get(backend.url + '/api/vault-identity')).json();
+    const headers = { 'X-Vault-Identity': identity.vault };
+    expect((await page.request.put(backend.url + '/api/file-sync', { headers, data: { enabled: true, endpoints: [endpoint], token, intervalSec: 3600 } })).ok()).toBe(true);
+    await expect.poll(async () => (await (await page.request.post(backend.url + '/api/file-sync/run', { headers, data: {} })).json()).phase).toBe('idle');
+    const changed = '\uFEFF# Context\r\n\r\nRemote synchronized text.\r\n\r\nTail sentinel.\r\n';
+    await update(changed, 1);
+    expect((await (await page.request.post(backend.url + '/api/file-sync/run', { headers, data: {} })).json()).phase).toBe('idle');
+    expect(await fs.readFile(path.join(backend.vault, 'context.md'), 'utf8')).toBe(changed);
+    await expect(page.locator('.main-pane .cm-content')).toContainText('Remote synchronized text.');
+    await expect(page.locator('body')).not.toHaveAttribute('inert');
+  } finally { await hub.close(); }
 });
 
 test('shortcut and context menu capture exact source coordinates, pinning and one-shot delivery', async ({ page, backend }) => {

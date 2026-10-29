@@ -10,7 +10,8 @@ import {
   sharedApp,
 } from '../lib/plugins';
 import { useStore } from '../lib/store';
-import { api } from '../lib/api';
+import { api, request } from '../lib/api';
+import FileSyncSettings from './FileSyncSettings';
 import Icon from './Icon';
 import WritingSettings from './WritingSettings';
 import { UserscriptSettings } from './UserscriptSettings';
@@ -29,7 +30,7 @@ import { SettingRow as Row, SettingGroup } from './SettingRow';
 import { documentAppearance, UiSettingsSchema, type UiSettings } from '../../../server/src/contracts/uiSettings';
 
 type Section =
-  'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
+  'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'sync' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
@@ -163,6 +164,7 @@ export default function Settings() {
             {settings && section === 'vault' && (
               <VaultSettings s={settings} reload={() => api.getSettings().then(setSettings)} />
             )}
+            {section === 'sync' && <FileSyncSettings />}
             {settings && section === 'git' && (
               <GitSettings s={settings} reload={() => api.getSettings().then(setSettings)} />
             )}
@@ -218,7 +220,8 @@ const labels: Record<Section, string> = {
   search: '搜索',
   hotkeys: '快捷键',
   vault: '文件与链接',
-  git: 'GitHub 同步',
+  sync: '文件同步',
+  git: 'Git 备份与版本',
   plugins: '第三方插件',
   appearance: '外观',
   interface: '界面',
@@ -228,11 +231,11 @@ const labels: Record<Section, string> = {
 };
 const sectionIcons: Record<Section, string> = {
   search: 'search', hotkeys: 'command', automation: 'command', writing: 'code', formatting: 'pencil', userscripts: 'globe', menus: 'list',
-  tags: 'hash', vault: 'folder', git: 'refresh-cw', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'pencil', about: 'info', debug: 'code',
+  tags: 'hash', vault: 'folder', sync: 'refresh-cw', git: 'git-branch', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'pencil', about: 'info', debug: 'code',
 };
 const NAV_GROUPS: { title: string; sections: Section[] }[] = [
   { title: '选项', sections: ['about', 'appearance', 'interface', 'editor', 'vault', 'hotkeys', 'plugins', 'debug'] },
-  { title: '核心功能', sections: ['search', 'writing', 'formatting', 'tags', 'automation', 'userscripts', 'menus', 'git'] },
+  { title: '核心功能', sections: ['search', 'writing', 'formatting', 'tags', 'automation', 'userscripts', 'menus', 'sync', 'git'] },
 ];
 
 function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
@@ -341,6 +344,12 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
 
 function GitSettings({ s, reload }: { s: any; reload: () => void }) {
   const [g, setG] = useState({ ...s.git });
+  const [nativeSync, setNativeSync] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void request<{ status: { enabled: boolean } }>('/api/file-sync').then(value => { if (active) setNativeSync(value.status.enabled); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   const [log, setLog] = useState<string[]>([]);
   const logRef = useRef<HTMLTextAreaElement>(null);
   const set = (k: string, v: any) => setG((p: any) => ({ ...p, [k]: v }));
@@ -375,9 +384,9 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
   };
   return (
     <div>
-      <h2>GitHub 同步</h2>
+      <h2>Git 备份与版本</h2>
       <SettingGroup title="连接与身份">
-      <Row name="启用 Git 同步">
+      <Row name="启用 Git">
         <input type="checkbox" checked={g.enabled} onChange={(e) => set('enabled', e.target.checked)} />
       </Row>
       <Row name="远程 URL" desc="https://github.com/owner/repo.git">
@@ -420,17 +429,17 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
         />
       </Row>
       </SettingGroup>
-      <SettingGroup title="同步方式">
-      <Row name="自动同步" desc="按下方间隔定期执行 pull+commit+push">
+      <SettingGroup title={nativeSync ? '备份方式' : '同步方式'}>
+      <Row name={nativeSync ? '定时备份' : '自动同步'} desc={nativeSync ? '定期提交，并推送到此设备的备份分支' : '按下方间隔定期执行 pull+commit+push'}>
         <input type="checkbox" checked={g.autoSync} onChange={(e) => set('autoSync', e.target.checked)} />
       </Row>
-      <Row name="保存时自动提交" desc="每次编辑约 5 秒后提交 (+push)">
+      {!nativeSync && <Row name="保存时自动提交" desc="每次编辑约 5 秒后提交 (+push)">
         <input
           type="checkbox"
           checked={g.autoCommitOnSave}
           onChange={(e) => set('autoCommitOnSave', e.target.checked)}
         />
-      </Row>
+      </Row>}
       <Row name="间隔（秒）">
         <input
           className="text-input"
@@ -456,10 +465,10 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
         <button className="btn secondary" onClick={() => run(api.gitInit, '初始化仓库')}>
           初始化仓库
         </button>
-        <button className="btn secondary" onClick={() => run(api.gitClone, '克隆')}>
+        <button className="btn secondary" disabled={nativeSync} onClick={() => run(api.gitClone, '克隆')}>
           克隆
         </button>
-        <button className="btn secondary" onClick={() => run(api.gitPull, '拉取')}>
+        <button className="btn secondary" disabled={nativeSync} onClick={() => run(api.gitPull, '拉取')}>
           拉取
         </button>
         <button className="btn secondary" onClick={() => run(() => api.gitCommit(), '提交')}>
@@ -468,8 +477,8 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
         <button className="btn secondary" onClick={() => run(api.gitPush, '推送')}>
           推送
         </button>
-        <button className="btn" onClick={() => run(() => api.gitSync(), '立即同步')}>
-          立即同步
+        <button className="btn" onClick={() => run(() => api.gitSync(), nativeSync ? '立即备份' : '立即同步')}>
+          {nativeSync ? '立即备份' : '立即同步'}
         </button>
       </div>
       <div style={{ marginTop: 12 }}>

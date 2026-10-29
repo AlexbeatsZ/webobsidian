@@ -1,3 +1,7 @@
+export function isReadOnlyAdapterOperation(operation: unknown): boolean {
+  return typeof operation === 'string' && ['read', 'readBinary', 'exists', 'stat', 'list'].includes(operation);
+}
+
 export interface VaultConfigurationSource {
   path: string; content: string; exists: boolean; revision?: string; vault: string;
 }
