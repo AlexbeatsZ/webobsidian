@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { transpileModule, ModuleKind, ScriptTarget } from 'typescript';
+import { McpLauncher } from '../../../desktop/src/mcpLauncher';
 
 const sourceFile = fileURLToPath(new URL('../../../desktop/src/main.ts', import.meta.url));
 const nativeRequire = createRequire(import.meta.url);
@@ -54,7 +55,7 @@ function fixture(platform = 'win32') {
   const electron = { app: application, BrowserWindow: FakeWindow, ipcMain: ipc, dialog: { showErrorBox } };
   runInNewContext(compiled + '\nexports.fixture = { createWindow, requestWindowClose, initialize: (scripts, server) => { serverPort = 8787; userscripts = scripts; serverProc = server; registerDesktopRequests(); } };', {
     exports: moduleExports,
-    require: (id: string) => id === 'electron' ? electron : id === './userscripts/service' || id === './paths' ? {} : nativeRequire(id),
+    require: (id: string) => id === 'electron' ? electron : id === './mcpLauncher' ? { McpLauncher } : id === './userscripts/service' || id === './paths' ? {} : nativeRequire(id),
     process: { platform },
     __dirname: fileURLToPath(new URL('../../../desktop/src', import.meta.url)),
     URL, Buffer, setTimeout, clearTimeout, console,
@@ -67,12 +68,27 @@ function fixture(platform = 'win32') {
     ipc.emit('desktop:close-result', { sender, senderFrame: window.webContents.mainFrame }, requestedToken, result);
   };
   return { application, window, scripts, server, showErrorBox, token, reply,
+    invoke: (channel: string, event: unknown, ...args: unknown[]) => ipc.handle.mock.calls.find(call => call[0] === channel)![1](event, ...args),
     close: (quit: boolean) => moduleExports.fixture.requestWindowClose(window, quit) as Promise<void> };
 }
 
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
 describe('desktop close coordinator against the production main implementation', () => {
+  it('rejects MCP IPC from guests, subframes and nonlocal origins before any operation', async () => {
+    const host = fixture();
+    const frame = host.window.webContents.mainFrame;
+    const denied = [
+      { sender: {}, senderFrame: frame },
+      { sender: host.window.webContents, senderFrame: { url: frame.url } },
+      { sender: host.window.webContents, senderFrame: null },
+    ];
+    for (const event of denied) for (const channel of ['desktop:mcp-inspect', 'desktop:mcp-run', 'desktop:mcp-select-project']) {
+      await expect(host.invoke(channel, event, 'Start')).rejects.toThrow('Local application frame');
+    }
+    frame.url = 'https://untrusted.example/';
+    await expect(host.invoke('desktop:mcp-run', { sender: host.window.webContents, senderFrame: frame }, 'Start')).rejects.toThrow('Local application frame');
+  });
   it('intercepts the native close, ignores stale or guest replies and keeps the server until will-quit', async () => {
     const host = fixture();
     let finishScripts!: () => void;

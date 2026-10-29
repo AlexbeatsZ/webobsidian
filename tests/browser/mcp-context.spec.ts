@@ -175,3 +175,63 @@ test('reading selection survives panel focus without fabricated source coordinat
   expect(queued.items[0].selections).toEqual([{ kind: 'rendered', text: 'selected 😀' }]);
   await page.screenshot({ path: test.info().outputPath('mcp-reading-context.png') });
 });
+
+test('desktop manual controls do not auto-start, serialize actions and expose failures for retry', async ({ page }) => {
+  await page.addInitScript(() => {
+    const host = window as any;
+    host.mcpCalls = [];
+    const state = { projectPath: 'C:/fixture/mcp', configured: true };
+    host.webobsidianDesktop = {
+      platform: 'win32', nativePlugins: false, isDesktop: true,
+      onBeforeClose: () => () => {}, openVaultPath: async () => {},
+      webviewer: { subscribe: () => () => {} }, userscripts: { subscribe: () => () => {}, request: async () => [] },
+      mcp: { inspect: async () => state, selectProject: async () => null,
+        run: (action: string) => {
+          host.mcpCalls.push(action);
+          return new Promise(resolve => { host.finishMcp = (ok: boolean) => resolve({ ...state, ok, output: ok ? 'fixture ready' : 'fixture offline' }); });
+        } },
+    };
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'MCP', exact: true }).click();
+  const launcher = page.getByLabel('MCP 连接', { exact: true });
+  await expect(launcher.getByRole('button', { name: '启动 MCP', exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => (window as any).mcpCalls)).toEqual([]);
+  await launcher.getByRole('button', { name: '启动 MCP', exact: true }).click();
+  await expect(launcher.getByRole('button', { name: '重新连接', exact: true })).toBeDisabled();
+  await expect(launcher.getByRole('button', { name: '选择项目', exact: true })).toBeDisabled();
+  await page.evaluate(() => (window as any).finishMcp(true));
+  await expect(launcher.getByRole('status')).toHaveText('启动完成');
+  await launcher.getByRole('button', { name: '重新连接', exact: true }).click();
+  await page.evaluate(() => (window as any).finishMcp(false));
+  await expect(launcher.locator('details')).toHaveAttribute('open', '');
+  await expect(launcher.locator('pre')).toHaveText('fixture offline');
+  await launcher.getByRole('button', { name: '检查状态', exact: true }).click();
+  await page.evaluate(() => (window as any).finishMcp(true));
+  await expect(launcher.getByRole('status')).toHaveText('状态检查完成');
+  expect(await page.evaluate(() => (window as any).mcpCalls)).toEqual(['Start', 'Restart', 'Status']);
+  await page.screenshot({ path: test.info().outputPath('mcp-native-controls.png') });
+});
+
+test('desktop project selection is explicit and cancellation keeps the current state', async ({ page }) => {
+  await page.addInitScript(() => {
+    const host = window as any;
+    let choose = 0;
+    host.webobsidianDesktop = { platform: 'win32',
+      onBeforeClose: () => () => {}, webviewer: { subscribe: () => () => {} }, userscripts: { subscribe: () => () => {}, request: async () => [] },
+      mcp: { inspect: async () => ({ configured: false, projectPath: 'missing' }),
+        selectProject: async () => ++choose === 1 ? null : { configured: true, projectPath: 'selected' },
+        run: async () => { throw new Error('fixture failed to launch'); } } };
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'MCP', exact: true }).click();
+  const launcher = page.getByLabel('MCP 连接', { exact: true });
+  await expect(launcher.getByRole('button', { name: '启动 MCP', exact: true })).toBeDisabled();
+  await launcher.getByRole('button', { name: '选择项目', exact: true }).click();
+  await expect(launcher.getByRole('button', { name: '启动 MCP', exact: true })).toBeDisabled();
+  await launcher.getByRole('button', { name: '选择项目', exact: true }).click();
+  await expect(launcher.getByRole('button', { name: '启动 MCP', exact: true })).toBeEnabled();
+  await launcher.getByRole('button', { name: '启动 MCP', exact: true }).click();
+  await expect(launcher.getByRole('alert')).toContainText('fixture failed to launch');
+  await expect(launcher.getByRole('button', { name: '启动 MCP', exact: true })).toBeEnabled();
+});

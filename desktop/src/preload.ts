@@ -11,6 +11,11 @@ const desktopApi = {
   isDesktop: true,
   platform: process.platform,
   nativePlugins: !!nativeArg,
+  mcp: {
+    inspect: () => ipcRenderer.invoke('desktop:mcp-inspect'),
+    selectProject: () => ipcRenderer.invoke('desktop:mcp-select-project'),
+    run: (action: 'Start' | 'Restart' | 'Status') => ipcRenderer.invoke('desktop:mcp-run', action),
+  },
   openVaultPath: (path: string): Promise<void> => ipcRenderer.invoke('desktop:open-vault-path', path),
   onBeforeClose: (listener: () => Promise<void>) => {
     const handler = (_event: unknown, token: string) => {

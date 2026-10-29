@@ -17,6 +17,7 @@ import MarkdownMinimap from './MarkdownMinimap';
 import { useMainPdfSession } from '../lib/pdf/react';
 import PdfOutlinePanel from './PdfOutlinePanel';
 import PdfThumbnailsPanel from './PdfThumbnailsPanel';
+import McpLauncher from './McpLauncher';
 import {
   addCurrentMcpContext,
   mcpContextSnapshot,
@@ -316,6 +317,7 @@ function McpPanel() {
       </div>
       <div className="sidebar-body">
         {ctx.error && <div className="panel-item" role="alert">{ctx.error}</div>}
+        <McpLauncher />
         <Section title="上下文" count={ctx.items.length} open={openContext} onToggle={() => setOpenContext(!openContext)}>
           {ctx.items.length === 0 && <div className="panel-item">暂无待发送上下文。</div>}
           {ctx.items.map((item) => (

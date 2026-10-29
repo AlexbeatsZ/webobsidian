@@ -62,6 +62,13 @@ an MCP client can launch `node --import tsx server/src/mcp.ts` with
 their actual address in `DATA_DIR/operations-endpoint.json`.
 See [native MCP contracts, examples and limits](docs/design/native-mcp.md).
 
+On Windows desktop, open **MCP** in the right sidebar for **启动 MCP**,
+**重新连接**, and **检查状态**. These controls reuse an already configured
+`obsidian-context-mcp` installation and its existing manual startup script.
+The default location is `~/Project/Workspaces/obsidian-context-mcp`; use
+**选择项目** for a different location. This does not install Node or configure
+a new Tunnel, and opening the panel never starts or restarts one automatically.
+
 ## Rendering and source preservation
 
 Live editing, Reading, split panes, embedded notes, table cells and Canvas Markdown

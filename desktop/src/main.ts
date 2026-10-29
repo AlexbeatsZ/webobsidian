@@ -7,6 +7,7 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { UserscriptService } from './userscripts/service';
 import { effectiveVaultPath, openExistingPath } from './paths';
+import { McpLauncher } from './mcpLauncher';
 
 // ---------------------------------------------------------------------------
 // Paths & persisted desktop config
@@ -24,6 +25,7 @@ const SERVER_STARTUP_TIMEOUT_MS = 120_000;
 interface DesktopConfig {
   vaultPath?: string;
   trustedPlugins?: boolean;
+  mcpProjectPath?: string;
 }
 
 let serverProc: ChildProcess | null = null;
@@ -500,6 +502,28 @@ function registerTitleBar(): void {
 // App lifecycle
 // ---------------------------------------------------------------------------
 function registerDesktopRequests(): void {
+  const mcp = new McpLauncher();
+  const mcpProject = () => desktopConfig?.mcpProjectPath ?? path.join(os.homedir(), 'Project', 'Workspaces', 'obsidian-context-mcp');
+  ipcMain.handle('desktop:mcp-inspect', async event => {
+    if (!desktopWindow(event)) throw new Error('Local application frame required');
+    return mcp.inspect(mcpProject());
+  });
+  ipcMain.handle('desktop:mcp-select-project', async event => {
+    const window = desktopWindow(event);
+    if (!window) throw new Error('Local application frame required');
+    const selected = await dialog.showOpenDialog(window, { title: '选择 obsidian-context-mcp 项目', defaultPath: mcpProject(), properties: ['openDirectory'] });
+    if (selected.canceled || !selected.filePaths[0]) return null;
+    const state = await mcp.inspect(selected.filePaths[0]);
+    if (!state.configured) throw new Error('所选目录缺少 obsidian-context-mcp 手动启动脚本');
+    const config = { ...desktopConfig, mcpProjectPath: state.projectPath };
+    await writeConfig(config);
+    desktopConfig = config;
+    return state;
+  });
+  ipcMain.handle('desktop:mcp-run', async (event, action: unknown) => {
+    if (!desktopWindow(event)) throw new Error('Local application frame required');
+    return mcp.run(mcpProject(), path.join(DATA_DIR(), 'operations-endpoint.json'), action);
+  });
   ipcMain.on('desktop:close-result', (event, token: unknown, result: unknown) => {
     const window = desktopWindow(event);
     if (!window || !pendingClose || pendingClose.window !== window || pendingClose.token !== token) return;
