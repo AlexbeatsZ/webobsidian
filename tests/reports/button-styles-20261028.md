@@ -56,3 +56,16 @@ No live Vault/profile/configuration, installed application or user process was
 changed or restarted. Browser fixture uses the actual UI and a controlled desktop
 bridge, not real macOS Electron/file-picker acceptance. Cross-platform release
 publication is recorded separately after actual native builds complete.
+
+## Aggregate release closeout - 2026-10-29
+
+Button fix f16a0b9 is included in the published latest v0.1.35, exact product
+cf8aae56d8ce61526c1e2ef4f5aaafd093414d1b, together with current native sync,
+Vault connection configuration and reference-migration changes. Native desktop
+Windows/macOS/Linux builds and Android debug/release all passed. Refreshed
+459/459 units,24/24 migration tests and37/37 focused browser cases passed.
+Actual published Windows installer payload also passes production startup and
+real Appearance-selector-driven dark/light import-button checks, errors0.
+See release-035-20261029.md for package sizes, remote asset verification and
+policy-blocked temporary cleanup. No installer/device/live-Vault change in this
+build-only continuation; physical Mac picker acceptance remains unclaimed.
