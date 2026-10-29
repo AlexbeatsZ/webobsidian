@@ -4,9 +4,9 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const source = '\uFEFF# Context\r\n\r\nAlpha selected 😀 text.\r\n\r\nTail sentinel.\r\n';
+const source = '\uFEFF# Context\r\n\r\nAlpha selected 😀 text.\r\n\r\nAlpha selected 😀 text.\r\n\r\nTail sentinel.\r\n';
 const test = base.extend<{ backend: { url: string; vault: string } }>({
-  backend: async ({}, use) => {
+  backend: async ({ page }, use) => {
     const parent = path.join(os.tmpdir(), '.agents'); await fs.mkdir(parent, { recursive: true });
     const directory = await fs.mkdtemp(path.join(parent, 'mcp-context-browser-'));
     const vault = path.join(directory, 'vault'), data = path.join(directory, 'data');
@@ -23,6 +23,7 @@ const test = base.extend<{ backend: { url: string; vault: string } }>({
       }, { timeout: 20000 }).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
       await use({ url: JSON.parse(await fs.readFile(endpoint, 'utf8')).url, vault });
     } finally {
+      await page.close();
       if (child.exitCode === null) { const closed = new Promise(resolve => child.once('close', resolve)); child.kill(); await closed; }
       if (!path.resolve(directory).startsWith(path.join(parent, 'mcp-context-browser-'))) throw new Error('Invalid fixture path');
       await fs.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -36,8 +37,8 @@ test.beforeEach(async ({ page, backend }) => {
     const url = new URL(route.request().url());
     try {
       await route.fulfill({ response: await route.fetch({ url: backend.url + url.pathname + url.search }) });
-    } catch {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    } catch (error) {
+      if (!page.isClosed() && route.request().failure()?.errorText !== 'net::ERR_ABORTED') throw error;
     }
   });
   let clientReady = false;
@@ -89,6 +90,12 @@ test('shortcut and context menu capture exact source coordinates, pinning and on
   expect(selected.items[0]).toMatchObject({ kind: 'selection', path: 'context.md', selections: [
     { kind: 'source', text: 'selected 😀', from: { line: 3, ch: 6 }, to: { line: 3, ch: 17 } },
   ] });
+  await page.locator('.mcp-context-snippet').click();
+  expect(await page.evaluate(async () => {
+    const { getActiveEditor } = await import('/src/lib/activeEditor.ts');
+    const view = getActiveEditor()!, range = view.state.selection.main;
+    return { text: view.state.sliceDoc(range.from, range.to), line: view.state.doc.lineAt(range.from).number };
+  })).toEqual({ text: 'selected 😀', line: 3 });
   await page.getByRole('button', { name: '固定保留' }).click();
   const read = () => page.evaluate(async () => {
     const { request } = await import('/src/lib/api.ts');
@@ -131,4 +138,40 @@ test('path-only context, manual removal, oversize selection rejection and reload
   await expect(page.locator('.main-pane .cm-content')).toContainText('Tail sentinel.');
   await page.getByRole('button', { name: 'MCP', exact: true }).click();
   await expect(page.locator('.mcp-context-item')).toHaveCount(1);
+});
+
+test('reading selection survives panel focus without fabricated source coordinates', async ({ page }) => {
+  await page.locator('.main-pane .cm-content').click();
+  await page.evaluate(async () => {
+    const { setActiveEditorMode } = await import('/src/lib/activeEditor.ts');
+    setActiveEditorMode('reading');
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const { getActiveEditor } = await import('/src/lib/activeEditor.ts');
+    return getActiveEditor()?.state.readOnly;
+  })).toBe(true);
+  await page.evaluate(() => {
+    const content = document.querySelector('.main-pane .cm-content')!;
+    const nodes = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = nodes.nextNode())) {
+      const start = node.textContent!.indexOf('selected 😀');
+      if (start < 0) continue;
+      const range = document.createRange(); range.setStart(node, start); range.setEnd(node, start + 'selected 😀'.length);
+      document.getSelection()!.removeAllRanges(); document.getSelection()!.addRange(range); return;
+    }
+    throw new Error('Reading text not found');
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const { captureMcpContextTarget } = await import('/src/lib/review/client.ts');
+    return captureMcpContextTarget().selections;
+  })).toEqual([{ kind: 'rendered', text: 'selected 😀' }]);
+  await page.getByRole('button', { name: '添加选中内容或当前页面' }).click();
+  await expect(page.locator('.mcp-context-item')).toHaveCount(1);
+  const queued = await page.evaluate(async () => {
+    const { request } = await import('/src/lib/api.ts'); return request('/api/operations/context');
+  });
+  expect(queued.items[0].revision).toBeTruthy();
+  expect(queued.items[0].selections).toEqual([{ kind: 'rendered', text: 'selected 😀' }]);
+  await page.screenshot({ path: test.info().outputPath('mcp-reading-context.png') });
 });
