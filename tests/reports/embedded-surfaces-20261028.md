@@ -25,7 +25,21 @@
 - Windows0.1.32首轮精确源码生产构建、独立包检查与NSIS成功；新生产测试误把
   底部视图菜单限定在main-pane内而超时。修正测试宿主并将实时预览光标移至表后，
   使用该实际打包资源复查已通过全部原表明暗/双视图/原文件不变断言。
-  最终测试源码的全新精确构建与发布仍待完成。
+  最终全新精确e56502a构建、NSIS、独立包检查和生产原表回归均通过，5932ms、
+  零渲染错误，原文件不变；真实打包Electron/IPC/PowerShell临时夹具也通过。
+
+## 交付
+
+- 0.1.32已发布，tag精确指向e56502a65ce733917c7795b826f0c6a707c1b219。
+  Windows安装包105609980字节，blockmap110261字节，BUILD-INFO1034字节；
+  远端非草稿/非预发布状态与三项资产名称/大小均读回一致。
+- 本地交付：`desktop/release/0.1.32/WebObsidian-0.1.32-win-x64-setup.exe`。
+  根server/public/index.html大小及UTC修改时间未变，生产构建未覆盖工作区服务资源。
+- 证据：`.local/embedded-surfaces-20261028/production/production-smoke`有实际打包
+  明暗/双视图截图、result.json和server.log；相邻native-mcp-smoke为原生临时夹具。
+- 活动release仅保留0.1.32；旧030/031和本轮自己的临时构建源码在无活动进程使用后，
+  按用户规范可逆移入Temp/.agents/.trash/webobsidian-builds-20261028-9687ece5，
+  保留来源/目标清单；未永久删除或触碰安装目录。
 
 ## 边界
 
