@@ -2,6 +2,9 @@ import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 
 const image = readFileSync('tests/fixtures/presentation-image.svg', 'utf8');
+const mergedTable = readFileSync('tests/fixtures/personal-merged-table.js', 'utf8');
+const listTable = readFileSync('tests/fixtures/personal-list-table.js', 'utf8');
+const polymerTable = readFileSync('tests/fixtures/personal-polymer-table.md', 'utf8');
 test.beforeEach(async ({ page }) => {
   await page.route('**/theme-media/**', route => route.fulfill({ contentType: 'image/svg+xml', body: image }));
   await page.goto('/__render-test');
@@ -16,6 +19,69 @@ async function reset(page: import('@playwright/test').Page, source: string) {
   await page.evaluate(async () => {
     await document.fonts.ready;
     await Promise.all([...document.images].map(img => img.decode().catch(() => {})));
+  });
+}
+
+for (const [effect, source] of [
+  ['exTable', polymerTable + '\n\nend'],
+  ['list2table', '[list2table]\n\n- 单体\n  - 乙烯\n  - 丙烯\n- 机理\n  - 自由基\n  - 配位\n\nend'],
+]) {
+  test(`personal ${effect} fragments preserve their containing surface in both themes and view modes`, async ({ page }) => {
+    await page.route('**/api/native-features/blocks', route => route.fulfill({ json: { vault: 'browser-fixture', definitions: [
+      { names: ['exTable'], classes: [], script: 'merged-table.js', code: mergedTable },
+      { names: ['list2table', 'table'], classes: [], script: 'list-table.js', code: listTable },
+      { names: ['addClass(ab-custom-td-nowrap)'], classes: ['stem-table-nowrap'], css: '.stem-table-nowrap td { white-space: nowrap; }' },
+    ] } }));
+    await reset(page, source);
+    await page.evaluate(async () => {
+      const { EditorView } = await import('/node_modules/.vite/deps/@codemirror_view.js');
+      const { Prec, StateEffect } = await import('/node_modules/.vite/deps/@codemirror_state.js');
+      const { renderContext } = await import('/src/lib/renderContext.ts');
+      const { installBlockEffects } = await import('/src/lib/blocks/runtime.ts');
+      const { sharedApp } = await import('/src/lib/obsidian/runtime.ts');
+      installBlockEffects(sharedApp);
+      for (const element of document.querySelectorAll<HTMLElement>('[data-slot] > .cm-host > .cm-editor')) {
+        const view = EditorView.findFromDOM(element)!;
+        const context = view.state.facet(renderContext);
+        view.dispatch({ effects: StateEffect.appendConfig.of(Prec.highest(renderContext.of({
+          ...context, allowBlockEffects: true, allowScriptExecution: true,
+        }))) });
+      }
+    });
+    for (const slot of [0, 1]) {
+      await expect(page.locator(`[data-slot="${slot}"] .native-block-effect .cm-table`)).toHaveCount(1);
+    }
+    await expect(page.locator('[data-render-pending]')).toHaveCount(0);
+    for (const [theme, pageSurface, headerSurface] of [
+      ['dark', 'rgb(30, 30, 30)', 'rgb(38, 38, 38)'],
+      ['light', 'rgb(255, 255, 255)', 'rgb(246, 246, 246)'],
+    ]) {
+      await page.evaluate(theme => {
+        for (const element of [document.body, document.querySelector('[data-slot="0"]')!.parentElement!]) {
+          element.classList.remove('theme-light', 'theme-dark');
+          element.classList.add('theme-' + theme);
+        }
+      }, theme);
+      for (const slot of [0, 1]) {
+        const host = page.locator(`[data-slot="${slot}"]`);
+        await host.locator('.native-block-effect').screenshot({ path: test.info().outputPath(`${effect}-${theme}-${slot}.png`) });
+        const surfaces = await host.locator('.native-block-effect .markdown-embedded-view > .cm-editor').evaluateAll(editors => editors.map(editor => getComputedStyle(editor).backgroundColor));
+        expect(surfaces.length).toBeGreaterThan(0);
+        expect(surfaces.every(surface => surface === 'rgba(0, 0, 0, 0)'), JSON.stringify(surfaces)).toBe(true);
+        await expect(host.locator('> .cm-host > .cm-editor')).toHaveCSS('background-color', pageSurface);
+        if (effect === 'exTable') {
+          const headers = host.locator('.native-block-effect th');
+          await expect(headers).toHaveCount(2);
+          await expect(headers.first()).toHaveCSS('background-color', headerSurface);
+          await expect(headers.first()).toHaveAttribute('rowspan', '2');
+          await expect(headers.first()).toHaveAttribute('colspan', '2');
+          await expect(headers.last()).toHaveAttribute('colspan', '4');
+          await expect(host.locator('.native-block-effect mjx-container').first()).toBeVisible();
+        }
+      }
+    }
+    expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+    expect(await page.evaluate(() => window.renderHarness.source(1))).toBe(source);
   });
 }
 
@@ -62,6 +128,31 @@ test('theme colors reach inherited UI text, body-mounted plugin modals and edito
     await expect(page.locator('[data-slot="0"] .cm-content')).toHaveCSS('color', foreground);
   }
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('Plain body text\n\nend');
+});
+
+test('native table fragments keep header and callout surfaces when reading and editing', async ({ page }) => {
+  const source = '| Header | Formula |\n| --- | --- |\n| value | $x^2$ |\n\n> [!note] Table\n>\n> | Nested | Value |\n> | --- | --- |\n> | body | text |\n\nend';
+  await reset(page, source);
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate(theme => {
+      const wrapper = document.querySelector('[data-slot="0"]')!.parentElement!;
+      wrapper.classList.remove('theme-light', 'theme-dark');
+      wrapper.classList.add('theme-' + theme);
+    }, theme);
+    for (const slot of [0, 1]) {
+      const host = page.locator(`[data-slot="${slot}"]`);
+      const fragments = host.locator('.cm-table .markdown-embedded-view > .cm-editor');
+      await expect(fragments).toHaveCount(8);
+      expect(await fragments.evaluateAll(editors => editors.every(editor => getComputedStyle(editor).backgroundColor === 'rgba(0, 0, 0, 0)'))).toBe(true);
+      await expect(host.locator('.md-callout .cm-table')).toHaveCount(1);
+    }
+    const editableCell = page.locator('[data-slot="0"] .cm-table tbody td').first();
+    await editableCell.click();
+    await expect(editableCell.locator('.cm-content')).toHaveAttribute('contenteditable', 'true');
+    await expect(editableCell.locator('.markdown-embedded-view > .cm-editor')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await page.keyboard.press('Escape');
+  }
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
 });
 
 test('Markdown and HTML image rows preserve captions, aliases, sizing and source', async ({ page }) => {

@@ -37,8 +37,15 @@ await fs.writeFile(path.join(native, 'automation.jsonc'), JSON.stringify({ versi
 }));
 await fs.writeFile(path.join(vault, 'Templates/Fixture.md'), 'TEMPLATE-OK <% command "user:acceptance" {} %>');
 await fs.writeFile(path.join(native, 'blocks/blocks.jsonc'), JSON.stringify({ version: 1,
-  definitions: [{ names: ['acceptance-card'], classes: ['acceptance-card'] }],
+  definitions: [
+    { names: ['acceptance-card'], classes: ['acceptance-card'] },
+    { names: ['exTable'], script: 'merged-table.js' },
+    { names: ['addClass(ab-custom-td-nowrap)'], classes: ['stem-table-nowrap'] },
+  ],
 }));
+const polymerTable = await fs.readFile(new URL('./fixtures/personal-polymer-table.md', import.meta.url), 'utf8');
+await fs.copyFile(new URL('./fixtures/personal-merged-table.js', import.meta.url), path.join(native, 'blocks/merged-table.js'));
+await fs.writeFile(path.join(vault, 'surface-table.md'), polymerTable);
 await fs.writeFile(path.join(vault, '化学实验.md'), '# 化学实验\n\n反应记录 #实验/化学\n');
 const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
 await fs.writeFile(path.join(vault, 'used.png'), pixel);
@@ -196,6 +203,33 @@ try {
   assert.equal(await page.getByRole('button', { name: /Daily note/i }).count(), 0);
   assert.deepEqual(errors, [], 'No renderer errors during production load/edit/save');
   checkpoint('right Homepage tab, fixed ribbon and zero renderer errors');
+  await page.keyboard.press('ControlOrMeta+o');
+  await page.locator('.palette-input').fill('surface-table');
+  await page.keyboard.press('Enter');
+  for (const mode of ['实时预览', '阅读视图']) {
+    await page.locator('.main-pane .view-mode-trigger').click();
+    await page.getByRole('menuitemcheckbox', { name: mode, exact: true }).click();
+    const table = page.locator('.main-pane .native-block-effect .cm-table');
+    await table.waitFor();
+    await page.waitForFunction(() => !document.querySelector('.main-pane [data-render-pending]'));
+    for (const theme of ['dark', 'light']) {
+      await page.evaluate(theme => {
+        for (const host of [document.body, document.querySelector('.app')]) {
+          host.classList.remove('theme-light', 'theme-dark');
+          host.classList.add('theme-' + theme);
+        }
+      }, theme);
+      const surfaces = await table.locator('.markdown-embedded-view > .cm-editor').evaluateAll(editors => editors.map(editor => getComputedStyle(editor).backgroundColor));
+      assert(surfaces.length > 0 && surfaces.every(surface => surface === 'rgba(0, 0, 0, 0)'), 'Generated cell fragments must not paint over their containing surface');
+      assert.equal(await table.locator('th').first().getAttribute('rowspan'), '2');
+      assert.equal(await table.locator('th').first().getAttribute('colspan'), '2');
+      assert.equal(await table.locator('th').first().evaluate(header => getComputedStyle(header).backgroundColor), theme === 'dark' ? 'rgb(38, 38, 38)' : 'rgb(246, 246, 246)');
+      await table.screenshot({ path: path.join(artifacts, `exTable-${theme}-${mode === '实时预览' ? 'live' : 'reading'}.png`) });
+    }
+  }
+  assert.equal(await fs.readFile(path.join(vault, 'surface-table.md'), 'utf8'), polymerTable);
+  assert.deepEqual(errors, [], 'No renderer errors during generated table theme checks');
+  checkpoint('personal merged table has uniform header surfaces in dark/light live/reading, source unchanged');
   passed = true;
   console.log('Packaged startup passed: production entry/local access/Vault identity/edit/save, native snippet, command-backed template, JS widget, custom block, equation reference, body title, reading/source modes, pinyin search, configured menu, attachment preview/protection and right tabs.');
 } catch (error) {

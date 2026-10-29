@@ -679,7 +679,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .is-reading-mode .cm-content { caret-color: transparent; }
 .is-reading-mode .cm-image-resize { display: none; }
 .markdown-embedded-view, .markdown-embedded-view .cm-scroller { overflow: visible; }
-.markdown-embedded-view .cm-editor { height: auto; }
+.markdown-embedded-view > .cm-editor { height: auto; background: transparent !important; }
 .markdown-embedded-view .cm-content { padding: 0; margin: 0; max-width: none; }
 .md-html-b, .md-html-strong { font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
 .md-html-mark { background: var(--text-highlight-bg); color: inherit; }
@@ -1935,7 +1935,6 @@ html[data-desktop-titlebar] .app.mobile .drawer-backdrop { top: 32px; }
 .cm-image-wrap img.cm-embed-image { max-width: var(--image-max-width, 100%); height: auto; border-radius: var(--radius); cursor: zoom-in; display: block; margin: 6px 0; }
 .cm-table-wrap { display: block; width: fit-content; min-width: 100%; max-width: none; padding: 8px 0 18px; }
 .cm-table-frame { position: relative; width: fit-content; }
-.cm-cell-edit .cm-table-cell-content .cm-editor { background: transparent !important; }
 .cm-table .cm-col-handle, .cm-table .cm-row-handle { position: absolute; z-index: 3; display: grid; place-items: center;
   padding: 0; width: 16px; height: 22px; color: var(--text-faint); background: transparent; border: 0; border-radius: 3px;
   font: 16px/1 var(--font-ui); opacity: 0; cursor: grab; touch-action: none; user-select: none; }

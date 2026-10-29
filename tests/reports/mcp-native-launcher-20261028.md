@@ -42,7 +42,10 @@
 - 0.1.30 (42ac0aa) was published before the final single-button clarification:
   NSIS 105609994 bytes, real native fixture and production smoke (6109ms) passed.
   It exposed three manual actions; no automatic reconnect/polling was introduced.
-- Final single-button delivery is 0.1.31 with companion 0.2.2, packaging pending.
+- Final single-button delivery 0.1.31 (f01f071) is published with companion 0.2.2
+  (215b86f). Exact-source NSIS105610041bytes, packaged production smoke6816ms and
+  real packaged Electron/preload/IPC/PowerShell fixture pass. Both release tags
+  and asset names/sizes verified remotely; companion release CI succeeded.
 - Superseded local builds and temporary source copies were moved, not permanently
   deleted, into Temp/.agents/.trash/webobsidian-builds-20261028-9687ece5 under the
   user's updated cleanup instructions. Existing installed 0.1.28 was not changed.
