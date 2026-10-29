@@ -35,11 +35,41 @@ Credentials intentionally travel with the Vault: use a private repository.
   branch push; advanced the disposable second clone before simulating divergence.
   Final full suite passes; product never performs this test-only pull.
 
-## Delivery boundary
+## Delivered Windows client
 
-Version 0.1.34 avoids the interrupted button-style chat's reserved 0.1.33 release.
-Fresh exact-source isolated build/package, production runtime, installation and release
-publication are pending. Root public, installed profile and real Vault are preserved.
+- Product source: `8edf4f3f45bb8a315e9612a66417418e9268e7a2`, normally pushed to
+  origin/main. Version 0.1.34 avoids the other chat's reserved 0.1.33 draft.
+- Fresh exact Git archive built core/Web/server, standalone desktop bundle and NSIS.
+  Initial archive dependency linking omitted workspace-local packages (`ts-dedent`);
+  linked those existing project dependencies and repeated the full build successfully.
+  No global dependency installation or root public rebuild was performed.
+- Installer `desktop/release/0.1.34/WebObsidian-0.1.34-win-x64-setup.exe`:
+  105,619,866 bytes, physical file version 0.1.34; blockmap and BUILD-INFO alongside.
+- Actual unpacked standalone runtime integration: 2/2 (3,924 ms); production SPA
+  5,741 ms, all nine groups passed, zero renderer errors. Includes existing personal
+  merged-table dark/light/live/reading and MCP/Pele features.
+- Actual packaged Electron and actual installed Electron each passed automatic
+  connection bootstrap, strict sequential fallback, two-way note transfer and exact
+  688,925-byte PNG transfer. Native settings show ordered addresses and private-repo
+  warning; token masked; Vault config unchanged; zero renderer errors.
+- Normal silent NSIS upgrade: exit 0, OMEN 0.1.28 -> 0.1.34.0, installed asar
+  0.1.34 and installed standalone server bytes match the accepted package.
+  Existing desktop/server settings match pre-install backups byte-for-byte.
+  No existing application process was force-closed; isolated test windows exited.
+- Published GitHub Release v0.1.34, non-draft/non-prerelease, target/tag both equal
+  product source above; remote three asset names/sizes verified. Other chat's 033
+  draft is unchanged. No other-platform release/install is claimed.
+- Root public entry length/UTC ticks unchanged. Old local 032 assets and this task's
+  temporary source/archive deletion was policy-rejected, not retried; moved reversibly
+  into `Temp/.agents/.trash/webobsidian-client-034-20261029` as permitted by user rules.
+  Active desktop/release now contains only 034. Manifest in cleanup-result.json.
+- Evidence: `Temp/.agents/webobsidian-sync-vault-20261029/` contains build/package
+  logs, production-spa, packaged-native, installed-native, installation-result.json,
+  cleanup-result.json and installation backups; no credentials are recorded here.
+
+## Live-data boundary
+
+Root public, installed profile and real Vault are preserved.
 STEM's parent has Syncthing markers: do not enable a second live writer, migrate/seed
 real notes or alter Syncthing ownership. ROG backend, gateway and Sakura are unchanged.
 No other-device installation or physical multi-device acceptance is claimed.
