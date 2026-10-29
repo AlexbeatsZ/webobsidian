@@ -1,6 +1,5 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { FileSyncPreferencesSchema } from '../contracts/fileSync.js';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { config, SETTINGS_FILE } from '../config.js';
@@ -9,7 +8,6 @@ import { UiSettingsSchema } from '../contracts/uiSettings.js';
 /** ---- Schema (PRD §6) ---------------------------------------------------- */
 
 const SettingsSchema = z.object({
-  fileSync: z.record(FileSyncPreferencesSchema).default({}),
   hotkeys: z.record(z.object({ version: z.literal(1), bindings: z.record(z.array(z.object({ modifiers: z.array(z.string()), key: z.string() }))),
     imported: z.array(z.string()).default([]), migration: z.string().default('') })).default({}),
   nativeFeatures: z.record(z.object({
@@ -185,7 +183,7 @@ export function updateSettings(mutator: (draft: Settings) => void | Promise<void
 /** Redact secrets for sending to the client. */
 export function redactSettings(s: Settings) {
   // Writing rules have a dedicated Vault-scoped endpoint, not every settings payload.
-  const {writing,nativeFeatures,hotkeys,fileSync,...publicSettings}=s;
+  const {writing,nativeFeatures,hotkeys,...publicSettings}=s;
   return {
     ...publicSettings,
     git: { ...s.git, token: s.git.token ? '••••••••' : '' },

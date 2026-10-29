@@ -49,7 +49,7 @@ export default function FileSyncSettings() {
             <textarea className="text-input" rows={5} style={{ width: 300, maxWidth: '100%', resize: 'vertical' }} value={addresses}
               placeholder={`192.168.1.10:${defaultPort}\nhttps://example.com/webobsidian-sync/v1/`} onChange={event => setAddresses(event.target.value)} />
           </SettingRow>
-          <SettingRow name="访问令牌"><input className="text-input" type="password" autoComplete="new-password" value={connection.preferences.token} onChange={event => update({ token: event.target.value })} /></SettingRow>
+          <SettingRow name="访问令牌" desc="随 Vault 保存；请使用私有仓库"><input className="text-input" type="password" autoComplete="new-password" value={connection.preferences.token} onChange={event => update({ token: event.target.value })} /></SettingRow>
           <SettingRow name="检查间隔（秒）"><input className="text-input" type="number" min={5} max={3600} value={connection.preferences.intervalSec} onChange={event => update({ intervalSec: Number(event.target.value) })} /></SettingRow>
         </SettingGroup>
         <div className="setting-actions">

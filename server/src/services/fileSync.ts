@@ -1,11 +1,12 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
-import { FileSyncPreferencesSchema, type FileSyncPreferences } from '../contracts/fileSync.js';
-import { getSettings, updateSettings } from './settings.js';
+import { FileSyncPreferencesSchema } from '../contracts/fileSync.js';
+import { getSettings } from './settings.js';
 import { getVaultRoot, vaultPathKey } from './vaultFile.js';
 import { FileSyncEngine } from './fileSyncEngine.js';
-import { normalizeSyncEndpoint } from './syncTransport.js';
+import { fileSyncPreferences, parseFileSyncPreferences, readFileSyncPreferencesSource } from './fileSyncPreferences.js';
+import { writeVaultConfiguration } from './vaultConfiguration.js';
 import { queueFileUpdate, drainFileUpdates, setFileSyncNotifier } from './fileupdates.js';
 import { withVaultMaintenance } from './vaultMaintenance.js';
 import { broadcast } from './realtime.js';
@@ -16,10 +17,7 @@ let timer: NodeJS.Timeout | undefined;
 let debounce: NodeJS.Timeout | undefined;
 let lastAttempt = 0;
 
-export async function fileSyncPreferences(): Promise<FileSyncPreferences> {
-  const root = await getVaultRoot();
-  return FileSyncPreferencesSchema.parse((await getSettings()).fileSync[vaultPathKey(root)] ?? {});
-}
+export { fileSyncPreferences } from './fileSyncPreferences.js';
 
 export async function fileSyncEngine(): Promise<FileSyncEngine> {
   const root = await getVaultRoot(); const preferences = await fileSyncPreferences();
@@ -49,20 +47,15 @@ export async function fileSyncEngine(): Promise<FileSyncEngine> {
 export async function saveFileSyncPreferences(value: unknown): Promise<void> {
   const parsed = FileSyncPreferencesSchema.strict().safeParse(value);
   if (!parsed.success) throw Object.assign(new Error('同步设置格式无效'), { status: 400 });
-  const preferences = parsed.data;
-  const root = await getVaultRoot();
   if (current?.engine.busy) throw Object.assign(new Error('正在同步，请完成后再修改连接设置'), { status: 409 });
-  try { preferences.endpoints = preferences.endpoints.map(normalizeSyncEndpoint); }
-  catch (error) { throw Object.assign(error as Error, { status: 400 }); }
-  if (preferences.enabled && !preferences.endpoints.length) throw Object.assign(new Error('请填写同步地址'), { status: 400 });
-  const previous = await fileSyncPreferences();
-  if (preferences.token === '••••••••') preferences.token = previous.token;
-  if (preferences.enabled && !/^[\x21-\x7e]{32,512}$/.test(preferences.token)) throw Object.assign(new Error('访问令牌需要 32–512 个 ASCII 字符'), { status: 400 });
+  const previous = await readFileSyncPreferencesSource();
+  if (parsed.data.token === '••••••••') parsed.data.token = previous.preferences.token;
+  const preferences = parseFileSyncPreferences(parsed.data);
   if (preferences.enabled) {
     try { await (await fileSyncEngine()).validateRoot(); }
     catch (error) { throw Object.assign(error as Error, { status: 400 }); }
   }
-  await updateSettings(draft => { draft.fileSync[vaultPathKey(root)] = preferences; });
+  await writeVaultConfiguration({ ...previous.source, content: JSON.stringify(preferences, null, 2) + '\n' });
   current = undefined;
 }
 
@@ -72,9 +65,8 @@ export async function runFileSync() {
 }
 
 export async function recoverFileSync(): Promise<void> {
-  if (!(await fileSyncPreferences()).enabled) return;
   recovering = true;
-  try { await (await fileSyncEngine()).recover(); }
+  try { if ((await fileSyncPreferences()).enabled) await (await fileSyncEngine()).recover(); }
   catch (error) { console.warn('[file-sync] recovery paused:', (error as Error).message); }
   finally { recovering = false; }
 }

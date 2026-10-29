@@ -2,7 +2,7 @@ import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
   const connection = {
-    preferences: { enabled: false, endpoints: ['http://192.168.1.10:18743/webobsidian-sync/v1/', 'https://example.com/webobsidian-sync/v1/'], token: '••••••••', intervalSec: 15 },
+    preferences: { enabled: false, endpoints: ['http://192.168.1.10:18744/webobsidian-sync/v1/', 'https://example.com/webobsidian-sync/v1/'], token: '••••••••', intervalSec: 15 },
     status: { enabled: false, endpoints: [], hasToken: true, activeEndpoint: null as string | null, phase: 'disabled', message: '', lastSuccess: null,
       conflictDirectory: null as string | null, conflictBranches: [] as string[] },
   };
@@ -39,11 +39,12 @@ test.beforeEach(async ({ page }) => {
 
 test('keeps address order, retains the masked token and does not synchronize just by opening settings', async ({ page }) => {
   expect(await page.evaluate(() => (window as any).fileSyncRequests())).toEqual([]);
-  await page.getByRole('textbox', { name: '同步地址', exact: true }).fill('100.106.169.46:18743\n192.168.1.10:18743\nhttps://example.com/webobsidian-sync/v1/');
+  await expect(page.getByText('随 Vault 保存；请使用私有仓库', { exact: true })).toBeVisible();
+  await page.getByRole('textbox', { name: '同步地址', exact: true }).fill('100.106.169.46:18744\n192.168.1.10:18744\nhttps://example.com/webobsidian-sync/v1/');
   await page.getByRole('checkbox', { name: '启用文件同步' }).check(); await page.getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('就绪');
   const requests = await page.evaluate(() => (window as any).fileSyncRequests());
-  expect(requests).toHaveLength(1); expect(requests[0].body.endpoints).toEqual(['100.106.169.46:18743', '192.168.1.10:18743', 'https://example.com/webobsidian-sync/v1/']);
+  expect(requests).toHaveLength(1); expect(requests[0].body.endpoints).toEqual(['100.106.169.46:18744', '192.168.1.10:18744', 'https://example.com/webobsidian-sync/v1/']);
   expect(requests[0].body.token).toBe('••••••••');
   await page.screenshot({ path: test.info().outputPath('file-sync-addresses.png') });
 });

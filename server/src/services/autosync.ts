@@ -1,6 +1,6 @@
 import { getSettings } from './settings.js';
 import { sync } from './git.js';
-import { getVaultRoot, vaultPathKey } from './vaultFile.js';
+import { fileSyncPreferences } from './fileSyncPreferences.js';
 
 /** Periodic auto-sync when enabled in settings (PRD FR-4). */
 let timer: NodeJS.Timeout | null = null;
@@ -14,14 +14,14 @@ export function startAutoSync(): void {
 
 async function tick(): Promise<void> {
   if (running) return;
-  const s = await getSettings();
-  const native = s.fileSync[vaultPathKey(await getVaultRoot())]?.enabled;
-  if (!s.git.enabled || !s.git.autoSync || !s.git.remote && !native) return;
-  const intervalMs = Math.max(s.git.intervalSec, 60) * 1000;
-  const last = lastRun ?? 0;
-  if (Date.now() - last < intervalMs) return;
   running = true;
   try {
+    const s = await getSettings();
+    if (!s.git.enabled || !s.git.autoSync) return;
+    const native = (await fileSyncPreferences()).enabled;
+    if (!s.git.remote && !native) return;
+    const intervalMs = Math.max(s.git.intervalSec, 60) * 1000;
+    if (Date.now() - (lastRun ?? 0) < intervalMs) return;
     const res = await sync();
     lastRun = Date.now();
     if (res.ok) console.log('[autosync] ok:', res.log.join(' | '));

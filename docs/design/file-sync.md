@@ -7,8 +7,13 @@ DocumentSession retains local saving/history, textFile owns physical publication
 the existing watcher/fileupdates owns indexing and notifications. No second watcher,
 editor, parser or index is introduced. Git is only periodic backup and conflict history.
 
-Each Vault has an explicit ordered address list stored outside its files, together with
-its token and local checkpoint. Every pass starts at entry one; attempts are sequential.
+Each Vault stores its enabled flag, ordered addresses, token and interval in
+`.obsidian/webobsidian/sync.jsonc`. The existing Vault configuration reader/JSONC parser
+and revision-checked physical writer are authoritative; application settings contain no
+second copy or implicit import. Git backup explicitly includes this one file even if
+`.obsidian` is ignored, so cloning a private Vault repository bootstraps native transport.
+Only local checkpoint/outbox/incoming journals, caches and recovery files stay in the
+device's application data directory. Every pass starts at entry one; attempts are sequential.
 No direct/public categories, probing races, speed ranking or last-success promotion.
 Use the first available address for that pass. On transport failure, retry the durable
 operation later, starting at entry one. Authentication, identity, rollback and conflict
@@ -34,9 +39,13 @@ history/blobs/receipts have no automatic GC.
 
 Only .obsidian/webobsidian is included from .obsidian; plugin state, workspace layouts,
 .git, .trash, Syncthing metadata and temporary files are excluded. Application sync
-credentials remain outside the Vault; user-authored files are not scanned for secrets. Reject
+credentials intentionally travel with the Vault configuration: use a private Vault
+repository and grant access only to trusted devices. General settings and connection
+responses never expose the plaintext token; the dedicated password field returns a mask.
+User-authored files are not scanned for secrets. Reject
 links and Syncthing-managed roots instead of enabling two file writers over one library.
-No automatic live-Vault selection, migration, seed choice or token propagation.
+No automatic live-Vault selection, migration or seed choice. Configured Vault files
+propagate through the same native file transport; no separate configuration channel.
 
 Three-way comparison uses local bytes, acknowledged baseline and remote manifest.
 Persist staged outgoing blobs and one stable operation before submission; uncertain
@@ -62,6 +71,10 @@ without switching the working branch or changing its index. Binary conflicts nee
 explicit version choice. Native sync disables per-save Git commits and background Git
 pull; the existing Git timer instead commits periodically and optionally pushes backups
 to per-device webobsidian-backups branches, together with retained conflict branches.
+It also attempts a normal non-forced push to the configured repository branch, making
+the shared connection discoverable by a fresh clone. If that branch has diverged or
+rejects the update, the successful device backup remains available; never pull, merge,
+force-push or overwrite the other device's repository history to make this succeed.
 Manual pull/clone is blocked while native synchronization owns file transport.
 
 ## Validation boundary

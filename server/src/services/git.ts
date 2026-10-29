@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git';
 import { getSettings } from './settings.js';
+import { FILE_SYNC_CONFIGURATION_PATH, fileSyncPreferences, readFileSyncPreferencesSource } from './fileSyncPreferences.js';
 import { getVaultRoot, vaultPathKey } from './vaultFile.js';
 import type { ConflictSnapshot } from './fileSyncEngine.js';
 import { redactUrlCreds } from '../lib/redact.js';
@@ -99,7 +100,7 @@ export const sync = (message?: string): Promise<{ ok: boolean; log: string[] }> 
   withGitLock(async () => await nativeSyncEnabled() ? backupImpl(message) : syncImpl(message));
 
 async function nativeSyncEnabled(): Promise<boolean> {
-  return (await getSettings()).fileSync[vaultPathKey(await getVaultRoot())]?.enabled === true;
+  return (await fileSyncPreferences()).enabled;
 }
 
 async function requireGitTransport(): Promise<void> {
@@ -119,6 +120,13 @@ async function backupImpl(message?: string): Promise<{ ok: boolean; log: string[
     const conflicts = (await client.raw(['for-each-ref', '--format=%(refname)', 'refs/heads/webobsidian-conflicts/'])).split('\n').filter(Boolean);
     await client.raw(['push', 'origin', `HEAD:refs/heads/${branch}`, ...conflicts.map(reference => `${reference}:${reference}`)]);
     output.push(`备份已推送到 ${branch}`);
+    const repositoryBranch = settings.git.branch || 'main';
+    try {
+      await client.raw(['push', 'origin', `HEAD:refs/heads/${repositoryBranch}`]);
+      output.push(`仓库分支 ${repositoryBranch} 已更新`);
+    } catch (error) {
+      output.push(`仓库分支 ${repositoryBranch} 未更新，设备备份已保留：${redactUrlCreds((error as Error).message)}`);
+    }
     return { ok: true, log: output };
   } catch (error) { return { ok: false, log: [...output, `备份推送失败：${redactUrlCreds((error as Error).message)}`] }; }
 }
@@ -433,6 +441,7 @@ async function commitAllImpl(message?: string): Promise<string> {
   await configureIdentity(g);
   await ensureLfsAttributes();
   await g.add('.');
+  if ((await readFileSyncPreferencesSource()).source.exists) await g.add(['--force', '--', FILE_SYNC_CONFIGURATION_PATH]);
   const st = await g.status();
   if (st.staged.length === 0 && st.isClean()) return 'Nothing to commit';
   const { subject, body } = describeChanges(st);
