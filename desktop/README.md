@@ -27,6 +27,15 @@ the matching prebuilt Electron binary — no cross-compilation, no `node-gyp`.
 
 ## Build locally
 
+The supplied platform icons live in `buildResources/`: macOS packages use
+`icon-macos.icns` (rounded dark-purple tile), Windows packages use
+`icon-windows.ico` (transparent crystal, 16–256px). Development windows use the
+same Windows ICO; development macOS Dock uses `icon-macos.png`. Packaged apps
+use their native application icon. Linux retains `icon.png`.
+
+Android shares the macOS PNG design. Regenerate its launcher sizes with
+`uv run --no-project --with pillow python android/scripts/generate-icons.py`.
+
 From the **repo root** (builds web + server first, then the desktop app):
 
 ```bash

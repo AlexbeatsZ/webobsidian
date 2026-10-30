@@ -1,6 +1,6 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "private": true,
   "description": "WebObsidian desktop app (Electron shell around the self-hosted server)",
   "author": "xnohat <xnohat@gmail.com>",
@@ -49,7 +49,7 @@
     "mac": {
       "category": "public.app-category.productivity",
       "sign": "scripts/sign-mac.cjs",
-      "icon": "buildResources/icon.png",
+      "icon": "buildResources/icon-macos.icns",
       "target": [
         { "target": "dmg", "arch": ["arm64", "x64"] },
         { "target": "zip", "arch": ["arm64", "x64"] }
@@ -61,7 +61,7 @@
       "writeUpdateInfo": false
     },
     "win": {
-      "icon": "buildResources/icon.png",
+      "icon": "buildResources/icon-windows.ico",
       "target": [
         { "target": "nsis", "arch": ["x64"] }
       ],

@@ -19,6 +19,8 @@ import { McpLauncher } from './mcpLauncher';
 const CONFIG_FILE = () => path.join(app.getPath('userData'), 'desktop-config.json');
 const DATA_DIR = () => path.join(app.getPath('userData'), 'server-data');
 const LOG_FILE = () => path.join(app.getPath('userData'), 'logs', 'server.log');
+const DEVELOPMENT_ICON = path.join(__dirname, '..', 'buildResources',
+  process.platform === 'darwin' ? 'icon-macos.png' : process.platform === 'win32' ? 'icon-windows.ico' : 'icon.png');
 // Cold starts rebuild the Vault index before opening the HTTP listener.
 const SERVER_STARTUP_TIMEOUT_MS = 120_000;
 
@@ -291,7 +293,7 @@ function createWindow(starting = false): void {
     minHeight: 480,
     backgroundColor: '#1e1e1e',
     title: 'WebObsidian',
-    icon: app.isPackaged ? undefined : path.join(__dirname, '..', 'buildResources', 'icon.png'),
+    icon: app.isPackaged ? undefined : DEVELOPMENT_ICON,
     titleBarStyle: 'hidden',
     ...(process.platform === 'darwin' ? {
       trafficLightPosition: { x: 12, y: 9 },
@@ -566,6 +568,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     try {
+      if (!app.isPackaged && process.platform === 'darwin') app.dock?.setIcon(DEVELOPMENT_ICON);
       const cfg = await ensureVault(await readConfig());
       if (!cfg) { app.quit(); return; }
       desktopConfig = cfg;

@@ -100,6 +100,14 @@ This follows [Android's parent-layout Insets guidance](https://developer.android
 
 ## Build and delivery
 
+Launcher icons use the supplied macOS rounded purple tile. The five legacy
+mipmap densities and the 108dp adaptive foreground are generated from the single
+`desktop/buildResources/icon-macos.png` master by
+`android/scripts/generate-icons.py`. The adaptive background fills the mask with
+the matching dark purple; the crystal stays within the central 66dp safe circle.
+Both manifest icon fields resolve the same adaptive resource, so the launcher
+owns the final round/squircle shape. The old unrelated notes vector is removed.
+
 Prerequisites: existing Java17, Android SDK35, NDK28.2.13676358, CMake3.22.1.
 No automatic SDK download/global installs. `android/local.properties` selects
 the existing SDK; Gradle wrapper is pinned at8.13, AGP8.13.0. Android11+ arm64.
