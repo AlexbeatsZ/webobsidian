@@ -77,8 +77,10 @@ the 13 existing source-adapter tests pass alongside it.
   source/core full commits, exact asset URL, npm integrity and build runtime.
 - Those exact CI artifacts were published using the maintainer CLI, with
   `--verify-tag --latest=false`. Remote assets are uploaded, non-draft and
-  non-prerelease. Tag readback equals the source commit. Latest remains the
-  pre-existing client release `v0.1.36`; other drafts/releases were untouched.
+  non-prerelease. Tag readback equals the source commit. Immediately after this
+  publication, latest readback was the pre-existing client `v0.1.36`. During final
+  closeout the parallel client task published `v0.1.38`, which is now latest;
+  `sync-server-v0.1.0` remains non-latest. This task did not modify client releases.
 
 | Published/local canonical file | Bytes |
 | --- | ---: |
