@@ -254,10 +254,6 @@ export function manualSave(path: string) {
   const promise = (async () => {
     await ensureWriting();
     const session = documents.get(path) ?? (await documents.open(path));
-    if (getEditorForPath(path)?.state.readOnly) {
-      await session.save();
-      return;
-    }
     while (current.requested) {
       current.requested = false;
       if (formatterSettings().lintOnSave) await formatSession(session);

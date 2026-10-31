@@ -20,10 +20,22 @@
 
 ## 共享归属
 
+- 笔记属性同时位于原页面头部和右侧栏“属性”。两处共用
+  `propertyEditor.ts` 的类型控件、候选、菜单和 YAML token 补丁；右栏直接编辑
+  同一 DocumentSession，保留正文、注释、历史及冲突/锁定保护。未建属性的笔记
+  只在用户添加第一个属性时插入 frontmatter。
+- 入链/出链面板归 `NoteLinks.tsx`，右侧栏和页面末尾共同使用并显式传入文档路径。
+  页面末尾由 MarkdownView 挂在现有 scrollDOM、contentDOM 之后，不进入 Markdown
+  源码或语法分析；嵌入和片段不递归添加。外层占完整行，内层使用正文栏宽。
+  MarkdownView 只提供 footer 插槽，不依赖工作区、链接索引或可写会话。
+
 - 文本源、草稿、Undo、语法分析仍属于 DocumentSession / markdown-core；新增导航面板不得拥有第二份可写文档。
 - Markdown 已有视图与导航归 activeEditor / fragmentNavigation；迷你地图不能另建键盘或源码坐标体系，不能误跳同路径侧栏嵌入。
 - 既有搜索面板的结果以及编辑器原生查找状态是 Markdown 命中的来源；缩略图只是消费，不发起重复索引或搜索请求。
 - PDF 解析归同一个本地 PDF.js 文档资源；阅读页、目录、文字内容及缩略图共享该资源。不得再用原生 iframe 启动另一份工作区。
+- PDF.js 主模块和 worker 都使用官方 `legacy/build` 兼容入口。Electron 33 的
+  Chromium 130 缺少现代构建依赖的 `Map.getOrInsertComputed`；不能因新版
+  Chrome 测试通过而认定原生桌面可用，也不自行维护一套平台 polyfill。
 - 附件地址继续使用既有 Vault 身份范围。二进制文件不能触发文本响应验证，也不能因缺少文本响应字段误判为切库；真实身份冲突仍阻止写入。
 
 ## 性能及生命周期验收

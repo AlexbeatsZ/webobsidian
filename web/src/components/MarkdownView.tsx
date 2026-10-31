@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import '../styles/equations.css';
 import { codeBlocks, pluginPostProcessing } from '../lib/obsidian/markdown';
 import { mountMarkdownFragment } from './MarkdownFragment';
@@ -62,6 +63,7 @@ export interface MarkdownViewProps {
   showTitle?: boolean;
   layout?: 'page' | 'embedded';
   extensions?: import('@codemirror/state').Extension;
+  footer?: ReactNode;
 }
 const externalUpdate = Annotation.define<boolean>();
 const readonlyExt = (reading: boolean) => reading
@@ -80,6 +82,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
   const instanceId = useId();
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const [footerHost, setFooterHost] = useState<HTMLElement | null>(null);
   const version = useRef(snapshot.version);
   const readonlyComp = useRef(new Compartment()).current;
   const contextComp = useRef(new Compartment()).current;
@@ -336,6 +339,18 @@ export default function MarkdownView(props: MarkdownViewProps) {
   }, [props.documentSession, snapshot.id, context.embedTrail?.length, context.equations?.from, context.navigationId, context.sourceFragment]);
 
   useEffect(() => { sync(snapshot); }, [snapshot]);
+  useEffect(() => {
+    const current = view.current;
+    if (!current || !props.footer) { setFooterHost(null); return; }
+    const element = document.createElement('footer');
+    element.className = 'cm-note-footer';
+    element.setAttribute('aria-label', '文档链接');
+    current.scrollDOM.classList.add('cm-has-note-footer');
+    current.scrollDOM.appendChild(element);
+    setFooterHost(element);
+    current.requestMeasure();
+    return () => { element.remove(); current.scrollDOM.classList.remove('cm-has-note-footer'); };
+  }, [props.documentSession, snapshot.id, !!props.footer]);
   useEffect(() => { view.current?.dispatch({ effects: extraComp.reconfigure(props.extensions ?? []) }); }, [props.extensions]);
   useEffect(() => {
     const isMd = /\.(md|markdown)$/i.test(snapshot.id) || layout === 'embedded';
@@ -353,7 +368,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
     layout === 'page' ? 'is-readable-line-width' : 'markdown-embedded-view',
     mode !== 'source' ? 'is-live-preview live-preview' : '',
     mode === 'reading' ? 'is-reading-mode' : ''].join(' ');
-  return <div className={cls} data-document-id={snapshot.id} data-mode={mode} ref={host} onContextMenu={onContextMenu}
+  return <><div className={cls} data-document-id={snapshot.id} data-mode={mode} ref={host} onContextMenu={onContextMenu}
     onMouseOver={event => {
       const tag = (event.target as Element).closest<HTMLElement>('[data-native-tag]');
       if (tag && !tag.contains(event.relatedTarget as Node | null)) context.tagHover?.(tag.dataset.nativeTag!, event.nativeEvent);
@@ -368,5 +383,5 @@ export default function MarkdownView(props: MarkdownViewProps) {
         event.preventDefault(); event.stopPropagation();
         context.openTag(tag.dataset.nativeTag!, event.ctrlKey || event.metaKey);
       }
-    }} />;
+    }} />{footerHost && props.footer && createPortal(props.footer, footerHost)}</>;
 }

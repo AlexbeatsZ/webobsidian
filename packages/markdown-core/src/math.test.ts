@@ -42,6 +42,19 @@ describe('shared formula source and history', () => {
     expect(mapped[0].from).toBe(initial[0].from + 4);
     expect(mapped[0].tex).toBe('x');
   });
+  it('keeps an empty display snippet bounded and updates its body on each keystroke', () => {
+    const source = '$$$$\n\nFollowing text $y$';
+    const original = analyzeMarkdown(source);
+    const empty = mathRegions(original);
+    expect(empty).toHaveLength(2);
+    expect(empty[0]).toMatchObject({ from: 0, to: 4, bodyFrom: 2, bodyTo: 2, tex: '', display: true, closed: true });
+    expect(formulaAt(empty, 2)).toBe(empty[0]);
+    const next = updateMarkdown(original, '$$x$$\n\nFollowing text $y$', [{ fromA: 2, toA: 2, fromB: 2, toB: 3 }]);
+    expect(mathRegions(next)[0]).toMatchObject({ from: 0, to: 5, tex: 'x', display: true, closed: true });
+    expect(mathRegions(next)[1].tex).toBe('y');
+    expect(mathRegions(analyzeMarkdown('> $$$$\n> following'))[0]).toMatchObject({ from: 2, to: 6, tex: '', closed: true });
+    expect(mathRegions(analyzeMarkdown('$$$$$'))).toEqual([]);
+  });
   it('keeps untouched raw line endings and restores exact inverse changes', () => {
     const raw = '\ufeffkeep\r\nalpha\nbeta\r\nend';
     const doc = new SourceDocument(raw);

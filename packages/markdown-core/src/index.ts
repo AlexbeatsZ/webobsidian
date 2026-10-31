@@ -14,8 +14,6 @@ export * from './tables.js';
 export * from './canvasSource.js';
 export * from './embeds.js';
 export * from './replacement.js';
-export * from './legacyReplacement.js';
-export * from './legacySubheadings.js';
 export * from './blockEffects.js';
 
 export * from './equations.js';

@@ -42,6 +42,7 @@ export default function Settings() {
   const [featureError, setFeatureError] = useState('');
   const [navQuery, setNavQuery] = useState('');
   const modal = useRef<HTMLDivElement>(null);
+  const mac = window.webobsidianDesktop?.platform === 'darwin';
   const drag = useRef<{ id: number; x: number; y: number; left: number; top: number }>();
   useEffect(() => {
     if (!open) return;
@@ -104,7 +105,7 @@ export default function Settings() {
 
   return (
     <div className="modal-bg settings-backdrop" onClick={() => setOpen(false)}>
-      <div ref={modal} className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(e) => e.stopPropagation()}>
+      <div ref={modal} className={`modal settings-modal${mac ? ' is-macos' : ''}`} role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header" onPointerDown={event => {
           if (event.button !== 0 || (event.target as HTMLElement).closest('button') || !modal.current || window.innerWidth <= 768) return;
           const box = modal.current.getBoundingClientRect();
@@ -121,7 +122,7 @@ export default function Settings() {
           element.style.transform = `translate(${left - centeredLeft}px, ${top - centeredTop}px)`;
         }} onPointerUp={() => { drag.current = undefined; }} onPointerCancel={() => { drag.current = undefined; }} onLostPointerCapture={() => { drag.current = undefined; }}>
           <span id="settings-title">设置 — {vaultName}</span>
-          <button type="button" title="关闭设置" aria-label="关闭设置" onClick={() => setOpen(false)}><Icon name="x" size={16} /></button></div>
+          <button type="button" className={mac ? 'settings-close-macos' : undefined} title="关闭设置" aria-label="关闭设置" onClick={() => setOpen(false)}><Icon name="x" size={mac ? 8 : 16} /></button></div>
         <div className="settings-layout">
           <div className="settings-nav">
             <label className="settings-search"><Icon name="search" size={15} /><input aria-label="搜索设置" placeholder="搜索设置…" value={navQuery} onChange={event => setNavQuery(event.target.value)} /></label>

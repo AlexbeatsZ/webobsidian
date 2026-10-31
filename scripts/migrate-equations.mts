@@ -9,9 +9,10 @@ import {
   SourceDocument, analyzeMarkdown, equations, equationAnchor, equationReferenceName,
   extractMetadata, mathRegions, markdownComments, isEscaped,
   TargetIndex, parseLinkTarget, mathBodyOffset, tableModels,
-  contentTargets, createContentTarget, fragmentRange, isGlobalContentTarget, legacySubheadings,
+  contentTargets, createContentTarget, fragmentRange, isGlobalContentTarget,
   type Equation, type SourceChange, type SourceSpan, type Heading,
 } from '../packages/markdown-core/src/index.ts';
+import { legacySubheadings, legacySubheadingRange } from '../packages/markdown-core/src/migration.ts';
 
 type Issue = { file: string; line: number; reason: string; source: string };
 type Repair = { file: string; source: string; insert: string; reason: string };
@@ -178,7 +179,7 @@ export function planMigration(input: Map<string, string>, options: Options = {})
     const reviewed = manual.get(sourceKey(sourceFile, range));
     if (reviewed) { if (!reviewed.heading) return; file = reviewed.decision.targetFile; reviewed.used = true; }
     const note = notes.get(file)!;
-    const target = reviewed?.heading ? undefined : fragmentRange(note.model, fragment);
+    const target = reviewed?.heading ? undefined : fragmentRange(note.model, fragment) ?? legacySubheadingRange(note.model, fragment);
     const oldHeadings = legacySubheadings(note.model, markdownComments(note.model));
     const normalizeHeading = (value: string) => decode(value).normalize('NFC').replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
     const namedLegacy = oldHeadings.filter(candidate => normalizeHeading(candidate.text) === normalizeHeading(fragment));

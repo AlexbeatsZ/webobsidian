@@ -1,6 +1,5 @@
 import type { MarkdownModel, SourceSpan } from './syntax.js';
 import { extractMetadata } from './metadata.js';
-import { legacySubheadings } from './legacySubheadings.js';
 import { footnotes, footnoteFragment } from './footnotes.js';
 import { contentTargets } from './contentTargets.js';
 
@@ -37,14 +36,6 @@ export function fragmentRange(model: MarkdownModel, fragment: string): FragmentR
     const paragraph = model.nodes.filter((node) => ['Paragraph', 'ListItem', 'Blockquote'].includes(node.name) && node.from <= block.from && node.to >= block.to)
       .sort((a, b) => a.to - a.from - (b.to - b.from))[0];
     return result(paragraph ? { from: paragraph.from, to: paragraph.to } : { from: model.text.lastIndexOf('\n', block.from - 1) + 1, to: block.to }, 'block');
-  }
-  if (decoded.startsWith('-')) {
-    const subheadings = legacySubheadings(model, meta.comments);
-    const item = subheadings.find(candidate => candidate.fragment.normalize('NFC') === decoded.normalize('NFC'));
-    if (item) {
-      const next = [...subheadings, ...meta.headings].filter(candidate => candidate.from > item.from).sort((a, b) => a.from - b.from)[0];
-      return result({ from: item.from, to: next?.from ?? model.text.length }, 'heading', { from: item.from, to: item.to });
-    }
   }
   const normalize = (text: string) => text.replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim().normalize('NFC').toLocaleLowerCase();
   let candidates = meta.headings;

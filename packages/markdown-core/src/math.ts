@@ -201,7 +201,11 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
     }
     const display = text[p + 1] === '$';
     const width = display ? 2 : 1;
-    if (text[p - 1] === '$' || text[p + width] === '$') {
+    // A display snippet starts as $$$$: two opening and two closing dollars,
+    // with an empty body. Keep that bounded region in the incremental model so
+    // ordinary typing inside it invalidates the previous formula analysis.
+    const emptyDisplay = display && text[p + 2] === '$' && text[p + 3] === '$' && text[p + 4] !== '$';
+    if (text[p - 1] === '$' || (text[p + width] === '$' && !emptyDisplay)) {
       p += width;
       continue;
     }

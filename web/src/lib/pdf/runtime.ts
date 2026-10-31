@@ -1,5 +1,7 @@
-import { getDocument, GlobalWorkerOptions, TextLayer } from 'pdfjs-dist';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+// Electron 33 / Chromium 130 lacks newer Map APIs used by the modern build.
+// Use PDF.js's own compatibility build in both realms, including its worker.
+import { getDocument, GlobalWorkerOptions, TextLayer } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import type { DocumentInitParameters } from 'pdfjs-dist/types/src/display/api';
 
 GlobalWorkerOptions.workerSrc = workerUrl;

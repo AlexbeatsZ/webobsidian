@@ -1,5 +1,14 @@
 # Settings interface
 
+## macOS modal close control (2026-10-30)
+
+The settings surface is an in-app modal, not another BrowserWindow. On macOS its
+close action uses a 12px red traffic-light circle on the left. Hover/focus reveals
+the close mark. It keeps the same Escape/backdrop/close action and modal dragging;
+there are no inactive pretend minimize or zoom controls. The main window retains
+its existing native macOS traffic lights. Windows and other platforms retain their
+existing close button.
+
 ## Visual contract (2026-10-23)
 
 Follow the supplied Obsidian references: compact title strip, searchable left

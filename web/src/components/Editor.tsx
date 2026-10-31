@@ -13,6 +13,7 @@ import type { LinkIntent } from '../lib/fragmentNavigation';
 import { TEXT_EXT_RE } from '../lib/media';
 import AttachmentView from './AttachmentView';
 import PdfViewer from './PdfViewer';
+import { BacklinksPanel, OutgoingPanel } from './NoteLinks';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
 export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment, sidebar = false, navigationId, onOpenLink, onReady }: {
@@ -65,6 +66,8 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   if (fragment && !range) return <div className="editor-error">未找到章节或块</div>;
   const displayed = range ? { ...snapshot, text: snapshot.text.slice(range.from, range.to), raw: snapshot.text.slice(range.from, range.to) } : snapshot;
   return <MarkdownView snapshot={displayed} documentSession={session} analysis={range ? fragmentAnalysis(analysis, range.from, range.to) : analysis} mode={reading ? 'reading' : mode} context={numberedContext}
+    footer={!embedded && !fragment && /\.(md|markdown)$/i.test(session.id)
+      ? <div className="note-footer-body"><BacklinksPanel path={session.id} /><OutgoingPanel path={session.id} /></div> : undefined}
     extensions={reviewExtensions}
     autoFocus={!reading} showTitle={!embedded} layout={embedded ? 'embedded' : 'page'}
     onChange={(changes, version, origin, model, history) => { session.edit(version, changes, origin, history); session.acceptAnalysis(model); return session.snapshot; }}

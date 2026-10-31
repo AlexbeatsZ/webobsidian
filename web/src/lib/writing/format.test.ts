@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { compileFormattingSettings, formatText, ignoresFormatting, formatRules } from './format';
 import legacy from '../../../../tests/fixtures/writing-linter-settings.json';
-import { migrateLinterReplacements } from '@webobsidian/markdown-core';
+import { migrateLinterReplacements } from '@webobsidian/markdown-core/migration';
 const native = migrateLinterReplacements(legacy);
 const now = Date.UTC(2026, 9, 22, 12, 0);
 describe('native formatting compatibility', () => {

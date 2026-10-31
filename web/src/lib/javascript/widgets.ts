@@ -3,7 +3,7 @@ import type { TFile, TFolder } from '../obsidian/vault';
 import type { JavascriptRun } from './runtime';
 import { createEl } from '../obsidian/dom';
 import { compileJavascript } from './execute';
-import { blockContainers, extractMetadata, legacySubheadings } from '@webobsidian/markdown-core';
+import { blockContainers, extractMetadata, BODY_HEADING_LEVEL } from '@webobsidian/markdown-core';
 type WidgetHost = JavascriptRun;
 const collator = new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' });
 export interface UptimerOptions {
@@ -444,9 +444,8 @@ function resolveTargetFile(host: WidgetHost, target: OutlineOptions["target"]): 
 
 function collectOutlineItems(model: Parameters<typeof extractMetadata>[0] & object): OutlineItem[] {
   const meta = extractMetadata(model);
-  const entries = [...meta.headings.map(heading => ({ ...heading, type: 'heading' as const, link: heading.text })),
-    ...legacySubheadings(model, meta.comments).map(heading => ({ ...heading, type: 'subheading' as const, level: 0, link: heading.fragment }))]
-    .sort((a, b) => a.from - b.from);
+  const entries = meta.headings.map(heading => ({ ...heading,
+    type: heading.level === BODY_HEADING_LEVEL ? 'subheading' as const : 'heading' as const, link: heading.text }));
   let level = 0;
   return entries.map(entry => {
     if (entry.type === 'heading' && entry.level <= 6) level = entry.level;

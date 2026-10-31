@@ -63,7 +63,8 @@ create new tabstops or captures. Templates compile once with their settings.
 Match-prefix/suffix strings are lazy, avoiding full-prefix copies for ordinary
 snippet expansion and ordinary regex replacements.
 
-`legacyReplacement.ts` remains for historical test fixtures, outside runtime loading. It reproduces the
+`legacyReplacement.ts` is exported only by the explicit `markdown-core/migration`
+entry for historical fixtures and offline conversion, outside runtime loading. It reproduces the
 old Linter escape-decoding order and JavaScript substitution rules, then emits
 native templates: `$1` becomes `[[0]]`, `$&` becomes `${MATCH}`, and `$$` becomes
 a literal dollar with an explicit escape only when needed. Named substitutions,
@@ -85,6 +86,9 @@ files remain untouched and are not startup configuration sources.
   commits one change group; snippet state follows history/position mapping.
 - Manual save formats once before persistence. Autosave, navigation saves,
   plugin writes and external changes do not trigger whole-document formatting.
+- The active view's reading mode does not bypass manual-save formatting. A
+  readonly presentation can save the same writable document session through the
+  shared format action; session locks and conflicts still reject changes.
 - The timestamp rule's opt-in delayed update changes only timestamps, through
   one debouncer per session. Its default setting is `never`; background autosave
   itself still only persists. File-change formatting follows its explicit option.
@@ -106,6 +110,12 @@ always render. A caret or selection in a formula reveals its source, and the
 shared formula source entry selects the body without its dollar delimiters.
 Formula/table entries use the common selection/focus lifecycle to restore output;
 they do not create another persistent visibility switch.
+
+Empty `$$$$` is one closed display formula with an empty body. It remains in the
+shared math-region cache before the first ordinary character is typed, so `dm`
+snippet expansion, TeX highlighting and preview update immediately without Enter.
+No placeholder is inserted into source. Five or more contiguous dollars remain
+invalid, and the four-dollar pair cannot consume following prose or formulas.
 
 Display and multiline formulas preview within the document below their source.
 Only inline formulas use a tooltip. Both hosts call `mathPreviewTex` and the same

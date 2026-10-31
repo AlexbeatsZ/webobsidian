@@ -681,6 +681,17 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .markdown-embedded-view, .markdown-embedded-view .cm-scroller { overflow: visible; }
 .markdown-embedded-view > .cm-editor { height: auto; background: transparent !important; }
 .markdown-embedded-view .cm-content { padding: 0; margin: 0; max-width: none; }
+.cm-scroller.cm-has-note-footer { flex-wrap: wrap; align-content: flex-start; }
+.cm-scroller.cm-has-note-footer > .cm-content { min-height: 0; }
+.cm-note-footer { flex: 0 0 100%; min-width: 0; box-sizing: border-box; width: 100%;
+  margin: 24px 0 32px;
+  font: var(--font-ui-size) var(--font-ui); white-space: normal; }
+.note-footer-body { max-width: var(--file-line-width); box-sizing: border-box; margin-inline: auto;
+  padding: 16px; border-top: 1px solid var(--background-modifier-border); }
+.cm-note-footer .sidebar-body { overflow: visible; }
+.cm-note-footer .nav-header { padding-inline: 0; }
+.note-properties .cm-properties { margin: 0; padding: 8px 0; }
+.note-properties .prop-row { min-width: 0; }
 .md-html-b, .md-html-strong { font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
 .md-html-mark { background: var(--text-highlight-bg); color: inherit; }
 .md-html-kbd { font-family: var(--font-mono); background: var(--background-primary-alt); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); padding: 0 3px; }
@@ -1174,6 +1185,11 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .settings-header button { position: absolute; right: 8px; top: 4px; width: 26px; height: 26px; display: grid; place-items: center;
   padding: 0; color: var(--text-muted); background: transparent; border: 0; border-radius: 5px; cursor: pointer; }
 .settings-header button:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
+.settings-modal.is-macos .settings-header { padding-inline: 44px; }
+.settings-header button.settings-close-macos { left: 12px; right: auto; top: 11px; width: 12px; height: 12px;
+  padding: 0; border-radius: 50%; background: #ff5f57; border: 1px solid #df4744; color: #5b0808; }
+.settings-header .settings-close-macos svg { opacity: 0; }
+.settings-header .settings-close-macos:hover svg, .settings-header .settings-close-macos:focus-visible svg { opacity: 1; }
 .settings-layout { display: flex; flex: 1; min-height: 0; }
 .settings-nav { width: 226px; flex-shrink: 0; overflow-y: auto; background: var(--bg-primary); border-right: 1px solid var(--bg-modifier-border); padding: 12px 10px 24px; }
 .settings-nav button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 30px; text-align: left; padding: 4px 9px; background: transparent; border: 1px solid transparent;
