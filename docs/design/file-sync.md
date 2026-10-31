@@ -25,6 +25,17 @@ The optional Sakura Web route is /webobsidian-sync/v1/, separate from Dayweave,
 Mojian and subscriptions. No extra tunnel is required. Backend credentials/data are
 independent. Existing services/tasks and live Vaults are never implicitly changed.
 
+The standalone server is versioned and released independently with `sync-server-v*`
+tags. Its thin `createSyncServer` adapter delegates durable storage, streaming blobs,
+CAS, receipts and draining close to an exact-release-pinned `@alexbeatsz/file-sync-core`.
+`protocol.mjs` remains the WebObsidian path/manifest authority and the adapter retains
+printable ASCII 32–512 token policy plus Origin/query/fragment rejection. Existing
+gateway exports, 18744 port, v1 route, receipt fingerprints and storage layout remain
+compatible. No second storage kernel is maintained in this repository. The tested core
+and license/notices ship inside each server package; Node 22+ needs no runtime install
+or sibling source checkout. `core-source.json` and `BUILD-INFO.json` record provenance.
+Server releases never change desktop/mobile versions or the client's latest Release.
+
 ## Files and safety
 
 Reuse Mojian's immutable SHA-256 blobs, exact-version CAS, retained tombstones and

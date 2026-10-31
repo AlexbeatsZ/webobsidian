@@ -1,0 +1,9 @@
+{
+  "name": "@alexbeatsz/file-sync-core",
+  "version": "0.1.0",
+  "repository": "https://github.com/AlexbeatsZ/file-sync-core",
+  "commit": "b191d74a61b2fe3d6855b95a3299c7e6b9591f86",
+  "tag": "v0.1.0",
+  "archive": "https://github.com/AlexbeatsZ/file-sync-core/releases/download/v0.1.0/alexbeatsz-file-sync-core-0.1.0.tgz",
+  "license": "MIT"
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@webobsidian/sync-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone WebObsidian file synchronization server",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/server.test.mjs test/cli.test.mjs",
+    "build": "node scripts/package.mjs",
+    "test:package": "node --test test/package.test.mjs",
+    "test:client": "node scripts/test-client.mjs"
+  },
+  "dependencies": {
+    "@alexbeatsz/file-sync-core": "https://github.com/AlexbeatsZ/file-sync-core/releases/download/v0.1.0/alexbeatsz-file-sync-core-0.1.0.tgz"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

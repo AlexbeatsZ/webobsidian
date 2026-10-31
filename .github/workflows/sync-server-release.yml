@@ -1,0 +1,78 @@
+name: Release standalone sync server
+
+on:
+  push:
+    tags:
+      - 'sync-server-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Sync server (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install only standalone server dependency
+        run: npm ci --workspace @webobsidian/sync-server --include-workspace-root=false --ignore-scripts --omit=dev
+      - name: Protocol and CLI compatibility
+        run: npm --workspace @webobsidian/sync-server test
+      - name: Build standalone ZIP and TAR.GZ
+        run: npm --workspace @webobsidian/sync-server run build
+      - name: Run both extracted packages outside checkout
+        run: npm --workspace @webobsidian/sync-server run test:package
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        with:
+          name: standalone-sync-server
+          path: sync-server/release/*/*
+          if-no-files-found: error
+
+  client:
+    name: Current native client compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:core
+      - run: npm --workspace @webobsidian/sync-server run build
+      - run: npm --workspace @webobsidian/sync-server run test:client
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/sync-server-v')
+    needs: [package, client]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: standalone-sync-server
+          path: release-assets
+      - name: Publish independent server Release without changing client latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(node -p "require('./sync-server/package.json').version")"
+          test "$RELEASE_TAG" = "sync-server-v$VERSION"
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --verify-tag --latest=false \
+            --title "WebObsidian Sync Server $VERSION" \
+            --notes "Standalone Node 22+ server. Includes its tested, commit-pinned file-sync core; no runtime npm install. Existing v1 routes, port, data identity and receipts are retained. See sync-server/README.md for upgrade and rollback."

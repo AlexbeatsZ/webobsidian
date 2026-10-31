@@ -25,6 +25,7 @@ android/.runtime/
 android/.signing/
 android/local.properties
 android/release/
+sync-server/release/
 # Local agent runbooks/skills — may contain server creds; never commit.
 .claude/skills/
 report.md
