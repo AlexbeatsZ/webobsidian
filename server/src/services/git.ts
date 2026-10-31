@@ -34,8 +34,7 @@ async function git(): Promise<SimpleGit> {
   // dead network push/pull can't hang forever and wedge the serial queue below.
   // Git LFS otherwise hides progress on piped stdout. A healthy multi-GB upload
   // then looks silent for 120s and gets aborted by the existing idle timeout.
-  return simpleGit({ baseDir: root, trimmed: true, timeout: { block: 120_000 } })
-    .env({ ...process.env, GIT_LFS_FORCE_PROGRESS: '1' });
+  return simpleGit({ baseDir: root, trimmed: true, timeout: { block: 120_000 }, config: ['lfs.forceprogress=1'] });
 }
 
 // ---------------------------------------------------------------------------
