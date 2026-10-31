@@ -37,22 +37,6 @@ const SettingsSchema = z.object({
       attachmentDir: z.string().default('attachments'),
     })
     .default({}),
-  git: z
-    .object({
-      enabled: z.boolean().default(false),
-      remote: z.string().default(''),
-      branch: z.string().default('main'),
-      token: z.string().default(''),
-      authorName: z.string().default('WebObsidian'),
-      authorEmail: z.string().default('webobsidian@localhost'),
-      autoSync: z.boolean().default(false),
-      autoCommitOnSave: z.boolean().default(false),
-      intervalSec: z.number().default(300),
-      lfsPatterns: z
-        .array(z.string())
-        .default(['*.png', '*.jpg', '*.jpeg', '*.gif', '*.pdf', '*.mp4', '*.mov', '*.zip']),
-    })
-    .default({}),
   search: z
     .object({
       chinese: z
@@ -186,6 +170,5 @@ export function redactSettings(s: Settings) {
   const {writing,nativeFeatures,hotkeys,...publicSettings}=s;
   return {
     ...publicSettings,
-    git: { ...s.git, token: s.git.token ? '••••••••' : '' },
   };
 }

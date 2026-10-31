@@ -77,6 +77,28 @@ rejects the update, the successful device backup remains available; never pull, 
 force-push or overwrite the other device's repository history to make this succeed.
 Manual pull/clone is blocked while native synchronization owns file transport.
 
+## Vault Git configuration
+
+Git backup settings now belong to `.obsidian/webobsidian/git.jsonc`: enabled,
+remote, branch, optional token, authorName, authorEmail, autoSync,
+autoCommitOnSave, intervalSec and lfsPatterns. The existing settings UI/API reads
+and writes this file through the same Vault configuration reader and
+revision-checked writer as sync.jsonc. Git operations, the periodic timer and
+conflict history read this one authority; application-global `settings.json.git`
+is no longer used. A fresh Vault defaults to Git disabled. Existing legacy
+settings bytes are not silently imported or assigned to a different Vault.
+
+Both connection files are explicitly included in Git commits even if `.obsidian`
+is ignored. Tokens are masked in API responses. Leave the Git token empty to use
+the device's existing Git credential helper; no GitHub access token is required
+in the shared file. Only the private Vault repository may contain the native
+sync token. Git configuration is read by Git/API operations, not every editor
+input or ordinary application-settings read.
+
+Git LFS progress is explicitly enabled for the existing child process. The
+120-second no-output timeout still detects a stalled command without aborting a
+healthy first backup simply because LFS suppressed progress on piped stdout.
+
 ## Validation boundary
 
 Use temporary Vaults for all protocol, binary, failover, offline, retry, conflict and

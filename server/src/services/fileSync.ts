@@ -2,7 +2,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { FileSyncPreferencesSchema } from '../contracts/fileSync.js';
-import { getSettings } from './settings.js';
+import { gitPreferences } from './gitPreferences.js';
 import { getVaultRoot, vaultPathKey } from './vaultFile.js';
 import { FileSyncEngine } from './fileSyncEngine.js';
 import { fileSyncPreferences, parseFileSyncPreferences, readFileSyncPreferencesSource } from './fileSyncPreferences.js';
@@ -35,7 +35,7 @@ export async function fileSyncEngine(): Promise<FileSyncEngine> {
     },
     changed: async (relative, deleted) => { await queueFileUpdate(relative, deleted ? 'unlink' : 'change'); },
     conflict: async snapshot => {
-      if (!(await getSettings()).git.enabled) return [];
+      if (!(await gitPreferences()).enabled) return [];
       const { recordSyncConflict } = await import('./git.js');
       return recordSyncConflict(root, snapshot);
     },

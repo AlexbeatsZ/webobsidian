@@ -1,4 +1,4 @@
-import { getSettings } from './settings.js';
+import { gitPreferences } from './gitPreferences.js';
 import { sync } from './git.js';
 import { fileSyncPreferences } from './fileSyncPreferences.js';
 
@@ -16,11 +16,11 @@ async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    const s = await getSettings();
-    if (!s.git.enabled || !s.git.autoSync) return;
+    const preferences = await gitPreferences();
+    if (!preferences.enabled || !preferences.autoSync) return;
     const native = (await fileSyncPreferences()).enabled;
-    if (!s.git.remote && !native) return;
-    const intervalMs = Math.max(s.git.intervalSec, 60) * 1000;
+    if (!preferences.remote && !native) return;
+    const intervalMs = preferences.intervalSec * 1000;
     if (Date.now() - (lastRun ?? 0) < intervalMs) return;
     const res = await sync();
     lastRun = Date.now();

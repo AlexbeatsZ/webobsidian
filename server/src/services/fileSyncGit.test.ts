@@ -6,7 +6,6 @@ import { randomUUID } from 'node:crypto';
 import { simpleGit } from 'simple-git';
 
 const fixture = vi.hoisted(() => ({ root: '', settings: { git: { enabled: true, autoCommitOnSave: true, authorName: 'Fixture', authorEmail: 'fixture@localhost', lfsPatterns: [] as string[], remote: '', branch: 'main', token: '' } } }));
-vi.mock('./settings.js', () => ({ getSettings: async () => fixture.settings }));
 vi.mock('./vaultFile.js', async importOriginal => ({ ...await importOriginal<typeof import('./vaultFile.js')>(), getVaultRoot: async () => fixture.root }));
 vi.mock('./vaultMaintenance.js', () => ({ beginBackgroundVaultWrite: () => () => {} }));
 
@@ -19,6 +18,7 @@ beforeEach(async () => {
   fixture.settings.git.remote = '';
   await fs.mkdir(path.join(fixture.root, '.obsidian/webobsidian'), { recursive: true });
   await fs.writeFile(path.join(fixture.root, '.obsidian/webobsidian/sync.jsonc'), JSON.stringify({ enabled: true, endpoints: ['http://127.0.0.1:18744'], token: 'fixture-only-git-token-0123456789-abcdef' }));
+  await fs.writeFile(path.join(fixture.root, '.obsidian/webobsidian/git.jsonc'), JSON.stringify(fixture.settings.git));
   const client = simpleGit(fixture.root); await client.init();
   await client.addConfig('user.name', 'Fixture'); await client.addConfig('user.email', 'fixture@localhost');
 });
@@ -38,6 +38,8 @@ describe('Git as backup, not file transport', () => {
     fixture.root = clone;
     const { fileSyncPreferences } = await import('./fileSyncPreferences.js');
     expect(await fileSyncPreferences()).toMatchObject({ enabled: true, endpoints: ['http://127.0.0.1:18744/webobsidian-sync/v1/'] });
+    const { gitPreferences } = await import('./gitPreferences.js');
+    expect(await gitPreferences()).toMatchObject({ enabled: true, branch: 'main', authorName: 'Fixture' });
     await expect(fs.access(path.join(clone, '.obsidian/workspace.json'))).rejects.toThrow();
   });
 
@@ -82,6 +84,7 @@ describe('Git as backup, not file transport', () => {
   it('backs up periodically to a per-device branch without pulling remote work into the Vault', async () => {
     const remote = path.join(directory, 'remote.git'); await fs.mkdir(remote); await simpleGit(remote).init(true);
     fixture.settings.git.remote = remote;
+    await fs.writeFile(path.join(fixture.root, '.obsidian/webobsidian/git.jsonc'), JSON.stringify(fixture.settings.git));
     await simpleGit(fixture.root).addRemote('origin', remote);
     await fs.writeFile(path.join(fixture.root, 'note.md'), 'local backup');
     const git = await import('./git.js');

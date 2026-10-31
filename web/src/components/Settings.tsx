@@ -406,7 +406,7 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           onChange={(e) => set('branch', e.target.value)}
         />
       </Row>
-      <Row name="访问令牌 (PAT)" desc="存储在服务端；保持掩码以保留当前值">
+      <Row name="访问令牌 (PAT)" desc="可留空使用本机 Git 凭据；保持掩码以保留当前值">
         <input
           className="text-input"
           type="password"

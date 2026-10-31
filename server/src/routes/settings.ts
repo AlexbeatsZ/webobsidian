@@ -14,6 +14,7 @@ import { readCssSnippets, readCssSnippet, setCssSnippetEnabled } from '../servic
 import { readHotkeys, patchHotkeys } from '../services/hotkeySettings.js';
 import { DebugLog } from '../services/debugLog.js';
 import { UiSettingsSchema } from '../contracts/uiSettings.js';
+import { gitPreferences, redactGitPreferences, saveGitPreferences } from '../services/gitPreferences.js';
 
 let switchRuntime = async (_commit: () => Promise<void>): Promise<void> => { throw new Error('Vault switch runtime is not ready'); };
 /** The server owns its existing watcher and index lifecycle. */
@@ -49,7 +50,7 @@ settingsRouter.put('/hotkeys', asyncHandler(async (req, res) => { res.json(await
 settingsRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
-    res.json(redactSettings(await getSettings()));
+    res.json({ ...redactSettings(await getSettings()), git: redactGitPreferences(await gitPreferences()) });
   }),
 );
 
@@ -58,6 +59,8 @@ settingsRouter.put(
   '/',
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
+    if (body.git && body.vault?.path !== undefined)
+      throw Object.assign(new Error('请先切换 Vault，再修改该 Vault 的 Git 配置'), { status: 400 });
     const ui = body.ui === undefined ? undefined : UiSettingsSchema.partial().strict().safeParse(body.ui);
     if (ui && !ui.success) throw Object.assign(new Error(ui.error.message), { status: 400 });
     let previous = await getSettings();
@@ -74,11 +77,6 @@ settingsRouter.put(
       if (body.vault) {
         Object.assign(d.vault, sanitizeVault(body.vault));
         ensureVaultBrowsable(d);
-      }
-      if (body.git) {
-        const { token, ...rest } = body.git;
-        Object.assign(d.git, rest);
-        if (typeof token === 'string' && token && token !== '••••••••') d.git.token = token;
       }
       if (body.search) {
         const { chinese, ...rest } = body.search;
@@ -108,8 +106,15 @@ settingsRouter.put(
         }
         broadcast({ type: 'vault-changed' });
       });
-    } else await commit();
-    res.json(redactSettings(updated));
+    } else {
+      if (body.git) {
+        await saveGitPreferences(body.git);
+        broadcast({ type: 'vault-configuration-changed', path: '.obsidian/webobsidian/git.jsonc', event: 'change' });
+      }
+      // A Git-only edit belongs entirely to the Vault; avoid a second app-data write.
+      if (Object.keys(body).some(key => key !== 'git')) await commit();
+    }
+    res.json({ ...redactSettings(updated), git: redactGitPreferences(await gitPreferences()) });
   }),
 );
 

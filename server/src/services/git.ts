@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git';
-import { getSettings } from './settings.js';
+import { GIT_CONFIGURATION_PATH, gitPreferences, readGitPreferencesSource } from './gitPreferences.js';
 import { FILE_SYNC_CONFIGURATION_PATH, fileSyncPreferences, readFileSyncPreferencesSource } from './fileSyncPreferences.js';
 import { getVaultRoot, vaultPathKey } from './vaultFile.js';
 import type { ConflictSnapshot } from './fileSyncEngine.js';
@@ -32,7 +32,10 @@ async function git(): Promise<SimpleGit> {
   await fs.mkdir(root, { recursive: true });
   // `timeout.block`: abort a command that produces no output for this long, so a
   // dead network push/pull can't hang forever and wedge the serial queue below.
-  return simpleGit({ baseDir: root, trimmed: true, timeout: { block: 120_000 } });
+  // Git LFS otherwise hides progress on piped stdout. A healthy multi-GB upload
+  // then looks silent for 120s and gets aborted by the existing idle timeout.
+  return simpleGit({ baseDir: root, trimmed: true, timeout: { block: 120_000 } })
+    .env({ ...process.env, GIT_LFS_FORCE_PROGRESS: '1' });
 }
 
 // ---------------------------------------------------------------------------
@@ -111,8 +114,8 @@ async function backupImpl(message?: string): Promise<{ ok: boolean; log: string[
   const client = await git();
   if (!await isRepo(client)) await initImpl();
   const output = [await commitAllImpl(message)];
-  const settings = await getSettings();
-  if (!settings.git.remote) return { ok: true, log: output };
+  const settings = await gitPreferences();
+  if (!settings.remote) return { ok: true, log: output };
   const identity = createHash('sha256').update(`${hostname()}:${vaultPathKey(await getVaultRoot())}`).digest('hex').slice(0, 16);
   const branch = `webobsidian-backups/${identity}`;
   try {
@@ -120,7 +123,7 @@ async function backupImpl(message?: string): Promise<{ ok: boolean; log: string[
     const conflicts = (await client.raw(['for-each-ref', '--format=%(refname)', 'refs/heads/webobsidian-conflicts/'])).split('\n').filter(Boolean);
     await client.raw(['push', 'origin', `HEAD:refs/heads/${branch}`, ...conflicts.map(reference => `${reference}:${reference}`)]);
     output.push(`备份已推送到 ${branch}`);
-    const repositoryBranch = settings.git.branch || 'main';
+    const repositoryBranch = settings.branch || 'main';
     try {
       await client.raw(['push', 'origin', `HEAD:refs/heads/${repositoryBranch}`]);
       output.push(`仓库分支 ${repositoryBranch} 已更新`);
@@ -134,7 +137,7 @@ async function backupImpl(message?: string): Promise<{ ok: boolean; log: string[
 export function recordSyncConflict(root: string, snapshot: ConflictSnapshot): Promise<string[]> {
   return withGitLock(async () => {
     if (vaultPathKey(await getVaultRoot()) !== vaultPathKey(root)) throw new Error('Vault 已切换，未创建冲突分支');
-    if (!(await getSettings()).git.enabled) return [];
+    if (!(await gitPreferences()).enabled) return [];
     const client = await git();
     if (!await isRepo(client)) await client.init();
     await configureIdentity(client);
@@ -169,14 +172,14 @@ export function recordSyncConflict(root: string, snapshot: ConflictSnapshot): Pr
 
 /** Compose an authenticated remote URL from settings (PAT embedded). */
 async function authedRemote(): Promise<string> {
-  const s = await getSettings();
-  const url = s.git.remote.trim();
+  const s = await gitPreferences();
+  const url = s.remote.trim();
   if (!url) return '';
-  if (s.git.token && url.startsWith('https://')) {
+  if (s.token && url.startsWith('https://')) {
     // https://<token>@github.com/owner/repo.git
     const without = url.replace(/^https:\/\//, '');
     if (without.includes('@')) return url; // already has creds
-    return `https://${s.git.token}@${without}`;
+    return `https://${s.token}@${without}`;
   }
   return url;
 }
@@ -200,15 +203,15 @@ export async function lfsAvailable(): Promise<boolean> {
 }
 
 async function configureIdentity(g: SimpleGit): Promise<void> {
-  const s = await getSettings();
-  await g.addConfig('user.name', s.git.authorName || 'WebObsidian');
-  await g.addConfig('user.email', s.git.authorEmail || 'webobsidian@localhost');
+  const s = await gitPreferences();
+  await g.addConfig('user.name', s.authorName || 'WebObsidian');
+  await g.addConfig('user.email', s.authorEmail || 'webobsidian@localhost');
 }
 
 /** Write/refresh .gitattributes so LFS patterns are tracked. */
 export async function ensureLfsAttributes(): Promise<void> {
-  const s = await getSettings();
-  if (!s.git.lfsPatterns.length) return;
+  const s = await gitPreferences();
+  if (!s.lfsPatterns.length) return;
   const root = await getVaultRoot();
   const file = path.join(root, '.gitattributes');
   let existing = '';
@@ -226,7 +229,7 @@ export async function ensureLfsAttributes(): Promise<void> {
       // conflict by regenerating never bakes `<<<<<<<`/`=======`/`>>>>>>>` into the file.
       .filter((l) => !/^(<{7}|={7}|>{7})/.test(l)),
   );
-  for (const p of s.git.lfsPatterns) {
+  for (const p of s.lfsPatterns) {
     lines.add(`${p} filter=lfs diff=lfs merge=lfs -text`);
   }
   // Write a CANONICAL (sorted) .gitattributes so every device/instance produces a
@@ -246,10 +249,10 @@ export async function ensureLfsAttributes(): Promise<void> {
 
 async function initImpl(): Promise<void> {
   const g = await git();
-  const s = await getSettings();
+  const s = await gitPreferences();
   if (!(await isRepo(g))) {
     await g.init();
-    await g.checkoutLocalBranch(s.git.branch || 'main').catch(() => {});
+    await g.checkoutLocalBranch(s.branch || 'main').catch(() => {});
   }
   await configureIdentity(g);
   const remote = await authedRemote();
@@ -266,7 +269,7 @@ async function initImpl(): Promise<void> {
 
 /** Clone the configured remote into the (empty) vault dir. */
 async function cloneImpl(): Promise<void> {
-  const s = await getSettings();
+  const s = await gitPreferences();
   const remote = await authedRemote();
   if (!remote) throw new Error('No remote configured');
   const root = await getVaultRoot();
@@ -275,21 +278,21 @@ async function cloneImpl(): Promise<void> {
     throw new Error('Vault directory not empty; cannot clone into it');
   }
   const g = simpleGit();
-  await g.clone(remote, root, ['--branch', s.git.branch || 'main']);
+  await g.clone(remote, root, ['--branch', s.branch || 'main']);
   const gv = await git();
   await configureIdentity(gv);
   if (await lfsAvailable()) await gv.raw(['lfs', 'pull']).catch(() => {});
 }
 
 async function statusImpl(): Promise<GitStatus> {
-  const s = await getSettings();
+  const s = await gitPreferences();
   const g = await git();
   const repo = await isRepo(g);
   if (!repo) {
     return {
-      enabled: s.git.enabled,
+      enabled: s.enabled,
       isRepo: false,
-      branch: s.git.branch,
+      branch: s.branch,
       ahead: 0,
       behind: 0,
       staged: 0,
@@ -297,15 +300,15 @@ async function statusImpl(): Promise<GitStatus> {
       notAdded: 0,
       conflicted: [],
       lfsAvailable: await lfsAvailable(),
-      remote: s.git.remote,
+      remote: s.remote,
       clean: true,
     };
   }
   const st = await g.status();
   return {
-    enabled: s.git.enabled,
+    enabled: s.enabled,
     isRepo: true,
-    branch: st.current ?? s.git.branch,
+    branch: st.current ?? s.branch,
     ahead: st.ahead,
     behind: st.behind,
     staged: st.staged.length,
@@ -313,7 +316,7 @@ async function statusImpl(): Promise<GitStatus> {
     notAdded: st.not_added.length,
     conflicted: st.conflicted,
     lfsAvailable: await lfsAvailable(),
-    remote: s.git.remote,
+    remote: s.remote,
     clean: st.isClean(),
   };
 }
@@ -356,7 +359,7 @@ export async function showFile(hash: string, filePath: string): Promise<string> 
 async function pullImpl(): Promise<string> {
   const g = await git();
   await ensureLfsAttributes();
-  const s = await getSettings();
+  const s = await gitPreferences();
   // Pull must use the authenticated remote too. push() set-urls before pushing but
   // pull() didn't, so a fresh clone's tokenless origin made pull fail auth → "Pull
   // skipped" → the subsequent push hit a diverged remote → "fetch first" forever.
@@ -366,7 +369,7 @@ async function pullImpl(): Promise<string> {
   // remote that already has commits have no common ancestor; without this, the
   // first pull aborts with "refusing to merge unrelated histories" and sync can
   // never converge. Harmless (no-op) once the histories share a base.
-  const res = await g.pull('origin', s.git.branch || 'main', {
+  const res = await g.pull('origin', s.branch || 'main', {
     '--no-rebase': null,
     '--allow-unrelated-histories': null,
   });
@@ -441,7 +444,9 @@ async function commitAllImpl(message?: string): Promise<string> {
   await configureIdentity(g);
   await ensureLfsAttributes();
   await g.add('.');
-  if ((await readFileSyncPreferencesSource()).source.exists) await g.add(['--force', '--', FILE_SYNC_CONFIGURATION_PATH]);
+  const sharedConfigurations = await Promise.all([readFileSyncPreferencesSource(), readGitPreferencesSource()]);
+  const paths = [FILE_SYNC_CONFIGURATION_PATH, GIT_CONFIGURATION_PATH].filter((_, index) => sharedConfigurations[index].source.exists);
+  if (paths.length) await g.add(['--force', '--', ...paths]);
   const st = await g.status();
   if (st.staged.length === 0 && st.isClean()) return 'Nothing to commit';
   const { subject, body } = describeChanges(st);
@@ -456,10 +461,10 @@ async function commitAllImpl(message?: string): Promise<string> {
 
 async function pushImpl(): Promise<string> {
   const g = await git();
-  const s = await getSettings();
+  const s = await gitPreferences();
   const remote = await authedRemote();
   if (remote) await g.remote(['set-url', 'origin', remote]);
-  await g.push('origin', s.git.branch || 'main', ['--set-upstream']);
+  await g.push('origin', s.branch || 'main', ['--set-upstream']);
   return 'Pushed to origin';
 }
 
@@ -469,12 +474,12 @@ export function scheduleAutoCommitOnSave(): void {
   if (autoCommitTimer) clearTimeout(autoCommitTimer);
   autoCommitTimer = setTimeout(async () => {
     try {
-      const s = await getSettings();
-      if (!s.git.enabled || !s.git.autoCommitOnSave || await nativeSyncEnabled()) return;
+      const s = await gitPreferences();
+      if (!s.enabled || !s.autoCommitOnSave || await nativeSyncEnabled()) return;
       // Full sync (pull→merge→push), not a bare push: pushing without first
       // integrating the remote is exactly what left the repo permanently rejected
       // ("fetch first") once another device had pushed in the meantime.
-      if (s.git.remote) await sync().catch((e) => console.warn('[git] auto-sync failed:', redactUrlCreds(e?.message)));
+      if (s.remote) await sync().catch((e) => console.warn('[git] auto-sync failed:', redactUrlCreds(e?.message)));
       else await commitAll();
     } catch (e: any) {
       console.warn('[git] auto-commit failed:', redactUrlCreds(e.message));

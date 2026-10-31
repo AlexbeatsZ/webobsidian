@@ -24,6 +24,9 @@ describe('real application integration', () => {
       const endpoint = `http://127.0.0.1:${(hub.server.address() as AddressInfo).port}${prefix}/`;
       await fs.mkdir(path.join(source, '.obsidian/webobsidian'), { recursive: true });
       await fs.writeFile(path.join(source, '.obsidian/webobsidian/sync.jsonc'), JSON.stringify({ enabled: true, endpoints: [endpoint], token, intervalSec: 3600 }));
+      await fs.writeFile(path.join(source, '.obsidian/webobsidian/git.jsonc'), JSON.stringify({
+        enabled: true, remote: 'https://github.com/example/private.git', token: 'fixture-only-git-secret', autoSync: false,
+      }));
       await fs.writeFile(path.join(source, 'cloned.md'), 'clone-only source\r\n');
       const git = simpleGit(source); await git.init(); await git.addConfig('user.name', 'Fixture'); await git.addConfig('user.email', 'fixture@localhost');
       await git.add('.'); await git.commit('fixture'); await simpleGit().clone(source, clone);
@@ -45,6 +48,15 @@ describe('real application integration', () => {
         else {
           expect(await response.json()).toMatchObject({ preferences: { enabled: true, endpoints: [endpoint], token: '••••••••' } });
           const identity = (await (await fetch(base + '/api/vault-identity')).json() as { vault: string }).vault;
+          const settings = await (await fetch(base + '/api/settings')).json() as any;
+          expect(settings.git).toMatchObject({ enabled: true, remote: 'https://github.com/example/private.git', token: '••••••••' });
+          const updated = await fetch(base + '/api/settings', { method: 'PUT', headers: {
+            'X-Vault-Identity': identity, 'Content-Type': 'application/json',
+          }, body: JSON.stringify({ git: { intervalSec: 900, token: '••••••••' } }) });
+          expect(updated.status).toBe(200);
+          expect(JSON.parse(await fs.readFile(path.join(clone, '.obsidian/webobsidian/git.jsonc'), 'utf8')))
+            .toMatchObject({ intervalSec: 900, token: 'fixture-only-git-secret' });
+          expect(JSON.parse(await fs.readFile(path.join(data, 'settings.json'), 'utf8')).git).toBeUndefined();
           const sync = await fetch(base + '/api/file-sync/run', { method: 'POST', headers: { 'X-Vault-Identity': identity } });
           expect(await sync.json(), logs).toMatchObject({ phase: 'idle', activeEndpoint: endpoint });
           const manifest = await (await fetch(endpoint + 'manifest', { headers: { Authorization: `Bearer ${token}` } })).json() as SyncManifest;
