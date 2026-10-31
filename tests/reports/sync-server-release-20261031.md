@@ -56,8 +56,41 @@ checkout, with no installation and no NODE_PATH/NODE_OPTIONS dependency. The
 additional actual-current-client test also passes against the extracted server;
 the 13 existing source-adapter tests pass alongside it.
 
-Clean source build, independent CI and Release publication remain the final
-closeout steps at this source checkpoint.
+## Final build and publication
+
+- Runtime source/tag: `dbe6a2fc9481be70051e18d67e0325b54fb35dcd`,
+  `sync-server-v0.1.0`, normally pushed to AlexbeatsZ/webobsidian origin/main.
+  Desktop/mobile version files were outside this commit.
+- Independent CI run `41189552479`: all five verification jobs passed. Four jobs
+  cover Windows/Linux × Node22/24 protocol/CLI (8 each), independent dependency
+  installation, build, and both extracted package formats (2 each). The fifth
+  builds and runs actual-current-client compatibility (14 cases, including the
+  extracted standalone server).
+- The publication job failed because download-artifact retained a `0.1.0/`
+  subdirectory, while the upload glob selected its parent directory. This was a
+  publication-path error, not a runtime/test failure. Main's workflow now selects
+  `release-assets/"$VERSION"/*`; no tag or published history was moved.
+- The canonical Linux/Node22 CI artifacts were downloaded unchanged, replacing
+  the local preliminary Windows build. On local Windows/Node24, both canonical
+  archives again passed extraction/startup/blob/CAS/restart (2/2), plus current
+  client compatibility (14/14). Final BUILD-INFO has sourceDirty=false and records
+  source/core full commits, exact asset URL, npm integrity and build runtime.
+- Those exact CI artifacts were published using the maintainer CLI, with
+  `--verify-tag --latest=false`. Remote assets are uploaded, non-draft and
+  non-prerelease. Tag readback equals the source commit. Latest remains the
+  pre-existing client release `v0.1.36`; other drafts/releases were untouched.
+
+| Published/local canonical file | Bytes |
+| --- | ---: |
+| webobsidian-sync-server-0.1.0.zip | 22918 |
+| webobsidian-sync-server-0.1.0.tar.gz | 14907 |
+| BUILD-INFO.json | 853 |
+
+Local canonical files: `sync-server/release/0.1.0/`.
+Release: https://github.com/AlexbeatsZ/webobsidian/releases/tag/sync-server-v0.1.0
+CI: https://github.com/AlexbeatsZ/webobsidian/actions/runs/41189552479
+The run's overall failure remains visible because of its failed publication job;
+it must not be described as an all-green workflow run.
 
 ## ROG handoff
 
@@ -71,3 +104,10 @@ the advanced current data, not overwrite it with a stale pre-upgrade backup.
 
 This chat does not deploy ROG, install software, restart any production service,
 construct desktop/mobile packages or perform live-client/physical acceptance.
+
+Temporary draft package, legacy test source and CI-download staging remain under
+`C:/Users/Meta/AppData/Local/Temp/.agents/webobsidian-sync-server-20261031/`.
+Automatic approval rejected the cleanup command as `blocked by policy` without
+a specific reason. It did not execute and was not retried. Official current
+artifacts remain in sync-server/release/0.1.0; no historical/unrelated cleanup was
+attempted.

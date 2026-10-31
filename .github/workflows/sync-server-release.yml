@@ -72,7 +72,7 @@ jobs:
         run: |
           VERSION="$(node -p "require('./sync-server/package.json').version")"
           test "$RELEASE_TAG" = "sync-server-v$VERSION"
-          gh release create "$RELEASE_TAG" release-assets/* \
+          gh release create "$RELEASE_TAG" release-assets/"$VERSION"/* \
             --verify-tag --latest=false \
             --title "WebObsidian Sync Server $VERSION" \
             --notes "Standalone Node 22+ server. Includes its tested, commit-pinned file-sync core; no runtime npm install. Existing v1 routes, port, data identity and receipts are retained. See sync-server/README.md for upgrade and rollback."
