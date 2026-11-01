@@ -35,6 +35,7 @@ const TREE_SORTS: TreeSort[] = ['name-asc', 'name-desc', 'mtime-desc', 'mtime-as
 /** Sentinel tab path for the Graph view (it lives in a tab, like Obsidian). */
 export const GRAPH_PATH = 'graph://view';
 export const isHomepagePath = (path: string | null): boolean => /^home:\/\/[\w-]+$/.test(path ?? '');
+const tabTitle = (path: string) => isHomepagePath(path) ? 'Homepage' : path === GRAPH_PATH ? '关系图谱' : path.split('/').pop() ?? path;
 
 export interface Tab {
   path: string;
@@ -151,7 +152,12 @@ interface AppState {
   /** Which edge the split pane is docked to ('right' = columns, 'down' = rows). */
   splitDirection: 'right' | 'down';
   openToSide: (path: string, direction?: 'right' | 'down') => Promise<void>;
+  /** Leave split view; both pages stay open as tabs. */
   closeSplit: () => Promise<void>;
+  /** Browser-style split: keep `path` (default: the main page) and open a Homepage on the new side. */
+  splitWithHomepage: (path?: string | null, direction?: 'right' | 'down') => Promise<void>;
+  /** Close one central pane and its tab; the remaining pane fills the workspace. */
+  closePane: (viewId: 'main' | 'split') => Promise<void>;
 
   recent: string[];
   removeRecent: (path: string) => void;
@@ -571,11 +577,23 @@ export const useStore = create<AppState>()(
         if (generation !== splitGeneration) return;
         const doc = TEXT_EXT_RE.test(path) ? await documents.open(path) : undefined;
         if (generation !== splitGeneration) return;
-        set((s) => ({
-          splitPath: path,
-          splitContent: doc?.snapshot.raw ?? '',
-          splitDirection: direction ?? s.splitDirection,
-        }));
+        set((s) => {
+          // The side page is a tab like the main one. A side Homepage is replaced
+          // by what it opens, like a browser new-tab page.
+          const prev = s.splitPath, home = prev !== null && isHomepagePath(prev) && prev !== s.activePath && prev !== path;
+          let tabs = home ? s.tabs.filter(t => t.path !== path) : s.tabs;
+          if (!tabs.some(t => t.path === path)) {
+            const tab = { path, title: tabTitle(path) }, homeAt = home ? tabs.findIndex(t => t.path === prev) : -1;
+            const at = homeAt >= 0 ? homeAt : tabs.findIndex(t => t.path === s.activePath) + 1 || tabs.length;
+            tabs = [...tabs.slice(0, at), tab, ...tabs.slice(homeAt >= 0 ? at + 1 : at)];
+          } else if (home) tabs = tabs.filter(t => t.path !== prev);
+          return {
+            tabs,
+            splitPath: path,
+            splitContent: doc?.snapshot.raw ?? '',
+            splitDirection: direction ?? s.splitDirection,
+          };
+        });
       },
       closeSplit: async () => {
         const generation = ++splitGeneration;
@@ -585,6 +603,41 @@ export const useStore = create<AppState>()(
           if (getActiveNavigationId() === 'split') activateNavigation('main');
           set(s => ({ splitPath: null, splitContent: '', viewHistories: Object.fromEntries(Object.entries(s.viewHistories).filter(([id]) => id !== 'split')) }));
         }
+      },
+      splitWithHomepage: async (path, direction) => {
+        if (path && path !== get().activePath) {
+          await get().openFile(path, true, 'main');
+          if (get().activePath !== path) return;
+        }
+        if (direction) set({ splitDirection: direction });
+        await get().openHomepage('split');
+      },
+      closePane: async (viewId) => {
+        const s = get(), path = viewId === 'split' ? s.splitPath : s.activePath, other = viewId === 'split' ? s.activePath : s.splitPath;
+        if (path === null) return;
+        if (other === null || s.splitPath === null) return get().closeTab(path);
+        if (viewId === 'split') {
+          await get().closeSplit();
+          if (get().splitPath === null && path !== get().activePath) set(st => ({ tabs: st.tabs.filter(t => t.path !== path) }));
+          return;
+        }
+        // Closing the main pane promotes the side page, so neither pane is subordinate.
+        const generation = ++splitGeneration;
+        try { await documents.saveLeaving(path); }
+        catch (error) { get().notify(String(error)); return; }
+        if (generation !== splitGeneration || get().splitPath !== other || get().activePath !== path) return;
+        openGeneration++;
+        cancelNavigation('main', other);
+        activateNavigation('main');
+        // The surviving page keeps its own live/source/reading mode as the workspace mode.
+        const mode = document.querySelector<HTMLElement>('[data-view-id="split"] [data-mode]')?.dataset.mode as ViewMode | undefined;
+        set(st => ({
+          ...(mode && ['live', 'source', 'reading'].includes(mode) ? { viewMode: mode } : {}),
+          tabs: path === other ? st.tabs : st.tabs.filter(t => t.path !== path),
+          activePath: other, splitPath: null, splitContent: '',
+          content: documents.get(other)?.snapshot.raw ?? st.splitContent, dirty: documents.get(other)?.snapshot.dirty ?? false,
+          viewHistories: Object.fromEntries(Object.entries(st.viewHistories).filter(([id]) => id !== 'split')),
+        }));
       },
 
       recent: [],
@@ -769,7 +822,7 @@ export const useStore = create<AppState>()(
         }
         if (generation !== openGeneration) return;
         activateNavigation('main');
-        const title = home ? 'Homepage' : path.split('/').pop() ?? path;
+        const title = tabTitle(path);
         set((s) => {
           const tabs = s.tabs.find((t) => t.path === path) ? s.tabs : [...s.tabs, { path, title }];
           const recent = isFolder || home ? s.recent : [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
@@ -808,6 +861,13 @@ export const useStore = create<AppState>()(
       },
 
       closeTab: async (path) => {
+        const { activePath, splitPath } = get();
+        if (splitPath !== null && splitPath !== activePath && (path === splitPath || path === activePath))
+          return get().closePane(path === splitPath ? 'split' : 'main');
+        if (splitPath !== null && path === splitPath) {
+          await get().closeSplit();
+          if (get().splitPath !== null) return;
+        }
         const tab = get().tabs.find(tab => tab.path === path);
         try { await documents.saveLeaving(path); }
         catch (error) { get().notify(String(error)); return; }

@@ -40,14 +40,14 @@ export const nativeWorkspaceCommands: NativeCommand[] = [
     const { sharedApp } = await import('./plugins');
     const leaf = sharedApp.workspace.activeLeaf, state = useStore.getState();
     if (leaf.slot === 'right' || leaf.slot === 'custom') leaf.detach();
-    else if (leaf.slot === 'split') state.closeSplit();
-    else if (state.activePath) state.closeTab(state.activePath);
+    else if (leaf.slot === 'split') state.closePane('split');
+    else if (state.activePath) state.closePane('main');
   } },
   { id: 'workspace:next-tab', title: '转到下一个标签页', run: () => moveTab(1) },
   { id: 'workspace:previous-tab', title: '转到上一个标签页', run: () => moveTab(-1) },
   { id: 'workspace:goto-last-tab', title: '转到最后一个标签页', run: () => selectTab(-1) },
   ...Array.from({ length: 8 }, (_, index) => ({ id: `workspace:goto-tab-${index + 1}`, title: `转到标签页 #${index + 1}`, run: () => selectTab(index) })),
-  { id: 'split-down', title: '在下方拆分当前文件', run: () => { const path = activePath(); if (path) return useStore.getState().openToSide(path, 'down'); } },
+  { id: 'split-down', title: '向下分屏', run: () => useStore.getState().splitWithHomepage(null, 'down') },
   { id: 'app:go-back', title: '返回', run: () => useStore.getState().goBack() },
   { id: 'app:go-forward', title: '前进', run: () => useStore.getState().goForward() },
   { id: 'app:toggle-left-sidebar', title: '显示或隐藏左侧栏', hotkeys: [{ modifiers: ['Mod'], key: '\\' }], run: () => useStore.getState().toggleLeft() },

@@ -196,10 +196,10 @@ export class WorkspaceLeaf extends Events {
   detach() {
     if (this.slot === 'right') void useStore.getState().closeRightTab(this.id);
     else if (this.slot === 'custom') void this.closeView();
-    else if (this.slot === 'split') void useStore.getState().closeSplit();
+    else if (this.slot === 'split') void useStore.getState().closePane('split');
     else {
-      const file = (this.view as MarkdownView).file;
-      if (file) useStore.getState().closeTab(file.path);
+      const file = (this.view as MarkdownView).file, state = useStore.getState();
+      if (file) void (file.path === state.activePath ? state.closePane('main') : state.closeTab(file.path));
     }
   }
   setEphemeralState(state: any) {

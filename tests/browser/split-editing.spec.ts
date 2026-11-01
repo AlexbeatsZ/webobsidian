@@ -637,9 +637,9 @@ for (const mode of ['live', 'source', 'reading'] as const) {
         const pluginsPath = '/src/lib/plugins.ts';
         await (await import(pluginsPath)).sharedApp.commands.execute('workspace:close');
       });
-      const survivor = target === 'main' ? 'split' : 'main';
-      if (target === 'split') await expect(pane(page, 'split')).toHaveCount(0);
-      else await expect(pane(page, 'main')).toHaveCount(0);
+      // Panes are equal: closing either one leaves the other page filling the workspace.
+      const survivor = 'main';
+      await expect(pane(page, 'split')).toHaveCount(0);
       await expect(host(page, survivor)).toHaveAttribute('data-document-id', 'main.md');
       await expect(host(page, survivor)).toHaveAttribute('data-mode', mode);
       expect((await viewState(page, survivor)).readOnly).toBe(mode === 'reading');
@@ -697,11 +697,11 @@ for (const target of ['main', 'split'] as const) {
     await expect.poll(() => workspacePaneBindings(page, other)).toMatchObject({ activeSlot: other, activeEditorMatches: true });
     await content(page, target).click();
     await chooseCommand('关闭当前标签页');
-    if (target === 'split') await expect(pane(page, 'split')).toHaveCount(0);
-    else await expect(host(page, 'main')).not.toHaveAttribute('data-document-id', file);
-    await expect(host(page, other)).toHaveAttribute('data-document-id', file);
-    await expect(host(page, other)).toHaveAttribute('data-mode', 'reading');
-    await expect.poll(() => viewState(page, other)).toMatchObject({ text: saved, readOnly: true });
+    // The surviving page keeps its reading mode and fills the workspace.
+    await expect(pane(page, 'split')).toHaveCount(0);
+    await expect(host(page, 'main')).toHaveAttribute('data-document-id', file);
+    await expect(host(page, 'main')).toHaveAttribute('data-mode', 'reading');
+    await expect.poll(() => viewState(page, 'main')).toMatchObject({ text: saved, readOnly: true });
     expect(await fs.readFile(path.join(backend.vault, file), 'utf8')).toBe(saved);
   });
 }
@@ -752,18 +752,99 @@ test('focused page routing: history is independent for main and split', async ({
   await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'main.md');
 });
 
-test('focused page routing: tab command stays in split, explicit main tab click targets main', async ({ page, backend }) => {
+function focusedPane(page: Page) {
+  return page.evaluate(async () => {
+    const module = '/src/lib/activeEditor.ts'; return (await import(module)).getActiveNavigationId();
+  });
+}
+function groupTab(page: Page, file: string): Locator { return page.locator(`.tab-split-group [data-tab-path="${file}"]`); }
+
+test('focused page routing: tab command stays in split, tabs open in the focused pane', async ({ page, backend }) => {
   await page.evaluate(async () => {
     const module = '/src/lib/store.ts'; const state = (await import(module)).useStore.getState();
-    await state.openFile('replacement.md', true, 'main'); await state.openFile('main.md', true, 'main');
+    await state.openFile('side.md', true, 'main'); await state.openFile('replacement.md', true, 'main'); await state.openFile('main.md', true, 'main');
   });
   await openSplit(page, 'main.md');
   await inlineTitle(page, 'split').click();
   await runPageCommand(page, 'workspace:next-tab');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  // A grouped tab focuses its own pane; any other tab opens in the focused pane.
+  await groupTab(page, 'side.md').click();
+  await expect.poll(() => focusedPane(page)).toBe('split');
+  await page.getByRole('tab', { name: /replacement/ }).click();
   await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
   await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
-  await page.getByRole('tab', { name: /replacement/ }).click();
+  await groupTab(page, 'main.md').click();
+  await expect.poll(() => focusedPane(page)).toBe('main');
+  await page.getByRole('tab', { name: /side/ }).click();
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'side.md');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+});
+
+test('split group tab pairs both panes, focuses each pane and closes either pane', async ({ page, backend }, info) => {
+  await openSplit(page);
+  const group = page.locator('.tab-bar .tab-split-group');
+  await expect(group).toHaveCount(1);
+  const main = groupTab(page, 'main.md'), side = groupTab(page, 'side.md');
+  await expect(main).toContainText('main');
+  await expect(side).toContainText('side');
+  // The side page is a real tab, shown once inside the group.
+  await expect(page.locator('.tab-bar [data-tab-path="side.md"]')).toHaveCount(1);
+  await side.click();
+  await expect.poll(() => focusedPane(page)).toBe('split');
+  await expect(side).toHaveClass(/is-focused/);
+  await main.click();
+  await expect.poll(() => focusedPane(page)).toBe('main');
+  await expect(main).toHaveClass(/is-focused/);
+  await page.locator('.tab-bar').screenshot({ path: info.outputPath('split-group-tab.png') });
+  // Closing the main tab keeps the side page, which now fills the workspace.
+  await main.getByRole('button', { name: '关闭 main.md' }).click();
+  await expect(pane(page, 'split')).toHaveCount(0);
+  await expect(group).toHaveCount(0);
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'side.md');
+  await expect(page.locator('.tab-bar [data-tab-path="main.md"]')).toHaveCount(0);
+  await openSplit(page, 'replacement.md');
+  await groupTab(page, 'replacement.md').getByRole('button', { name: '关闭 replacement.md' }).click();
+  await expect(pane(page, 'split')).toHaveCount(0);
+  await expect(page.locator('.tab-bar [data-tab-path="replacement.md"]')).toHaveCount(0);
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'side.md');
+});
+
+test('splitting a tab keeps it and opens a Homepage that a picked file replaces', async ({ page, backend }) => {
+  await page.locator('.tab-bar [data-tab-path="main.md"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '向右分屏' }).click();
+  await expect(pane(page, 'split').locator('.workspace-launcher')).toBeVisible();
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  await expect(page.locator('.tab-split-group .tab')).toHaveText([/main/, /Homepage/]);
+  await expect.poll(() => focusedPane(page)).toBe('split');
+  await runPageCommand(page, 'files');
+  await page.locator('.palette-input').fill('replacement'); await page.keyboard.press('Enter');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(page.locator('.tab-bar .tab')).toHaveText([/main/, /replacement/]);
+  // Leaving split view keeps both pages as tabs.
+  await groupTab(page, 'replacement.md').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '取消分屏' }).click();
+  await expect(pane(page, 'split')).toHaveCount(0);
+  await expect(page.locator('.tab-bar .tab')).toHaveText([/main/, /replacement/]);
+});
+
+test('dragging a tab onto a pane opens it there, or onto the far half to split', async ({ page, backend }) => {
+  await page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; const state = (await import(module)).useStore.getState();
+    await state.openFile('replacement.md', true, 'main'); await state.openFile('main.md', true, 'main');
+  });
+  const area = page.locator('.editor-area'), box = (await area.boundingBox())!;
+  await page.locator('.tab-bar [data-tab-path="replacement.md"]').dragTo(area, { targetPosition: { x: box.width * 0.85, y: box.height * 0.3 } });
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  await expect(page.locator('.pane-drop-indicator')).toHaveCount(0);
+  await openSplit(page, 'side.md');
+  await page.locator('.tab-bar [data-tab-path="replacement.md"]').dragTo(content(page, 'main'));
   await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
+  // The dragged tab never lands in the note as text.
+  expect((await snapshot(page, 'replacement.md')).raw).toBe(original['replacement.md']);
 });
 
 test('focused page routing: headings palette and outline read and navigate split', async ({ page, backend }) => {

@@ -59,11 +59,8 @@ export const nativeCommands: NativeCommand[] = [
   },
   {
     id: 'split',
-    title: '在右侧拆分当前文件',
-    run: () => {
-      const s = useStore.getState();
-      const path = s.currentPath(); if (path) void s.openToSide(path);
-    },
+    title: '向右分屏',
+    run: () => { void useStore.getState().splitWithHomepage(null, 'right'); },
   },
   { id: 'search', title: '搜索整个仓库', hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'F' }], run: () => useStore.getState().setLeftPanel('search') },
   {

@@ -1,7 +1,12 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.17 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Phiên bản: 1.18 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Changelog 1.18 (平等分屏与分屏标签组): 两个分屏栏地位平等。副栏页面也是 `tabs` 中的标签,
+> 与主栏标签在标签栏合并为浏览器式分屏组;点击组内标签聚焦对应栏,点击组外标签在当前聚焦栏打开;
+> 关闭任一栏的标签后另一栏铺满并保留其模式。标签"向右/向下分屏"及分屏命令保留当前页并在新侧打开
+> Homepage(不再复制当前页),新侧 Homepage 打开文件时被替换。标签可拖到某一栏替换其内容,
+> 未分屏时拖到编辑区右/下半边直接建立分屏。组内右键提供切换方向、取消分屏(两页都保留为标签)。
 > Changelog 1.17 (精简与搜索性能): 删除 Canvas 白板(FR-12 退役;现有 .canvas 文件保留,
 > 作为普通文本文件打开,附件清理仍识别其中的引用)与繁体字拼音词典(设置项 `search.chinese.traditional`
 > 删除,索引版本升级后自动重建)。快速切换器拼音匹配改为编译式状态机 + 字母集合预筛,
@@ -291,6 +296,12 @@ webobsidian/
     (Backlinks / Outgoing links / Outline), Reveal file in navigation, Close tab / Close other tabs, Delete.
   - Graph view: Copy screenshot (PNG vào clipboard), Close tab.
   - Split pane hỗ trợ 2 hướng: right (cạnh phải) và down (bên dưới); hướng split persist trong uistate.
+  - Hai pane split bình đẳng: trang ở pane phụ cũng là một tab trong `tabs`; tab bar gộp hai tab đang hiển thị
+    thành nhóm split kiểu trình duyệt. Click tab trong nhóm → focus pane đó (pane focus được làm nổi); click tab
+    ngoài nhóm → mở trong pane đang focus. Đóng tab của một pane → pane còn lại chiếm toàn bộ, giữ mode của nó.
+  - "Split right/down" trên tab và lệnh split giữ trang hiện tại, mở Homepage ở phía mới (không nhân bản trang);
+    Homepage phía mới bị thay thế bởi file được mở từ nó. Chuột phải tab trong nhóm: đổi hướng, bỏ split (giữ cả hai tab).
+  - Kéo tab thả vào một pane để mở ở pane đó; khi chưa split, thả vào nửa phải/dưới của vùng soạn thảo để tạo split.
   - **Find/Replace trong note**: tích hợp `@codemirror/search` (panel top, ⌘F mở Find, ⌘⇧F Replace, ⌘G next).
   - **Reveal file in navigation**: mở rộng folder tổ tiên + cuộn/nháy sáng row trong file tree.
   - **Add file property**: chèn property rỗng vào frontmatter YAML (tạo block nếu chưa có) → render trong Properties widget.

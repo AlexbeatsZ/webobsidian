@@ -1,9 +1,11 @@
+import { useEffect, useRef, useState } from 'react';
 import { useStore, GRAPH_PATH, isHomepagePath } from '../lib/store';
 import { api } from '../lib/api';
 import { documents } from '../lib/documents';
 import { activateNavigation } from '../lib/activeEditor';
 import { isFolderPath } from '../lib/tree';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from '../lib/media';
+import { TAB_DRAG_TYPE, tabDrag } from '../lib/tabDrag';
 import Editor from './Editor';
 import GraphView from './GraphView';
 import FolderView from './FolderView';
@@ -54,10 +56,10 @@ function EditorPane({ path: activePath, navigationId }: { path: string; navigati
 }
 
 function WorkspacePane({ path, navigationId }: { path: string; navigationId: 'main' | 'split' }) {
-  const close = useStore((state) => navigationId === 'main' ? state.closeTab : state.closeSplit);
+  const close = useStore((state) => state.closePane);
   return <div className={`pane ${navigationId}-pane`} data-view-id={navigationId}
     onPointerDownCapture={() => activateNavigation(navigationId)} onFocusCapture={() => activateNavigation(navigationId)}>
-    <button className="tool-btn pane-close" onClick={() => void close(path)} title={navigationId === 'main' ? '关闭标签页' : '关闭分屏'}>
+    <button className="tool-btn pane-close" onClick={() => void close(navigationId)} title={navigationId === 'main' ? '关闭标签页' : '关闭分屏'}>
       <Icon name="x" size={16} />
     </button>
     <EditorPane path={path} navigationId={navigationId} />
@@ -73,6 +75,53 @@ export default function Workspace() {
   const tree = useStore((s) => s.tree);
   const activeIsHome = isHomepagePath(activePath);
   const activeIsFolder = !activeIsHome && isFolderPath(tree, activePath);
+  const workspace = useRef<HTMLDivElement>(null);
+  const [drop, setDrop] = useState<{ view: 'main' | 'split' | 'right' | 'down'; left: number; top: number; width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const clear = () => setDrop(null);
+    window.addEventListener('dragend', clear);
+    return () => window.removeEventListener('dragend', clear);
+  }, []);
+
+  // A dragged tab replaces the pane under the pointer; without a split, the far
+  // half of the editor opens it side by side (right) or below (down).
+  const dropTarget = (e: React.DragEvent) => {
+    const host = workspace.current, area = host?.querySelector<HTMLElement>(':scope > .editor-area'), path = tabDrag.path;
+    if (!host || !area || !path) return null;
+    const origin = host.getBoundingClientRect(), box = area.getBoundingClientRect();
+    const sideable = isHomepagePath(path) || (path !== GRAPH_PATH && !isFolderPath(tree, path));
+    const at = (view: 'main' | 'split' | 'right' | 'down', r: { left: number; top: number; width: number; height: number }) =>
+      ({ view, left: r.left - origin.left, top: r.top - origin.top, width: r.width, height: r.height });
+    if (splitPath) {
+      const pane = (e.target as Element).closest<HTMLElement>('[data-view-id]');
+      const view = pane?.dataset.viewId === 'split' && sideable ? 'split' : 'main';
+      const element = area.querySelector<HTMLElement>(`:scope > [data-view-id="${view}"]`);
+      return element ? at(view, element.getBoundingClientRect()) : null;
+    }
+    const x = (e.clientX - box.left) / box.width, y = (e.clientY - box.top) / box.height;
+    if (sideable && x > 0.5 && x >= y) return at('right', { left: box.left + box.width / 2, top: box.top, width: box.width / 2, height: box.height });
+    if (sideable && y > 0.5) return at('down', { left: box.left, top: box.top + box.height / 2, width: box.width, height: box.height / 2 });
+    return at('main', box);
+  };
+  const onTabDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes(TAB_DRAG_TYPE)) return;
+    // Capture before CodeMirror so a tab never drops as text into the note.
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const next = dropTarget(e);
+    setDrop(prev => prev && next && (Object.keys(next) as (keyof typeof next)[]).every(key => prev[key] === next[key]) ? prev : next);
+  };
+  const onTabDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes(TAB_DRAG_TYPE)) return;
+    e.preventDefault(); e.stopPropagation();
+    const target = dropTarget(e), path = tabDrag.path;
+    setDrop(null);
+    if (!target || !path) return;
+    const s = useStore.getState();
+    if (target.view === 'right' || target.view === 'down') void s.openToSide(path, target.view);
+    else if ((target.view === 'split' ? s.splitPath : s.activePath) !== path) void s.openFile(path, true, target.view);
+  };
 
   // Paste / drop image → upload to attachments and insert an embed.
   const handleFiles = async (files: FileList | File[], sourcePath: string) => {
@@ -105,8 +154,10 @@ export default function Workspace() {
     }
   };
   return (
-    <div className="workspace" onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
-      <div className={`editor-area ${splitDirection === 'down' ? 'split-down' : ''}`}>
+    <div className="workspace" ref={workspace} onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+      <div className={`editor-area ${splitDirection === 'down' ? 'split-down' : ''}`}
+        onDragOverCapture={onTabDragOver} onDropCapture={onTabDrop}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDrop(null); }}>
         {(!activePath || activeIsHome) && (
           <div className="empty-state" data-view-id="main" onPointerDownCapture={() => activateNavigation('main')} onFocusCapture={() => activateNavigation('main')}>
             <WorkspaceLauncher key={activePath} />
@@ -127,6 +178,7 @@ export default function Workspace() {
         )}
         {splitPath && <WorkspacePane path={splitPath} navigationId="split" />}
       </div>
+      {drop && <div className="pane-drop-indicator" style={{ left: drop.left, top: drop.top, width: drop.width, height: drop.height }} />}
       <StatusBar />
     </div>
   );

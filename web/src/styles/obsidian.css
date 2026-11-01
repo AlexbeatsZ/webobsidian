@@ -449,6 +449,19 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .tab.active .close, .tab:hover .close, .tab:focus-within .close { opacity: 1; }
 .tab .close:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
 .tab .dot { color: var(--text-muted); font-size: 9px; }
+/* Split group: the main tab and the side pane share one active tab shell; the
+   focused pane is the raised segment, like a browser split-screen tab group. */
+.tab-split-group { display: flex; align-items: stretch; gap: 2px; flex: 0 0 auto; position: relative; min-width: 0;
+  padding: 3px 3px 3px 6px; background: var(--tab-active-bg); border-radius: 8px 8px 0 0; }
+.tab-split-group::before, .tab-split-group::after { content: ''; pointer-events: none; position: absolute; bottom: 0; width: 8px; height: 8px; }
+.tab-split-group::before { right: 100%; border-radius: 0 0 8px 0; box-shadow: 4px 0 0 var(--tab-active-bg); }
+.tab-split-group::after { left: 100%; border-radius: 0 0 0 8px; box-shadow: -4px 0 0 var(--tab-active-bg); }
+.tab-split-group > .split-icon { flex-shrink: 0; align-self: center; margin-right: 2px; color: var(--text-faint); }
+.tab-split-group > .tab { border-radius: var(--radius-s); background: transparent; color: var(--text-muted); max-width: 160px; }
+.tab-split-group > .tab::before, .tab-split-group > .tab::after { content: none; }
+.tab-split-group > .tab:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
+.tab-split-group > .tab.is-focused { background: var(--bg-modifier-hover); color: var(--text-normal); }
+.tab-split-group > .tab .close { opacity: 1; }
 .tab-new { width: 32px; display: grid; place-items: center; color: var(--text-faint); cursor: pointer;
   padding: 0; border: 0; background: transparent; }
 .tab-new:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
@@ -466,6 +479,9 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .editor-area.split-down > .pane + .pane { box-shadow: inset 0 1px var(--bg-modifier-border); }
 .pane-close { position: absolute; top: 6px; right: 6px; z-index: 5; opacity: 0; }
 .pane:hover > .pane-close, .pane:focus-within > .pane-close, .pane-close:focus-visible { opacity: 1; }
+.pane-drop-indicator { position: absolute; z-index: 20; pointer-events: none; border-radius: var(--radius-m, 8px);
+  background: color-mix(in srgb, var(--interactive-accent, var(--text-accent)) 14%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--interactive-accent, var(--text-accent)) 55%, transparent); }
 
 .cm-host { flex: 1; overflow: auto; }
 .cm-editor { height: 100%; background: var(--background-primary) !important; color: var(--text-normal); }
