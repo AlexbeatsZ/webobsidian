@@ -55,10 +55,42 @@ performance claim.
 
 ## Isolation and delivery
 
+- Source/tag: `c1f4d488ebfb9ab446012556d4486a3a0a4d9f7b`, `v0.1.43`, normally
+  pushed to AlexbeatsZ/webobsidian. Exact committed archive compiled core,
+  renderer, server and desktop; standalone server/MCP guards passed and
+  Windows NSIS built successfully (129,834,829 bytes; File/Product 0.1.43).
+- Actual packaged production resources with a disposable Vault passed focused
+  picker replacement, independent Back, mode targeting, real keyboard input,
+  disk Save and Close while preserving main (1,782ms; zero renderer errors).
+  Evidence: `.local/focus-routing-20261101/production/result.json` and screenshot.
+- Existing packaged-startup regression also passed on the same actual resources
+  (6,556ms measured by the verifier), covering native features/templates/MCP/
+  Pele/attachments/table surfaces.
+- Downloaded the actual CI Windows installer (129,834,833 bytes), verified
+  embedded EXE File 0.1.43/Product 0.1.43.0, and extracted its actual resources
+  without installation. The same focused production verification passes in
+  1,780ms with zero renderer errors. Evidence:
+  `.local/focus-routing-20261101/release-production/result.json`.
+- Cross-platform release workflow `41291336070`: Windows, macOS and Linux all
+  pass at the exact source above. `v0.1.43` is published, non-draft and
+  non-prerelease; all 17 asset names/sizes/uploaded states read back and the tag
+  points to c1f4d48. The current local delivery is the downloaded CI installer,
+  its blockmap and BUILD-INFO.json under `desktop/release/0.1.43`.
+- General CI `41291318142` has a failed Typecheck & build job while its broader
+  browser job was still running at publication; Docker passed. This release is
+  not claimed as all-CI/all-browser clean. Focused/current local acceptance is
+  the isolated evidence above.
+
 Only owned files are copied over an exact committed archive under
 Temp/.agents/webobsidian-focus-043-*; unrelated native-only removal work is
 excluded. Source/root server/public, daily Vaults, installed040 assets/profile,
 credentials, proxy and running user processes are preserved. Temporary test
-servers and browsers use disposable Vaults. Build/release and production proof
-are recorded after source commit. No installation/current-user-window or
+servers and browsers use disposable Vaults. No installation/current-user-window or
 other-device acceptance is implied.
+
+Cleanup was attempted once for this task's three exact Temp build/validation/
+extraction directories after checking the intended boundary in the command.
+Automatic approval rejected the command before execution with `blocked by
+policy`; no specific reason was supplied. No retry or alternate removal was
+performed. These temporary copies remain; current delivery/evidence and all
+unrelated or historical builds are preserved.
