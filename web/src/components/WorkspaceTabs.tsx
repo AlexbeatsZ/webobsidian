@@ -6,7 +6,6 @@ import { printDocument } from '../lib/printDocument';
 import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { editorFind, getActiveEditor } from '../lib/activeEditor';
 import { triggerAddProperty } from '../lib/livePreview';
-import { pathToUrl } from '../lib/urlsync';
 import { extendFileMenu } from '../lib/obsidian/menus';
 import { nativeBatchTagMenuItems } from '../lib/tags/actions';
 import { menuModifiers } from '../lib/configuredMenus/transform';
@@ -140,7 +139,6 @@ export default function WorkspaceTabs() {
               { id: 'file:split-down', label: "向下分屏", icon: 'rows', onClick: () => openToSide(path, 'down') },
             ]
           : []),
-        { id: 'file:new-window', label: "在新窗口中打开", icon: 'arrow-up-right', onClick: () => window.open(pathToUrl(path), '_blank', 'noopener') },
         sep,
         renameItem,
         moveItem,
@@ -161,13 +159,6 @@ export default function WorkspaceTabs() {
             ]
           : []),
         sep,
-        {
-          id: 'file:copy-url', label: "复制 URL 路径",
-          onClick: () => {
-            navigator.clipboard?.writeText(`${location.origin}${pathToUrl(path)}`).catch(() => {});
-            notify("URL 已复制");
-          },
-        },
         { id: 'file:history', label: "打开版本历史", icon: 'clock', onClick: () => setVersionHistory(path) },
         ...(isMd
           ? [

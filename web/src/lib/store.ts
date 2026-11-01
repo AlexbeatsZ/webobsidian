@@ -764,7 +764,7 @@ export const useStore = create<AppState>()(
         if (path === GRAPH_PATH) return get().openGraph(recordHistory);
         await documents.saveLeaving(get().activePath);
         const home = isHomepagePath(path);
-        // A folder path (e.g. deep-link /note/<folder>) opens a folder content
+        // A folder path (restored tab or folder link) opens a folder content
         // view — never read it as a note nor pollute Recent with it.
         const isFolder = !home && findNode(get().tree, path)?.type === 'folder';
         let content = '';

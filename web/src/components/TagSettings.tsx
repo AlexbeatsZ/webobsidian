@@ -54,7 +54,7 @@ export default function TagSettings({ value, vault, onChange }: TagSettingsProps
     </SettingGroup>
     <SettingGroup title="按文件夹自动补标签">
     <p>为指定目录配置固定标签。匹配的父目录和子目录规则会叠加；目录按完整路径段匹配。</p>
-    <fieldset disabled={busy} style={{ border: 0, padding: 0 }}>
+    <fieldset disabled={busy}>
       <SettingRow name="自动补齐" desc="新建和保存 Markdown 笔记时补齐固定标签"><input type="checkbox" aria-label="自动补齐" checked={enabled} onChange={event => { setEnabled(event.target.checked); setMessage(''); }} /></SettingRow>
       <SettingRow name="移除重复的父标签" desc="例如保留 _资料/AI，移除 _资料"><input type="checkbox" aria-label="移除重复的父标签" checked={pruneAncestors} onChange={event => { setPruneAncestors(event.target.checked); setMessage(''); }} /></SettingRow>
       <datalist id="folder-tag-directories">{entries.filter(entry => entry.kind === 'folder').map(entry => <option key={entry.path} value={entry.path} />)}</datalist>

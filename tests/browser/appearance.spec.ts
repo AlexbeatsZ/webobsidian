@@ -24,6 +24,7 @@ const test = base.extend<{ backend: Backend }>({
     const vault = path.join(directory, 'vault'), data = path.join(directory, 'data');
     await fs.mkdir(vault); await fs.mkdir(data);
     await fs.writeFile(path.join(vault, 'appearance.md'), source);
+    await fs.writeFile(path.join(data, 'uistate.json'), JSON.stringify({ tabs: [{ path: 'appearance.md', title: 'appearance.md' }], activePath: 'appearance.md' }));
     const child = spawn(process.execPath, ['--import', 'tsx', 'server/src/index.ts'], {
       cwd: process.cwd(), windowsHide: true,
       env: { ...process.env, PORT: '0', HOST: '127.0.0.1', DATA_DIR: data, VAULT_PATH: vault,
@@ -65,13 +66,13 @@ test.beforeEach(async ({ page, backend }) => {
   });
   await page.routeWebSocket('**/ws', () => {});
   await page.routeWebSocket(url => url.searchParams.has('token'), socket => socket.send(JSON.stringify({ type: 'connected' })));
-  await page.route('**/note/appearance.md', async route => {
+  await page.route('**/', async route => {
     if (route.request().resourceType() !== 'document') return route.fallback();
     const response = await route.fetch();
     const entry = '/@fs/' + path.resolve('tests/browser/appearanceFixture.tsx').replaceAll('\\', '/');
     await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', entry) });
   });
-  await page.goto('/note/appearance.md');
+  await page.goto('/');
   await expect(page.locator('.main-pane .cm-content')).toContainText('end');
   await page.evaluate(async () => {
     const modulePath = '/src/lib/store.ts';

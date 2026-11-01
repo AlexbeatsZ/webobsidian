@@ -14,8 +14,8 @@ remain controlled by the OS.
 Both vertical ribbons share their sidebar's visibility. The two SidebarDock hosts
 float over the workspace below the titlebar without reserving document columns;
 the top-row toggles remain available to restore them. Left contains Files/Search;
-right contains the four existing fixed panels. Both have a + entry and independent note,
-browser or plugin-view tabs. Mobile keeps device-local drawer visibility.
+right contains its existing fixed panels. Both have a + entry and independent note
+or plugin-view tabs. Android keeps device-local drawer visibility.
 See workspace-sidebars.md for ownership, persistence and lifecycle contracts.
 
 The three + buttons open the same Homepage actions without creating files. The
@@ -34,11 +34,10 @@ remains above the editor.
 
 File actions formerly available from the note header's More button are available
 from the corresponding tab's context menu (including bookmark, split, properties,
-PDF, history and sharing). The document title remains part of the document view.
+PDF and history). Browser URL/new-window actions are removed. The document title remains part of the document view.
 Native vault/window actions and accelerators remain available through F10 on
 Windows/Linux. macOS shares the compact row with left-side native traffic lights
-and retains its system menu bar; browsers share the new
-workspace layout without native caption insets or draggable regions.
+and retains its system menu bar. There is no browser application target.
 
 ## Implementation
 

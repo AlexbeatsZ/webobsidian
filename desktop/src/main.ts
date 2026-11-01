@@ -5,7 +5,6 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { UserscriptService } from './userscripts/service';
 import { effectiveVaultPath, openExistingPath } from './paths';
 import { McpLauncher } from './mcpLauncher';
 
@@ -33,7 +32,6 @@ let serverProc: ChildProcess | null = null;
 let serverPort = 0;
 let mainWindow: BrowserWindow | null = null;
 let desktopConfig: DesktopConfig | undefined;
-let userscripts: UserscriptService | undefined;
 let mcpLauncher: McpLauncher | undefined;
 let initialVaultChoice: string | undefined;
 let finishingQuit = false;
@@ -70,7 +68,7 @@ function requestWindowClose(window: BrowserWindow, quit: boolean): Promise<void>
     try {
       await prepareWindowClose(window);
       if (quitRequested) {
-        await Promise.all([userscripts?.stop(), mcpLauncher?.stop()]);
+        await mcpLauncher?.stop();
         finishingQuit = true;
         app.quit();
       } else if (!window.isDestroyed()) {
@@ -307,41 +305,29 @@ function createWindow(starting = false): void {
       contextIsolation: !desktopConfig?.trustedPlugins,
       nodeIntegration: !!desktopConfig?.trustedPlugins,
       sandbox: !desktopConfig?.trustedPlugins,
-      webviewTag: true,
       additionalArguments: desktopConfig?.trustedPlugins ? [`--webobsidian-native-vault=${encodeURIComponent(desktopConfig.vaultPath ?? '')}`] : [],
     },
   });
+  mainWindow.webContents.setUserAgent(`${mainWindow.webContents.getUserAgent()} WebObsidianDesktop`);
 
   // Retain native actions/accelerators behind F10, without a visible menu row.
   if (process.platform !== 'darwin') mainWindow.setMenuBarVisibility(false);
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const target = new URL(url);
-    if (target.origin !== baseUrl(serverPort) || !(target.pathname === '/' || target.pathname.startsWith('/note/'))) {
-      event.preventDefault(); if (/^https?:/.test(url)) void shell.openExternal(url);
+    if (target.origin !== baseUrl(serverPort) || target.pathname !== '/') {
+      event.preventDefault();
+      if (target.origin !== baseUrl(serverPort) && /^https?:/.test(url)) void shell.openExternal(url);
     }
   });
   mainWindow.webContents.on('will-redirect', (event, url) => {
     const target = new URL(url);
-    if (target.origin !== baseUrl(serverPort) || !(target.pathname === '/' || target.pathname.startsWith('/note/'))) event.preventDefault();
+    if (target.origin !== baseUrl(serverPort) || target.pathname !== '/') event.preventDefault();
   });
-  mainWindow.webContents.on('will-attach-webview', (event, preferences, params) => {
-    if (!/^https?:\/\//i.test(params.src)) { event.preventDefault(); return; }
-    // Only our bundled sandbox preload may enter remote guests. No host Node.
-    preferences.preload = path.join(__dirname, 'preload.js');
-    preferences.additionalArguments = ['--webobsidian-userscript-guest'];
-    preferences.nodeIntegration = false; preferences.contextIsolation = true; preferences.sandbox = true;
-    preferences.nodeIntegrationInSubFrames = false;
-    preferences.nodeIntegrationInWorker = false;
-    preferences.webviewTag = false;
-    preferences.webSecurity = true;
-    preferences.allowRunningInsecureContent = false;
-  });
-  mainWindow.webContents.on('did-attach-webview', (_event, contents) => userscripts?.attach(contents));
 
   // Open external links (http/https not on our origin) in the system browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) void shell.openExternal(url);
+    if (/^https?:/.test(url) && new URL(url).origin !== baseUrl(serverPort)) void shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -460,7 +446,7 @@ function buildMenu(): void {
       submenu: [
         {
           label: "GitHub 上的 WebObsidian",
-          click: () => shell.openExternal('https://github.com/xnohat/webobsidian'),
+          click: () => shell.openExternal('https://github.com/AlexbeatsZ/webobsidian'),
         },
       ],
     },
@@ -581,9 +567,6 @@ if (!app.requestSingleInstanceLock()) {
       buildMenu();
       registerTitleBar();
       registerDesktopRequests();
-      userscripts = new UserscriptService({ dataDir: DATA_DIR(), fallbackVault: cfg.vaultPath!,
-        window: () => mainWindow, hostAllowed: event => !!desktopWindow(event) });
-      await userscripts.start();
       if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(baseUrl(serverPort));
     } catch (err) {
       dialog.showErrorBox('WebObsidian failed to start', String(err instanceof Error ? err.stack ?? err.message : err));
@@ -605,9 +588,9 @@ if (!app.requestSingleInstanceLock()) {
       void requestWindowClose(mainWindow, true);
       return;
     }
-    if (!finishingQuit && (userscripts || mcpLauncher)) {
+    if (!finishingQuit && mcpLauncher) {
       event.preventDefault();
-      if (!quitRequest) quitRequest = Promise.all([userscripts?.stop(), mcpLauncher?.stop()]).then(() => { finishingQuit = true; app.quit(); })
+      if (!quitRequest) quitRequest = mcpLauncher.stop().then(() => { finishingQuit = true; app.quit(); })
         .catch(error => dialog.showErrorBox('无法退出 WebObsidian', String(error))).finally(() => { quitRequest = undefined; });
       return;
     }

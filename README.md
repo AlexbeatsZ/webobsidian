@@ -1,329 +1,111 @@
 <div align="center">
-
 <img src="assets/logo.png" alt="WebObsidian logo" width="140" />
 
 # WebObsidian
 
-**A self-hosted, Obsidian-compatible web app for your Markdown "second brain".**
+**A personal Markdown application for desktop and Android.**
 
-Point it at a folder of Markdown files and edit your notes from any browser — with a
-CodeMirror editor, live preview, wikilinks, an interactive graph, full-text search,
-GitHub sync (incl. Git LFS), and support for installed community plugins.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
-
-[Quick start](#-quick-start-docker) · [Features](#-features) · [Configuration](#-configuration) · [Development](#-local-development) · [Architecture](#-architecture)
-
-> 📐 Design: [PRD.md](PRD.md) · 📋 Progress: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
-
+[MIT license](LICENSE) · [Releases](https://github.com/AlexbeatsZ/webobsidian/releases) · [Desktop](desktop/README.md) · [Android](docs/design/android-runtime.md)
 </div>
 
----
+## Product scope
 
-## Direction of this fork
+This fork rebuilds an Obsidian-like application around the owner's editing and
+reading workflows. Windows, macOS, Linux and Android are application targets.
+There is no browser edition, self-hosted webpage deployment, embedded webpage
+browser or userscript manager. Future changes target the native applications.
 
-This fork aims to rebuild an Obsidian-like application around the owner's personal
-workflows. The motivation is that Obsidian plugins offer limited control over the
-host application. Owning the source allows direct changes to the editor, workspace,
-file operations, and interface when plugin hooks are insufficient.
+The `web/` workspace contains the shared React/CodeMirror renderer embedded by
+Electron and Android WebView. The `server/` workspace is their bundled loopback
+runtime for files, indexing, configuration and document operations. These are
+internal application components. They are not independently supported products.
+The application runtime binds to `127.0.0.1`; renderer assets are served only to
+the native shells, without browser note URLs or history routing.
 
-WebObsidian provides the existing implementation base. Its browser, self-hosted, and
-desktop modes remain available; future work prioritizes concrete customization needs.
-[obsidian-typings](https://github.com/obsidian-typings/obsidian-typings) is a reference
-for undocumented APIs and compatibility analysis, not a complete Obsidian runtime.
-Community-plugin compatibility is selective and must be verified per workflow.
+## Install
 
-See [project direction and reference boundaries](docs/design/product-direction.md)
-for the rationale, current implementation gaps, and proposed next steps.
+Download an application package from [Releases](https://github.com/AlexbeatsZ/webobsidian/releases).
 
-The plugin host now connects commands, settings, vault data, CM6 extensions and
-Markdown renderers to the application. It reads existing vault plugin enablement
-and settings without migrating the source vault. Native Node/Electron plugins
-require the desktop File menu's **Trust native plugins (next launch)** setting,
-which is off by default. See the [tested plugin versions, setup and remaining
-acceptance boundaries](docs/design/plugin-compatibility.md). Final interactive
-acceptance is reserved for the owner; API presence alone is not full compatibility.
+| Target | Package |
+| --- | --- |
+| Windows | x64 per-user setup `.exe` |
+| macOS | arm64 / x64 `.dmg` or `.zip` |
+| Linux | arm64 / x64 `.AppImage` or `.deb` |
+| Android | `.apk` |
 
-## Local AI tools and reviewed edits
+Choose a Vault using the application's folder picker. Notes, attachments and
+Vault configuration remain ordinary files. Updating the application does not
+require moving or rewriting the Vault. See [desktop packaging](desktop/README.md)
+and [Android runtime](docs/design/android-runtime.md).
 
-The native local operation entry provides context, saved-file listing, indexed
-search, ranged reads, edit proposals and review status. CLI and stdio MCP use
-the same dispatcher. There is no model API key, chat backend or remote approval
-tool. Existing Markdown edits are reviewed in the note with per-block Accept /
-Reject; accepted changes use its normal session history and save path.
+## Editing and reading
 
-Use the **审阅候选修改** command or pending-review badge to open the review inbox.
-For source development, run `npm run cli -- --url http://127.0.0.1:8787 list`;
-an MCP client can launch `node --import tsx server/src/mcp.ts` with
-`WEBOBSIDIAN_URL` set to the chosen local instance. Desktop instances publish
-their actual address in `DATA_DIR/operations-endpoint.json`.
-See [native MCP contracts, examples and limits](docs/design/native-mcp.md).
+- Markdown Live Preview, Source and Reading views share CodeMirror source analysis
+  and document sessions, including split panes, sidebar notes and embedded notes.
+- Wikilinks, stable content references, backlinks, outlines, graph view, tags,
+  source-preserving tables/properties, MathJax formulas and Pele diagrams.
+- Native PDF reading, thumbnails, outline and Markdown minimap.
+- Vault-owned snippets, writing/formatting rules, templates, commands and menus.
+- Existing installed community plugins use the shared compatibility host.
+  Compatibility is selective; native Node/Electron plugin access is a separate
+  desktop trust setting. Original plugin files and settings are preserved.
+- File sync, optional Git backup and reviewed local AI proposals use their existing
+  services and document save barriers.
 
-On Windows desktop, open **MCP** in the right sidebar and click **连接**.
-That one click checks the runtime once, starts it when stopped, or repairs an
-unhealthy running instance; a healthy connection is left untouched. It reuses an already configured
-`obsidian-context-mcp` installation and its existing manual startup script.
-The default location is `~/Project/Workspaces/obsidian-context-mcp`; use
-folder button for a different location. The companion must be version 0.2.2 or newer.
-This does not install Node or configure a new Tunnel. Opening the panel never
-checks the runtime, starts it or reconnects; there is no polling or background retry.
+## Sync and AI tools
 
-## Rendering and source preservation
+The [independent sync server](sync-server/README.md) is a separate headless
+application. It remains available for device synchronization and does not serve a
+note-editing webpage. Keep its deployment and data separate from the native client.
 
-Live editing, Reading, split panes, embedded notes, table cells and Canvas Markdown
-reuse one CodeMirror presentation engine. Views get
-an explicit document context; the workspace owns sessions, saves and permissions.
-Unchanged source keeps its BOM, mixed line endings, whitespace and quoting.
-Table/property edits patch ranges instead of serializing the whole structure.
-Print/PDF freezes an entire readonly rendering after resources load.
+The desktop **MCP** panel configures and connects the bundled MCP/Tunnel runtime.
+It shares the existing operation dispatcher with stdio MCP and the developer CLI.
+The application reviews edit/create/rename proposals locally before writing files.
+See [MCP operations and review](docs/design/native-mcp.md).
 
-See [rendering design, acceptance and limits](docs/design/rendering-unification.md).
-Automated checks: npm run test:unit, npm run test:render, npm run test:integration.
-The browser suites accept RENDER_TEST_BROWSER for an installed Chromium executable.
-Native IME/touch and system print-dialog acceptance remain manual.
+## Build and development
 
-## What is this?
-
-WebObsidian is a web application that gives you an [Obsidian](https://obsidian.md)-like
-experience over a **real folder of Markdown files** living on your server. It works
-with existing Obsidian vault files. Compatibility with `.obsidian/` settings, themes,
-and plugins depends on the specific feature; preserving these files does not mean
-every Obsidian behavior is implemented.
-
-This personal fork runs on the local machine. HTTP and WebSocket requests use one
-loopback peer, Host and Origin check. Accounts, sessions, API keys and public sharing
-have been removed. Application configuration lives in `data/settings.json`;
-advanced feature configuration belongs to the selected Vault.
-
-> **Why?** To own and customize the editor and workspace around personal notes.
-
----
-
-## ✨ Features
-
-- 📝 **Editor & rendering** — CodeMirror 6 with live / source / reading views; wikilinks
-  `[[note]]`, embeds `![[file]]`, tags `#tag`, callouts, task lists, MathJax 4.1.3 math and
-  Mermaid diagrams.
-- 🕸️ **Graph view** — force-directed graph built from your wikilinks, with fly-to node
-  search and highlighting.
-- 🔗 **Backlinks & outline** — right sidebar tab strip: Backlinks (linked **and** unlinked
-  mentions), Outgoing links (resolved/unresolved), Tags and Outline.
-- 🔍 **QMD search** — fast full-text + fielded search (`tag:`, `path:`, `title:`), fuzzy +
-  prefix matching, incremental indexing, persisted to disk for fast startup.
-- 🔄 **GitHub sync** — native `git` pull / commit / push with **Git LFS** for large
-  attachments, optional auto-sync, and per-file **version history** (browse & restore).
-- 🧩 **Community plugins** — use already installed Obsidian plugins through the
-  existing compatibility host; enable or disable them in Settings.
-- 📱 **Responsive / mobile** — drawer sidebars, edge-swipe, an on-keyboard formatting
-  toolbar, and touch-friendly targets, à la Obsidian Mobile.
-- 🗃️ **Pure-JSON config** — everything lives in `data/settings.json`. No database.
-- 🐳 **Docker** — one command to run the whole stack.
-
----
-
-## 🚀 Quick start (Docker)
+Requires Node.js >=20, npm and Git. Android also requires its documented Android
+SDK/JDK toolchain. Install dependencies inside this project:
 
 ```bash
-git clone https://github.com/AlexbeatsZ/webobsidian.git
-cd webobsidian
-cp .env.example .env          # edit VAULT_HOST_PATH
-docker compose up -d --build
-# open http://localhost:8787
+npm ci
+npm run dev                 # build and launch the native desktop application
+npm run desktop:dist        # build native desktop deliverables
+npm run typecheck
+npm --workspace desktop run typecheck
+npm run test:unit
 ```
 
-Out of the box it serves the bundled `./sample-vault`, so the stack boots immediately. All
-deployment settings live in **`.env`** (git-ignored) — you never edit the tracked
-`docker-compose.yml`, so a `git pull` / redeploy keeps your config and vault mapping intact.
+`npm run build` compiles the shared renderer and local runtime for the native
+packagers. It does not start a browser application. Renderer regression fixtures
+may use headless Chromium as a test engine; this does not add a browser product or
+browser compatibility target. Native IME/touch/window/system-print acceptance is
+separate from those checks. Use an isolated source snapshot for production builds
+when the checkout's generated resources are used by a running application.
 
-## 🖥️ Desktop app (no server setup)
+## Architecture and design
 
-Prefer a native app? Download a desktop package from the
-[**Releases**](https://github.com/AlexbeatsZ/webobsidian/releases) page — available for
-**macOS / Windows / Linux** (Windows: x64 installer; macOS/Linux: arm64 and x64):
+| Component | Owner |
+| --- | --- |
+| `desktop/` | Electron windows, native menus, local runtime and MCP lifecycle |
+| `android/` | Android storage selection, embedded Node runtime and WebView lifecycle |
+| `web/` | Shared native renderer, document sessions, commands and plugin adapters |
+| `server/` | Loopback file/configuration/indexing/operation services |
+| `sync-server/` | Independently released headless device sync |
+| `packages/markdown-core/`, `packages/search-core/` | Shared pure source and search contracts |
 
-| Platform | Download |
-|----------|----------|
-| macOS    | `.dmg` (or `.zip`) — arm64 / x64 |
-| Windows  | Setup `.exe` — x64, per-user installation |
-| Linux    | `.AppImage` or `.deb` — x64 / arm64 |
+Document text/history/save belong to DocumentSession; syntax/ranges to
+markdown-core; saved metadata to VaultCatalog. Existing command, menu and rendering
+owners remain authoritative. Do not introduce a browser fallback or a parallel
+implementation for plugins.
 
-The desktop app bundles the whole server, picks your vault folder on first launch, and
-**opens the local application directly** — no account or Docker required. Apps are currently
-**unsigned**, so macOS Gatekeeper / Windows SmartScreen will warn on first open (right-click →
-Open on macOS). Build it yourself with `npm run desktop:dist`; see
-[`desktop/README.md`](desktop/README.md) for details.
+[Product direction](docs/design/product-direction.md) ·
+[Native application boundary](docs/design/native-only.md) ·
+[Local runtime](docs/design/personal-local-runtime.md) ·
+[Plugin compatibility](docs/design/plugin-compatibility.md) ·
+[PRD](PRD.md)
 
-### Point it at your own vault
+## License
 
-```bash
-# .env
-VAULT_HOST_PATH=/abs/path/to/your/ObsidianVault   # must exist; bind-mounted to /vault
-HTTP_BIND=0.0.0.0                                  # 127.0.0.1 to expose only to localhost
-HTTP_PORT=8787
-```
-
-Then `docker compose up -d --build`. Your vault can be a plain folder or a `git clone`
-(Git LFS is supported for attachments).
-
-### Behind a reverse proxy (TLS)
-
-Set `HTTP_BIND=127.0.0.1` so the app is only reachable from the host, then terminate TLS
-with nginx / Caddy / Traefik in front of `http://127.0.0.1:8787`.
-
-### Large vaults & file watching
-
-A fresh VPS ships a low `fs.inotify.max_user_watches` (often 8192), which a big vault
-exceeds. WebObsidian auto-detects this and falls back to **polling** (works anywhere,
-higher CPU). For lower CPU, raise the kernel limit and keep native watching:
-
-```bash
-sudo sysctl -w fs.inotify.max_user_watches=524288
-echo 'fs.inotify.max_user_watches=524288' | sudo tee -a /etc/sysctl.conf
-```
-
-The search index (QMD) and link graph are kept in memory, so memory use scales with the
-number of notes. The Docker image sets `NODE_OPTIONS=--max-old-space-size=4096` (4 GB);
-raise it to `8192` for very large vaults (e.g. 6k+ notes / multi-GB).
-
----
-
-## 💻 Local development
-
-Requires **Node ≥ 20** and `git` (+ `git-lfs` if you use LFS).
-
-```bash
-npm install
-npm run dev          # server on :8787 + web dev server on :5173 (proxied)
-# open http://localhost:5173
-```
-
-Production build (the server serves the built SPA):
-
-```bash
-npm run build
-VAULT_PATH=./sample-vault npm start
-# open http://localhost:8787
-```
-
-Useful scripts:
-
-| Command | What it does |
-|---------|--------------|
-| `npm run dev` | Run server + web together in watch mode |
-| `npm run build` | Build the web SPA, then compile the server |
-| `npm start` | Run the production server (serves built web) |
-| `npm run typecheck` | Type-check both workspaces |
-
----
-
-## ⚙️ Configuration
-
-### Docker env (`.env`, consumed by `docker-compose.yml`)
-
-| Var | Default | Description |
-|-----|---------|-------------|
-| `VAULT_HOST_PATH` | `./sample-vault` | Host path bind-mounted to `/vault` |
-| `HOST` | `127.0.0.1` | Local listener; Compose uses host networking |
-| `WEBOBSIDIAN_WATCH` | `auto` | `auto` (native + polling fallback) or `polling` |
-
-### App-level env (read by the server; Docker sets these inside the container)
-
-| Var | Default | Description |
-|-----|---------|-------------|
-| `PORT` | `8787` | HTTP port |
-| `VAULT_PATH` | `./sample-vault` | Path to the notes vault |
-| `DATA_DIR` | `./data` | Where `settings.json` + search index live |
-| `ALLOWED_ROOTS` | – | Comma-separated roots the vault picker may browse |
-| `WEBOBSIDIAN_WATCH` | `auto` | File-watch mode: `auto` or `polling` |
-| `NODE_OPTIONS` | `--max-old-space-size=4096` | Node heap size — raise for large vaults |
-
-Git remote/token, plugin enablement and theme use the existing Settings services.
-Advanced scripts, menus, snippets and formulas use Vault-owned configuration files.
-
----
-
-## 🏗️ Architecture
-
-Monorepo with two npm workspaces:
-
-```
-webobsidian/
-├── server/   # Express + TypeScript API
-│   └── src/{routes,services,middleware,plugins}
-├── web/      # React + Vite SPA (built into server/public)
-│   └── src/{components,lib,styles}
-├── data/     # runtime: settings.json + search index (git-ignored)
-├── docs/     # module design and Obsidian internals notes
-├── Dockerfile · docker-compose.yml · .env.example
-```
-
-```
-┌──────────────────────── Browser (React SPA) ────────────────────────┐
-│   CodeMirror 6 · Live Preview · File Tree · Graph · Search           │
-└───────────────▲──────────────────────────────────┬──────────────────┘
-                │ REST + WebSocket                  │ static assets
-┌───────────────┴──────────────────────────────────▼──────────────────┐
-│                  Server (Node + Express + TypeScript)                │
-│   Auth gate │ Vault FS │ QMD Search │ Git Sync │ API Gate │ Plugins  │
-└──────┬──────────────┬───────────┬────────────┬───────────────┬───────┘
-   settings.json   Vault dir   Search index  GitHub repo    plugins dir
-   (JSON config)   (.md+attach) (in-mem/disk) (git + LFS)   (.obsidian/plugins)
-```
-
-**Tech stack:** Node 20+ · Express · TypeScript · React · Vite · CodeMirror 6 ·
-unified/remark/rehype · MiniSearch (QMD) · simple-git + git-lfs · Docker.
-
-See [PRD.md §2](PRD.md) for the full design.
-
----
-
-## Local access
-
-The server accepts loopback peers with a local Host and, when supplied, a local
-HTTP(S) Origin. WebSocket upgrades use the same predicate. There are no login,
-API-key or public-share endpoints. File path and Vault mutation/revision guards
-remain in their original services. See [personal local runtime](docs/design/personal-local-runtime.md).
-
-Compose uses host networking so the same loopback rule applies; a normal
-bridge-published port is not a supported access path. This deployment path has
-not been exercised for this source revision.
-
----
-
-## 🗺️ Compatibility & scope
-
-- ✅ Works directly on an existing Obsidian vault, including `.obsidian/` config.
-- ⚠️ **Single-user (v1)** — no real-time multi-user collaborative editing yet.
-- ⚠️ Git sync replaces Obsidian Sync/Publish.
-- ⚠️ Community-plugin support is a **subset** of the Obsidian API; plugins relying on
-  Electron/Node internals may not work.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! A few house rules from [CLAUDE.md](CLAUDE.md):
-
-1. **Follow [PRD.md](PRD.md).** It is the source of truth for design. Changing scope means
-   updating the PRD first (with a changelog bump), then the code.
-2. **Keep [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) in sync** — flip checkboxes and
-   add a progress-log line as you work.
-3. TypeScript everywhere; avoid `any`. Runtime config is JSON only (no DB engine).
-4. Never log secrets/tokens; hash before storing; guard against path traversal.
-
-Run `npm run typecheck` before opening a PR.
-
----
-
-## 📄 License
-
-[MIT](LICENSE) © xnohat
-
----
-
-<div align="center">
-<sub>Built for people who want to own their notes. Not affiliated with Obsidian.md.</sub>
-</div>
+[MIT](LICENSE). Based on xnohat/webobsidian. Not affiliated with Obsidian.md.

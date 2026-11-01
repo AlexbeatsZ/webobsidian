@@ -13,7 +13,6 @@ const KEYS: Record<string, readonly string[]> = {
   'obsidian-menu-manager': ['observedItems', 'rules'],
   'obsidian-plus': ['schemaVersion', 'modules', 'menuManager', 'anyBlock', 'liveReferences'],
   'templater-obsidian': ['command_timeout', 'templates_folder', 'templates_pairs', 'trigger_on_file_creation', 'auto_jump_to_cursor', 'enable_system_commands', 'shell_path', 'user_scripts_folder', 'enable_folder_templates', 'folder_templates', 'enable_file_templates', 'file_templates', 'syntax_highlighting', 'syntax_highlighting_mobile', 'enabled_templates_hotkeys', 'startup_templates', 'intellisense_render'],
-  'webviewer-userscripts': ['schemaVersion', 'scripts', 'values'],
 };
 
 export function readKnownPluginReferences(pluginId: string, path: string, content: string): ReferenceCollection | null {
@@ -22,15 +21,5 @@ export function readKnownPluginReferences(pluginId: string, path: string, conten
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('插件配置必须是 JSON 对象');
   const data = value as Record<string, unknown>;
   if (Object.keys(data).some((key) => !KEYS[pluginId].includes(key))) return null;
-  // Browser userscripts run in the isolated guest, not the Vault. Their JavaScript
-  // source is never treated as an executing Markdown reference source. Native script
-  // records retain imports/source URLs; per-script storage retains literal evidence.
-  if (pluginId === 'webviewer-userscripts') {
-    if (data.schemaVersion !== 1 || !Array.isArray(data.scripts) || !data.values || typeof data.values !== 'object') return null;
-    return collectReferences(path, JSON.stringify({
-      scripts: data.scripts.map((s: Record<string, unknown>) => ({ id: s.id, metadata: s.metadata })),
-      values: data.values,
-    }), { literalData: true });
-  }
   return collectReferences(path, content, { literalData: true });
 }

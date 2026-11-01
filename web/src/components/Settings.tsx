@@ -14,7 +14,6 @@ import { api, request } from '../lib/api';
 import FileSyncSettings from './FileSyncSettings';
 import Icon from './Icon';
 import WritingSettings from './WritingSettings';
-import { UserscriptSettings } from './UserscriptSettings';
 import ConfiguredMenuSettings from './ConfiguredMenuSettings';
 import TagSettings from './TagSettings';
 import AutomationSettings from './AutomationSettings';
@@ -31,7 +30,7 @@ import { documentAppearance, UiSettingsSchema, type UiSettings } from '../../../
 import { FilePlacementSchema, type FilePlacement } from '../../../server/src/contracts/filePlacement';
 
 type Section =
-  'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'sync' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
+  'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'menus' | 'tags' | 'vault' | 'sync' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
@@ -67,15 +66,13 @@ export default function Settings() {
     return () => { live = false; };
   }, [open]);
   useEffect(() => {
-    const scripts = () => { setPluginTab(null); setSection('userscripts'); };
     const menus = () => { setPluginTab(null); setSection('menus'); };
     const automation = () => { setPluginTab(null); setSection('automation'); };
     const vault = () => { setPluginTab(null); setSection('vault'); };
-    window.addEventListener('userscripts:open-settings', scripts);
     window.addEventListener('menus:open-settings', menus);
     window.addEventListener('automation:open-settings', automation);
     window.addEventListener('vault-settings-open', vault);
-    return () => { window.removeEventListener('userscripts:open-settings', scripts); window.removeEventListener('menus:open-settings', menus); window.removeEventListener('automation:open-settings', automation); window.removeEventListener('vault-settings-open', vault); };
+    return () => { window.removeEventListener('menus:open-settings', menus); window.removeEventListener('automation:open-settings', automation); window.removeEventListener('vault-settings-open', vault); };
   }, []);
   useSyncExternalStore(subscribePlugins, pluginRevision);
   useEffect(() => {
@@ -157,7 +154,6 @@ export default function Settings() {
             {section === 'automation' && <AutomationSettings />}
             {section === 'writing' && <WritingSettings />}
             {section === 'formatting' && <WritingSettings formatting />}
-            {section === 'userscripts' && <UserscriptSettings />}
             {section === 'menus' && <ConfiguredMenuSettings />}
             {section === 'tags' && (features ? <TagSettings value={features.tags} vault={features.vault} onChange={async patch => {
               setFeatures(await saveNativeFeatures({ vault: features.vault, tags: patch }));
@@ -214,7 +210,6 @@ function PluginSettingsTab({ id }: { id: string }) {
 
 const labels: Record<Section, string> = {
   automation: '用户指令与模板',
-  userscripts: '内置浏览器脚本',
   menus: '右键菜单',
   tags: '标签',
   writing: '公式与片段',
@@ -232,12 +227,12 @@ const labels: Record<Section, string> = {
   debug: '调试',
 };
 const sectionIcons: Record<Section, string> = {
-  search: 'search', hotkeys: 'command', automation: 'command', writing: 'code', formatting: 'pencil', userscripts: 'globe', menus: 'list',
-  tags: 'hash', vault: 'folder', sync: 'refresh-cw', git: 'git-branch', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'pencil', about: 'info', debug: 'code',
+  search: 'search', hotkeys: 'key', automation: 'command', writing: 'brackets', formatting: 'align-left', menus: 'list',
+  tags: 'hash', vault: 'folder', sync: 'refresh-cw', git: 'git-branch', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'square-pen', about: 'info', debug: 'code',
 };
 const NAV_GROUPS: { title: string; sections: Section[] }[] = [
   { title: '选项', sections: ['about', 'appearance', 'interface', 'editor', 'vault', 'hotkeys', 'plugins', 'debug'] },
-  { title: '核心功能', sections: ['search', 'writing', 'formatting', 'tags', 'automation', 'userscripts', 'menus', 'sync', 'git'] },
+  { title: '核心功能', sections: ['search', 'writing', 'formatting', 'tags', 'automation', 'menus', 'sync', 'git'] },
 ];
 
 function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
@@ -271,10 +266,9 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
       <h2>文件与链接</h2>
       <FileLocationSettings vault={s.vault} />
       <SettingGroup title="仓库位置">
-      <Row name="仓库路径" desc="服务器上存放笔记的文件夹">
+      <Row name="仓库路径" desc="本机存放笔记的文件夹">
         <input
           className="text-input"
-          style={{ width: 260 }}
           value={path}
           onChange={(e) => setPath(e.target.value)}
         />
@@ -289,29 +283,23 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
       </div>
       {switchError && <p className="editor-error" role="alert">{switchError}</p>}
       {browser && !browser.error && (
-        <div
-          style={{ border: '1px solid var(--bg-modifier-border)', borderRadius: 6, padding: 8, marginTop: 8 }}
-        >
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{browser.dir}</div>
-          <div
-            className="result"
-            onClick={() => browse(browser.parent)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-          >
-            <Icon name="folder" size={15} /> ..
+        <div className="settings-folder-browser">
+          <div className="settings-folder-dir">{browser.dir}</div>
+          <div className="settings-folder-entry" onClick={() => browse(browser.parent)}>
+            <Icon name="folder" size={15} /><span>..</span>
           </div>
           {browser.folders.map((f: any) => (
             <div
-              className="result"
+              className="settings-folder-entry"
               key={f.path}
+              title={f.path}
               onClick={() => browse(f.path)}
               onDoubleClick={() => setPath(f.path)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
-              <Icon name="folder" size={15} /> {f.name}
+              <Icon name="folder" size={15} /><span>{f.name}</span>
               <button
+                type="button"
                 className="btn secondary"
-                style={{ float: 'right', padding: '2px 8px' }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setPath(f.path);
@@ -323,7 +311,7 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
           ))}
         </div>
       )}
-      {browser?.error && <div style={{ color: '#e5534b' }}>{browser.error}</div>}
+      {browser?.error && <p className="editor-error" role="alert">{browser.error}</p>}
       </SettingGroup>
       <SettingGroup title="文件删除">
       <Row
@@ -332,7 +320,6 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
       >
         <select
           className="text-input"
-          style={{ width: 220 }}
           value={deleteMode}
           onChange={(e) => saveDeleteMode(e.target.value)}
         >
@@ -361,7 +348,7 @@ function FileLocationSettings({ vault }: { vault: unknown }) {
   };
   const patch = <K extends keyof FilePlacement>(key: K, next: FilePlacement[K]) => setValue(current => ({ ...current, [key]: next }));
   return <SettingGroup title="默认位置">
-    <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+    <fieldset disabled={saving}>
       <Row name="新建文件的默认位置"><select className="text-input" aria-label="新建文件的默认位置" value={value.newFileLocation} onChange={event => patch('newFileLocation', event.target.value as FilePlacement['newFileLocation'])}>
         <option value="root">仓库根目录</option><option value="current">当前文件所在文件夹</option><option value="folder">指定文件夹</option>
       </select></Row>
@@ -427,7 +414,6 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
       <Row name="远程 URL" desc="https://github.com/owner/repo.git">
         <input
           className="text-input"
-          style={{ width: 260 }}
           value={g.remote}
           onChange={(e) => set('remote', e.target.value)}
         />
@@ -435,7 +421,6 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
       <Row name="分支">
         <input
           className="text-input"
-          style={{ width: 120 }}
           value={g.branch}
           onChange={(e) => set('branch', e.target.value)}
         />
@@ -444,7 +429,6 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
         <input
           className="text-input"
           type="password"
-          style={{ width: 260 }}
           value={g.token}
           onChange={(e) => set('token', e.target.value)}
         />
@@ -479,7 +463,6 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
         <input
           className="text-input"
           type="number"
-          style={{ width: 90 }}
           value={g.intervalSec}
           onChange={(e) => set('intervalSec', Number(e.target.value))}
         />
@@ -487,7 +470,6 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
       <Row name="Git LFS 规则" desc="通过 LFS 跟踪的空格分隔 glob 规则">
         <input
           className="text-input"
-          style={{ width: 260 }}
           value={(g.lfsPatterns || []).join(' ')}
           onChange={(e) => set('lfsPatterns', e.target.value.split(/\s+/).filter(Boolean))}
         />
@@ -516,42 +498,22 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
           {nativeSync ? '立即备份' : '立即同步'}
         </button>
       </div>
-      <div style={{ marginTop: 12 }}>
-        <div
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}
-        >
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>同步日志</span>
-          {log.length > 0 && (
-            <button className="btn secondary" style={{ padding: '2px 8px' }} onClick={() => setLog([])}>
-              清空
-            </button>
-          )}
-        </div>
-        <textarea
-          ref={logRef}
-          readOnly
-          value={
-            log.length
-              ? log.join('\n')
-              : '暂无 Git 活动。点击上方操作（立即同步、拉取、推送…）在此查看日志。'
-          }
-          style={{
-            width: '100%',
-            height: 200,
-            boxSizing: 'border-box',
-            resize: 'vertical',
-            background: 'var(--bg-primary)',
-            color: 'var(--text-normal)',
-            border: '1px solid var(--bg-modifier-border, #444)',
-            borderRadius: 6,
-            padding: 10,
-            fontFamily: 'var(--font-monospace, monospace)',
-            fontSize: 12,
-            lineHeight: 1.5,
-            whiteSpace: 'pre',
-          }}
-        />
+      <div className="settings-log-head">
+        <span>同步日志</span>
+        {log.length > 0 && (
+          <button type="button" className="btn secondary" onClick={() => setLog([])}>
+            清空
+          </button>
+        )}
       </div>
+      <textarea
+        ref={logRef}
+        className="settings-log"
+        aria-label="同步日志"
+        readOnly
+        placeholder="暂无 Git 活动"
+        value={log.join('\n')}
+      />
     </div>
   );
 }
@@ -571,20 +533,18 @@ function Plugins() {
   return (
     <div>
       <h2>第三方插件</h2>
-      {msg && <div style={{ color: 'var(--text-muted)', margin: '6px 0' }}>{msg}</div>}
+      {msg && <p role="alert">{msg}</p>}
       <SettingGroup title="已安装插件">
-        {plugins.length === 0 && (
-          <div style={{ color: 'var(--text-faint)' }}>尚未在 .obsidian/plugins 安装插件</div>
-        )}
+        {plugins.length === 0 && <p>尚未在 .obsidian/plugins 安装插件</p>}
         {plugins.map((p) => (
           <div className="setting-row" key={p.id}>
             <div className="info">
               <div className="name">
-                {p.name} <span style={{ color: 'var(--text-faint)' }}>v{p.version}</span>
+                {p.name} <span className="setting-version">v{p.version}</span>
               </div>
               <div className="desc">{p.description}</div>
               <div className="desc" role="status">
-                {pluginStatuses.get(p.id)?.state ?? 'disabled'}
+                {pluginStateLabels[pluginStatuses.get(p.id)?.state ?? 'disabled']}
                 {pluginStatuses.get(p.id)?.error ? `: ${pluginStatuses.get(p.id)!.error}` : ''}
               </div>
             </div>
@@ -607,12 +567,14 @@ function Plugins() {
           </div>
         ))}
       </SettingGroup>
-      <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 14 }}>
-        原生 Node/Electron 模块需要桌面插件宿主。加载状态与具体工作流兼容性分别显示。
-      </p>
     </div>
   );
 }
+
+type PluginState = NonNullable<ReturnType<typeof pluginStatuses.get>>['state'];
+const pluginStateLabels: Record<PluginState, string> = {
+  loading: '正在加载', loaded: '已加载', disabled: '未启用', error: '加载失败', unsupported: '不支持', builtin: '已由原生功能替代',
+};
 
 function Appearance({ s }: { s: any }) {
   const [fontTextSize, setFontTextSize] = useState(String(s.ui.fontTextSize ?? documentAppearance.fontTextSize.default));

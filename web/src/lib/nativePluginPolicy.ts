@@ -10,7 +10,7 @@ export const nativePlusModules = {
 export const migratedPluginIds: Record<string, string> = {
   'any-block': '已由内置自定义块效果接管，请在 Vault 中注册效果',
   'any-block-local': '已由内置自定义块效果接管，请在 Vault 中注册效果',
-  'webviewer-userscripts': '已由内置浏览器脚本管理接管',
+  'webviewer-userscripts': '此应用已移除网页浏览与用户脚本功能',
   'obsidian-menu-manager': '已由内置配置式右键菜单接管',
   'oz-clear-unused-images': '已由内置未引用附件清理接管',
   'multi-tag': '已由内置批量标签接管',

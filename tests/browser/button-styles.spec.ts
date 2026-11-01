@@ -5,34 +5,18 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => Boolean(window.renderHarness));
   await page.evaluate(async () => {
     const load = (path: string) => import(path);
-    const [React, ReactDOM, { UserscriptSettings }, { ButtonComponent, SearchComponent }, { default: TagOperationsHost }, { ItemView }] = await Promise.all([
+    const [React, ReactDOM, { ButtonComponent, SearchComponent }, { default: TagOperationsHost }, { ItemView }] = await Promise.all([
       load('/node_modules/.vite/deps/react.js'), load('/node_modules/.vite/deps/react-dom_client.js'),
-      load('/src/components/UserscriptSettings.tsx'), load('/src/lib/obsidian/ui.ts'), load('/src/components/TagOperationsHost.tsx'), load('/src/lib/obsidian/workspace.ts'),
+      load('/src/lib/obsidian/ui.ts'), load('/src/components/TagOperationsHost.tsx'), load('/src/lib/obsidian/workspace.ts'),
     ]);
-    const requests: { action: string; payload: any }[] = [];
-    const metadata = { name: 'Fixture script', version: '1.0', description: '', grants: [], connects: [], matches: ['https://example.com/*'],
-      includes: [], excludes: [], excludeMatches: [], requires: [], resources: [], runAt: 'document-end', noframes: true, raw: {} };
-    const snapshot = { vault: 'browser-fixture', migration: 'fixture', autoUpdate: false, intervalHours: 24, statuses: [], scripts: [{
-      id: 'fixture', revision: 1, source: '// fixture', metadata, requires: [], resources: {}, warnings: [], enabled: false, autoUpdate: false,
-      importedAt: 0, updatedAt: 0, approved: { grants: [], connects: [], pageWorld: false, rules: metadata },
-      update: { state: 'available', candidateId: 'next', pending: { source: '// next', metadata: { ...metadata, version: '2.0' }, warnings: [] } },
-    }] };
-    const fixture = { requests, blockImport: false, release: () => {} };
-    (window as any).buttonFixture = fixture;
-    (window as any).webobsidianDesktop = { userscripts: { subscribe: () => () => {}, request: async (action: string, payload: any) => {
-      requests.push({ action, payload });
-      if (action === 'list') return snapshot;
-      if (action === 'paths') return { store: '.obsidian/webobsidian/userscripts/store.json' };
-      if (action === 'menus') return [{ guestId: 1, scriptId: 'fixture', id: 'menu', label: 'Fixture menu', url: 'https://example.com/' }];
-      if (action === 'import' && fixture.blockImport) await new Promise<void>(resolve => { fixture.release = resolve; });
-    } } };
     document.getElementById('root')!.hidden = true;
     const host = document.createElement('div');
     host.id = 'button-fixture'; host.style.cssText = 'position:fixed;inset:12px;display:flex;justify-content:center'; document.body.append(host);
     const element = (React.default ?? React).createElement;
     (ReactDOM.createRoot ?? ReactDOM.default.createRoot)(host).render(element('div', { className: 'settings-modal' },
       element('nav', { className: 'settings-nav' }, element('button', {}, 'Navigation')),
-      element('div', { className: 'settings-content' }, element(UserscriptSettings), element('div', { id: 'adapter-buttons' })),
+      element('div', { className: 'settings-content' }, element('button', { id: 'native-reference' }, 'Native action'),
+        element('input', { type: 'file', 'aria-label': 'Fixture file' }), element('div', { id: 'adapter-buttons' })),
       element('button', { className: 'tool-btn', 'aria-label': 'Fixture toolbar' }, '×'), element(TagOperationsHost)));
     await new Promise<void>(resolve => {
       const mounted = () => document.getElementById('adapter-buttons') ? resolve() : requestAnimationFrame(mounted);
@@ -47,17 +31,16 @@ test.beforeEach(async ({ page }) => {
     const view = new ItemView({}); view.addAction('x', 'Adapter view action', () => {}); adapters.append(view.containerEl);
     const submit = document.createElement('input'); submit.type = 'submit'; submit.value = 'Native submit'; adapters.append(submit);
   });
-  await expect(page.getByRole('heading', { name: 'Fixture script' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Native action', exact: true })).toBeVisible();
 });
-
 for (const theme of ['dark', 'light']) {
-  test(`${theme}: native file picker and every ordinary userscript/adapter button share one visual contract`, async ({ page }) => {
+  test(`${theme}: native file picker and every ordinary native/adapter button share one visual contract`, async ({ page }) => {
     await page.evaluate(theme => { document.body.classList.remove('theme-dark', 'theme-light'); document.body.classList.add(`theme-${theme}`); }, theme);
     const styles = await page.evaluate(() => {
       const keys = ['appearance', 'fontFamily', 'fontSize', 'lineHeight', 'minHeight', 'paddingTop', 'paddingRight', 'borderTopWidth', 'borderRadius', 'backgroundColor', 'color'];
       const read = (element: Element, pseudo?: string) => { const style = getComputedStyle(element, pseudo); return Object.fromEntries(keys.map(key => [key, (style as any)[key]])); };
-      const reference = document.querySelector('[aria-label="内置浏览器用户脚本"] button')!;
-      const buttons = Array.from(document.querySelectorAll('[aria-label="内置浏览器用户脚本"] button, #adapter-buttons .secondary:not(.danger), #adapter-buttons input[type="submit"]'));
+      const reference = document.querySelector('#native-reference')!;
+      const buttons = Array.from(document.querySelectorAll('#native-reference, #adapter-buttons .secondary:not(.danger), #adapter-buttons input[type="submit"]'));
       return { reference: read(reference), buttons: buttons.map(button => ({ text: button.textContent, styles: read(button) })),
         file: read(document.querySelector('input[type="file"]')!, '::file-selector-button') };
     });
@@ -90,31 +73,6 @@ test('secondary/primary/warning buttons share focus and disabled handling withou
     await expect(button).toHaveCSS('opacity', '0.5');
     await expect(button).toHaveCSS('cursor', 'default');
   }
-});
-
-test('native file import still reads source, allows the same file twice and rejects oversized files', async ({ page }) => {
-  const input = page.getByLabel('从文件导入用户脚本');
-  const file = { name: 'fixture.user.js', mimeType: 'text/javascript', buffer: Buffer.from('// fixture import') };
-  await input.setInputFiles(file); await input.setInputFiles(file);
-  await expect.poll(() => page.evaluate(() => (window as any).buttonFixture.requests.filter((request: any) => request.action === 'import')))
-    .toEqual([{ action: 'import', payload: { source: '// fixture import' } }, { action: 'import', payload: { source: '// fixture import' } }]);
-  await input.setInputFiles({ ...file, buffer: Buffer.alloc(8 * 1024 * 1024 + 1) });
-  await expect(page.getByRole('alert')).toContainText('文件超过 8 MiB');
-  expect(await page.evaluate(() => (window as any).buttonFixture.requests.filter((request: any) => request.action === 'import').length)).toBe(2);
-});
-
-test('busy fieldset disables both the native picker and every userscript action consistently', async ({ page }) => {
-  await page.evaluate(() => { (window as any).buttonFixture.blockImport = true; });
-  await page.getByLabel('从文件导入用户脚本').setInputFiles({ name: 'busy.user.js', mimeType: 'text/javascript', buffer: Buffer.from('// busy') });
-  const section = page.getByRole('region', { name: '内置浏览器用户脚本' });
-  await expect(section).toHaveAttribute('aria-busy', 'true');
-  expect(await page.getByLabel('从文件导入用户脚本').evaluate(input => getComputedStyle(input, '::file-selector-button').cursor)).toBe('default');
-  for (const button of await section.locator('button, input[type="file"]').all()) {
-    await expect(button).toBeDisabled(); await expect(button).toHaveCSS('opacity', '0.5');
-  }
-  await page.evaluate(() => (window as any).buttonFixture.release());
-  await expect(section).toHaveAttribute('aria-busy', 'false');
-  await expect(page.getByLabel('从文件导入用户脚本')).toBeEnabled();
 });
 
 test('ordinary prompt and tag dialog actions reuse the same button family', async ({ page }) => {

@@ -26,11 +26,11 @@ export function NoteLinkSection({
 }) {
   return (
     <>
-      <div className="section-head" onClick={onToggle}>
+      <button type="button" className="section-head" aria-expanded={open} onClick={onToggle}>
         <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
         <span>{title}</span>
         <span className="count">{count}</span>
-      </div>
+      </button>
       {open && children}
     </>
   );
@@ -46,14 +46,14 @@ function LinkedMention({ path, target }: { path: string; target: string }) {
   }, [session, snapshot.version, path, target]);
   return <div className="mention-box">
     <div className="mention-src" {...preview(path)} onClick={() => void useStore.getState().openFile(path)}>{name(path)}</div>
-    <button className="text-btn" onClick={() => setExpanded(!expanded)}>{expanded ? '收起引用' : '查看引用位置'}</button>
-    {error && <div role="alert">{error.message}</div>}
+    <button type="button" className="text-btn" onClick={() => setExpanded(!expanded)}>{expanded ? '收起引用' : '查看引用位置'}</button>
+    {error && <div className="editor-error" role="alert">{error.message}</div>}
     {expanded && occurrences.map(link => <div key={link.from} className="mention-context" role="button" tabIndex={0}
       {...preview(path)} onClick={() => void useStore.getState().navigate(path, { range: link, text: session!.analysis.text.slice(link.from, link.to) })}
       onKeyDown={event => { if (event.key === 'Enter') void useStore.getState().navigate(path, { range: link, text: session!.analysis.text.slice(link.from, link.to) }); }}>
       {session!.analysis.text.slice(Math.max(0, link.from - 32), link.to + 32).replace(/\n/g, ' ')}
     </div>)}
-    {expanded && session && !occurrences.length && <div>当前正文没有可定位的引用</div>}
+    {expanded && session && !occurrences.length && <div className="panel-empty">当前正文没有可定位的引用</div>}
   </div>;
 }
 
@@ -114,7 +114,7 @@ export function BacklinksPanel({ path: activePath }: { path: string | null }) {
       </div>
       <div className="sidebar-body">
         <NoteLinkSection title="已链接提及" count={linked.length} open={openLinked} onToggle={() => setOpenLinked(!openLinked)}>
-          {linked.length === 0 && <div className="panel-item">未发现反向链接。</div>}
+          {linked.length === 0 && <div className="panel-empty">未发现反向链接</div>}
           {linked.map(b => <LinkedMention key={b} path={b} target={activePath!} />)}
         </NoteLinkSection>
         <NoteLinkSection
@@ -123,14 +123,14 @@ export function BacklinksPanel({ path: activePath }: { path: string | null }) {
           open={openUnlinked}
           onToggle={() => setOpenUnlinked(!openUnlinked)}
         >
-          {unlinked.length === 0 && <div className="panel-item">未发现未链接提及。</div>}
+          {unlinked.length === 0 && <div className="panel-empty">未发现未链接提及</div>}
           {unlinked.map((m) => (
             <div key={m.path} className="mention-box">
               <div className="mention-src" onClick={() => openFile(m.path)}>
                 {name(m.path)}
               </div>
               {m.contexts[0] && (
-                <div style={{ color: 'var(--text-muted)' }} onClick={() => {
+                <div className="mention-context" onClick={() => {
                   const source = m.contexts[0].source;
                   if (source) void useStore.getState().navigate(m.path, { range: source, text: source.text });
                   else void openFile(m.path);
@@ -186,11 +186,11 @@ export function OutgoingPanel({ path: activePath }: { path: string | null }) {
         </span>
       </div>
       <div className="sidebar-body">
-        <div className="section-head" style={{ cursor: 'default' }}>
+        <div className="section-head">
           <span>链接</span>
           <span className="count">{links.length}</span>
         </div>
-        {links.length === 0 && <div className="panel-item">无出链。</div>}
+        {links.length === 0 && <div className="panel-empty">无出链</div>}
         {links.map((t) => (
           <div key={t} className="outgoing-item" {...preview(t)} onClick={() => openWikilink(t, activePath ?? undefined)} title={resolved[t] ?? t}>
             <Icon name="file-text" size={14} />
@@ -198,7 +198,7 @@ export function OutgoingPanel({ path: activePath }: { path: string | null }) {
           </div>
         ))}
         {unresolved.length > 0 && (
-          <div className="section-head" style={{ cursor: 'default' }}>
+          <div className="section-head">
             <span>未解析</span>
             <span className="count">{unresolved.length}</span>
           </div>

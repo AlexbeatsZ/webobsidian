@@ -7,8 +7,7 @@ import { vaultPathKey } from './vaultFile.js';
 /**
  * Persisted UI/workspace state (open tabs, active note, expanded folders, panel
  * layout, bookmarks, recents). Stored server-side as a plain JSON file so the
- * workspace is shared across browsers/devices — not tied to one browser's
- * localStorage. Single-user app → one shared state file.
+ * native application windows share one authoritative state file.
  */
 
 const FILE = path.join(config.dataDir, 'uistate.json');

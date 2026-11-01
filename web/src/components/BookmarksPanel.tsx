@@ -1,5 +1,4 @@
 import { useStore, type ContextMenuItem } from '../lib/store';
-import { pathToUrl } from '../lib/urlsync';
 import Icon from './Icon';
 
 export default function BookmarksPanel() {
@@ -12,14 +11,9 @@ export default function BookmarksPanel() {
   const revealInTree = useStore((s) => s.revealInTree);
   const setMovePath = useStore((s) => s.setMovePath);
   const openContextMenu = useStore((s) => s.openContextMenu);
-  const notify = useStore((s) => s.notify);
 
   const name = (p: string) => p.split('/').pop()?.replace(/\.(md|markdown)$/, '') ?? p;
 
-  const copyUrl = (p: string) => {
-    navigator.clipboard?.writeText(`${location.origin}${pathToUrl(p)}`).catch(() => {});
-    notify("URL 已复制");
-  };
 
   // Drag a row onto a folder in the file tree to move the underlying file
   // (FileTree's onDrop reads this same `text/wo-path` payload).
@@ -42,7 +36,6 @@ export default function BookmarksPanel() {
       ...(kind === 'recent'
         ? [{ label: "从最近列表中移除", icon: 'x', onClick: () => removeRecent(path) } as ContextMenuItem]
         : []),
-      { label: "复制 URL 路径", onClick: () => copyUrl(path) },
     ];
     openContextMenu({ x: e.clientX, y: e.clientY, items });
   };
@@ -55,7 +48,7 @@ export default function BookmarksPanel() {
   return (
     <div>
       <div className="panel-title">书签</div>
-      {bookmarks.length === 0 && <div className="panel-item">暂无书签</div>}
+      {bookmarks.length === 0 && <div className="panel-empty">暂无书签</div>}
       {bookmarks.map((b) => (
         <div
           key={b}
@@ -66,19 +59,19 @@ export default function BookmarksPanel() {
           onContextMenu={(e) => showMenu(e, b, 'bookmark')}
           title={b}
         >
-          <Icon name="bookmark" size={14} /> <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(b)}</span>
+          <Icon name="bookmark" size={14} /> <span className="panel-item-name">{name(b)}</span>
           <span className="panel-item-actions">
-            <span title="移动文件至…" onClick={(e) => actionBtn(e, () => setMovePath(b))}>
+            <button type="button" title="移动文件至…" aria-label="移动文件至…" onClick={(e) => actionBtn(e, () => setMovePath(b))}>
               <Icon name="folder" size={13} />
-            </span>
-            <span title="移除书签" onClick={(e) => actionBtn(e, () => toggleBookmark(b))}>
+            </button>
+            <button type="button" title="移除书签" aria-label="移除书签" onClick={(e) => actionBtn(e, () => toggleBookmark(b))}>
               <Icon name="x" size={13} />
-            </span>
+            </button>
           </span>
         </div>
       ))}
-      <div className="panel-title" style={{ marginTop: 8 }}>最近</div>
-      {recent.length === 0 && <div className="panel-item">暂无最近文件</div>}
+      <div className="panel-title">最近</div>
+      {recent.length === 0 && <div className="panel-empty">暂无最近文件</div>}
       {recent.map((r) => (
         <div
           key={r}
@@ -89,14 +82,14 @@ export default function BookmarksPanel() {
           onContextMenu={(e) => showMenu(e, r, 'recent')}
           title={r}
         >
-          <Icon name="clock" size={14} /> <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(r)}</span>
+          <Icon name="clock" size={14} /> <span className="panel-item-name">{name(r)}</span>
           <span className="panel-item-actions">
-            <span title="移动文件至…" onClick={(e) => actionBtn(e, () => setMovePath(r))}>
+            <button type="button" title="移动文件至…" aria-label="移动文件至…" onClick={(e) => actionBtn(e, () => setMovePath(r))}>
               <Icon name="folder" size={13} />
-            </span>
-            <span title="从最近列表中移除" onClick={(e) => actionBtn(e, () => removeRecent(r))}>
+            </button>
+            <button type="button" title="从最近列表中移除" aria-label="从最近列表中移除" onClick={(e) => actionBtn(e, () => removeRecent(r))}>
               <Icon name="x" size={13} />
-            </span>
+            </button>
           </span>
         </div>
       ))}

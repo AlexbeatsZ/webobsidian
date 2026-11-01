@@ -179,4 +179,4 @@ Artifacts:
 | Linux    | `.AppImage`, `.deb`    | x64, arm64 |
 
 The apps are **not code-signed/notarized**, so users will see a Gatekeeper /
-SmartScreen warning on first launch (expected for a free self-hosted build).
+SmartScreen warning on first launch (expected for this personal application build).

@@ -31,8 +31,8 @@ export default function NoteProperties({ path }: { path: string | null }) {
   }, [session, yaml, types, snapshot.locked, stale]);
   return <>
     <div className="nav-header"><span className="nav-title">属性</span></div>
-    {error && <div className="panel-item" role="alert">{error.message}</div>}
-    {!target && <div className="panel-item">打开 Markdown 文档查看属性</div>}
+    {error && <div className="panel-empty" role="alert">{error.message}</div>}
+    {!target && <div className="panel-empty">打开 Markdown 文档查看属性</div>}
     <div ref={host} className="sidebar-body note-properties" />
   </>;
 }

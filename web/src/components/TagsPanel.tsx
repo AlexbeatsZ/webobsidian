@@ -98,11 +98,11 @@ export default function TagsPanel() {
     });
   }
   return <div className="native-tags-panel">
-    <div className="native-tags-toolbar"><input aria-label="筛选标签" placeholder="筛选标签…" value={filter} onChange={(e) => setFilter(e.target.value)} />
-      {preferences.batchEnabled && <button title="批量修改标签" aria-label="批量修改标签" onClick={() => openTagOperation({ scope: { kind: 'vault' } })}><Icon name="pencil" size={15} /></button>}
+    <div className="native-tags-toolbar"><input className="text-input" aria-label="筛选标签" placeholder="筛选标签…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      {preferences.batchEnabled && <button type="button" className="nav-action" title="批量修改标签" aria-label="批量修改标签" onClick={() => openTagOperation({ scope: { kind: 'vault' } })}><Icon name="pencil" size={15} /></button>}
     </div>
     {error && <p role="alert" className="native-tags-error">{error}</p>}
-    {!tags.length && !error && <div style={{ color: 'var(--text-faint)', padding: 8 }}>没有标签</div>}
+    {!tags.length && !error && <div className="panel-empty">没有标签</div>}
     <ul className="native-tags-tree" aria-label="标签层级">{rows(tree)}</ul>
     {hover && <TagPageHover {...hover} />}
   </div>;

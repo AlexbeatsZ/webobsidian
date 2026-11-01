@@ -7,7 +7,6 @@ import { setActiveEditorMode } from './activeEditor';
 import type { NativeCommand } from './commands';
 import { nativeEditorCommands } from './nativeEditorCommands';
 import { nativeWorkspaceCommands } from './nativeWorkspaceCommands';
-import { userscriptCommands } from './userscripts/commands';
 import { configuredMenuCommands } from './configuredMenus/commands';
 import { attachmentCleanupCommands, attachmentCleanupLegacyCommandIds } from './attachments/commands';
 import { tagCommands } from './tags/commands';
@@ -32,7 +31,6 @@ export const nativeCommands: NativeCommand[] = [
   ...nativeEditorCommands,
   ...nativeWorkspaceCommands,
   ...writingCommands,
-  ...userscriptCommands,
   ...configuredMenuCommands,
   ...attachmentCleanupCommands,
   ...tagCommands,

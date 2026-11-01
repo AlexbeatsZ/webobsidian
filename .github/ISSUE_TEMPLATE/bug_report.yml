@@ -30,9 +30,9 @@ body:
     attributes:
       label: How are you running it?
       options:
-        - Docker (docker compose)
-        - Local dev (npm run dev)
-        - Production build (npm start)
+        - Desktop application
+        - Android application
+        - Independent sync server
         - Other
     validations:
       required: true
@@ -45,11 +45,11 @@ body:
     id: env
     attributes:
       label: Environment
-      description: OS, browser, Node version, vault size (approx. note count) if relevant.
-      placeholder: macOS 15 · Chrome 138 · Node 20 · ~4k notes
+      description: OS, application version, vault size (approx. note count) if relevant.
+      placeholder: Windows 11 · Desktop application · ~4k notes
   - type: textarea
     id: logs
     attributes:
       label: Logs / console output
-      description: Relevant server logs or browser console errors. Redact any secrets.
+      description: Relevant native application or sync server logs. Redact any secrets.
       render: shell

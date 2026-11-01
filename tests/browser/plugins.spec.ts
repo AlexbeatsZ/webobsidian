@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
-import { createServer } from 'node:http';
+
 import { migrateLinterReplacements } from '../../packages/markdown-core/src/legacyReplacement';
 
 const fixtureCode = `
@@ -394,19 +394,12 @@ test('native original plugins use isolated Node filesystem and MCP runtime', asy
   const main = path.join(temp, 'main.cjs');
   await fs.writeFile(
     main,
-    `const {app,BrowserWindow,ipcMain}=require('electron');app.setPath('userData',${JSON.stringify(path.join(temp, 'profile'))});app.whenReady().then(()=>{ipcMain.handle('desktop:menu-items',()=>[]);const win=new BrowserWindow({show:false,webPreferences:{preload:${JSON.stringify(path.join(temp, 'preload.cjs'))},contextIsolation:false,nodeIntegration:true,sandbox:false,webviewTag:true,additionalArguments:[${JSON.stringify('--webobsidian-native-vault=' + encodeURIComponent(vault))}]}});win.loadURL('about:blank')});app.on('window-all-closed',()=>app.quit());`
+    `const {app,BrowserWindow,ipcMain}=require('electron');app.setPath('userData',${JSON.stringify(path.join(temp, 'profile'))});app.whenReady().then(()=>{ipcMain.handle('desktop:menu-items',()=>[]);const win=new BrowserWindow({show:false,webPreferences:{preload:${JSON.stringify(path.join(temp, 'preload.cjs'))},contextIsolation:false,nodeIntegration:true,sandbox:false,additionalArguments:[${JSON.stringify('--webobsidian-native-vault=' + encodeURIComponent(vault))}]}});win.loadURL('about:blank')});app.on('window-all-closed',()=>app.quit());`
   );
   const app = await electron.launch({
     executablePath: require('electron'),
     args: [main],
   });
-  const guest = createServer((_req, res) =>
-    res.end(
-      '<!doctype html><title>Isolated guest</title><body>Userscript fixture</body>'
-    )
-  );
-  await new Promise<void>((resolve) => guest.listen(0, '127.0.0.1', resolve));
-  const guestUrl = `http://127.0.0.1:${(guest.address() as any).port}/`;
   try {
     const page = await app.firstWindow();
     const errors: string[] = [],
@@ -431,7 +424,6 @@ test('native original plugins use isolated Node filesystem and MCP runtime', asy
     for (const id of [
       'templater-obsidian',
       'local-latex-renderer',
-      'webviewer-userscripts',
       'obsidian-context-mcp',
     ]) {
       const dir = path.join(source, '.obsidian/plugins', id),
@@ -485,38 +477,6 @@ test('native original plugins use isolated Node filesystem and MCP runtime', asy
     expect(response.ok).toBe(true);
     const context = await response.json();
     expect(context.error).toBeUndefined();
-    await page.evaluate(async (url) => {
-      const app = (window as any).pluginHarness.sharedApp;
-      await (app.plugins.plugins['webviewer-userscripts'] as any).saveScript(
-        '// ==UserScript==\n// @name Plugin fixture\n// @namespace webobsidian-test\n// @match http://127.0.0.1/*\n// @grant GM_setValue\n// ==/UserScript==\ndocument.body.dataset.fixture="injected";GM_setValue("fixture","saved");'
-      );
-      await app.workspace
-        .getLeaf(true)
-        .setViewState({ type: 'webviewer', state: { url } });
-    }, guestUrl);
-    await expect
-      .poll(() =>
-        page.evaluate(async () => {
-          const leaf = (
-            window as any
-          ).pluginHarness.sharedApp.workspace.getLeavesOfType('webviewer')[0];
-          try {
-            return await leaf.view.webview.executeJavaScript(
-              '({injected:document.body.dataset.fixture,node:typeof require})'
-            );
-          } catch {
-            return null;
-          }
-        })
-      )
-      .toEqual({ injected: 'injected', node: 'undefined' });
-    await expect
-      .poll(() =>
-        Object.values(data['webviewer-userscripts']?.values ?? {}).some(
-          (v: any) => v.fixture === 'saved'
-        )
-      )
-      .toBe(true);
     await page.evaluate(async () => {
       await (window as any).pluginHarness.unloadPlugins();
     });
@@ -532,7 +492,7 @@ test('native original plugins use isolated Node filesystem and MCP runtime', asy
       .toBe(false);
   } finally {
     await app.close();
-    await new Promise<void>((resolve) => guest.close(() => resolve()));
+
     await fs.rm(temp, {
       recursive: true,
       force: true,

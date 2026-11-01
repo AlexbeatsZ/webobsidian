@@ -42,11 +42,11 @@ export default function FileSyncSettings() {
     <h2>文件同步</h2>
     {error && <p role="alert">{error}</p>}
     {!connection ? <p role="status">{error ? '无法读取同步设置' : '正在读取…'}</p> : <>
-      <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <fieldset disabled={busy}>
         <SettingGroup title="连接">
           <SettingRow name="启用文件同步"><input type="checkbox" checked={connection.preferences.enabled} onChange={event => update({ enabled: event.target.checked })} /></SettingRow>
           <SettingRow name="同步地址" desc="每行一个，严格按填写顺序尝试">
-            <textarea className="text-input" rows={5} style={{ width: 300, maxWidth: '100%', resize: 'vertical' }} value={addresses}
+            <textarea className="text-input" rows={5} value={addresses}
               placeholder={`192.168.1.10:${defaultPort}\nhttps://example.com/webobsidian-sync/v1/`} onChange={event => setAddresses(event.target.value)} />
           </SettingRow>
           <SettingRow name="访问令牌" desc="随 Vault 保存；请使用私有仓库"><input className="text-input" type="password" autoComplete="new-password" value={connection.preferences.token} onChange={event => update({ token: event.target.value })} /></SettingRow>
@@ -59,10 +59,10 @@ export default function FileSyncSettings() {
         </div>
         <SettingGroup title="状态">
           <SettingRow name="同步状态"><span role="status">{status && phases[status.phase]}{status?.message && ` · ${status.message}`}</span></SettingRow>
-          {status?.activeEndpoint && <SettingRow name="当前地址"><span style={{ overflowWrap: 'anywhere' }}>{status.activeEndpoint}</span></SettingRow>}
+          {status?.activeEndpoint && <SettingRow name="当前地址"><span>{status.activeEndpoint}</span></SettingRow>}
           {status?.lastSuccess && <SettingRow name="上次完成"><time>{new Date(status.lastSuccess).toLocaleString()}</time></SettingRow>}
-          {status?.conflictDirectory && <SettingRow name="保留的冲突文件"><span style={{ overflowWrap: 'anywhere' }}>{status.conflictDirectory}</span></SettingRow>}
-          {!!status?.conflictBranches.length && <SettingRow name="冲突分支"><span style={{ overflowWrap: 'anywhere' }}>{status.conflictBranches.join('\n')}</span></SettingRow>}
+          {status?.conflictDirectory && <SettingRow name="保留的冲突文件"><span>{status.conflictDirectory}</span></SettingRow>}
+          {!!status?.conflictBranches.length && <SettingRow name="冲突分支"><span>{status.conflictBranches.join('\n')}</span></SettingRow>}
         </SettingGroup>
         {status?.phase === 'conflict' && <div className="setting-actions">
           <button className="btn secondary" onClick={() => void action('local')}>采用本机版本</button>

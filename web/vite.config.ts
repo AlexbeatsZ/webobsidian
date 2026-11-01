@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { mathJaxAssets, mathJaxVersion } from './mathjaxAssets';
 import { pdfAssetsPlugin } from './src/lib/pdf/vitePlugin';
 
-// Web build outputs to ../server/public so the server can serve the SPA.
+// Shared native renderer assets, bundled by the desktop and Android shells.
 export default defineConfig({
   plugins: [react(), mathJaxAssets(), pdfAssetsPlugin()],
   define: { __MATHJAX_VERSION__: JSON.stringify(mathJaxVersion),
@@ -30,13 +30,6 @@ export default defineConfig({
           react: ['react', 'react-dom'],
         },
       },
-    },
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': 'http://localhost:8787',
-      '/ws': { target: 'ws://localhost:8787', ws: true },
     },
   },
 });

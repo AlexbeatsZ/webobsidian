@@ -1,12 +1,8 @@
 // Preload supplies native chrome; React shares the compact workspace tab row.
 import { contextBridge, ipcRenderer } from 'electron';
 import { installTitleBar } from './titlebar';
-import { installGuestUserscripts } from './userscripts/guest';
 import type { McpConnectionInput } from './mcpLauncher';
 
-if (process.argv.includes('--webobsidian-userscript-guest')) {
-  installGuestUserscripts();
-} else {
 const nativeArg = process.argv.find(arg => arg.startsWith('--webobsidian-native-vault='));
 const desktopApi = {
   isDesktop: true,
@@ -29,21 +25,6 @@ const desktopApi = {
     ipcRenderer.on('desktop:prepare-close', handler);
     return () => ipcRenderer.removeListener('desktop:prepare-close', handler);
   },
-  webviewer: {
-    subscribe: (listener: (page: { sourceGuestId: number; url: string }) => void) => {
-      const handler = (_event: unknown, page: { sourceGuestId: number; url: string }) => listener(page);
-      ipcRenderer.on('webviewer:open-tab', handler);
-      return () => ipcRenderer.removeListener('webviewer:open-tab', handler);
-    },
-  },
-  userscripts: {
-    request: (action: string, payload?: unknown) => ipcRenderer.invoke('userscripts:manage', action, payload ?? {}),
-    subscribe: (listener: () => void) => {
-      const handler = () => listener();
-      ipcRenderer.on('userscripts:changed', handler);
-      return () => ipcRenderer.removeListener('userscripts:changed', handler);
-    },
-  },
   vaultPath: nativeArg ? decodeURIComponent(nativeArg.slice('--webobsidian-native-vault='.length)) : undefined,
 };
 if (process.contextIsolated) contextBridge.exposeInMainWorld('webobsidianDesktop', desktopApi);
@@ -59,5 +40,4 @@ if (process.isMainFrame) {
   });
   ipcRenderer.on('desktop:close-cancelled', () => window.dispatchEvent(new Event('desktop-close-cancelled')));
   window.addEventListener('DOMContentLoaded', () => void installTitleBar(), { once: true });
-}
 }

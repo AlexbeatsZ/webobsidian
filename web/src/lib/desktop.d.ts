@@ -1,4 +1,3 @@
-import type { UserscriptBridge } from './userscripts/types';
 import type { McpLauncherState, McpConnectionInput } from '../../../desktop/src/mcpLauncher';
 
 declare global {
@@ -16,10 +15,6 @@ declare global {
       vaultPath?: string;
       openVaultPath(path: string): Promise<void>;
       onBeforeClose(listener: () => Promise<void>): () => void;
-      userscripts: UserscriptBridge;
-      webviewer: {
-        subscribe(listener: (page: { sourceGuestId: number; url: string }) => void): () => void;
-      };
     };
   }
 }

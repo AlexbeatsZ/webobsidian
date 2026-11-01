@@ -17,11 +17,9 @@ import TrashView from './components/TrashView';
 import ContextMenu from './components/ContextMenu';
 import FolderPicker from './components/FolderPicker';
 import { loadPlugins, sharedApp } from './lib/plugins';
-import { initUrlSync } from './lib/urlsync';
 import { useIsMobile } from './lib/useIsMobile';
 import { notifyIndexChanged } from './lib/indexEvents';
 import { bindVaultMaintenance } from './lib/vaultMaintenance';
-import { bootstrapUserscripts, refreshUserscripts } from './lib/userscripts/client';
 import { initializeNativeMenus, attachmentDialogHost, readNativeFeatures } from './lib/nativeFeatures';
 import { notifyMenuConfigurationFileChanged } from './lib/configuredMenus/controller';
 import AttachmentCleanupDialog from './components/AttachmentCleanupDialog';
@@ -90,7 +88,6 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    const stopUserscripts = bootstrapUserscripts();
     let stopMenus = initializeNativeMenus();
     void readNativeFeatures().then(value => { attachmentDialogHost.initialOptions = value.attachments; }).catch(console.error);
     loadTree();
@@ -98,16 +95,9 @@ export default function App() {
     const stopWritingFiles=watchExternalWritingSources();
     const stopWritingNavigation=bindWritingNavigation();
     void ensureWriting().catch(error=>useStore.getState().notify(String(error)));
-    // Deep link (/note/<path>) wins over the restored workspace's active note.
-    const deepLink = initUrlSync();
     useStore
       .getState()
       .loadUiState() // restore workspace from server + open note(s)
-      .then(() => {
-        if (deepLink && deepLink !== useStore.getState().activePath) {
-          return useStore.getState().openFile(deepLink, true, 'main');
-        }
-      })
       .catch(() => {});
     loadPlugins().catch(() => {});
     // websocket live updates
@@ -144,7 +134,6 @@ export default function App() {
           clearNativeFeaturePreferences();
           stopMenus();
           stopMenus = initializeNativeMenus();
-          void refreshUserscripts().catch(error => useStore.getState().notify(String(error)));
           window.dispatchEvent(new Event('vault-changed'));
           void readNativeFeatures().then(value => { attachmentDialogHost.initialOptions = value.attachments; }).catch(console.error);
           loadTree();
@@ -178,7 +167,6 @@ export default function App() {
       ws.close();
       stopMaintenance();
       stopOperations();
-      stopUserscripts();
       stopPropertyTypes();
       stopMenus();
       clearNativeFeaturePreferences();

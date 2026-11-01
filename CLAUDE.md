@@ -1,7 +1,10 @@
 # CLAUDE.md — Hướng dẫn làm việc cho Claude Code trên dự án WebObsidian
 
 ## Bối cảnh
-WebObsidian là web app self-hosted clone toàn diện Obsidian. Thiết kế chính thức nằm ở
+WebObsidian is a native desktop/Android application. The browser product, Web
+deployment, embedded webpage browser and userscripts were retired on 2026-11-01.
+The `web/` directory is an internal native renderer; do not add browser adapters.
+Thiết kế chính thức nằm ở
 [PRD.md](PRD.md). Tiến độ phát triển được track ở [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Nguyên tắc bắt buộc (đọc trước mỗi phiên làm việc)
@@ -29,15 +32,13 @@ WebObsidian là web app self-hosted clone toàn diện Obsidian. Thiết kế ch
 ## Lệnh hữu ích
 ```bash
 npm install            # cài deps toàn workspace
-npm run dev            # chạy server + web (dev)
-npm run build          # build web rồi server
-npm run start          # chạy production (server serve web đã build)
+npm run dev            # build and launch the native desktop application
+npm run build          # compile the shared native renderer and local runtime
 npm run typecheck      # kiểm tra type cả 2 workspace
-docker compose up      # chạy full stack
 ```
 
 ## Cấu trúc (xem PRD §2.2)
 - `server/` — Express API (routes, services, middleware, plugins shim).
-- `web/` — React SPA (components, lib, styles).
+- `web/` — shared native application renderer (components, lib, styles).
 - `data/` — runtime config & index (gitignored).
 - `docs/` — tài liệu bổ sung.

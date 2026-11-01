@@ -1,10 +1,10 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.43",
+  "version": "0.1.44",
   "private": true,
   "description": "WebObsidian native desktop application",
   "author": "xnohat <xnohat@gmail.com>",
-  "homepage": "https://github.com/xnohat/webobsidian",
+  "homepage": "https://github.com/AlexbeatsZ/webobsidian",
   "license": "MIT",
   "main": "dist/main.js",
   "scripts": {
@@ -108,7 +108,7 @@
       "icon": "buildResources/icon.png",
       "category": "Utility",
       "maintainer": "xnohat <xnohat@gmail.com>",
-      "synopsis": "Self-hosted Obsidian-compatible notes app",
+      "synopsis": "Personal Obsidian-like Markdown notes app",
       "target": [
         {
           "target": "AppImage",

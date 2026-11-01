@@ -16,6 +16,7 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL, viewport: { width: 1480, height: 780 },
+    userAgent: 'WebObsidianDesktop renderer-contract',
     launchOptions: { executablePath: process.env.RENDER_TEST_BROWSER },
     trace: 'retain-on-failure',
   },
@@ -27,7 +28,7 @@ export default defineConfig({
     { name: 'palette', testMatch: /palette\.spec\.ts/ },
   ],
   webServer: {
-    command: `${process.env.RENDER_TEST_SKIP_CORE_BUILD === '1' ? '' : 'npm run build:core && '}npm --workspace web run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
+    command: `${process.env.RENDER_TEST_SKIP_CORE_BUILD === '1' ? '' : 'npm run build:core && '}npm --workspace web exec -- vite --host 127.0.0.1 --port ${port} --strictPort`,
     url: `${baseURL}/__render-test`,
     reuseExistingServer: false,
     timeout: 60_000,

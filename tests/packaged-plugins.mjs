@@ -52,8 +52,8 @@ await fs.writeFile(
   `const {Plugin}=require('obsidian');module.exports=class extends Plugin {async onload(){const data=await this.loadData();const el=document.createElement('div');el.id='plugin-loaded';el.textContent=data?.value||'initial';document.body.append(el);this.register(()=>el.remove());this.addCommand({id:'persist',name:'Persist fixture',callback:()=>this.saveData({value:'persisted'})});this.registerMarkdownCodeBlockProcessor('fixture',(source,el)=>el.textContent='RESULT:'+source.trim());this.addCommand({id:'edit',name:'Edit fixture',editorCallback:ed=>ed.replaceSelection('PLUGIN')});}}`
 );
 await fs.writeFile(
-  path.join(data, 'shares.json'),
-  JSON.stringify([{ id: 'plain', path: 'fixture.md', enabled: true }])
+  path.join(data, 'uistate.json'),
+  JSON.stringify({ tabs: [{ path: 'fixture.md', title: 'fixture.md' }], activePath: 'fixture.md' })
 );
 const probe = createServer();
 await new Promise((r) => probe.listen(0, '127.0.0.1', r));
@@ -94,23 +94,7 @@ try {
     if (attempt > 100) throw new Error('Server startup timeout: ' + logs);
     await new Promise((r) => setTimeout(r, 100));
   }
-  assert.equal((await fetch(url + '/api/plugins/fixture/data')).status, 401);
-  const publicCsp = (await fetch(url + '/share/plain')).headers.get(
-    'content-security-policy'
-  );
-  assert.ok(!publicCsp.includes("'unsafe-eval'"));
-  assert.ok(
-    !publicCsp
-      .split(';')
-      .find((s) => s.startsWith('script-src'))
-      .includes('blob:')
-  );
-  assert.ok(
-    !publicCsp
-      .split(';')
-      .find((s) => s.startsWith('worker-src'))
-      .includes('blob:')
-  );
+  assert.equal((await fetch(url)).status, 404);
   const privateCsp = (await fetch(url + '/')).headers.get(
     'content-security-policy'
   );
@@ -121,17 +105,11 @@ try {
       'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     headless: true,
   });
-  const page = await browser.newPage();
+  const page = await browser.newPage({ userAgent: 'WebObsidianDesktop plugin-renderer-contract' });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('**/favicon.ico', (r) => r.fulfill({ status: 204 }));
-  await page.request.post(url + '/auth/login', {
-    data: { password: '123456' },
-  });
-  await page.request.post(url + '/auth/change-password', {
-    data: { currentPassword: '123456', newPassword: 'isolated-plugin-fixture' },
-  });
-  await page.goto(url + '/note/fixture.md');
+  await page.goto(url);
   await page.waitForSelector('#plugin-loaded');
   assert.equal(await page.textContent('#plugin-loaded'), 'initial');
   await page.waitForSelector('.plugin-code-block');

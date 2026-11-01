@@ -18,6 +18,7 @@ test.beforeEach(async ({ page }) => {
   await fs.mkdir(path.join(vault, 'Notes'), { recursive: true }); await fs.mkdir(data);
   await fs.writeFile(path.join(vault, 'Notes/original.md'), body);
   await fs.writeFile(path.join(vault, 'Notes/taken.md'), 'existing target');
+  await fs.writeFile(path.join(data, 'uistate.json'), JSON.stringify({ tabs: [{ path: 'Notes/original.md', title: 'Notes/original.md' }], activePath: 'Notes/original.md' }));
   child = spawn(process.execPath, ['--import', 'tsx', 'server/src/index.ts'], {
     cwd: process.cwd(), windowsHide: true,
     env: { ...process.env, PORT: '0', HOST: '127.0.0.1', DATA_DIR: data, VAULT_PATH: vault,
@@ -43,13 +44,13 @@ test.beforeEach(async ({ page }) => {
   });
   await page.routeWebSocket('**/ws', () => {});
   await page.routeWebSocket(url => url.searchParams.has('token'), socket => socket.send(JSON.stringify({ type: 'connected' })));
-  await page.route('**/note/**', async route => {
+  await page.route('**/', async route => {
     if (route.request().resourceType() !== 'document') return route.fallback();
     const response = await route.fetch();
     const entry = '/@fs/' + path.resolve('tests/browser/appearanceFixture.tsx').replaceAll('\\', '/');
     await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', entry) });
   });
-  await page.goto('/note/Notes/original.md');
+  await page.goto('/');
   await expect(page.locator('.main-pane .cm-content')).toContainText('正文保持不变');
 });
 test.afterEach(async ({ page }) => {
@@ -170,6 +171,8 @@ test('inline title renames in all modes and preserves draft and undo history', a
   expect(await fs.readFile(path.join(vault, 'Notes/taken.md'), 'utf8')).toBe('existing target');
   await title().fill('bad/name'); await title().press('Enter'); await expect(title()).toHaveText('live');
   await title().fill(''); await title().press('Enter'); await expect(title()).toHaveText('live');
+  // Native restarts restore the flushed workspace; there is no note URL to reload.
+  await page.evaluate(async () => { const name = '/src/lib/store.ts'; const { flushWorkspaceState } = await import(name); await flushWorkspaceState(); });
   await page.reload(); await expect(title()).toHaveText('live');
   await title().focus(); await page.screenshot({ path: test.info().outputPath('inline-title.png') });
   expect(errors).toEqual([]);

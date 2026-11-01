@@ -4,8 +4,6 @@ import App from './App';
 import './styles/obsidian.css';
 import './styles/plugins.css';
 
-// /share/<id> keeps SSR for crawlers and loads the separate scoped share entry.
-
 const root = createRoot(document.getElementById('root')!);
 if (import.meta.env.DEV && location.pathname === '/__plugin-test') {
   void import('./dev/PluginHarness').then(({ default: Harness }) => root.render(<Harness />));

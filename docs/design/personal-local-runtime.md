@@ -9,8 +9,9 @@ are removed from the client, server and desktop launcher.
 a loopback socket peer and a local Host. If Origin is supplied, it must be a local
 HTTP(S) origin. Express applies it before all routes and static resources;
 WebSocket upgrades call the same predicate. No forwarded header supplies the peer.
-The server defaults to 127.0.0.1. Compose uses host networking to preserve local
-connections instead of publishing a bridge port. No deployment was exercised.
+The application runtime binds to 127.0.0.1. Browser/Docker deployment was removed
+on 2026-11-01. Native renderer assets require the desktop/Android shell marker and
+have no note-URL or SPA fallback. See native-only.md.
 
 The desktop directly opens its local server, without generating installation
 passwords, logging in, or seeding cookies. Old on-disk configuration is not edited

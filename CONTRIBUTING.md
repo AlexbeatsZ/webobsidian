@@ -1,6 +1,6 @@
 # Contributing to WebObsidian
 
-Thanks for your interest in improving WebObsidian! This project is self-hosted, single-user,
+Thanks for your interest in improving WebObsidian! This project is a native personal application,
 and design-driven — please read the few rules below before opening a PR.
 
 ## Ground rules (from [CLAUDE.md](CLAUDE.md))
@@ -16,7 +16,8 @@ and design-driven — please read the few rules below before opening a PR.
 
 ## Technical conventions
 
-- **TypeScript** for both server and web. Avoid `any` where possible.
+- **TypeScript** for the local runtime and shared native renderer. Avoid `any` where possible.
+- Target desktop and Android only; do not add browser fallbacks or Web deployment.
 - **Runtime config is JSON only** (`data/settings.json`) — do not add a DB engine.
 - **Security:** never log secrets/tokens/API keys; hash before storing; guard against path
   traversal.
@@ -28,7 +29,7 @@ Requires **Node ≥ 20** and `git` (+ `git-lfs` if you use LFS).
 
 ```bash
 npm install
-npm run dev          # server :8787 + web dev server :5173 (proxied)
+npm run dev          # build and launch the desktop application
 ```
 
 Before opening a PR:

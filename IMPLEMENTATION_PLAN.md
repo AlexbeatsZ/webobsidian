@@ -4,7 +4,20 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-10-22 (native workflows; static-only validation)
+Cập nhật lần cuối: 2026-11-01 (PRD 1.16 aligned with native scope)
+
+## PRD alignment (PRD 1.16)
+
+- [x] Rewrite PRD §1/§2/§4–§8 and FR-3/4/5/6/8/9/10/13 to the native/local scope; add FR-14/15/16 for delivered fork features.
+
+## Native applications only (PRD 1.15)
+
+- [x] Remove browser deployment, URL routing/actions, embedded webpage browsing,
+  userscripts and their obsolete IPC/lifecycle/workspace paths.
+- [x] Keep desktop/Android renderer and local runtime, independent sync and MCP.
+- [~] Isolated types/unit/renderer/build/packaged-startup validation done; installers, Android and exact release pending.
+- [ ] Pre-existing failure: pdf-toolbar.spec.ts:228 narrow-touch toggle (fails on 0719551 too).
+- Historical browser/share/Docker requirements below are retired, not future work.
 
 ## Native workflows (PRD 1.14)
 
@@ -526,6 +539,8 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-01 (PRD 1.16): PRD 与现状对齐——删除登录/分享/深链/Agent REST API/Docker/插件在线安装描述，
+  改为本地访问控制、原生文件同步 + Git 备份、MCP、Android 和当前桌面打包；新增 FR-14/15/16。仅文档修改。
 - 2026-10-18 (FR-13 compact desktop title bar): implemented a single Windows/Linux menu row
   with native window controls, no app icon/name, native submenu actions and accelerators,
   keyboard menu access, dragging, and light/dark styling. macOS and browser UI unchanged.

@@ -23,9 +23,10 @@ function fixture(platform = 'win32') {
     getPath: () => 'C:/fixture/profile',
   });
   const ipc = Object.assign(new EventEmitter(), { handle: vi.fn() });
-  const scripts = { stop: vi.fn().mockResolvedValue(undefined) };
+  const launcher = { stop: vi.fn().mockResolvedValue(undefined) };
   const server = { kill: vi.fn() };
   const showErrorBox = vi.fn();
+  const openExternal = vi.fn().mockResolvedValue(undefined);
   let window!: FakeWindow;
   class FakeWindow extends EventEmitter {
     vetoUnload = false;
@@ -34,6 +35,8 @@ function fixture(platform = 'win32') {
     webContents = Object.assign(new EventEmitter(), {
       mainFrame: { url: this.url },
       getURL: () => this.url,
+      getUserAgent: () => 'Electron',
+      setUserAgent: vi.fn(),
       send: vi.fn(),
       setWindowOpenHandler: vi.fn(),
     });
@@ -53,22 +56,22 @@ function fixture(platform = 'win32') {
     loadURL(url: string) { this.url = url; this.webContents.mainFrame.url = url; return Promise.resolve(); }
   }
   const moduleExports: Record<string, any> = {};
-  const electron = { app: application, BrowserWindow: FakeWindow, ipcMain: ipc, dialog: { showErrorBox } };
-  runInNewContext(compiled + '\nexports.fixture = { createWindow, requestWindowClose, initialize: (scripts, server) => { serverPort = 8787; userscripts = scripts; serverProc = server; registerDesktopRequests(); } };', {
+  const electron = { app: application, BrowserWindow: FakeWindow, ipcMain: ipc, dialog: { showErrorBox }, shell: { openExternal } };
+  runInNewContext(compiled + '\nexports.fixture = { createWindow, requestWindowClose, initialize: (launcher, server) => { serverPort = 8787; serverProc = server; registerDesktopRequests(); mcpLauncher = launcher; } };', {
     exports: moduleExports,
-    require: (id: string) => id === 'electron' ? electron : id === './mcpLauncher' ? { McpLauncher } : id === './userscripts/service' || id === './paths' ? {} : nativeRequire(id),
+    require: (id: string) => id === 'electron' ? electron : id === './mcpLauncher' ? { McpLauncher } : id === './paths' ? {} : nativeRequire(id),
     process: { platform, arch: 'x64', execPath: 'WebObsidian' },
     __dirname: fileURLToPath(new URL('../../../desktop/src', import.meta.url)),
     URL, Buffer, setTimeout, clearTimeout, console,
   });
-  moduleExports.fixture.initialize(scripts, server);
+  moduleExports.fixture.initialize(launcher, server);
   moduleExports.fixture.createWindow();
   const token = () => window.webContents.send.mock.calls.filter(call => call[0] === 'desktop:prepare-close').at(-1)![1];
   const reply = (result: { ok: boolean; error?: string }, requestedToken = token(), guest = false) => {
     const sender = guest ? { mainFrame: window.webContents.mainFrame } : window.webContents;
     ipc.emit('desktop:close-result', { sender, senderFrame: window.webContents.mainFrame }, requestedToken, result);
   };
-  return { application, window, scripts, server, showErrorBox, token, reply,
+  return { application, window, launcher, server, showErrorBox, openExternal, token, reply,
     invoke: (channel: string, event: unknown, ...args: unknown[]) => ipc.handle.mock.calls.find(call => call[0] === channel)![1](event, ...args),
     close: (quit: boolean) => moduleExports.fixture.requestWindowClose(window, quit) as Promise<void> };
 }
@@ -76,6 +79,15 @@ function fixture(platform = 'win32') {
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
 describe('desktop close coordinator against the production main implementation', () => {
+  it('keeps application URLs out of the system browser while delegating external note hyperlinks', () => {
+    const host = fixture();
+    const open = host.window.webContents.setWindowOpenHandler.mock.calls[0]![0] as unknown as (details: { url: string }) => { action: string };
+    expect(host.window.webContents.setUserAgent).toHaveBeenCalledWith('Electron WebObsidianDesktop');
+    expect(open({ url: 'http://127.0.0.1:8787/note/note.md' })).toEqual({ action: 'deny' });
+    expect(host.openExternal).not.toHaveBeenCalled();
+    expect(open({ url: 'https://example.com/' })).toEqual({ action: 'deny' });
+    expect(host.openExternal).toHaveBeenCalledWith('https://example.com/');
+  });
   it('rejects MCP IPC from guests, subframes and nonlocal origins before any operation', async () => {
     const host = fixture();
     const frame = host.window.webContents.mainFrame;
@@ -92,8 +104,8 @@ describe('desktop close coordinator against the production main implementation',
   });
   it('intercepts the native close, ignores stale or guest replies and keeps the server until will-quit', async () => {
     const host = fixture();
-    let finishScripts!: () => void;
-    host.scripts.stop.mockReturnValueOnce(new Promise<void>(resolve => { finishScripts = resolve; }));
+    let finishLauncher!: () => void;
+    host.launcher.stop.mockReturnValueOnce(new Promise<void>(resolve => { finishLauncher = resolve; }));
     host.window.close();
     const closing = host.close(true);
     expect(host.window.destroyed).toBe(false);
@@ -101,12 +113,12 @@ describe('desktop close coordinator against the production main implementation',
     host.reply({ ok: true }, 'stale');
     host.reply({ ok: true }, host.token(), true);
     await vi.advanceTimersByTimeAsync(0);
-    expect(host.scripts.stop).not.toHaveBeenCalled();
+    expect(host.launcher.stop).not.toHaveBeenCalled();
     host.reply({ ok: true });
     await vi.advanceTimersByTimeAsync(0);
-    expect(host.scripts.stop).toHaveBeenCalledOnce();
+    expect(host.launcher.stop).toHaveBeenCalledOnce();
     expect(host.application.quit).not.toHaveBeenCalled();
-    finishScripts();
+    finishLauncher();
     await closing;
     expect(host.application.quit).toHaveBeenCalledOnce();
     expect(host.server.kill).not.toHaveBeenCalled();
@@ -122,7 +134,7 @@ describe('desktop close coordinator against the production main implementation',
     await failing;
     expect(host.window.destroyed).toBe(false);
     expect(host.application.quit).not.toHaveBeenCalled();
-    expect(host.scripts.stop).not.toHaveBeenCalled();
+    expect(host.launcher.stop).not.toHaveBeenCalled();
     expect(host.showErrorBox).toHaveBeenCalledWith('无法关闭 WebObsidian', expect.stringContaining('disk full'));
     const retry = host.close(true);
     expect(host.token()).not.toBe(oldToken);
@@ -166,7 +178,7 @@ describe('desktop close coordinator against the production main implementation',
     host.reply({ ok: true });
     await closing;
     expect(host.window.destroyed).toBe(true);
-    expect(host.scripts.stop).not.toHaveBeenCalled();
+    expect(host.launcher.stop).not.toHaveBeenCalled();
     expect(host.application.quit).not.toHaveBeenCalled();
     expect(host.server.kill).not.toHaveBeenCalled();
   });
@@ -187,9 +199,9 @@ describe('desktop close coordinator against the production main implementation',
     expect(host.window.destroyed).toBe(true);
   });
 
-  it('retains the window and releases the renderer when userscript shutdown fails', async () => {
+  it('retains the window and releases the renderer when MCP shutdown fails', async () => {
     const host = fixture();
-    host.scripts.stop.mockRejectedValueOnce(new Error('shutdown failure'));
+    host.launcher.stop.mockRejectedValueOnce(new Error('shutdown failure'));
     const closing = host.close(true);
     host.reply({ ok: true });
     await closing;
@@ -208,7 +220,7 @@ describe('desktop close coordinator against the production main implementation',
     expect(host.window.webContents.send.mock.calls.filter(call => call[0] === 'desktop:prepare-close')).toHaveLength(1);
     host.reply({ ok: true });
     await closing;
-    expect(host.scripts.stop).toHaveBeenCalledOnce();
+    expect(host.launcher.stop).toHaveBeenCalledOnce();
     expect(host.application.quit).toHaveBeenCalledOnce();
   });
 });

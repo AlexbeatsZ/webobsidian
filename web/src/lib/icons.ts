@@ -6,6 +6,9 @@ export const iconPaths: Record<string, string> = {
   loader: '<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  'git-branch': '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   key: '<circle cx="8" cy="8" r="5"/><path d="m11.5 11.5 9 9M17 16l3-3M15 18l3-3"/>',
   puzzle: '<path d="M19 13h-2a2 2 0 1 1 0-4h2V5h-4V3a2 2 0 1 0-4 0v2H5v4H3a2 2 0 1 0 0 4h2v6h4v2a2 2 0 1 0 4 0v-2h6Z"/>',
   // Lucide "palette" + "zoom-in" (used by the Canvas selection menu / zoom controls).

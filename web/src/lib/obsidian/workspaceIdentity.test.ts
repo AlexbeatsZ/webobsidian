@@ -129,7 +129,7 @@ describe('workspace Markdown host identity', () => {
   });
 
   it('retains DOM focus routing for non-Markdown sidebar views without an editor binding', () => {
-    host.state.rightTabs = [{ id: 'guest', type: 'webviewer', state: {}, title: 'Guest', icon: 'globe' }];
+    host.state.rightTabs = [{ id: 'guest', type: 'plugin-view', state: {}, title: 'Plugin', icon: 'file-text' }];
     const closest = vi.fn(() => ({ dataset: { sidebarTab: 'guest' } }));
     vi.stubGlobal('document', { activeElement: { closest } });
     const ws = workspace();

@@ -3,7 +3,6 @@ import { useStore, type TreeSort, type ContextMenuItem } from '../lib/store';
 import { extendFileMenu } from '../lib/obsidian/menus';
 import { api, type TreeNode } from '../lib/api';
 import { findNode, pruneDescendants } from '../lib/tree';
-import { pathToUrl } from '../lib/urlsync';
 import { nativeBatchTagMenuItems } from '../lib/tags/actions';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import Icon from './Icon';
@@ -262,10 +261,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     navigator.clipboard?.writeText(node.path).catch(() => {});
     notify("路径已复制");
   };
-  const copyUrl = () => {
-    navigator.clipboard?.writeText(`${location.origin}${pathToUrl(node.path)}`).catch(() => {});
-    notify("URL 已复制");
-  };
 
   const onContext = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -303,7 +298,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           { id: 'file:rename', label: "重命名…", onClick: doRename },
           { id: 'file:move', label: "移动文件夹至…", onClick: doMove },
           { id: 'file:copy-path', label: "复制路径", onClick: copyPath },
-          { id: 'file:copy-url', label: "复制 URL 路径", onClick: copyUrl },
           { label: '', separator: true },
           { id: 'file:delete', label: "删除", danger: true, onClick: doDelete },
         ]
@@ -320,7 +314,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           { label: '', separator: true },
           { id: 'file:rename', label: "重命名…", onClick: doRename },
           { id: 'file:move', label: "移动文件至…", onClick: doMove },
-          { id: 'file:copy-url', label: "复制 URL 路径", onClick: copyUrl },
           { label: '', separator: true },
           { id: 'file:delete', label: "删除", danger: true, onClick: doDelete },
         ];
@@ -553,7 +546,7 @@ export default function FileTree() {
     });
   };
 
-  if (!tree) return <div style={{ padding: 12, color: 'var(--text-faint)' }}>加载中…</div>;
+  if (!tree) return <div className="panel-empty" role="status">加载中…</div>;
   if (!tree.children?.length)
     return (
       <div

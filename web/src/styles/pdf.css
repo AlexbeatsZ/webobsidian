@@ -20,9 +20,9 @@
 .pdf-match-layer { position:absolute; inset:0; pointer-events:none; }
 .pdf-match { position:absolute; background:#ffd54f88; box-shadow:0 0 0 1px #c8972244; }
 .pdf-match.is-selected { background:#fb923c99; box-shadow:0 0 0 1px #b45309; }
-.pdf-page-error { position:absolute; inset:0; padding:16px; color:var(--text-error,#b91c1c); background:var(--background-primary); }
+.pdf-page-error { position:absolute; inset:0; padding:16px; color:var(--text-error); background:var(--background-primary); }
 .pdf-message,.pdf-panel-message { padding:10px 14px; color:var(--text-muted); }
-.pdf-message[role=alert],.pdf-panel-message[role=alert] { color:var(--text-error,#b91c1c); }
+.pdf-message[role=alert],.pdf-panel-message[role=alert] { color:var(--text-error); }
 .pdf-outline { padding:8px 6px; overflow:auto; }
 .pdf-outline-list { list-style:none; margin:0; padding:0; }
 .pdf-outline-list .pdf-outline-list { padding-left:14px; }

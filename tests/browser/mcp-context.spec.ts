@@ -15,6 +15,7 @@ const test = base.extend<{ backend: { url: string; vault: string } }>({
     const directory = await fs.mkdtemp(path.join(parent, 'mcp-context-browser-'));
     const vault = path.join(directory, 'vault'), data = path.join(directory, 'data');
     await fs.mkdir(vault); await fs.mkdir(data); await fs.writeFile(path.join(vault, 'context.md'), source);
+    await fs.writeFile(path.join(data, 'uistate.json'), JSON.stringify({ tabs: [{ path: 'context.md', title: 'context.md' }], activePath: 'context.md' }));
     const child = spawn(process.execPath, ['--import', 'tsx', 'server/src/index.ts'], { cwd: process.cwd(), windowsHide: true,
       env: { ...process.env, PORT: '0', HOST: '127.0.0.1', DATA_DIR: data, VAULT_PATH: vault, ALLOWED_ROOTS: directory,
         WEBOBSIDIAN_INITIAL_VAULT: '', NODE_ENV: 'development' }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -67,16 +68,34 @@ test.beforeEach(async ({ page, backend }) => {
     });
     socket.onClose(() => upstream.close());
   });
-  await page.route('**/note/context.md', async route => {
+  await page.route('**/', async route => {
     if (route.request().resourceType() !== 'document') return route.fallback();
     const response = await route.fetch();
     const entry = '/@fs/' + path.resolve('tests/browser/appearanceFixture.tsx').replaceAll('\\', '/');
     await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', entry) });
   });
-  await page.goto('/note/context.md');
+  await page.goto('/');
   await expect(page.locator('.main-pane .cm-content')).toContainText('Tail sentinel.');
   await expect.poll(() => clientReady).toBe(true);
   await page.getByRole('button', { name: 'MCP', exact: true }).click();
+});
+
+test('native workspace omits webpage commands, settings and application URL actions', async ({ page }) => {
+  await page.locator('.tab-bar .tab').first().click({ button: 'right' });
+  await expect(page.getByText('在新窗口中打开', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('复制 URL 路径', { exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    const storePath = '/src/lib/store.ts';
+    (await import(storePath)).useStore.getState().setSettings(true);
+  });
+  await expect(page.getByRole('button', { name: '内置浏览器脚本', exact: true })).toHaveCount(0);
+  const commands = await page.evaluate(async () => {
+    const path = '/src/lib/plugins.ts';
+    return (await import(path)).sharedApp.commands.listCommands().map((command: any) => command.id);
+  });
+  expect(commands.filter((id: string) => /webviewer|userscripts/.test(id))).toEqual([]);
+  expect(new URL(page.url()).pathname).toBe('/');
 });
 
 test('an open clean document refreshes native sync only after the workspace lease releases', async ({ page, backend }) => {
@@ -221,7 +240,6 @@ test('desktop manual controls do not auto-start, serialize actions and expose fa
     host.webobsidianDesktop = {
       platform: 'win32', nativePlugins: false, isDesktop: true,
       onBeforeClose: () => () => {}, openVaultPath: async () => {},
-      webviewer: { subscribe: () => () => {} }, userscripts: { subscribe: () => () => {}, request: async () => [] },
       mcp: { inspect: async () => state, copyConfig: async () => {}, configure: async () => state,
         connect: () => {
           host.mcpCalls.push('Connect');
@@ -258,7 +276,7 @@ test('built-in MCP works without a project directory and stores only explicit co
     const state = { available: true, tunnelId: '', hasKey: false, connected: false, clientConfig: '{}' };
     host.savedMcp = null; host.copiedMcp = false;
     host.webobsidianDesktop = { platform: 'darwin',
-      onBeforeClose: () => () => {}, webviewer: { subscribe: () => () => {} }, userscripts: { subscribe: () => () => {}, request: async () => [] },
+      onBeforeClose: () => () => {},
       mcp: { inspect: async () => state,
         configure: async (input: unknown) => { host.savedMcp = input; return { ...state, tunnelId: 'tunnel_fixture123', hasKey: true }; },
         copyConfig: async () => { host.copiedMcp = true; },

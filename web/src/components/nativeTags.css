@@ -8,12 +8,12 @@
 .native-tags-fields .native-tags-check, .native-tags-check { display: flex; align-items: flex-start; gap: 8px; }
 .native-tags-check input { margin-top: 4px; }
 .native-tags-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-.native-tags-error { color: var(--text-error, #dd654e); white-space: pre-wrap; }
+.native-tags-error { color: var(--text-error); white-space: pre-wrap; }
 .native-tags-preview { margin-top: 14px; }
 .native-tags-preview > ul, .native-tags-results { max-height: 300px; overflow: auto; padding-left: 20px; }
 .native-tags-preview li { margin: 6px 0; overflow-wrap: anywhere; }
 .native-tags-merge { border: 1px solid var(--text-accent); padding: 12px; border-radius: 6px; }
-.native-tags-change { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; font: 12px var(--font-monospace); white-space: pre-wrap; }
+.native-tags-change { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; font: 12px var(--font-mono); white-space: pre-wrap; }
 .native-tags-change del { background: #d9534f20; text-decoration: none; }
 .native-tags-change ins { background: #4caf5020; text-decoration: none; }
 .native-tags-panel { padding: 8px; }

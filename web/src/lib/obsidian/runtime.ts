@@ -36,7 +36,6 @@ import * as workspace from './workspace';
 import * as editor from './editor';
 import * as markdown from './markdown';
 import { RenderLifetime } from './renderLifetime';
-import { WebViewerView, promptWebViewer } from './webviewer';
 import { bindPluginMenus } from './menus';
 import { installJavascript } from '../javascript/runtime';
 import { installQueryBlocks } from '../queryBlock';
@@ -392,26 +391,23 @@ function debounce<T extends (...args: any[]) => any>(callback: T, delay = 0, res
   };
   return fn;
 }
+const androidApp = /\bWebObsidianAndroid\b/.test(navigator.userAgent);
 export const Platform = {
-  isDesktop: false,
-  isDesktopApp: false,
-  isMobile: false,
-  isMobileApp: false,
+  isDesktop: !!window.webobsidianDesktop,
+  isDesktopApp: !!window.webobsidianDesktop,
+  isMobile: androidApp,
+  isMobileApp: androidApp,
   isPhone: false,
   isTablet: false,
   isWin: /Win/.test(navigator.platform),
   isMacOS: /Mac/.test(navigator.platform),
   isLinux: /Linux/.test(navigator.platform),
-  isAndroidApp: false,
+  isAndroidApp: androidApp,
   isIosApp: false,
-  isSafari: /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent),
+  isSafari: false,
   resourcePathPrefix: '',
 };
 const nativeRequire = (window as any).webobsidianNativeRequire as ((name: string) => any) | undefined;
-if (nativeRequire) {
-  Platform.isDesktop = true;
-  Platform.isDesktopApp = true;
-}
 export async function requestUrl(input: string | any) {
   const options = typeof input === 'string' ? { url: input } : input;
   const result = nativeRequire
@@ -746,28 +742,6 @@ export async function loadPlugins(): Promise<void> {
     const settings = await api.getSettings();
     sharedApp.vault.adapter.basePath = settings.vault.path;
     const stopMenus = bindPluginMenus(sharedApp);
-    const stopWebPages = (window as any).webobsidianDesktop?.webviewer?.subscribe((page: { sourceGuestId: number; url: string }) => {
-      // Only pages from a still-mounted application guest can create dock tabs.
-      const source = [...sharedApp.workspace.custom].find(leaf => leaf.view instanceof WebViewerView
-        && (leaf.view as WebViewerView).guestId() === page.sourceGuestId);
-      if (source && /^https?:\/\//i.test(page.url)) void sharedApp.workspace.getRightLeaf(true)
-        .setViewState({ type: 'webviewer', state: { url: page.url } }).catch(error => useStore.getState().notify(String(error)));
-    });
-    if ((window as any).webobsidianDesktop?.userscripts) {
-      sharedApp.workspace.viewRegistry.set('webviewer', (leaf) => new WebViewerView(leaf));
-      sharedApp.internalPlugins.plugins.webviewer = {
-        enabled: true,
-        instance: {
-          open: (url: string) =>
-            sharedApp.workspace.getLeaf(true).setViewState({ type: 'webviewer', state: { url } }),
-        },
-      };
-      pluginCommands.set('webviewer:open', {
-        id: 'webviewer:open',
-        name: '打开网页视图',
-        callback: () => promptWebViewer(sharedApp),
-      });
-    }
     sharedApp.internalPlugins.plugins.templates = {
       enabled: true,
       instance: {
@@ -861,7 +835,6 @@ export async function loadPlugins(): Promise<void> {
       stopBlocks();
       stopCssSnippets();
       stopMenus();
-      stopWebPages?.();
       unsub(); stopActiveNavigation();
       metadataStopped = true;
       window.clearTimeout(metadataTimer);

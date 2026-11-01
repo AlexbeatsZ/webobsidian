@@ -7,9 +7,9 @@ import { writeBinaryFile, writeTextFile } from './textFile.js';
 /**
  * Obsidian community plugin support (PRD FR-8).
  * Plugins live in `<vault>/.obsidian/plugins/<id>/` with manifest.json + main.js
- * (+ optional styles.css), exactly like the desktop app. The server lists,
- * installs (from GitHub releases) and toggles them; the browser loads main.js
- * against the Obsidian API shim (see web/src/lib/obsidian-shim).
+ * (+ optional styles.css), exactly like the desktop app. The server lists and
+ * toggles already-installed plugins (no online install); the native renderer
+ * loads main.js against the Obsidian API host (see web/src/lib/obsidian).
  */
 
 export interface PluginManifest {
@@ -34,9 +34,8 @@ async function pluginsDir(): Promise<string> {
 }
 
 /**
- * A plugin id becomes a path segment under `.obsidian/plugins/`, both when
- * installing (taken from a *remote* manifest.json) and when serving assets
- * (taken from the URL). Reject anything that isn't a plain id so a crafted
+ * A plugin id becomes a path segment under `.obsidian/plugins/` when toggling
+ * plugins and serving assets (taken from the URL). Reject anything that isn't a plain id so a crafted
  * `../../..` can't read or write outside the plugins directory.
  */
 function assertSafeId(id: string): string {

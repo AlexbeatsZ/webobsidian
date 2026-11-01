@@ -1,7 +1,18 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.14 · Cập nhật: 2026-10-22 · Trạng thái: Draft
+> Phiên bản: 1.16 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Changelog 1.16 (PRD 与现状对齐): 按 1.15 原生应用边界和 2026-10-23 个人本地运行时决定,
+> 改写 §1/§2/§4–§8 及 FR-3/4/5/6/8/9/10/13:删除已退役的登录、公开分享、深链 URL、
+> Agent REST API/API Key、Docker 部署和插件在线安装描述,改为本地访问控制、原生文件同步 +
+> Git 备份、MCP 原生笔记操作、Android 应用;新增 FR-14/15/16 概述 fork 已交付的原生写作、
+> 原生工作流和阅读辅助能力。FR 编号保持不变以免旧引用失效。仅文档修改,代码行为不变。
+> Changelog 1.15 (native applications only): the owner retires the browser product,
+> Web deployment/URL routing, embedded webpage browser and userscript manager.
+> Maintain desktop and Android only. Retain their shared internal renderer/local
+> runtime, independent sync and MCP. No future browser fallback or Web adaptation.
+> [Native application boundary](docs/design/native-only.md) supersedes historical
+> browser/share/deployment requirements throughout this document.
 > Changelog 1.14 (native workflows): desktop browser userscripts with reviewed
 > import/update/storage/GM support; per-Vault JSONC context menus; preview and
 > revalidated unused-attachment trash; native tag hierarchy, source-preserving
@@ -133,30 +144,32 @@
 
 ---
 
-## 1. Tổng quan
+## 1. 概述
 
-**WebObsidian** là một web app self-hosted clone toàn diện chức năng của [Obsidian](https://obsidian.md), chạy trên server (Docker), thao tác trực tiếp trên một thư mục Vault chứa các file Markdown. Mục tiêu là cho phép truy cập và chỉnh sửa "second brain" của người dùng từ bất kỳ trình duyệt nào, đồng thời mở API cho AI Agent tương tác.
+**WebObsidian**(本 fork:AlexbeatsZ/webobsidian,源自 xnohat/webobsidian v0.1.1)是一个面向个人使用的
+类 Obsidian 原生应用,支持 Windows/macOS/Linux 桌面端和 Android。应用直接读写本地 Vault 目录中的
+Markdown、附件和 Canvas 文件。上游的自托管网页版、登录、公开分享和 Docker 部署已全部退役,
+边界见 [原生应用边界](docs/design/native-only.md) 和 [个人本地运行时](docs/design/personal-local-runtime.md)。
 
-### 1.1 Mục tiêu (Goals)
-- Trải nghiệm soạn thảo/đọc Markdown tương đương Obsidian desktop (editor, live preview, wikilinks, graph, backlinks).
-- Vault là một thư mục thực trên server — giữ các file vault Obsidian hiện có; mức tương thích cấu hình, theme và plugin được đánh giá riêng theo §1.4.
-- Sync 2 chiều bằng **GitHub repo native** (git), hỗ trợ **Git LFS** cho file lớn (ảnh, pdf, audio…).
-- **Login gate** đơn giản: một mật khẩu duy nhất bảo vệ toàn bộ app.
-- Cấu hình lưu trong **file `.json` thuần** (không cần DB engine).
-- **API Gate** với API key để AI Agent đọc/ghi/tìm kiếm vault qua REST.
-- **QMD search engine** tích hợp sẵn: full-text + fielded search nhanh trên toàn vault.
-- Hỗ trợ cài **Obsidian community plugins** giống app chuẩn (qua plugin loader + Obsidian API shim).
-- Đóng gói **Docker stack** chạy 1 lệnh.
+### 1.1 目标
+- 提供与 Obsidian 桌面版相当的编辑/阅读体验(编辑器、实时预览、双链、图谱、反向链接、Canvas)。
+- Vault 是本地真实目录,保留现有 Markdown、附件、Canvas 和 `.obsidian/` 数据;
+  配置、主题和插件的兼容程度按 §1.4 单独评估。
+- 原生文件同步(独立 `sync-server/`)负责多设备实时同步,Git(含 LFS)作为定期备份和冲突历史。
+- 运行时只监听本机回环地址,不需要账号或密码;配置使用 JSON/JSONC 文件,不引入数据库引擎。
+- 通过 MCP 让 AI 读取 Vault 上下文、搜索,并以"提议 → 本地审阅 → 接受"的方式修改笔记。
+- 内置中文(拼音)搜索、LaTeX/公式写作、格式化(Linter)等原生能力,替代对应社区插件。
+- 支持加载用户实际使用的 Obsidian 社区插件(已安装的 `.obsidian/plugins/*`)。
 
-### 1.2 Ngoài phạm vi (Non-goals — v1)
-- Realtime multi-user collaborative editing (CRDT). v1 là single-user (1 password).
-- Obsidian Sync/Publish độc quyền (thay bằng Git sync).
-- Mobile native app (chỉ responsive web).
-- 100% tương thích mọi plugin dùng Electron/Node API nội bộ (chỉ hỗ trợ subset Obsidian API phổ biến).
+### 1.2 不在范围内
+- 浏览器版、自托管网页部署、Docker 镜像、公开分享链接、笔记 URL 深链、内置网页浏览器和用户脚本
+  (2026-11-01 退役,不再添加浏览器适配)。
+- 账号、密码、会话、API Key 和对外开放的 REST API(2026-10-23 退役)。
+- 多用户实时协作编辑(CRDT);Obsidian Sync/Publish 官方服务。
+- 应用内在线下载/安装社区插件;100% 兼容所有依赖 Obsidian 内部 Electron/Node API 的插件。
 
-### 1.3 Người dùng mục tiêu
-- Cá nhân tự host knowledge base, muốn truy cập từ mọi thiết bị qua web.
-- Người dùng muốn AI Agent đọc/ghi vault qua API an toàn.
+### 1.3 目标用户
+- 本 fork 的所有者本人:在自己的桌面和 Android 设备上使用同一个 Vault,并按个人工作流定制核心行为。
 
 ### 1.4 本 fork 的目标与优先级
 
@@ -175,55 +188,59 @@
 
 ---
 
-## 2. Kiến trúc hệ thống
+## 2. 系统架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Browser (SPA)                          │
-│   React + CodeMirror 6 · Live Preview · File Tree · Graph     │
-└───────────────▲───────────────────────────┬──────────────────┘
-                │ REST + WebSocket           │ static assets
-┌───────────────┴───────────────────────────▼──────────────────┐
-│                   Server (Node + Express + TS)                │
-│  Auth gate │ Vault FS │ QMD Search │ Git Sync │ API Gate │     │
-│            │          │            │          │ Plugins  │     │
-└───┬─────────────┬──────────┬────────────┬──────────────┬──────┘
-    │             │          │            │              │
- settings.json   Vault dir  Search index  GitHub repo   plugins dir
- (JSON db)       (.md+attach) (in-mem/disk) (git+LFS)    (.obsidian/plugins)
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│ 桌面壳 Electron (desktop/)   │   │ Android 壳 (android/)        │
+│ 窗口/标题栏/菜单/MCP 启动器   │   │ WebView + libnode RuntimeHost│
+└──────────────┬───────────────┘   └──────────────┬───────────────┘
+               │ 加载共享原生渲染器 (web/:React + CodeMirror 6)
+               │ HTTP + WebSocket,仅 127.0.0.1 随机端口
+┌──────────────▼───────────────────────────────────▼───────────────┐
+│ 本地运行时 (server/:Node + Express + TS,打包为单个 .mjs)          │
+│ 本地访问检查 │ Vault 文件 │ 搜索/索引 │ 文件同步 │ Git 备份 │ 插件 │ MCP 操作 │
+└──────┬──────────────┬──────────────┬──────────────┬──────────────┘
+       │              │              │              │
+  应用数据目录      Vault 目录      sync-server     Git 远程仓库
+  settings.json    (.md/附件/       (独立发布的     (备份,可选 LFS)
+  索引/日志        .canvas/.obsidian) 同步服务)
 ```
 
-### 2.1 Tech stack
-| Layer | Lựa chọn | Lý do |
-|-------|----------|-------|
-| Backend | Node 20+, Express, TypeScript | Đồng nhất ngôn ngữ, hệ sinh thái git/markdown phong phú |
-| Frontend | React + Vite + TypeScript | Build nhanh, SPA |
-| Editor | CodeMirror 6 | Engine soạn thảo của chính Obsidian |
-| Markdown | unified/remark + rehype | Render an toàn, hỗ trợ plugin |
-| Search | QMD (module nội bộ trên nền MiniSearch) | Full-text + fielded, in-process, không cần service ngoài |
-| Sync | simple-git + git-lfs | Native git, hỗ trợ file lớn |
-| Auth | Mật khẩu hash (scrypt) + JWT cookie | Đơn giản, không cần DB |
-| Storage cfg | `data/settings.json` | Yêu cầu "JSON thuần" |
-| Container | Docker + docker-compose | Deploy 1 lệnh |
+`packages/markdown-core`(Markdown 源码模型、审阅合并)和 `packages/search-core`(中文/拼音搜索)
+由渲染器和运行时共用。
 
-### 2.2 Layout thư mục dự án
+### 2.1 技术栈
+| 层 | 选型 | 说明 |
+|----|------|------|
+| 桌面壳 | Electron + electron-builder | 以 `ELECTRON_RUN_AS_NODE` 启动打包后的本地运行时 |
+| Android | 原生 Activity + WebView + Bionic `libnode.so` | 与桌面共用同一份打包运行时和渲染器 |
+| 本地运行时 | Node 20+、Express、TypeScript | 只在本机回环地址提供服务 |
+| 渲染器 | React + Vite + TypeScript | 原生应用内部界面,不作为网页发布 |
+| 编辑器 | CodeMirror 6 | |
+| Markdown | 自有 markdown-core 源码模型 + MathJax | 保留原始字节,支持局部修改 |
+| 搜索 | QMD(基于 MiniSearch)+ search-core 拼音 | |
+| 同步 | 原生 HTTPS 文件同步 + simple-git/git-lfs 备份 | |
+| AI 集成 | MCP(本地 HTTP `/mcp` 与 stdio)+ 共享 Zod 操作契约 | 与 CLI 共用同一套操作 |
+| 配置 | JSON/JSONC 文件 | 不使用数据库 |
+
+### 2.2 项目目录结构
 ```
 webobsidian/
-├── server/           # API backend
+├── desktop/        # Electron 壳:窗口、标题栏、路径、MCP 启动器、打包脚本
+├── android/        # Android 壳:MainActivity、RuntimeHost
+├── server/         # 本地运行时
 │   └── src/
-│       ├── routes/       # auth, files, search, sync, api(agent), plugins
-│       ├── services/     # vault, search(QMD), git, settings, auth, plugins
-│       ├── middleware/   # auth guard, apikey guard, error handler
-│       └── plugins/      # Obsidian API shim + loader
-├── web/              # React SPA
-│   └── src/
-│       ├── components/   # FileTree, Editor, Preview, SearchPanel, Settings…
-│       ├── lib/          # api client, store, markdown
-│       └── styles/
-├── data/             # runtime: settings.json, apikeys, sessions (gitignored)
-├── docs/
-├── docker-compose.yml
-└── Dockerfile
+│       ├── routes/       # files, search, git, file-sync, plugins, settings, tags, menus, operations, mcp…
+│       ├── services/     # vault, 索引, 同步, git, 插件, 设置, 标签, 附件清理…
+│       ├── operations/   # MCP/CLI 共用的操作契约与分发
+│       └── middleware/   # localAccess(本地访问检查)、错误处理
+├── web/            # 共享原生渲染器(components, lib, styles)
+├── packages/       # markdown-core, search-core
+├── sync-server/    # 独立发布的文件同步服务(sync-server-v* 标签)
+├── scripts/        # bundle-server 等构建/迁移脚本
+├── tests/          # 单元、渲染器(Chromium)与打包后应用测试
+└── docs/           # design/(模块设计)、log/(工作日志)、examples/
 ```
 
 ---
@@ -231,7 +248,7 @@ webobsidian/
 ## 3. Yêu cầu chức năng (Functional Requirements)
 
 ### FR-1 · Vault management
-- Chọn/đổi thư mục Vault qua Settings (đường dẫn server-side, có folder browser an toàn trong allowed roots).
+- Mở/đổi Vault qua Vault 启动器(Vault 底栏);运行时只访问 `allowedRoots` 内的目录。
 - CRUD file & folder: tạo, đọc, ghi, đổi tên, di chuyển, xoá. Chế độ xoá cấu hình qua
   `vault.deleteMode`: `trash` (→ `.trash`, khôi phục được — mặc định) hoặc `permanent` (xoá hẳn).
 - **Trash**: giao diện xem các file đã xoá, **Restore** về vị trí gốc, **xoá vĩnh viễn** từng file, **Empty
@@ -239,7 +256,7 @@ webobsidian/
 - **Copy/Cut/Paste** trên context menu file tree (file & folder): clipboard session-local; Cut = move (`rename`),
   Copy = copy đệ quy (`POST /api/files/copy`, `fs.cp` recursive); Paste vào folder đích, tự né trùng tên, chặn dán
   folder vào chính nó/thư mục con.
-- Hỗ trợ attachments (ảnh/pdf/…); upload từ web. Thư mục đích upload resolve **case-insensitive** với folder
+- Hỗ trợ attachments (ảnh/pdf/…); thêm/kéo thả vào app. Thư mục đích upload resolve **case-insensitive** với folder
   sẵn có (`vault.resolveDirCaseInsensitive`) — tránh tạo thư mục trùng khác hoa-thường (vd `attachments` cạnh
   `Attachments` có sẵn) trên filesystem phân biệt hoa-thường (Linux).
 - Watch filesystem (chokidar) để phản ánh thay đổi ngoài (git pull, sửa trực tiếp).
@@ -255,7 +272,7 @@ webobsidian/
   Click ảnh → **lightbox toàn màn hình**: wheel/pinch zoom (theo con trỏ/tâm), kéo/1-ngón pan,
   double-click reset, Esc/click nền đóng (xem §22 mobile: pinch-zoom ảnh trong reading).
 - **Audio/Video nhúng**: `![[clip.mp4]]` → `<video controls>`, `![[song.mp3]]` → `<audio controls>`
-  (Live Preview, Reading, public share). Video: `mp4/webm/ogv/mov/mkv`; audio: `mp3/wav/m4a/3gp/flac/ogg/
+  (Live Preview, Reading). Video: `mp4/webm/ogv/mov/mkv`; audio: `mp3/wav/m4a/3gp/flac/ogg/
   oga/opus`. `![[clip.mp4|W]]` đặt chiều rộng video. Mở thẳng file media từ file tree → hiện player.
   Binary serve qua HTTP Range (206) để seek/Safari hoạt động; MIME + extension: `services/mime.ts` /
   `lib/media.ts`.
@@ -267,120 +284,80 @@ webobsidian/
 - Menu **More options (⋯)** trên header mỗi pane (note lẫn Graph view), dựng theo cấu trúc Obsidian Desktop:
   - Note: Backlinks in document, Split right / Split down, Open in new window, Rename / Move file to / Make a
     copy, Bookmark, Add file property, Export to PDF…, Find…, Copy path, Open version history, Open linked view
-    (Backlinks / Outgoing links / Outline), Reveal file in navigation, Share…, Close tab / Close other tabs, Delete.
+    (Backlinks / Outgoing links / Outline), Reveal file in navigation, Close tab / Close other tabs, Delete.
   - Graph view: Copy screenshot (PNG vào clipboard), Close tab.
   - Split pane hỗ trợ 2 hướng: right (cạnh phải) và down (bên dưới); hướng split persist trong uistate.
   - **Find/Replace trong note**: tích hợp `@codemirror/search` (panel top, ⌘F mở Find, ⌘⇧F Replace, ⌘G next).
   - **Reveal file in navigation**: mở rộng folder tổ tiên + cuộn/nháy sáng row trong file tree.
   - **Add file property**: chèn property rỗng vào frontmatter YAML (tạo block nếu chưa có) → render trong Properties widget.
-  - **Export to PDF**: chuyển Reading view rồi dùng print dialog của trình duyệt (CSS `@media print` chỉ in nội dung note).
-  - **Open in new window**: mở deep-link `/note/<path>` ở tab/cửa sổ trình duyệt mới.
-  - Lưu ý: "Reveal in Finder" / "Open in default app" của Obsidian Desktop không áp dụng cho web app nên không có.
+  - **Export to PDF**: 整篇文档以只读方式在本地 iframe 中渲染后调用系统打印对话框(见 FR-16)。
+  - Không có "Reveal in Finder" / "Open in default app"; "Open in new window" theo URL đã bỏ cùng FR-10.
 - Graph view (lực đẩy, từ wikilinks).
   - Tìm node trên graph: ô search nổi (góc trên-trái), gõ keywords → danh sách node khả dĩ
     (note/tag/attachment đang hiển thị trên graph); click hoặc Enter → camera bay (pan+zoom mượt)
     tới node, node được highlight kiểu hover (accent + dim phần không liên kết) tới khi di chuột.
 
-### FR-3 · Login gate
-- **Mật khẩu mặc định khi cài đặt: `123456`** — không cần bước setup, đăng nhập ngay được
-  bằng pass mặc định. settings.json mặc định **không** chứa mật khẩu nào.
-- Người dùng đổi mật khẩu trong Settings → Account (nhập pass hiện tại + pass mới). Hash mới
-  lưu ở `auth.userPasswordHash`. Khi field này rỗng nghĩa là đang dùng pass mặc định `123456`.
-- **Mật khẩu override (khôi phục khi quên pass):** `auth.passwordHash` trong `data/settings.json`
-  (sửa tay, dạng scrypt hash) **hoặc** biến môi trường `WEBOBSIDIAN_PASSWORD` (plaintext). Login
-  chấp nhận pass override **bất kể** người dùng đã đổi pass hay chưa. Mặc định không có override.
-- Đăng nhập 1 password → JWT trong httpOnly cookie.
-- Mọi route web & file API yêu cầu auth (trừ `/login`, healthcheck).
+### FR-3 · 本地访问控制(取代原登录)
+- 2026-10-23 起删除账号、密码、会话、JWT 和 API Key;详见 [个人本地运行时](docs/design/personal-local-runtime.md)。
+- 运行时只绑定 `127.0.0.1` 随机端口。`server/src/middleware/localAccess.ts` 是唯一的访问判断:
+  要求回环地址的 socket 对端和本地 Host;带 Origin 时必须是本地 HTTP(S) 来源;不信任任何转发头。
+  Express 在所有路由和静态资源前执行该检查,WebSocket 升级复用同一判断。
+- 渲染器静态资源只提供给带桌面/Android 壳标识的请求,普通浏览器请求返回 404,没有 SPA 兜底路由。
+  该标识只用于区分产品形态,不是身份认证。
+- 路径越界防护、Vault 维护租约、脏会话协调、基准版本校验和附件预览令牌保持原有实现。
 
-### FR-4 · GitHub sync
-- Cấu hình: repo URL, branch, token (PAT) hoặc deploy key, tên/email commit.
-- Thao tác: init/clone, pull, commit-all, push; hiển thị status (ahead/behind/dirty).
-- Auto-sync tuỳ chọn theo interval + on-save debounce.
-- Git LFS: cấu hình `.gitattributes` cho pattern lớn; track/push LFS.
-- **Version history per-file**: `git log` (commit chạm file, newest first) + `git show <hash>:<path>` qua
-  `GET /api/git/log` & `/api/git/show`; UI modal liệt kê version, preview nội dung, "Restore this version"
-  (ghi đè + reload). Rỗng khi vault chưa là git repo / chưa bật Git Sync.
-- Conflict: phát hiện, báo người dùng, chiến lược merge cơ bản (ưu tiên hỏi).
+### FR-4 · 原生文件同步与 Git 备份
+- 设计见 [原生文件同步与 Git 备份](docs/design/file-sync.md)。
+- **文件同步**:原生 HTTPS 传输负责实时同步 Markdown、Canvas 和附件,服务端是独立发布的
+  `sync-server/`(`sync-server-v*` 标签,不影响桌面/移动版本号)。每个 Vault 的开关、有序地址列表、
+  令牌和间隔保存在 `.obsidian/webobsidian/sync.jsonc`;每轮从第一个可用地址开始,认证/身份/回滚/冲突
+  错误直接停止,不静默切换数据源。公网连接要求校验证书的 HTTPS,HTTP 仅允许私有/回环地址。
+- **Git 备份**:Git 只做定期备份和冲突历史,配置在每个 Vault 的 `.obsidian/webobsidian/git.jsonc`
+  (远程、分支、凭据、间隔、LFS 规则);备份会显式包含 `sync.jsonc`,克隆私有 Vault 仓库即可恢复同步配置。
+- **单文件历史版本**:`git log`/`git show` 列出触及该文件的提交,可预览并恢复某个版本。
+- 冲突:检测并提示用户,不自动合并覆盖数据。
 
-### FR-5 · Settings (JSON db)
-- Toàn bộ cấu hình trong `data/settings.json` (atomic write, có backup).
-- Nhóm: vault, auth, git, search, api, ui, plugins.
-- UI Settings để xem/sửa; validate bằng schema (zod).
+### FR-5 · 配置(JSON/JSONC 文件)
+- 应用级设置保存在应用数据目录的 `settings.json`(原子写入,zod 校验),包括 Vault 路径与删除方式、
+  文件/附件默认位置、搜索(中文/拼音)、快捷键、原生功能开关、写作设置等。
+- 每个 Vault 的原生配置集中在 `.obsidian/webobsidian/`:`sync.jsonc`、`git.jsonc`、`writing.jsonc`、
+  `math.jsonc`、`automation.jsonc`、`menus/`、`blocks/`、`snippets/` 等。
+- 不自动迁移或改写正在使用的 Vault;保留原始插件数据和未知配置。
 
-### FR-6 · API Gate (AI Agent)
-- Quản lý nhiều **API key** (tạo/thu hồi, scope: read / write / search).
-- REST endpoints `/api/v1/*` xác thực bằng header `Authorization: Bearer <key>` hoặc `X-API-Key`.
-- Năng lực: list notes, read note, create/update/delete note, search, get backlinks, append.
-- Rate limit + audit log mỗi key.
+### FR-6 · MCP 与原生笔记操作(取代原 Agent API)
+- 设计见 [原生 MCP](docs/design/native-mcp.md)。不恢复账号、API Key 或对外 REST API。
+- MCP 通过本地 HTTP `/mcp` 和 stdio(`server/src/mcp.ts`)提供,CLI 转发同一份 JSON;
+  三者共用 `server/src/operations/contract.ts` 中的 Zod 契约。
+- 六个工具:上下文、已保存文件列表、原生搜索、按范围读取、提议修改、状态查询。
+- 每个提议只含一项 Markdown 笔记操作(编辑 / 新建 / 重命名);删除文件/文件夹、文件夹操作和批量操作
+  在校验阶段拒绝。提议进入本地审阅收件箱,用户逐项审阅、接受后才写入。
+- 桌面端提供 MCP 启动器,方便外部 AI 客户端连接。
 
 ### FR-7 · QMD Search engine
 - Index toàn bộ `.md`: nội dung, tiêu đề, headings, tags, path, frontmatter.
 - Truy vấn: full-text, prefix, fuzzy, fielded (`tag:`, `path:`, `title:`), boolean.
 - Cập nhật incremental khi file thay đổi (qua watcher).
 - Index lưu/khôi phục trên disk (`data/qmd-index.json`) để khởi động nhanh.
+- 中文/拼音:见 FR-15;繁体词典默认关闭(`search.chinese.traditional`)。
 
 ### FR-8 · Community plugins
-- Đọc danh sách plugin từ `.obsidian/plugins/*` (manifest.json, main.js).
+- Chỉ dùng plugin đã có trong Vault (không tải/cài trực tuyến). Đọc danh sách plugin từ `.obsidian/plugins/*` (manifest.json, main.js).
 - Plugin loader evaluates trusted CommonJS `main.js` against the host API; this is not a security sandbox. Native Node modules require explicit desktop trust.
-- Browse & cài plugin từ community list (qua GitHub releases) — tải về thư mục plugins.
 - Read and update vault `.obsidian/community-plugins.json`; keep each plugin's `data.json`; runtime enable/disable cleans registrations.
 - Detailed APIs, existing-plugin versions, verification status and unsupported internals: [plugin compatibility](docs/design/plugin-compatibility.md).
 
-### FR-9 · Docker
-- `Dockerfile` multi-stage (build web + server → image gọn).
-- `docker-compose.yml`: mount vault volume, data volume, env cho password/secret.
-- Healthcheck (`start_period` đủ dài cho index vault lớn lần đầu), restart policy.
-- **Self-deploy không sửa file tracked**: mọi tham số deploy đặt qua `.env` (git-ignored) —
-  `VAULT_HOST_PATH` (host vault → `/vault`), `HTTP_BIND`/`HTTP_PORT` (publish), `WEBOBSIDIAN_PASSWORD`,
-  `WEBOBSIDIAN_WATCH`, `TRUST_PROXY` (mặc định `true` — tin hop kề để `X-Forwarded-Proto` hoạt động khi
-  đứng sau reverse proxy; đặt `false` khi phơi trực tiếp không proxy, hoặc danh sách subnet/số hop để siết).
-  `docker-compose.yml` chỉ tham chiếu `${VAR:-default}` nên `git pull`/redeploy
-  không clobber cấu hình của người tự host. `cp .env.example .env && docker compose up -d --build`.
-- **File watcher chịu lỗi inotify**: VPS sạch thường có `fs.inotify.max_user_watches` thấp →
-  native watch lỗi `ENOSPC/EMFILE`. Watcher tự degrade sang **polling** (`WEBOBSIDIAN_WATCH=auto`),
-  log hướng dẫn nâng `sysctl` để giữ native (CPU thấp hơn).
+### FR-9 · Android 应用(取代原 Docker 部署)
+- 设计见 [Android 本地运行时](docs/design/android-runtime.md)。Docker 镜像/Compose 部署已于 2026-11-01 删除。
+- Android 独立离线运行:`RuntimeHost` 在应用进程的后台线程中加载 Bionic `libnode.so`,运行与桌面相同的
+  打包运行时(`scripts/bundle-server.mjs`);WebView 只连接本机 `127.0.0.1` 随机端口。
+- 原生壳负责生命周期、WebView、权限和文件选择;编辑、保存、索引和配置沿用共享实现。
+- 用户明确选择 Vault 后才启动 Node;切到后台或页面隐藏时请求保存脏会话,常规 900ms 自动保存不变。
+- 内置资源按版本解压到 `files/runtime-<code>`,用户 Vault 和配置不参与解压;日志写入 `files/logs/server.log`。
 
-### FR-10 · Deep-link URL & Public share
-- **Deep-link**: URL trình duyệt phản ánh note đang mở — `/note/<vault-relative-path>`
-  (URL-encode từng segment); Graph view = `/graph`. Mở URL trực tiếp (sau login) sẽ mở đúng
-  note; back/forward của trình duyệt hoạt động (popstate ↔ history stack của app).
-- **Public share (readonly, không cần login)**:
-  - Tạo share link cho một note `.md` **hoặc canvas `.canvas`** → token ngẫu nhiên (16 bytes, base64url),
-    URL dạng `/share/<token>`.
-  - **Canvas share**: `.canvas` được server render thành **HTML tĩnh** (snapshot): node đặt tuyệt đối theo
-    toạ độ, edges vẽ SSR bằng SVG Bézier (cùng hình học với editor), text/embedded-note render qua pipeline
-    markdown; trang full-width (bỏ cột markdown hẹp). Allowlist file public lấy từ ảnh trong file-node canvas
-    (`rendercanvas.canvasEmbedTargets`). Non-interactive (không pan/zoom) ở v1.
-  - Trang public render Reading view (markdown → HTML sanitize), **không** sidebar/editor,
-    không yêu cầu auth. Wikilink trong note hiển thị như text tĩnh (không điều hướng).
-  - **SEO / SSR**: `GET /share/{id}` được **server render thành HTML hoàn chỉnh** (không cần JS
-    để đọc nội dung → Google indexable). Head gồm: `<title>` (tên note), meta description
-    (~160 ký tự đầu của body, đã strip markdown), canonical, Open Graph
-    (`og:title/description/type=article/url/site_name/image` — ảnh đầu tiên note nhúng hoặc URL
-    ảnh web đầu tiên), Twitter card (`summary_large_image`/`summary`), `robots: index,follow`.
-    Share có password → SSR trang nhập password (**noindex**, không kèm nội dung note, form unlock
-    bằng inline JS); share disabled/không tồn tại → 404 (noindex). Render markdown phía server
-    dùng cùng pipeline unified/remark/rehype + sanitize (port từ web, kèm CSS inline từ bundle).
-  - File nhúng (ảnh/pdf/video) trong note được serve qua endpoint public **giới hạn đúng các
-    file mà note đó nhúng** (`![[...]]` / `![](...)`) — không cho đọc tuỳ ý vault. Không serve
-    file `.md` qua endpoint này (không transclusion ở trang public).
-  - Share record: `{ id, path, enabled, createdAt, passwordHash? }` lưu ở `data/shares.json`
-    (JSON, atomic write). Mỗi note tối đa 1 share record (tạo lại → trả record cũ + enable).
-  - Disable (giữ token, có thể bật lại) hoặc xoá hẳn. Token bị disable/xoá → trang public trả 404.
-  - **Password tuỳ chọn cho từng share**: đặt/xoá ở trang quản lý (hash scrypt, không bao giờ trả
-    hash về client — chỉ `hasPassword`). Khi share có password: endpoint public trả 401
-    `{passwordRequired: true}`; khách nhập password → `POST /public/shares/{id}/unlock` → JWT
-    (ký bằng `jwtSecret`, TTL 12h, payload gắn share id) đặt trong httpOnly cookie scope đúng
-    `/public/shares/{id}` — ảnh nhúng tự gửi cookie. Đổi/xoá password không vô hiệu cookie đã cấp
-    (TTL ngắn chấp nhận được cho v1).
-- **Share dialog per-note**: menu "Share…" (context menu file tree + menu ⋯ của pane, cho note `.md`
-  **và canvas `.canvas`**) mở popup cài đặt share của note đó: tạo public link, ô URL + nút Copy, toggle
-  bật/tắt link, đặt/đổi/xoá password, xoá link vĩnh viễn.
-- **Badge nhận biết**: note đang share public (enabled) hiện **icon globe** màu accent cạnh tên
-  trong file tree. Danh sách share cache trong store, load sau login và refresh sau mỗi thao tác
-  (dialog lẫn Settings dùng chung) nên badge luôn đúng.
-- **Quản lý tập trung**: Settings → tab "Sharing" liệt kê toàn bộ note đã share, có ô search
-  lọc theo path, toggle enable/disable nhanh, copy link, xoá.
+### FR-10 · 深链 URL 与公开分享(已退役)
+- 2026-10-23 删除公开分享;2026-11-01 删除笔记 URL(`/note/...`)、地址/历史同步、"复制应用链接"
+  和"在浏览器窗口打开"等功能。见 [原生应用边界](docs/design/native-only.md)。
+- 笔记内容中的外部超链接仍交给操作系统打开;不得重新引入浏览器入口或分享服务。
 
 ---
 
@@ -388,6 +365,7 @@ webobsidian/
 Mục tiêu: trải nghiệm **đọc note** và **soạn thảo note** thuận tiện trên điện thoại màn hình cảm ứng,
 tham chiếu UX Obsidian Mobile. Kích hoạt theo breakpoint (`max-width: 768px`) — không phải app riêng,
 cùng một codebase React.
+本节布局由 Android 应用(FR-9)和窄窗口桌面端使用,不面向手机浏览器。
 - **Layout drawer**: ribbon + sidebar trái và right sidebar trở thành **drawer overlay** trượt đè lên
   nội dung (không đẩy layout). Mặc định đóng → editor chiếm trọn màn hình. Mở bằng: nút hamburger (☰)
   trên thanh tab, **vuốt từ mép trái/phải** (edge-swipe), hoặc các nút toggle panel. Có **backdrop** mờ;
@@ -444,163 +422,108 @@ chúng bằng đường có mũi tên, dùng cho brainstorm, moodboard, sơ đ�
 - **Phạm vi v1 (non-goals)**: không có realtime collaborative cursor; không group auto-resize theo thành viên;
   không portal/embed canvas-trong-canvas; không liên kết backlink graph từ node file (giữ đơn giản).
 
-### FR-13 · Desktop app (Electron, multi-platform)
-Desktop/workspace chrome (1.11): on Windows/Linux, tabs and both sidebar toggles share
-one 32px row with native minimize/maximize/close controls. No visible File/Edit menu,
-app branding, duplicate note header or formatting toolbar. Keep compact scrollable tabs,
-native caption safe areas, a draggable empty region and themes. F10 opens the native
-application menu; existing accelerators remain. The vertical ribbon collapses together
-with the left sidebar. Markdown modes move into a bottom-right icon menu. macOS retains
-its system title/menu bars; browsers share the workspace layout without native insets.
+### FR-13 · 桌面应用(Electron,多平台)
+- 设计见 [桌面窗口](docs/design/desktop-window.md) 和 [桌面运行时打包](docs/design/desktop-runtime.md)。
+- **架构**:Electron 主进程以 `ELECTRON_RUN_AS_NODE=1` 启动打包好的本地运行时
+  (`resources/server/dist/index.mjs`,esbuild 单文件,不带 `node_modules`),绑定 `127.0.0.1` 随机端口,
+  再在 `BrowserWindow` 中加载渲染器。直接打开本地服务,不生成密码、不登录、不写 cookie。
+- **窗口外观(1.11)**:Windows/Linux 上,标签页和左右侧栏开关与原生最小化/最大化/关闭按钮共用一行 32px;
+  不显示 File/Edit 菜单、应用名称、重复的笔记标题或格式工具栏。F10 打开原生应用菜单,原有快捷键保留。
+  功能区竖条随左侧栏一起折叠;Markdown 视图模式切换在右下角。macOS 保留系统标题栏和菜单栏。
+  两侧侧栏悬浮在文档之上;"+"打开主页而不新建文件;设置和 Vault 切换位于 Vault 底栏。
+- **Vault**:通过 Vault 启动器选择或切换;Vault 内容不随应用打包。
+- **打包**:electron-builder。macOS `dmg`+`zip`(arm64/x64,ad-hoc 签名,未公证);Windows x64 NSIS 安装包;
+  Linux `AppImage`+`deb`(x64/arm64)。推送 `v*` 标签时 GitHub Actions 在三个平台构建并发布 Release。
+- **外部依赖**:Git 备份需要系统中可用的 `git`;没有 git 时本地编辑和文件同步照常工作。
+- **不做**:自动更新、商业代码签名、内置便携版 git、同一实例内多窗口打开多个 Vault。
 
-Mục tiêu: đóng gói WebObsidian thành **app cài đặt trên máy** (macOS/Windows/Linux) để người dùng tải về dùng
-như app native, không cần tự dựng server hay Docker. Bản chất là một **Electron shell** bọc quanh đúng server
-Express + SPA hiện có (không fork code, không đổi kiến trúc) — nên mọi tính năng web đều chạy y hệt.
+### FR-14 · 原生写作与数学
+- 设计见 [原生写作](docs/design/native-writing.md)、[原生数学](docs/design/native-math.md)、
+  [公式编号](docs/design/native-equations.md)。
+- **LaTeX 片段与公式辅助**:改编自 obsidian-latex-suite 1.14.0(MIT),保留片段语义、TeX 语法、括号/隐藏算法;
+  不包含矩阵快捷键、输入法切换和 Vim。隐藏(Conceal)默认关闭。
+- **格式化(Linter)**:改编自 obsidian-linter 1.31.2(MIT),保留全部规则、执行顺序和选项;
+  手动保存时格式化,后台自动保存只写盘;拼写词典只在启用纠错时加载。
+- **公式**:MathJax 渲染、宏/前导(preamble)、公式编号与引用、行内公式提示。
+- 原插件实例不再加载,由 `nativePluginPolicy` 屏蔽已迁移的插件,原插件文件保持不变。
 
-- **Kiến trúc**: Electron `main` **spawn server hiện có như tiến trình con** qua `ELECTRON_RUN_AS_NODE`
-  (dùng luôn Node nhúng trong Electron, không cần Node cài sẵn trên máy), bind **`127.0.0.1` + cổng trống
-  ngẫu nhiên** (localhost-only, không mở ra mạng), rồi `BrowserWindow` load `http://127.0.0.1:<port>`.
-  Server được **bundle thành 1 file `.mjs` duy nhất** bằng esbuild (toàn bộ deps inline; `fsevents` để
-  external vì optional). SPA build (`server/public`) đi kèm trong `resources/server/public`.
-- **Dữ liệu & vault**: lần chạy đầu hiện hộp thoại **chọn thư mục vault** (mặc định `~/Documents/WebObsidianVault`
-  nếu bỏ qua). `DATA_DIR` (settings.json, index) nằm trong thư mục `userData` per-user của Electron. Menu
-  **File → Switch Vault…** đổi vault (relaunch để re-index), **Open Vault/Data Folder**, **Open Logs**.
-- **Đăng nhập liền mạch**: app tự sinh **mật khẩu ngẫu nhiên/máy** lưu trong `userData`, truyền qua
-  `WEBOBSIDIAN_PASSWORD` (override) → **auto-login** (seed cookie JWT vào session của cửa sổ) và tự đặt
-  password tuỳ chỉnh để **không bắt đổi mật khẩu** lần đầu. Người dùng không phải gõ password; vẫn có thể
-  đổi trong Settings.
-- **Đa nền tảng / đa kiến trúc**: vì server **không có native module runtime**, cross-arch chỉ là đóng gói
-  Electron binary tương ứng. Đóng gói bằng **electron-builder**: macOS `dmg`+`zip` (arm64/x64), Windows
-  `portable` only (x64; no setup installer), Linux `AppImage`+`deb` (x64/arm64).
-- **Phát hành**: GitHub Actions workflow `release.yml` chạy khi push tag `v*` — matrix macOS/Windows/Ubuntu,
-  mỗi runner build native cho HĐH của nó rồi **publish lên GitHub Release** (draft) để người dùng tải.
-- **Phụ thuộc ngoài**: tính năng Git sync cần `git` có trên máy (PATH được bổ sung các vị trí phổ biến); thiếu
-  git thì app vẫn chạy bình thường cho sửa note cục bộ, chỉ tắt sync. App **chưa code-sign/notarize** (sẽ có
-  cảnh báo Gatekeeper/SmartScreen — chấp nhận cho self-hosted free).
-- **Phạm vi (non-goals)**: chưa auto-update (người dùng tải bản mới thủ công); chưa ký số; không nhúng git
-  portable; không chạy nhiều cửa sổ/vault song song trong 1 instance (single-instance lock).
+### FR-15 · 原生工作流
+- 设计见 [原生功能](docs/design/native-features.md) 及其链接的子文档。
+- **标签**:层级标签面板、批量重命名/合并、标签页(Tag Page)、按文件夹自动打标签规则。
+- **附件清理**:预览未被引用的附件,用户明确勾选并重新校验后移入回收站,可恢复。
+- **自定义菜单**:每个 Vault 用 JSONC 声明右键菜单(`.obsidian/webobsidian/menus/`)。
+- **命令与快捷键**:命令面板、可自定义快捷键、用户命令、模板、标题级别命令。
+- **块与脚本**:可执行的 JavaScript 代码块(含图表/组件)、查询块、块效果、图表(diagrams)、callout 列表。
+- **外观**:CSS 片段、主题、字体;新建文件和附件的默认位置;正文首个标题作为笔记标题。
+- **中文搜索**:单一 VaultCatalog + MiniSearch 支持原文和拼音字段;文件/命令/文件夹/标题/模板选择器
+  以及链接/标签补全使用原生实现,替代 Fuzzy Chinese Pinyin 插件(见 [中文搜索](docs/design/chinese-search.md))。
 
----
-
-## 4. Yêu cầu phi chức năng (NFR)
-- **Bảo mật**: password hash scrypt, JWT secret tự sinh, API key hash khi lưu, path traversal guard
-  (chặn `..`, segment `.git`, symlink thoát vault), CORS hạn chế, rate limiting (cả `/auth/login`:
-  10 lần/15 phút — **khóa theo địa chỉ socket TCP thật, không theo `req.ip`/`X-Forwarded-For`** nên
-  không thể bypass bằng cách xoay vòng XFF, **bất kể cấu hình `trust proxy`**; vì vậy `trust proxy` để
-  mặc định bật (`true`, qua `TRUST_PROXY`) cho `X-Forwarded-Proto`/Secure-cookie hoạt động sau proxy). Bắt buộc đổi mật khẩu mặc định (`123456`) ngay sau lần đăng nhập đầu
-  (`mustChangePassword`). Security headers qua `helmet` + CSP (script-src 'self'+nonce; không ép HTTPS
-  để giữ self-host HTTP). Token git/PAT được redact khỏi mọi thông báo lỗi trả client + log. WebSocket
-  `/ws` yêu cầu phiên đăng nhập hợp lệ. Plugin `id` được validate trước khi thành path segment; đổi
-  `vault.path` qua API bị giới hạn trong `allowedRoots`.
-- **Hiệu năng**: search < 100ms cho vault ~10k notes; lazy load file tree lớn.
-- **Tin cậy**: atomic writes cho settings & notes; backup trước ghi đè; git ops không mất dữ liệu.
-- **Khả chuyển**: chạy được trên Linux/macOS, ARM & x86.
-- **Khả dụng**: responsive (desktop/tablet/mobile), dark/light theme.
+### FR-16 · 工作区与阅读辅助
+- 设计见 [工作区侧栏](docs/design/workspace-sidebars.md)、[文档导航](docs/design/document-navigation.md)。
+- 分屏编辑(左右/上下),命令和导航跟随当前聚焦的页面;左右侧栏支持固定入口和动态标签页。
+- PDF 阅读器(页面缩略图、目录大纲)、Markdown 小地图、链接悬停预览、内容引用与块引用跳转。
+- 整篇文档只读打印/导出 PDF(通过本地 iframe 打印)。
 
 ---
 
-## 5. API surface (tóm tắt)
+## 4. 非功能需求(NFR)
+- **安全**:运行时只监听回环地址,所有 HTTP/WebSocket 请求经 `localAccess` 检查;路径越界防护
+  (拦截 `..`、`.git` 段和逃出 Vault 的符号链接);插件 `id` 先校验再作为路径段;同步令牌、Git 凭据等
+  机密不写入日志和错误信息。社区插件以受信任代码运行,不是安全沙箱;原生 Node 模块需要显式信任。
+- **性能**:约 1 万篇笔记的 Vault 搜索 < 100ms;大文件树按需加载;编辑时使用增量索引和按依赖更新的装饰
+  (见 [性能](docs/design/performance.md))。
+- **可靠性**:设置和笔记原子写入;保留原始字节,只做局部修改;同步和 Git 操作不得丢失数据,
+  冲突时停止并提示。
+- **平台**:Windows/macOS/Linux 桌面(x64/arm64)与 Android。
+- **可用性**:桌面与触屏布局(Android)、深色/浅色主题。
 
-### Web/session API (cookie auth)
-```
-POST   /auth/setup            # (legacy) set password lần đầu — vô hiệu khi đã có pass mặc định
-POST   /auth/login            # login → cookie
-POST   /auth/logout
-POST   /auth/change-password  # đổi pass: { currentPassword, newPassword } (yêu cầu auth)
-GET    /auth/me
-GET    /api/files            # cây thư mục
-GET    /api/files/*path      # đọc file (md/binary)
-PUT    /api/files/*path      # ghi
-POST   /api/files/*path      # tạo / upload
-PATCH  /api/files            # rename/move
-POST   /api/files/copy       # copy đệ quy file/folder {from,to} (Paste sau Copy)
-DELETE /api/files/*path      # xoá → .trash hoặc xoá hẳn (theo vault.deleteMode)
-GET    /api/files/trash      # liệt kê file trong .trash
-POST   /api/files/trash/restore   # khôi phục {path} về vị trí gốc
-DELETE /api/files/trash/item # xoá vĩnh viễn 1 item trong trash
-DELETE /api/files/trash      # empty trash (xoá hẳn toàn bộ)
-GET    /api/search?q=...
-GET    /api/backlinks?path=...
-GET    /api/git/status | POST /api/git/{pull,commit,push,sync}
-GET/PUT /api/settings
-GET/POST/DELETE /api/keys     # quản lý API key
-GET    /api/plugins | POST /api/plugins/install | PATCH enable
-GET    /api/shares            # list share (quản lý)
-POST   /api/shares            # tạo share cho 1 note {path} → {id,...}
-PATCH  /api/shares/{id}       # enable/disable {enabled}
-DELETE /api/shares/{id}       # xoá share
-```
+---
 
-### Public share (không auth) — `/public` & `/share`
+## 5. 本地运行时 API 概览
+仅供桌面/Android 壳内的渲染器和本机 MCP/CLI 调用,不对外开放。
 ```
-GET    /public/shares/{id}        # nội dung note đã share {title, content} (404 nếu disabled,
-                                  # 401 {passwordRequired} nếu có password & chưa unlock)
-POST   /public/shares/{id}/unlock # {password} → set httpOnly cookie unlock (JWT 12h)
-GET    /public/shares/{id}/file?path=  # file nhúng trong note (chỉ file note đó tham chiếu)
-GET    /share/{id}                # trang HTML public — SERVER-RENDERED (SEO meta + OG + nội dung
-                                  # note trong HTML; locked → form password noindex)
-```
-
-### Agent API (API-key auth) — `/api/v1`
-```
-GET    /api/v1/notes                 # list (paginate)
-GET    /api/v1/notes/{path}          # read
-PUT    /api/v1/notes/{path}          # create/update
-PATCH  /api/v1/notes/{path}/append   # append content
-DELETE /api/v1/notes/{path}
-GET    /api/v1/search?q=...&limit=
-GET    /api/v1/backlinks?path=
-GET    /api/v1/tags
+GET    /api/vault-identity
+/api/files/*           # 文件树、读写、新建/上传、重命名/移动、复制、删除、回收站
+/api/search, /api/backlinks, /api/graph …   # 搜索与链接索引
+/api/tags/*            # 标签批量操作
+/api/attachments/*     # 未引用附件预览与清理
+/api/git/*             # Git 备份状态/操作、单文件历史
+/api/file-sync/*       # 原生文件同步状态与配置
+/api/plugins/*         # 已安装插件列表、启用/停用、资源
+/api/menus/*           # 自定义菜单
+/api/settings, /api/writing, /api/native-features, /api/uistate
+/api/operations/*      # 原生操作分发(与 MCP 共用契约)
+POST   /mcp            # MCP(另有 stdio 入口)
+WS     /ws             # 文件变更、索引更新等通知
 ```
 
 ---
 
-## 6. Data model — `settings.json`
-```jsonc
-{
-  "version": 1,
-  "auth":   { "userPasswordHash": "scrypt$... (pass đã đổi; rỗng = dùng mặc định 123456)",
-              "passwordHash": "scrypt$... (override khôi phục; rỗng = không có)",
-              "jwtSecret": "..." },
-  "vault":  { "path": "/vault", "allowedRoots": ["/vault"], "trash": ".trash", "deleteMode": "trash" },
-  "git":    { "enabled": false, "remote": "", "branch": "main",
-              "token": "", "authorName": "", "authorEmail": "",
-              "autoSync": false, "intervalSec": 300,
-              "lfsPatterns": ["*.png","*.jpg","*.pdf","*.mp4"] },
-  "search": { "fuzzy": 0.2, "indexFrontmatter": true },
-  "api":    { "keys": [ { "id": "...", "name": "agent1",
-                          "hash": "...", "scopes": ["read","search"],
-                          "createdAt": "...", "lastUsed": "..." } ],
-              "rateLimitPerMin": 120 },
-  "ui":     { "theme": "obsidian-dark", "defaultView": "live" },
-  "plugins":{ "enabled": ["dataview"], "installed": [] }
-}
-```
-
-### `data/shares.json` (public share links — FR-10)
-```jsonc
-[
-  { "id": "base64url-16-bytes", "path": "Folder/Note.md",
-    "enabled": true, "createdAt": "2026-06-10T00:00:00.000Z",
-    "passwordHash": "scrypt$...salt...$...hash..." } // optional — share không password thì bỏ field
-]
-```
+## 6. 数据模型
+- **应用数据目录**(每台设备):`settings.json`、搜索/文件索引、同步检查点和收发日志、缓存、日志。
+  `settings.json` 主要分组:`vault`(路径、`allowedRoots`、`trash`、`deleteMode`、文件/附件默认位置)、
+  `search`(中文/拼音、选择器选项)、`hotkeys`、`nativeFeatures`(标签、附件清理等)、`writing`。
+- **Vault 内**:Markdown、附件、`.canvas`(JSON Canvas)、`.trash/`、`.obsidian/`(原有配置与插件)、
+  `.obsidian/webobsidian/`(本 fork 的原生配置,见 FR-5)。
 
 ---
 
-## 7. Rủi ro & quyết định
-- **Tương thích plugin**: nhiều plugin dùng API/DOM Electron riêng → chỉ đảm bảo subset. Quyết định: shim API phổ biến, fail mềm với API thiếu, log cảnh báo.
-- **Bảo mật token git/API key**: lưu trong settings.json server-side (chmod 600), khuyến nghị mount qua secret/volume riêng.
-- **File lớn**: bắt buộc Git LFS; cảnh báo khi commit file > ngưỡng mà chưa track LFS.
-- **Đồng bộ xung đột**: v1 ưu tiên thông báo + manual resolve, không auto-merge phá dữ liệu.
+## 7. 风险与决策
+- **插件兼容**:很多插件依赖 Obsidian 内部 API → 只保证用户实际使用的子集;缺失接口软失败并记录警告。
+  常用插件(LaTeX Suite、Linter、Fuzzy Chinese Pinyin、用户脚本等)优先改为原生实现或明确屏蔽。
+- **机密**:同步令牌和 Git 凭据保存在 Vault 配置或本地凭据中,禁止进入日志。
+- **大文件**:Git 备份需配置 LFS;实时同步由原生文件传输承担。
+- **同步冲突**:优先提示并手动处理,不自动合并覆盖数据。
+- **无浏览器回退**:不添加浏览器兼容目标;渲染器测试可用 Chromium 作为引擎,但与原生窗口、Android 设备
+  和真实 Vault 的验收分开记录。
 
 ---
 
-## 8. Tiêu chí hoàn thành (Definition of Done) cho v1
-1. Đăng nhập 1 password, mở vault, xem cây thư mục.
-2. Mở/sửa/tạo/xoá note với editor + live preview + wikilinks/backlinks.
-3. Search trả kết quả từ QMD < 100ms trên vault mẫu.
-4. Cấu hình git, sync (pull/commit/push) thành công kể cả file LFS.
-5. Tạo API key, AI Agent gọi `/api/v1` đọc/ghi/search thành công.
-6. Cài & bật ít nhất 1 community plugin đơn giản.
-7. `docker compose up` chạy toàn bộ stack.
+## 8. 完成标准(Definition of Done)
+1. 桌面端和 Android 端都能打开 Vault,浏览文件树。
+2. 编辑器能打开/修改/新建/删除笔记,实时预览、双链和反向链接正常。
+3. 示例 Vault 中搜索(含拼音)在 100ms 内返回结果。
+4. 原生文件同步在两台设备间同步笔记和附件;Git 备份(含 LFS)成功。
+5. 外部 AI 客户端通过 MCP 读取上下文、搜索,并经本地审阅完成一次笔记修改。
+6. 至少一个用户实际使用的社区插件能加载并启用。
+7. 推送 `v*` 标签后,三个桌面平台的安装包成功发布到 GitHub Release。

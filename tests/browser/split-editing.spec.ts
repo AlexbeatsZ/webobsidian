@@ -46,6 +46,7 @@ const test = base.extend<{ backend: Backend }>({
     const configuration = path.join(vault, '.obsidian', 'webobsidian');
     await fs.mkdir(configuration, { recursive: true }); await fs.mkdir(data);
     for (const [file, text] of Object.entries(original)) await fs.writeFile(path.join(vault, file), text);
+    await fs.writeFile(path.join(data, 'uistate.json'), JSON.stringify({ tabs: [{ path: 'main.md', title: 'main.md' }], activePath: 'main.md' }));
     // Formatting distinguishes an explicit Save from the registry's 900ms autosave.
     await fs.writeFile(path.join(configuration, 'writing.jsonc'), JSON.stringify({
       version: 1, migration: 'split-editing-fixture',
@@ -93,12 +94,12 @@ const test = base.extend<{ backend: Backend }>({
       });
       await page.routeWebSocket('**/ws', () => {});
       await page.routeWebSocket(url => url.searchParams.has('token'), socket => socket.send(JSON.stringify({ type: 'connected' })));
-      await page.route('**/note/**', async route => {
+      await page.route('**/', async route => {
         if (route.request().resourceType() !== 'document') return route.fallback();
         const response = await route.fetch();
         await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', entry) });
       });
-      await page.goto('/note/main.md');
+      await page.goto('/');
       mounted = true;
       await expect(content(page, 'main')).toContainText('Main，body');
       await page.evaluate(async () => {

@@ -1,7 +1,6 @@
 import { migrateSearchSettings } from './services/searchmigration.js';
 import { writingRouter } from './routes/writing.js';
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -107,10 +106,6 @@ async function main() {
     }),
   );
 
-  if (!config.isProd) {
-    app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
-  }
-
   // Local readiness endpoint for the desktop launcher.
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
   app.get('/api/vault-identity', asyncHandler(async (_req, res) => {
@@ -142,15 +137,16 @@ async function main() {
   app.use('/api/uistate', uiStateRouter);
   app.use('/api', searchRouter); // /api/search, /api/tags, /api/backlinks, /api/graph...
 
-  // Static SPA (built into server/public)
+  // Native renderer assets. No standalone browser application or deep-link fallback.
   const publicDir = path.join(__dirname, '..', 'public');
   if (await dirExists(publicDir)) {
-    app.use(express.static(publicDir));
-    app.get('*', (req, res, next) => {
-      if (req.path.startsWith('/api'))
-        return next();
-      res.sendFile(path.join(publicDir, 'index.html'));
-    });
+    app.use((req, res, next) => {
+      if (!/\bWebObsidian(?:Desktop|Android)\b/.test(req.get('User-Agent') ?? '')) {
+        res.sendStatus(404);
+        return;
+      }
+      next();
+    }, express.static(publicDir));
   }
 
   app.use(errorHandler);

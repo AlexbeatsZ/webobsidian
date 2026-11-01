@@ -8,9 +8,10 @@ describe('sidebar view state persistence', () => {
     expect(restored.map(tab => tab.id)).toEqual(['first', 'second']);
     expect(restored.map(tab => tab.state)).toEqual([{ file: 'note.md' }, { file: 'note.md' }]);
   });
-  it('rejects duplicate ids, executable browser URLs and malformed file states while retaining unknown plugin views', () => {
+  it('drops removed webpage views, duplicate ids and malformed file states while retaining plugin views', () => {
     expect(restoreSidebarTabs([
       sidebarTab('webviewer', { url: 'javascript:alert(1)' }, 'unsafe'),
+      sidebarTab('webviewer', { url: 'https://example.com/' }, 'old-page'),
       sidebarTab('markdown', { file: null }, 'invalid'),
       sidebarTab('plugin-view', { custom: { value: 1 } }, 'plugin'),
       sidebarTab('empty', {}, 'plugin'),

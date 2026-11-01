@@ -59,7 +59,7 @@ function OutlinePanel() {
         <span className="nav-title">大纲</span>
       </div>
       <div className="sidebar-body">
-        {heads.length === 0 && <div className="panel-item">无标题</div>}
+        {heads.length === 0 && <div className="panel-empty">无标题</div>}
         {heads.map((h, i) => (
           <div key={i} className="outline-item" style={{ paddingLeft: 10 + (h.level - 1) * 12 }} onClick={() => {
             const path = useStore.getState().currentPath();
@@ -104,7 +104,7 @@ function McpPanel() {
         <span className="nav-title">MCP</span>
         <button
           type="button"
-          className="icon-btn"
+          className="nav-action"
           title="添加选中内容或当前页面"
           aria-label="添加选中内容或当前页面"
           disabled={ctx.busy}
@@ -114,10 +114,10 @@ function McpPanel() {
         </button>
       </div>
       <div className="sidebar-body">
-        {ctx.error && <div className="panel-item" role="alert">{ctx.error}</div>}
+        {ctx.error && <div className="panel-empty" role="alert">{ctx.error}</div>}
         <McpLauncher />
         <Section title="上下文" count={ctx.items.length} open={openContext} onToggle={() => setOpenContext(!openContext)}>
-          {ctx.items.length === 0 && <div className="panel-item">暂无待发送上下文。</div>}
+          {ctx.items.length === 0 && <div className="panel-empty">暂无待发送上下文</div>}
           {ctx.items.map((item) => (
             <div key={item.id} className="mention-box mcp-context-item" data-context-id={item.id} data-context-kind={item.kind}>
               <div className="mcp-context-head">
@@ -131,7 +131,7 @@ function McpPanel() {
                 <div className="mcp-context-actions">
                   <button
                     type="button"
-                    className={'icon-btn mcp-pin-btn' + (item.pinned ? ' is-active' : '')}
+                    className="nav-action"
                     title={item.pinned ? '取消固定' : '固定保留'}
                     aria-label={item.pinned ? '取消固定' : '固定保留'}
                     aria-pressed={item.pinned}
@@ -142,7 +142,7 @@ function McpPanel() {
                   </button>
                   <button
                     type="button"
-                    className="icon-btn mcp-remove-btn"
+                    className="nav-action"
                     title="移除"
                     aria-label="移除上下文"
                     disabled={ctx.busy}
@@ -172,8 +172,8 @@ function McpPanel() {
           ))}
         </Section>
         <Section title="候选修改" count={review.proposals.length} open={openReview} onToggle={() => setOpenReview(!openReview)}>
-          {review.error && <div className="panel-item" role="alert">{review.error}</div>}
-          {review.proposals.length === 0 && <div className="panel-item">暂无候选修改。</div>}
+          {review.error && <div className="panel-empty" role="alert">{review.error}</div>}
+          {review.proposals.length === 0 && <div className="panel-empty">暂无候选修改</div>}
           {review.proposals.map((p) => (
             <div key={p.id} className="mention-box mcp-review-item" onClick={() => void selectReview(p.id)}>
               <div className="mention-src">{p.title}</div>
@@ -221,7 +221,7 @@ export default function RightSidebar({ open }: { open: boolean; onTheme?: () => 
       {presented && !activeId && rightPanel === 'outline' && (pdf ? <PdfOutlinePanel session={pdf} /> : <OutlinePanel />)}
       {presented && !activeId && rightPanel === 'minimap' && (pdf ? <PdfThumbnailsPanel session={pdf} />
         : path && MD_RE.test(path) ? <MarkdownMinimap key={viewId + ':' + path} path={path} viewId={viewId} />
-        : <div className="panel-item">打开 Markdown 或 PDF 查看缩略图</div>)}
+        : <div className="panel-empty">打开 Markdown 或 PDF 查看缩略图</div>)}
       {presented && !activeId && rightPanel === 'mcp' && <McpPanel />}
       <SidebarTabPanels side="right" open={presented} />
     </div>}

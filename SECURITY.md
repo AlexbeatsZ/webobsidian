@@ -1,43 +1,22 @@
-# Security Policy
+# Security policy
 
-## Reporting a vulnerability
+Report vulnerabilities privately through this fork's GitHub Security Advisories.
+Include the affected application version, a description and reproduction steps;
+do not publish Vault content or credentials in an issue.
 
-**Please do not open a public GitHub issue for security vulnerabilities.**
+## Runtime boundary
 
-Instead, report privately:
+The client is a personal desktop/Android application. Its bundled runtime binds
+to loopback; HTTP and WebSocket share the existing local peer/Host/Origin predicate.
+Native renderer assets require the native shell's user-agent marker. This marker
+selects the supported renderer, and is not an authentication secret. Accounts,
+passwords, session tokens, API keys and public-share endpoints are absent.
 
-- Use **GitHub Security Advisories** ("Report a vulnerability" on the Security tab), or
-- Email the maintainer: **xnohat@gmail.com**
+File containment, Vault identity, maintenance leases, document revisions and
+local review remain the owners of file-operation safety. Plugin Node access is
+an explicit desktop trust choice. Keep notes, native profile/configuration and
+sync credentials out of Git. The independently released sync server has its own
+authenticated protocol and does not expose the application interface.
 
-Please include:
-
-- A description of the issue and its impact.
-- Steps to reproduce (a proof-of-concept if possible).
-- Affected version / commit.
-
-You can expect an initial acknowledgement within a few days. We'll work with you on a fix
-and coordinate disclosure once a patch is available.
-
-## Scope & hardening notes
-
-WebObsidian is **self-hosted and single-user**. Operators are responsible for deploying it
-safely. Key points:
-
-- **Change the default password (`123456`)** immediately after first login.
-- Master password is scrypt-hashed; the JWT secret is auto-generated.
-- API keys are hashed at rest and scoped (`read` / `write` / `search`) with per-key rate
-  limiting.
-- File paths are guarded against traversal; the vault picker is confined to `ALLOWED_ROOTS`.
-- Secrets (git token, API keys) live in `data/settings.json` on the server — mount `/data`
-  as a private volume and keep it out of version control.
-- Run behind a TLS-terminating reverse proxy (set `HTTP_BIND=127.0.0.1`) for any
-  internet-facing deployment. `TRUST_PROXY` defaults to `true` so `X-Forwarded-Proto`
-  is honoured (Secure cookies work) behind that proxy; tighten it to a subnet list
-  if you want, or set `TRUST_PROXY=false` for an instance exposed directly to clients
-  with no proxy. Either way the login rate limit is keyed on the real TCP socket
-  address, so it cannot be bypassed by rotating `X-Forwarded-For`.
-
-## Supported versions
-
-This project is pre-1.0; security fixes are applied to the latest `main`. Please run a
-recent build.
+Supported fixes target the current native application release. Browser deployment,
+reverse proxies and remote note-editing pages are outside the product.

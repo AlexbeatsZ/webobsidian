@@ -13,8 +13,8 @@ function entryIcon(n: TreeNode): string {
 }
 
 /**
- * Folder content view — shown when the active path is a folder (e.g. deep-link
- * /note/<folder>). Lists the notes/sub-folders inside instead of opening the
+ * Folder content view — shown when the active path is a folder (for example a
+ * restored tab or a folder link). Lists the notes/sub-folders inside instead of opening the
  * folder as an empty note.
  */
 export default function FolderView({ path }: { path: string }) {

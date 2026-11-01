@@ -42,10 +42,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build web + server
+      - name: Build native renderer and local runtime
         run: npm run build
 
-      - name: Package & publish desktop apps (Windows portable only)
+      - name: Package & publish desktop apps
         run: npm --workspace desktop run dist:publish
         env:
           # electron-builder publishes to GitHub Releases with this token.

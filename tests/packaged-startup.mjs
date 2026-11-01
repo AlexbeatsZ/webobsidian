@@ -89,12 +89,17 @@ try {
     headless: true,
   });
   browserVersion = browser.version();
-  page = await browser.newPage();
+  assert.equal((await fetch(base)).status, 404, 'The local runtime does not serve a standalone browser application');
+  const nativeHeaders = { 'User-Agent': 'WebObsidianDesktop packaged-renderer-contract' };
+  assert.equal((await fetch(base, { headers: nativeHeaders })).status, 200, 'The native shell can load its bundled renderer');
+  assert.equal((await fetch(base + '/note/Home.md', { headers: nativeHeaders })).status, 404, 'Retired note URLs have no SPA fallback');
+  page = await browser.newPage({ userAgent: nativeHeaders['User-Agent'] });
   page.on('pageerror', error => errors.push(error.stack));
   await page.goto(base, { waitUntil: 'networkidle' });
   assert.deepEqual(errors, [], 'The real production entry must evaluate without initialization errors');
   assert(await page.locator('#root').innerText(), 'React must mount a visible workspace');
   await page.locator('.workspace-launcher').waitFor();
+  assert.equal(await page.getByRole('button', { name: '打开网页浏览器', exact: true }).count(), 0);
   for (const route of ['/auth/login', '/auth/change-password'])
     assert.equal((await page.request.post(base + route, { data: {} })).status(), 404, 'Retired authentication route: ' + route);
   const identityResponse = await page.request.get(base + '/api/vault-identity');

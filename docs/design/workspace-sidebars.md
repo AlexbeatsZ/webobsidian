@@ -15,7 +15,7 @@ thresholds, storage and device acceptance entry points are in android-runtime.md
 - 删除原生日记创建动作、命令及入口；已有 Daily 文件继续作为普通笔记，不删除用户内容。
 - 左竖栏顶部为文件、搜索；右竖栏顶部为反向链接、出链、标签、大纲四个固定入口。
 - 中央、左栏和右栏的 + 只创建 Homepage 标签，不创建文件。左右下方是独立笔记、
-  WebViewer 或已注册插件视图。中键、Delete、
+  已注册插件视图。中键、Delete、
   标题关闭按钮和右键菜单关闭标签，方向键选择标签。
 - 只读参照实际 STEM `.obsidian/snippets/Hider.css` 的有效规则：浮在正文之上，
   左面板默认 280px，右栏整体 opacity=.95。hover 自动隐藏代码处于注释状态，不采用。
@@ -37,7 +37,6 @@ thresholds, storage and device acceptance entry points are in android-runtime.md
 | 正文、历史、冲突及落盘 | DocumentRegistry/DocumentSession | 两侧直接使用 Editor path；不复制 content |
 | 选区、光标、视图模式 | 各 Editor/MarkdownView 实例 | 同文件中央/左右共享会话，保持独立编辑视图 |
 | 自定义视图的创建与清理 | WorkspaceLeaf + viewRegistry + Component | SidebarTabPanels 调用既有 mountView；Modal 和左右侧栏共享加载路径 |
-| 内置网页、脚本、网络和 guest 权限 | 原有 WebViewer/UserscriptService | 只改宿主和新页面转发，不增加浏览器管理器 |
 | 全局编辑焦点 | activeEditor | 排除 hidden/aria-hidden，覆盖命令、模板、保存 |
 | 标题、块、公式定位 | fragmentNavigation | 可指定 EditorView，避免同路径多实例跳错 |
 | 图标路径 | lib/icons.ts | React Icon 与 Obsidian DOM getIcon 共用目录 |
@@ -50,14 +49,14 @@ rightTabs 只保存 `{id,type,state,title,icon,side?}`，不保存正文、DOM�
 `home://<uuid>` 作为既有 tabs 的非文件身份，URL 映射为 `/home/<uuid>`，不进入最近文件，
 不加载 DocumentSession。标签显式关闭前保留；访问其他标签不隐式删除 Homepage。
 Homepage 的新建笔记、白板和图谱沿用中央工作区动作；侧栏文件选择器沿用已有 picker，
-笔记和网页可替换该侧空标签。白板和媒体继续由中央既有视图承载，不复制 Canvas/media。
+笔记可替换该侧空标签。白板和媒体继续由中央既有视图承载，不复制 Canvas/media。
 本体尚无数据库产品或创建动作，截图中的“新建数据库”未实现，不提供无效按钮。
-同路径可以有多个稳定 id。恢复时校验形状与 WebViewer HTTP(S) 地址，保留未知插件
+同路径可以有多个稳定 id。恢复时校验形状并丢弃已移除的网页视图，保留未知插件
 视图 state，等待实际注册后重试。旧 leftPanel=tags/bookmarks 迁移到右侧；左侧回退文件。
 关闭、替换和远端布局移除笔记前共用 saveLeavingSidebarTab；保存失败或保存期间又发生
 修改时保留原标签。每个异步替换/关闭有代次，过期结果不能覆盖较新的选择。
 
-左右笔记和 guest 首次选中才挂载；随后隐藏时保留实例，避免丢光标/滚动或重载网页。
+左右笔记和插件视图首次选中才挂载；随后隐藏时保留实例，避免丢光标/滚动。
 App 保留左侧 Sidebar 外壳，只用 open 控制可见固定面板和动态内容；不再收起就卸载宿主。
 标签关闭才卸载。WorkspaceLeaf 串行化挂载、用代次取消过期结果；不重复调用 onOpen，
 相同状态的 setState 不重复执行。React StrictMode cleanup 后可以安全重新挂载。
@@ -122,14 +121,12 @@ Markdown views/sidebar hosts retain stable session/tab identities. Canvas drafts
 block path changes and defer external refresh. See architecture-optimization.md
 for exact rules and deleted branches. Source/diff only; no runtime checks.
 
-## 浏览器新页面
+## 原生应用范围（2026-11-01）
 
-既有 guest setWindowOpenHandler 向本地 preload 发送 `{sourceGuestId,url}`；host
-对照仍挂载的 WebViewer 再创建右侧标签。拒绝原生新窗口和非 HTTP(S)，每个新 guest
-继续执行既有 main 的 sandbox/contextIsolation/Node/preload 校验与 userscripts 附着。
-webview 必须先设置经过验证的 src 再插入文档，否则会被原有 will-attach-webview 拒绝。
-此路径不保留 window.opener；about:blank/document.write、下载、自定义 scheme 不是浏览器
-兼容承诺。已有 guest 登录 session 继续使用既有默认会话，不创建或重置用户 profile。
+用户已取消内置网页浏览器、网页脚本和浏览器产品。WebViewer 的 guest/预加载/IPC/
+弹窗路由、工作区专用挂载分支及入口均删除；恢复布局时丢弃旧 WebViewer 标签。
+笔记与插件视图继续复用 SidebarDock、WorkspaceLeaf 和 DocumentSession 的生命周期。
+不改原有插件文件、网页脚本存储或浏览会话数据。见 native-only.md。
 
 ## 2026-10-22 修改意见交付边界
 

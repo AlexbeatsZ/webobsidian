@@ -108,11 +108,6 @@ export class WorkspaceLeaf extends Events {
       (this.view as MarkdownView).editor?.setCursor(state.eState.line, 0);
   }
   async setViewState(state: any) {
-    // The same view object/lifecycle can be hosted by a dock instead of a modal.
-    if (state.type === 'webviewer' && this.slot !== 'right') {
-      await this.closeView();
-      this.slot = 'right';
-    }
     if (this.slot === 'right') {
       const retained = this.workspace.custom.has(this);
       this.workspace.custom.add(this);
@@ -162,12 +157,10 @@ export class WorkspaceLeaf extends Events {
     try {
       await view.load();
       if (generation !== this.generation) return;
-      // A guest must have its validated URL before Electron attaches the element.
-      if (state.type !== 'webviewer') host.replaceChildren(view.containerEl);
+      host.replaceChildren(view.containerEl);
       await view.setState(state.state ?? {}, {});
       this.mountedState = JSON.stringify(state.state ?? {});
       if (generation !== this.generation) return;
-      if (state.type === 'webviewer') host.replaceChildren(view.containerEl);
       await view.onOpen();
       if (generation === this.generation) this.workspace.updateRightLeaf(this);
     } catch (error) {
