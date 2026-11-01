@@ -121,7 +121,7 @@ async function main() {
   // Specific routes precede the shared search router. Access is checked once above.
   app.use('/api/files', filesRouter);
   app.use('/api/operations', operationsRouter);
-  app.use('/mcp', mcpRouter);
+  app.use(mcpRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/writing', writingRouter);
   app.use('/api/git', gitRouter);

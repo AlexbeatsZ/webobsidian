@@ -135,8 +135,8 @@ export const api = {
   createText: (path: string, content: string) => req<{ ok: true; revision: string }>('/api/files/content', {
     method: 'PUT', body: JSON.stringify({ path, content, createOnly: true }),
   }),
-  rename: (from: string, to: string) =>
-    req<{ ok: true }>('/api/files/rename', { method: 'PATCH', body: JSON.stringify({ from, to }) }),
+  rename: (from: string, to: string, baseRevision?: string) =>
+    req<{ ok: true }>('/api/files/rename', { method: 'PATCH', body: JSON.stringify({ from, to, baseRevision }) }),
   copy: (from: string, to: string) =>
     req<{ ok: true }>('/api/files/copy', { method: 'POST', body: JSON.stringify({ from, to }) }),
   remove: (path: string) =>

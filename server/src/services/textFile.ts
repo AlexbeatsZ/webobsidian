@@ -49,7 +49,7 @@ async function writeBytes(absolutePath: string, bytes: Buffer, baseRevision?: st
   });
 }
 
-async function withFileWrite(absolutePath: string, work: () => Promise<void>): Promise<void> {
+export async function withFileWrite(absolutePath: string, work: () => Promise<void>): Promise<void> {
   absolutePath = path.resolve(absolutePath);
   const key = process.platform === 'win32' ? absolutePath.toLowerCase() : absolutePath;
   const previous = queues.get(key) ?? Promise.resolve();

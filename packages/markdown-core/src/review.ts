@@ -69,11 +69,13 @@ export function mergeReview(base: string, current: string, restored: string): st
 
 export interface OperationPoint { line: number; ch: number }
 export interface OperationEdit { from: OperationPoint; to: OperationPoint; expected_text: string; replacement: string }
+export type NoteFileOperation = { kind: 'create'; path: string; content: string }
+  | { kind: 'rename'; path: string; to: string; base_revision: string };
 /** Shared JSON contract; transports do not own validation or implementation. */
 export interface TextProposalInput {
   request_id: string;
   title?: string;
-  operations: { kind: 'edit'; path: string; base_revision: string; edits: OperationEdit[] }[];
+  operations: ({ kind: 'edit'; path: string; base_revision: string; edits: OperationEdit[] } | NoteFileOperation)[];
 }
 export interface ReviewProposal {
   id: string;
@@ -85,6 +87,8 @@ export interface ReviewProposal {
   baseline: string;
   hunks: ReviewHunk[];
   applied: { before: string; after: string }[];
+  /** Whole file operation; absent on persisted text-review records. */
+  fileOperation?: NoteFileOperation & { decision: 'pending' | 'accepted' | 'rejected'; applying?: boolean };
   restored?: boolean;
   error?: string;
   uncertain?: { before: string; diskBefore: string; after: string; kind: 'accept' | 'recover'; hunks: ReviewHunk[] };

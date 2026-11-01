@@ -7,4 +7,7 @@
 .native-review-list { max-height:80vh; overflow:auto; }
 .native-review-choice { display:flex; flex-direction:column; width:100%; text-align:left; margin:10px 0; padding:10px; }
 .native-review-choice span { font-size:var(--font-ui-small); color:var(--text-muted); }
+.native-review-path { overflow-wrap:anywhere; }
+.native-review-file { padding:16px; }
+.native-review-file-content { white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; max-height:45vh; overflow:auto; background:var(--background-secondary); }
 .native-review-inbox { position:fixed; right:56px; bottom:28px; z-index:40; padding:8px 14px; box-shadow:var(--shadow-s); }

@@ -115,7 +115,7 @@ export class DocumentRegistry {
   async pathsSettled() { await this.pathQueue.catch(() => {}); }
 
   /** Rename/delete callers share one save/freeze/identity transaction. */
-  changePath<T>(from: string, to: string | undefined, work: () => Promise<T>, apply: () => void): Promise<T> {
+  changePath<T>(from: string, to: string | undefined, work: () => Promise<T>, apply: () => void, validate?: () => void): Promise<T> {
     const job = this.pathQueue.catch(() => {}).then(async () => {
       this.pathVersion++;
       const loads = [...this.pending.values()];
@@ -125,6 +125,7 @@ export class DocumentRegistry {
       const releases: (() => void)[] = [];
       try {
         await Promise.allSettled(loads);
+        validate?.();
         const affected = [...this.sessions].filter(([id]) => this.under(id, from));
         const targets = to ? [...this.sessions].filter(([id]) => this.under(id, to) && !this.under(id, from)) : [];
         if (targets.some(([id, session]) => this.isOpen(id) || session.snapshot.dirty || session.snapshot.conflict || session.snapshot.saving))
@@ -133,6 +134,7 @@ export class DocumentRegistry {
         for (const [, session] of affected) releases.push(session.holdEdits());
         if (affected.some(([, session]) => session.snapshot.dirty || session.snapshot.saving || session.snapshot.conflict))
           throw new Error('笔记保存期间又有修改，请保存后重试');
+        validate?.();
         const result = await work();
         for (const [id, session] of targets) {
           this.cancelSave(session); this.stops.get(session)?.(); this.stops.delete(session); this.sessions.delete(id);

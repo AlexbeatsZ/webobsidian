@@ -7,10 +7,10 @@ does not restore accounts, JWT, API keys, public shares, a model client, or a
 Tunnel. The reference obsidian-context-mcp checkout is read-only provenance;
 its plugin deployments and connection profiles remain independent.
 
-The first native contract contains six tools: context, saved file list, native
-search, ranged read, propose, and status. Proposals contain exactly one edit of
-one existing Markdown file. Create/move/trash and multi-file groups fail schema
-validation. These are explicit unsupported operations, not silently partial work.
+The native contract contains six tools: context, saved file list, native
+search, ranged read, propose, and status. Each proposal contains exactly one
+Markdown note operation: edit, create, or rename. File/folder deletion, folder
+operations and multiple-operation groups fail schema validation.
 
 Existing owners remain authoritative:
 
@@ -39,8 +39,10 @@ CommandManager and opens the native review inbox.
 
 Text-write Git scheduling moved from route/tag text-write callers to vault.writeFileText;
 the redundant calls were removed. The exclusive raw Tag Page creator retains
-its scheduling because it does not use that writer. Rename/trash/etc. keep their existing route
-semantics; those operations are not part of this first MCP contract.
+its scheduling because it does not use that writer. Reviewed renames reuse
+vault.rename and the native workspace path transaction. Rename reserves the
+existing physical writer queues for both source and destination in sorted
+order and optionally compares the source revision before moving it.
 
 ## Read/coordinate contract
 
@@ -119,6 +121,56 @@ an additional sandbox against a malicious process already able to call its
 normal local file endpoints. There is no accept/restore operation in the machine
 tool catalog.
 
+## New and renamed notes (2026-11-01)
+
+`obsidian_propose_changes.operations` accepts one discriminated operation:
+
+```json
+{"kind":"create","path":"课程/新笔记.md","content":"# 新笔记\n"}
+```
+
+```json
+{"kind":"rename","path":"课程/旧笔记.md","to":"课程/新名称.md","base_revision":"<fresh read revision>"}
+```
+
+Both paths must be visible Vault-relative Markdown file paths. Creation can
+make parent folders through the existing exclusive writer; it never overwrites
+an existing file or directory. Rename requires a saved source and fresh read
+revision, keeps the exact raw bytes, and supports case-only filename changes.
+It has the same link-update semantics as the native file-tree rename.
+
+File proposals use the existing persisted inbox/idempotency/serialized decisions.
+`fileOperation` is absent on older text proposals, preserving their existing
+per-hunk behavior. The local review dialog shows complete create content as
+literal source, or the old/new paths for rename. The user accepts/rejects the
+whole operation. Selecting a create candidate does not open a missing note.
+No remote accept tool, folder operations or deletion is exposed.
+
+Acceptance requires an attached local workspace. It rechecks target absence,
+source revision, all responding workspace drafts/conflicts and Vault identity.
+The chosen workspace calls store.createNote (with new-note templates disabled)
+or store.renamePath; the existing DocumentRegistry path transaction locks
+edits and remaps sessions/tabs. Its optional revision guard runs before any
+save and after locking. The source/destination writer queues and revision
+check in vault.rename protect against competing native saves/creates.
+Normal native callers retain their existing template/save behavior.
+
+Creation previews already include automatic folder tags. If the save rules
+change before acceptance, the user must resubmit the candidate. Rename does
+not run save-time formatting or folder-tag transformation on the moved bytes.
+
+An intended file operation is persisted before the workspace request. The
+server confirms the exact destination bytes and source absence after rename,
+including actual filename spelling for a Windows case-only rename. Lost
+acknowledgements/restarts reconcile only exact before/after states; ambiguous
+states retain the record as recovery_required and block further decisions.
+File operations are whole actions, with no text-hunk restore command. Normal
+native file operations remain available for subsequent user changes.
+
+Status includes `kind`, rename `to`, and `operation.status` with pending,
+accepted or rejected. Accepted empty notes still count as one applied step.
+Single-file text edits retain the existing `hunks` and recovery semantics.
+
 ## Explicit MCP context (2026-10-28)
 
 The native command `mcp:add-context` (default Mod+Shift+M), editor context menu,
@@ -184,6 +236,12 @@ when another instance's endpoint environment variable is present. Existing
 local-access, operation leases, context persistence, DocumentSession and
 local-only review decisions remain authoritative. No second listener, index,
 parser, file writer or remote accept tool is introduced.
+
+The root-mounted MCP router explicitly returns JSON 404 for OAuth protected
+resource and authorization-server discovery under `/.well-known/`, including
+resource-suffixed paths. This local service does not provide OAuth metadata;
+these requests must never fall through to the SPA's 200 HTML response, which
+causes Tunnel discovery to retry indefinitely and blocks its startup catalog.
 
 All desktop platforms expose **连接**, **复制配置**, and **连接设置**. Copy
 provides a stdio client JSON using this WebObsidian executable in

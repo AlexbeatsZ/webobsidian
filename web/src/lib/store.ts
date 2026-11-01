@@ -228,11 +228,11 @@ interface AppState {
   openHomepage: () => Promise<void>;
   openWikilink: (target: string, sourcePath?: string, intent?: LinkIntent) => Promise<void>;
   closeTab: (path: string) => Promise<void>;
-  renamePath: (from: string, to: string) => Promise<void>;
+  renamePath: (from: string, to: string, expectedRevision?: string) => Promise<void>;
   removePath: (path: string) => ReturnType<typeof api.remove>;
   setContent: (c: string) => void;
   save: (cause?: 'manual' | 'background') => Promise<void>;
-  createNote: (path: string, body?: string) => Promise<void>;
+  createNote: (path: string, body?: string, applyTemplate?: boolean) => Promise<void>;
   /** Obsidian-style: create & open a fresh "Untitled" note (no prompt). `dir` = target folder, '' = vault root. */
   newNote: (dir?: string) => Promise<void>;
   /** Obsidian-style: create a fresh "Untitled" folder (no prompt) and start inline-renaming it. */
@@ -766,17 +766,22 @@ export const useStore = create<AppState>()(
         });
       },
 
-      renamePath: async (from, requested) => {
+      renamePath: async (from, requested, expectedRevision) => {
         const to = requested.replace(/\\/g, '/');
         if (from === to) return;
         if (!to || to.split('/').some(part => !part || part === '.' || part === '..')) throw new Error('请输入有效的仓库相对路径');
         if (to.startsWith(from + '/')) throw new Error('不能将文件夹移入自身');
         if (get().pendingCanvasEdits) throw new Error('请先完成 Canvas 卡片或连线编辑，再移动文件');
         openGeneration++; splitGeneration++;
-        await documents.changePath(from, to, () => api.rename(from, to), () => {
+        const validate = expectedRevision === undefined ? undefined : () => {
+          const snapshot = documents.get(from)?.snapshot;
+          if (snapshot && (snapshot.dirty || snapshot.saving || snapshot.conflict || snapshot.revision !== expectedRevision))
+            throw new Error('源笔记已改变，请重新提交重命名候选');
+        };
+        await documents.changePath(from, to, () => api.rename(from, to, expectedRevision), () => {
           window.dispatchEvent(new CustomEvent('file-path-changed', { detail: { from, to } }));
           set(state => remapWorkspacePaths(state, from, to));
-        });
+        }, validate);
         await get().loadTree();
       },
       removePath: async (path) => {
@@ -804,9 +809,9 @@ export const useStore = create<AppState>()(
         }
       },
 
-      createNote: async (path, body) => {
+      createNote: async (path, body, applyTemplate = true) => {
         const { sharedApp } = await import('./plugins');
-        await sharedApp.vault.create(path, body ?? '');
+        await sharedApp.vault.create(path, body ?? '', applyTemplate);
         await get().openFile(path);
       },
 

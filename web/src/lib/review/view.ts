@@ -83,7 +83,7 @@ export function nativeReviewExtension(path: string): Extension {
   };
   const load = (state: import('@codemirror/state').EditorState) => {
     const p = reviewSnapshot().selected;
-    if (!p || p.path !== path) return build(state, null, []);
+    if (!p || p.fileOperation || p.path !== path) return build(state, null, []);
     if (p.restored || p.uncertain) return build(state, p, []);
     const normalized = new SourceDocument(p.baseline);
     const hunks = p.hunks.map(h => ({ ...h,

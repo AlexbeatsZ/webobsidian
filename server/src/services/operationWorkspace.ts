@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { z } from 'zod';
+import type { NoteFileOperation } from '@webobsidian/markdown-core';
 
 const point = z.object({ line: z.number().int().min(1), ch: z.number().int().min(0) });
 const snapshot = z.object({ path: z.string().max(1024), raw: z.string().max(1024 * 1024),
@@ -55,4 +56,7 @@ export async function captureWorkspaces(path?: string): Promise<WorkspaceCapture
 export async function applyInWorkspace(clientId: string, expected: NonNullable<WorkspaceCapture['document']>, raw: string): Promise<void> {
   const result = z.object({ saved: z.literal(true) }).parse(await ask(clientId, 'apply', { expected, raw }));
   if (!result.saved) throw failure('文档尚未保存');
+}
+export async function applyFileInWorkspace(clientId: string, operation: NoteFileOperation): Promise<void> {
+  z.object({ saved: z.literal(true) }).parse(await ask(clientId, 'apply-file', { operation }));
 }

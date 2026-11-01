@@ -9,6 +9,7 @@ import type { AddressInfo } from 'node:net';
 
 const source = '\uFEFF# Context\r\n\r\nAlpha selected 😀 text.\r\n\r\nAlpha selected 😀 text.\r\n\r\nTail sentinel.\r\n';
 const test = base.extend<{ backend: { url: string; vault: string } }>({
+  expectedErrors: async ({}, use) => { await use([]); },
   backend: async ({ page }, use) => {
     const parent = path.join(os.tmpdir(), '.agents'); await fs.mkdir(parent, { recursive: true });
     const directory = await fs.mkdtemp(path.join(parent, 'mcp-context-browser-'));
@@ -279,4 +280,95 @@ test('built-in MCP works without a project directory and stores only explicit co
   await launcher.getByRole('button', { name: '连接', exact: true }).click();
   await expect(launcher.getByRole('alert')).toContainText('fixture failed to launch');
   await expect(launcher.getByRole('button', { name: '连接', exact: true })).toBeEnabled();
+});
+
+async function noteTool(url: string, name: string, args: object) {
+  const response = await fetch(url + '/mcp', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
+  const payload = await response.json() as any;
+  if (payload.error || payload.result?.isError) throw new Error(JSON.stringify(payload));
+  return payload.result.structuredContent;
+}
+
+test('MCP creates a reviewed note with exact bytes, skips templates, then renames the live session', async ({ page, backend }) => {
+  const content = '\ufeff# MCP note\r\n\r\n中文 😀\r\n<script>window.unreviewedExecution = true</script>\n';
+  await page.evaluate(async () => {
+    const { sharedApp } = await import('/src/lib/plugins.ts');
+    sharedApp.vault.prepareNewNote = async () => { throw new Error('Unreviewed template must not run'); };
+  });
+  const proposed = await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'create-reviewed', title: '新建测试笔记',
+    operations: [{ kind: 'create', path: 'MCP/新笔记.md', content }] });
+  expect(proposed.status).toBe('awaiting_user_review');
+  await expect(fs.readFile(path.join(backend.vault, 'MCP/新笔记.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
+  await page.getByRole('button', { name: /新建测试笔记.*MCP\/新笔记/ }).click();
+  const dialog = page.getByRole('dialog', { name: '笔记操作审阅' });
+  await expect(dialog.locator('pre')).toContainText('中文 😀');
+  expect(await page.evaluate(() => (window as any).unreviewedExecution)).toBeUndefined();
+  await page.screenshot({ path: test.info().outputPath('mcp-create-review.png') });
+  await dialog.getByRole('button', { name: '接受', exact: true }).click();
+  await expect(dialog.getByRole('status')).toHaveText('已接受');
+  expect(await fs.readFile(path.join(backend.vault, 'MCP/新笔记.md'), 'utf8')).toBe(content);
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  const current = await noteTool(backend.url, 'obsidian_read_file', { path: 'MCP/新笔记.md' });
+  const renamed = await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'rename-reviewed', title: '重命名测试笔记',
+    operations: [{ kind: 'rename', path: 'MCP/新笔记.md', to: 'MCP/重命名.md', base_revision: current.revision }] });
+  expect(await fs.readFile(path.join(backend.vault, 'MCP/新笔记.md'), 'utf8')).toBe(content);
+  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
+  // The inbox keeps its selected file proposal until the user returns to the list.
+  await dialog.getByRole('button', { name: '返回列表', exact: true }).click();
+  await page.getByRole('button', { name: /重命名测试笔记.*MCP\/新笔记/ }).click();
+  await expect(dialog).toContainText('MCP/新笔记.md → MCP/重命名.md');
+  await page.screenshot({ path: test.info().outputPath('mcp-rename-review.png') });
+  await dialog.getByRole('button', { name: '接受', exact: true }).click();
+  await expect(dialog.getByRole('status')).toHaveText('已接受');
+  expect(await fs.readFile(path.join(backend.vault, 'MCP/重命名.md'), 'utf8')).toBe(content);
+  await expect(fs.readFile(path.join(backend.vault, 'MCP/新笔记.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await noteTool(backend.url, 'obsidian_get_change_status', { proposal_id: renamed.proposal_id })).toMatchObject({
+    operation: { kind: 'rename', status: 'accepted' }, applied_steps: 1 });
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  expect(await page.evaluate(async () => {
+    const { useStore } = await import('/src/lib/store.ts');
+    const { documents } = await import('/src/lib/documents.ts');
+    return { active: useStore.getState().activePath, old: !!documents.get('MCP/新笔记.md'), next: !!documents.get('MCP/重命名.md') };
+  })).toEqual({ active: 'MCP/重命名.md', old: false, next: true });
+});
+
+test('MCP file review rejects safely and reports a target created after proposal', async ({ page, backend, expectedErrors }) => {
+  const proposed = await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'reject-created', title: '拒绝新建',
+    operations: [{ kind: 'create', path: 'rejected.md', content: 'Never written' }] });
+  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
+  await page.getByRole('button', { name: /拒绝新建.*rejected.md/ }).click();
+  const dialog = page.getByRole('dialog', { name: '笔记操作审阅' });
+  await dialog.getByRole('button', { name: '拒绝', exact: true }).click();
+  await expect(dialog.getByRole('status')).toHaveText('已拒绝');
+  await expect(fs.readFile(path.join(backend.vault, 'rejected.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await noteTool(backend.url, 'obsidian_get_change_status', { proposal_id: proposed.proposal_id })).toMatchObject({ operation: { status: 'rejected' } });
+  await dialog.getByRole('button', { name: '返回列表', exact: true }).click();
+  await page.getByRole('dialog', { name: '候选修改', exact: true }).getByRole('button', { name: '关闭', exact: true }).click();
+  await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'collision-created', title: '冲突新建',
+    operations: [{ kind: 'create', path: 'collision.md', content: 'Must not overwrite' }] });
+  await fs.writeFile(path.join(backend.vault, 'collision.md'), 'Existing file');
+  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
+  await page.getByRole('button', { name: /冲突新建.*collision.md/ }).click();
+  expectedErrors.push('409');
+  await dialog.getByRole('button', { name: '接受', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('目标路径已存在');
+  expect(await fs.readFile(path.join(backend.vault, 'collision.md'), 'utf8')).toBe('Existing file');
+});
+
+test('MCP rename refuses changed source at local acceptance', async ({ page, backend, expectedErrors }) => {
+  const current = await noteTool(backend.url, 'obsidian_read_file', { path: 'context.md' });
+  await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'stale-rename', title: '过期重命名',
+    operations: [{ kind: 'rename', path: 'context.md', to: 'renamed.md', base_revision: current.revision }] });
+  await fs.writeFile(path.join(backend.vault, 'context.md'), source + '\nExternal edit\n');
+  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
+  await page.getByRole('button', { name: /过期重命名.*context.md/ }).click();
+  const dialog = page.getByRole('dialog', { name: '笔记操作审阅' });
+  expectedErrors.push('409');
+  await dialog.getByRole('button', { name: '接受', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('源笔记已改变');
+  expect(await fs.readFile(path.join(backend.vault, 'context.md'), 'utf8')).toBe(source + '\nExternal edit\n');
+  await expect(fs.readFile(path.join(backend.vault, 'renamed.md'))).rejects.toMatchObject({ code: 'ENOENT' });
 });

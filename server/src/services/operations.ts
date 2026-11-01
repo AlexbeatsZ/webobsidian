@@ -6,11 +6,12 @@ import { SourceDocument, reviewHunks, materializeReview, rebaseReview, mergeRevi
 import { config } from '../config.js';
 import { operationContract } from '../operations/contract.js';
 import * as vault from './vault.js';
-import { getVaultRoot, resolveInVault, isTextFile, readFileSnapshot } from './vaultFile.js';
+import { getVaultRoot, resolveInVault, isTextFile, readFileSnapshot, vaultPathKey } from './vaultFile.js';
+import { fileTitleError } from '@webobsidian/search-core';
 import { catalog } from './catalog.js';
 import { qmd } from './search.js';
 import { broadcast } from './realtime.js';
-import { applyInWorkspace, captureWorkspaces, type WorkspaceCapture } from './operationWorkspace.js';
+import { applyInWorkspace, applyFileInWorkspace, captureWorkspaces, type WorkspaceCapture } from './operationWorkspace.js';
 import { mcpContext } from './mcpContext.js';
 import type { McpSelection } from '../contracts.js';
 
@@ -26,6 +27,33 @@ function visible(input: string, root = false): string {
 }
 const under = (file: string, prefix: string) => !prefix || file === prefix || file.startsWith(prefix + '/');
 type Snapshot = { raw: string; revision: string; disk: { content: string; revision: string }; owner?: WorkspaceCapture };
+
+function notePath(input: string): string {
+  const file = visible(input);
+  if (!/\.(md|markdown)$/i.test(file)) fail('候选操作仅支持 Markdown 笔记', 400);
+  return file;
+}
+async function fileImage(file: string, exactName = false): Promise<{ content: string | null } | null> {
+  const absolute = await resolveInVault(file);
+  try {
+    const stat = await fs.lstat(absolute);
+    if (exactName && !(await fs.readdir(path.dirname(absolute))).includes(path.basename(absolute))) return null;
+    if (!stat.isFile() || stat.size > MAX_TEXT * 4) return { content: null };
+    return await readFileSnapshot(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    if ((error as { status?: number }).status === 415) return { content: null };
+    throw error;
+  }
+}
+async function requireNewNote(file: string) {
+  const error = fileTitleError(file);
+  if (error) fail(error, 400);
+  const exists = await fs.lstat(await resolveInVault(file)).then(() => true, (error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return false; throw error;
+  });
+  if (exists) fail('目标路径已存在，请选择其他名称');
+}
 
 async function snapshot(file: string, captures?: WorkspaceCapture[]): Promise<Snapshot> {
   visible(file);
@@ -45,7 +73,7 @@ async function snapshot(file: string, captures?: WorkspaceCapture[]): Promise<Sn
 }
 
 /** Node persistence belongs here; pure review/range logic remains in markdown-core. */
-class NativeReview {
+export class NativeReview {
   private root = '';
   private records = new Map<string, ReviewProposal & { fingerprint: string }>();
   private serial: Promise<unknown> = Promise.resolve();
@@ -79,6 +107,20 @@ class NativeReview {
     return this.records.get(id) ?? fail('找不到候选修改', 404);
   }
   private async settle(p: ReviewProposal & { fingerprint: string }) {
+    if (p.fileOperation?.applying) {
+      const op = p.fileOperation;
+      // Case-only renames need the actual directory entry, not Windows' alias.
+      const sameKey = op.kind === 'rename' && vaultPathKey(p.path) === vaultPathKey(op.to);
+      const source = await fileImage(p.path, sameKey);
+      const target = op.kind === 'rename' ? await fileImage(op.to, sameKey) : source;
+      const complete = op.kind === 'create' ? target?.content === op.content : source === null && target?.content === p.baseline;
+      const unchanged = op.kind === 'create' ? target === null : source?.content === p.baseline && target === null;
+      if (complete) { op.decision = 'accepted'; delete op.applying; delete p.error; }
+      else if (unchanged) { delete op.applying; delete p.error; }
+      else p.error = '上次文件操作结果无法确认；已保留候选和原文，请核对源路径及目标路径';
+      await this.save(p);
+      return;
+    }
     if (!p.uncertain) return;
     const j = p.uncertain, current = await readFileSnapshot(p.path);
     if (current.content === j.after) {
@@ -100,7 +142,9 @@ class NativeReview {
   }
   list() { return this.enqueue(async () => { await this.load();
     return [...this.records.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(p => ({
-      id: p.id, path: p.path, title: p.title, pending: p.hunks.some(h => h.decision === 'pending') && !p.restored, createdAt: p.createdAt,
+      id: p.id, path: p.path, title: p.title, kind: p.fileOperation?.kind ?? 'edit',
+      ...(p.fileOperation?.kind === 'rename' ? { to: p.fileOperation.to } : {}),
+      pending: (p.fileOperation ? p.fileOperation.decision === 'pending' : p.hunks.some(h => h.decision === 'pending')) && !p.restored, createdAt: p.createdAt,
     }));
   }); }
   read(id: string) { return this.enqueue(async () => { await this.load(); const p = this.get(id); await this.settle(p); return structuredClone(p); }); }
@@ -113,8 +157,31 @@ class NativeReview {
       return this.statusOf(prior);
     }
     if (this.records.size >= 200) fail('本 Vault 已保存 200 个审阅记录；请先归档审阅数据再提交新候选', 413);
-    const op = input.operations[0], file = visible(op.path);
-    if (!/\.(md|markdown)$/i.test(file)) fail('当前原生审阅仅支持已有 Markdown 文件', 400);
+    const op = input.operations[0], file = notePath(op.path);
+    if (op.kind !== 'edit') {
+      let baseline = '';
+      let operation = { ...op, path: file };
+      if (op.kind === 'create') {
+        await requireNewNote(file);
+        const content = await vault.prepareNoteSave(file, op.content);
+        if (content.length > MAX_TEXT) fail('候选正文超过上限', 413);
+        operation = { ...op, path: file, content };
+      } else {
+        const to = notePath(op.to), error = fileTitleError(to);
+        if (error) fail(error, 400);
+        if (file === to) fail('新名称与原路径相同', 400);
+        const sameKey = vaultPathKey(file) === vaultPathKey(to);
+        if (!sameKey) await requireNewNote(to);
+        const captures = await captureWorkspaces(file), before = await snapshot(file, captures);
+        if (captures.some(c => c.document?.path === file && c.document.dirty)) fail('请先保存源笔记再提交重命名');
+        if (before.revision !== op.base_revision) fail('文件版本已变化，请重新读取');
+        baseline = before.raw; operation = { ...op, path: file, to };
+      }
+      const p = { id: randomUUID(), request_id: input.request_id, fingerprint, title: input.title ?? '候选修改', root: this.root,
+        path: file, createdAt: new Date().toISOString(), baseline, hunks: [], applied: [],
+        fileOperation: { ...operation, decision: 'pending' as const } };
+      await this.save(p); this.records.set(p.id, p); return this.statusOf(p);
+    }
     const root = this.root, before = await snapshot(file);
     if (before.revision !== op.base_revision) fail('文件版本已变化，请重新读取');
     if (op.edits.reduce((n, e) => n + e.replacement.length, 0) > MAX_TEXT) fail('替换文本总长度超过上限', 413);
@@ -139,16 +206,54 @@ class NativeReview {
     await this.save(p); this.records.set(p.id, p); return this.statusOf(p);
   }); }
   private statusOf(p: ReviewProposal) {
+    const file = p.fileOperation;
     return { vault: hash(p.root), proposal_id: p.id, path: p.path, title: p.title,
-      status: p.uncertain ? 'recovery_required' : p.restored ? 'restored' : p.error ? 'conflict'
+      kind: file?.kind ?? 'edit', ...(file?.kind === 'rename' ? { to: file.to } : {}),
+      ...(file ? { operation: { kind: file.kind, status: file.decision } } : {}),
+      status: p.uncertain || file?.applying ? 'recovery_required' : p.restored ? 'restored' : p.error ? 'conflict'
+        : file ? file.decision === 'pending' ? 'awaiting_user_review' : 'completed'
         : p.hunks.some(h => h.decision === 'pending') ? p.applied.length ? 'partially_applied' : 'awaiting_user_review' : 'completed',
-      revision: hash(materializeReview(p.baseline, p.hunks)), error: p.error,
-      hunks: p.hunks.map(h => ({ hunk_id: h.id, status: h.decision })), applied_steps: p.applied.length };
+      revision: hash(file?.kind === 'create' ? file.content : materializeReview(p.baseline, p.hunks)), error: p.error,
+      hunks: p.hunks.map(h => ({ hunk_id: h.id, status: h.decision })), applied_steps: file ? Number(file.decision === 'accepted') : p.applied.length };
   }
   async status(id: string) { return this.statusOf(await this.read(id)); }
   decide(id: string, clientId: string, decision: 'accepted' | 'rejected', hunkId?: string, recover = false) {
     return this.enqueue(async () => {
       await this.load(); const p = this.get(id); await this.settle(p);
+      if (p.fileOperation) {
+        const op = p.fileOperation;
+        const accepted = () => op.decision === 'accepted';
+        if (op.applying) fail(p.error ?? '请先核对中断的文件操作');
+        if (hunkId || recover) fail('新建和重命名使用整项接受或拒绝', 400);
+        if (op.decision !== 'pending') fail('该候选已经处理');
+        if (decision === 'rejected') { op.decision = decision; delete p.error; await this.save(p); return this.statusOf(p); }
+        try {
+          const captures = await captureWorkspaces(p.path);
+          if (!captures.some(c => c.clientId === clientId) || captures.some(c => c.stale)) fail('请在当前 Vault 的本体工作区审阅');
+          const target = op.kind === 'rename' ? op.to : p.path;
+          const targetCaptures = target === p.path ? captures : await captureWorkspaces(target);
+          if (targetCaptures.some(c => c.stale || c.document?.path === target)) fail('目标路径已有打开的文档，请先关闭再审阅');
+          if (op.kind === 'create') {
+            await requireNewNote(p.path);
+            if (await vault.prepareNoteSave(p.path, op.content) !== op.content) fail('保存规则已变化，请重新提交候选');
+          } else {
+            const current = await snapshot(p.path, captures);
+            if (current.disk.revision !== op.base_revision || current.raw !== p.baseline) fail('源笔记已改变，请重新读取并提交重命名');
+            if (captures.some(c => c.document?.path === p.path && (c.document.dirty || c.document.saving || c.document.conflict)))
+              fail('源笔记有未保存草稿或冲突，请先处理');
+            if (vaultPathKey(p.path) !== vaultPathKey(op.to)) await requireNewNote(op.to);
+          }
+          op.applying = true; delete p.error; await this.save(p);
+          await applyFileInWorkspace(clientId, op);
+          await this.settle(p);
+          if (op.applying || !accepted()) fail(p.error ?? '文件操作尚未确认完成');
+          return this.statusOf(p);
+        } catch (error) {
+          await this.settle(p);
+          if (!accepted()) { p.error = (error as Error).message; await this.save(p); throw error; }
+          return this.statusOf(p);
+        }
+      }
       if (p.uncertain) fail(p.error ?? '请先核对中断写入');
       if (p.restored) fail('该候选已经恢复');
       if (decision === 'rejected' && !recover) {

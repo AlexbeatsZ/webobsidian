@@ -3,7 +3,7 @@ import path from 'node:path';
 import { queueFileUpdate, type FileUpdateResult } from './fileupdates.js';
 import { indexedFilesUnder } from './fileindex.js';
 import { getSettings } from './settings.js';
-import { writeBinaryFile, writeTextFile } from './textFile.js';
+import { readTextFile, withFileWrite, writeBinaryFile, writeTextFile } from './textFile.js';
 import { getVaultRoot, resolveInVault, vaultPathKey, toRel, exists, ignoredVaultNames } from './vaultFile.js';
 import { planFolderTags } from '@webobsidian/markdown-core';
 import { fileTitleError } from '@webobsidian/search-core';
@@ -63,20 +63,26 @@ export async function createFolder(rel: string): Promise<void> {
   void queueFileUpdate(rel, 'addDir');
 }
 
-export async function rename(from: string, to: string): Promise<void> {
+export async function rename(from: string, to: string, baseRevision?: string): Promise<void> {
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
-  if (vaultPathKey(absFrom) !== vaultPathKey(absTo) && await pathExists(absTo))
-    throw Object.assign(new Error('目标路径已存在，请选择其他名称'), { status: 409 });
-  if ((await fs.stat(absFrom)).isFile() && path.basename(from) !== path.basename(to)) assertFileTitle(to);
-  await fs.mkdir(path.dirname(absTo), { recursive: true });
-  const children = indexedFilesUnder(from);
-  await fs.rename(absFrom, absTo);
-  for (const child of new Set([from, ...children])) {
-    void queueFileUpdate(child, 'unlink');
-    void queueFileUpdate(to + child.slice(from.length), 'add');
-  }
-  scheduleAutoCommitOnSave();
+  const run = async () => {
+    if (vaultPathKey(absFrom) !== vaultPathKey(absTo) && await pathExists(absTo))
+      throw Object.assign(new Error('目标路径已存在，请选择其他名称'), { status: 409 });
+    if ((await fs.stat(absFrom)).isFile() && path.basename(from) !== path.basename(to)) assertFileTitle(to);
+    if (baseRevision !== undefined && (await readTextFile(absFrom)).revision !== baseRevision)
+      throw Object.assign(new Error('源笔记已改变，请重新读取并提交重命名'), { status: 409 });
+    await fs.mkdir(path.dirname(absTo), { recursive: true });
+    const children = indexedFilesUnder(from);
+    await fs.rename(absFrom, absTo);
+    for (const child of new Set([from, ...children])) {
+      void queueFileUpdate(child, 'unlink');
+      void queueFileUpdate(to + child.slice(from.length), 'add');
+    }
+    scheduleAutoCommitOnSave();
+  };
+  const [first, second] = [...new Set([vaultPathKey(absFrom), vaultPathKey(absTo)])].sort();
+  await withFileWrite(first, () => second ? withFileWrite(second, run) : run());
 }
 
 /**

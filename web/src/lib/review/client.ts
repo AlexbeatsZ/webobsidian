@@ -1,6 +1,6 @@
 import type { EditorView } from '@codemirror/view';
 import type { ReviewProposal } from '@webobsidian/markdown-core';
-import { request } from '../api';
+import { api, request } from '../api';
 import { documents } from '../documents';
 import { getActiveEditor } from '../activeEditor';
 import { contextOf } from '../renderContext';
@@ -8,7 +8,7 @@ import { useStore } from '../store';
 import type { McpSelection, McpContextItem } from '../../../../server/src/contracts';
 export type { McpSelection, McpContextItem } from '../../../../server/src/contracts';
 
-export type ReviewSummary = { id: string; path: string; title: string; pending: boolean; createdAt: string };
+export type ReviewSummary = { id: string; path: string; title: string; pending: boolean; createdAt: string; kind?: 'edit' | 'create' | 'rename'; to?: string };
 export type CapturedMcpTarget = { path: string; version?: number; selections: McpSelection[]; error?: string };
 type ReviewState = { proposals: ReviewSummary[]; selected: ReviewProposal | null; panel: boolean; busy: boolean; error: string };
 type McpContextState = { items: McpContextItem[]; busy: boolean; error: string };
@@ -26,6 +26,7 @@ function update(patch: Partial<ReviewState>) { state = { ...state, ...patch }; f
 function updateContext(patch: Partial<McpContextState>) { contextState = { ...contextState, ...patch }; for (const fn of contextListeners) fn(); }
 export function showReviews() { update({ panel: true }); void reloadReviews().catch(report); }
 export function hideReviews() { update({ panel: false }); }
+export function showReviewList() { update({ selected: null }); showReviews(); }
 function report(error: unknown) { update({ error: String(error) }); }
 function reportContext(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -117,6 +118,7 @@ export async function selectReview(id: string): Promise<void> {
   const captured = ++generation;
   const selected = await request<ReviewProposal>('/api/operations/reviews/' + id);
   if (captured !== generation || useStore.getState().vaultSessionStale) return;
+  if (selected.fileOperation) { update({ selected, panel: true, error: '' }); return; }
   await useStore.getState().openFile(selected.path);
   if (captured === generation) update({ selected, panel: false, error: '' });
 }
@@ -190,6 +192,18 @@ export function bindOperationWorkspace(socket: WebSocket): () => void {
         // No view reset: setRawText uses the original changesBetween/SourceDocument.
         session.setRawText(raw, 'review.accept');
         await session.save(raw);
+        result = { saved: true };
+      } else if (msg.kind === 'apply-file') {
+        const op = msg.args?.operation;
+        if (!op || typeof op.path !== 'string') throw new Error('无效的文件候选');
+        if (op.kind === 'create' && typeof op.content === 'string' && op.content.length <= 1024 * 1024) {
+          if (documents.get(op.path)) throw new Error('目标路径已有文档会话');
+          await workspace.createNote(op.path, op.content, false);
+        } else if (op.kind === 'rename' && typeof op.to === 'string' && typeof op.base_revision === 'string') {
+          const current = await api.read(op.path);
+          if (current.path !== op.path || current.revision !== op.base_revision) throw new Error('源笔记已改变');
+          await workspace.renamePath(op.path, op.to, op.base_revision);
+        } else throw new Error('无效的文件候选');
         result = { saved: true };
       } else throw new Error('不支持的工作区操作');
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'operations-response', id: msg.id, result }));

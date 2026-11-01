@@ -100,12 +100,15 @@ filesRouter.post(
 filesRouter.patch(
   '/rename',
   asyncHandler(async (req, res) => {
-    const { from, to } = req.body ?? {};
+    const { from, to, baseRevision } = req.body ?? {};
     if (typeof from !== 'string' || typeof to !== 'string') {
       res.status(400).json({ error: 'from and to required' });
       return;
     }
-    await vault.rename(from, to);
+    if (baseRevision !== undefined && typeof baseRevision !== 'string') {
+      res.status(400).json({ error: 'baseRevision must be a string' }); return;
+    }
+    await vault.rename(from, to, baseRevision);
     res.json({ ok: true, from, to });
   }),
 );

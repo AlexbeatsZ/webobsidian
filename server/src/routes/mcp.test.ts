@@ -12,7 +12,8 @@ afterEach(async () => {
 async function app() {
   const server = express(); server.use(requireLocal, express.json());
   server.post('/api/operations/call', (req, res) => res.json({ fixture: req.body }));
-  server.use('/mcp', mcpRouter);
+  server.use(mcpRouter);
+  server.get('*', (_req, res) => res.type('html').send('<!doctype html><title>SPA</title>'));
   listener = server.listen(0, '127.0.0.1');
   await new Promise<void>(resolve => listener!.once('listening', resolve));
   const url = `http://127.0.0.1:${(listener.address() as { port: number }).port}`;
@@ -32,6 +33,17 @@ describe('built-in Streamable HTTP MCP', () => {
     const read = await call('tools/call', { name: 'obsidian_read_file', arguments: { path: 'fixture.md' } });
     expect(read.result.structuredContent.fixture).toEqual({ name: 'obsidian_read_file',
       arguments: { path: 'fixture.md', start_line: 1, line_count: 200 } });
+  });
+  it('returns discovery 404 before SPA fallback without advertising OAuth', async () => {
+    const { url } = await app();
+    for (const route of ['/.well-known/oauth-protected-resource/mcp', '/.well-known/oauth-protected-resource',
+      '/.well-known/oauth-authorization-server', '/.well-known/oauth-authorization-server/mcp']) {
+      const response = await fetch(url + route);
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      expect(await response.json()).toEqual({ error: 'not_found' });
+    }
+    expect(await (await fetch(url + '/notes')).text()).toContain('<!doctype html>');
   });
   it('retains local access restrictions and rejects unsupported transports', async () => {
     const { url } = await app();
