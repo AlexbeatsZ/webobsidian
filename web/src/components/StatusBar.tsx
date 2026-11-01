@@ -8,6 +8,13 @@ import PluginElements from './PluginElements';
 import ViewModeMenu from './ViewModeMenu';
 import { pluginStatusItems } from '../lib/plugins';
 
+// CJK characters count individually, as Obsidian does; other scripts count by whitespace runs.
+const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/gu;
+function countWords(text: string): number {
+  const cjk = text.match(CJK)?.length ?? 0;
+  return cjk + text.replace(CJK, ' ').split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length;
+}
+
 export default function StatusBar() {
   const { path: activePath } = useActivePage();
   const { snapshot } = useDocumentSession(activePath && /\.(md|markdown|txt)$/i.test(activePath) ? activePath : null);
@@ -42,13 +49,13 @@ export default function StatusBar() {
   };
 
   const isText = activePath && /\.(md|markdown|txt)$/i.test(activePath);
-  const words = isText ? content.trim().split(/\s+/).filter(Boolean).length : 0;
+  const words = isText ? countWords(content) : 0;
 
   const gitLabel = !git?.isRepo
-    ? '未同步仓库'
+    ? '未启用 Git'
     : git.clean
       ? `git ${git.branch}${git.ahead ? ` ↑${git.ahead}` : ''}${git.behind ? ` ↓${git.behind}` : ''}`
-      : `${git.modified + git.notAdded} 未保存更改`;
+      : `${git.modified + git.notAdded} 项未提交`;
 
   return (
     <div className="status-bar">
@@ -57,10 +64,10 @@ export default function StatusBar() {
       {dirty && <span>保存中…</span>}
       {isText && <span>{words} 词</span>}
       {isText && <span>{content.length} 字符</span>}
-      <span className="clickable" title="Git 同步" onClick={sync}>
-        <Icon name="refresh-cw" size={13} style={syncing ? { animation: 'spin 1s linear infinite' } : undefined} />
+      <button type="button" className="clickable" title="Git 同步" disabled={syncing} onClick={sync}>
+        <Icon name="refresh-cw" size={13} className={syncing ? 'icon-spin' : undefined} />
         {gitLabel}
-      </span>
+      </button>
     </div>
   );
 }

@@ -26,6 +26,7 @@ import { notifyIndexChanged } from '../lib/indexEvents';
 import { documents } from '../lib/documents';
 import { workspaceMaintenanceBlockers } from '../lib/vaultMaintenance';
 import { SettingRow as Row, SettingGroup } from './SettingRow';
+import { useDialogEscape } from '../lib/useDialogEscape';
 import { documentAppearance, UiSettingsSchema, type UiSettings } from '../../../server/src/contracts/uiSettings';
 import { FilePlacementSchema, type FilePlacement } from '../../../server/src/contracts/filePlacement';
 
@@ -52,12 +53,7 @@ export default function Settings() {
     return () => window.removeEventListener('resize', center);
   }, [open]);
   const vaultName = useStore(s => s.tree?.name ?? 'Vault');
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) setOpen(false); };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
-  }, [open, setOpen]);
+  useDialogEscape(open, () => setOpen(false));
   useEffect(() => {
     if (!open) return;
     let live = true;

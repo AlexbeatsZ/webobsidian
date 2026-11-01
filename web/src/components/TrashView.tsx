@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
 import { api, type TrashItem } from '../lib/api';
 import Icon from './Icon';
+import { useDialogEscape } from '../lib/useDialogEscape';
 
 /** Trash browser (FR-1): list items moved to `.trash`, restore them, or delete
  *  them permanently. Items land here when delete mode is "Move to trash". */
@@ -27,6 +28,7 @@ export default function TrashView() {
   useEffect(() => {
     if (open) refresh();
   }, [open, refresh]);
+  useDialogEscape(open, () => close(false));
 
   if (!open) return null;
 
@@ -88,22 +90,22 @@ export default function TrashView() {
 
   return (
     <div className="modal-bg" onClick={() => close(false)}>
-      <div className="modal trash-view" onClick={(e) => e.stopPropagation()}>
+      <div className="modal trash-view" role="dialog" aria-modal="true" aria-labelledby="trash-title" onClick={(e) => e.stopPropagation()}>
         <div className="vh-head">
           <Icon name="trash" size={16} />
-          <div className="vh-title">回收站</div>
+          <div className="vh-title" id="trash-title">回收站</div>
           <div className="vh-path">{items.length} 项</div>
-          <button className="tool-btn" title="刷新" onClick={refresh}>
+          <button type="button" className="tool-btn" title="刷新" aria-label="刷新" onClick={refresh}>
             <Icon name="refresh-cw" size={16} />
           </button>
-          <button className="tool-btn" title="关闭" onClick={() => close(false)}>
+          <button type="button" className="tool-btn" title="关闭" aria-label="关闭" onClick={() => close(false)}>
             <Icon name="x" size={16} />
           </button>
         </div>
         <div className="trash-body">
-          {loading && <div className="vh-empty">加载中…</div>}
+          {loading && <div className="vh-empty" role="status">加载中…</div>}
           {!loading && items.length === 0 && (
-            <div className="vh-empty">回收站为空。</div>
+            <div className="vh-empty">回收站为空</div>
           )}
           {!loading &&
             items.map((it) => (
@@ -126,8 +128,10 @@ export default function TrashView() {
                   恢复
                 </button>
                 <button
+                  type="button"
                   className="tool-btn trash-del"
                   title="永久删除"
+                  aria-label={`永久删除 ${it.name}`}
                   disabled={busy}
                   onClick={() => remove(it)}
                 >

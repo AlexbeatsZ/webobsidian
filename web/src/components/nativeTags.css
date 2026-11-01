@@ -1,6 +1,8 @@
-.native-tags-backdrop { z-index: 1100; position: fixed; inset: 0; display: grid; place-items: center; background: #0007; padding: 24px; }
-.native-tags-dialog { background: var(--background-primary); color: var(--text-normal); border: 1px solid var(--background-modifier-border); border-radius: 10px; width: min(740px, 96vw); max-height: 90vh; overflow: auto; padding: 24px; box-shadow: 0 16px 60px #0005; }
-.native-tags-dialog h2 { margin: 0 0 12px; font-size: 1.2em; }
+.native-tags-backdrop { z-index: 1100; position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, .4); padding: 24px; }
+.native-tags-dialog { background: var(--background-primary); color: var(--text-normal); border: 1px solid var(--background-modifier-border); border-radius: 10px; width: min(740px, 96vw); max-height: 90vh; overflow: auto; padding: 24px; box-shadow: var(--shadow); }
+.native-tags-dialog h2 { margin: 0 0 12px; font: 600 16px/1.4 var(--font-ui); }
+.native-tags-dialog :is(input:not([type=checkbox]), select) { min-height: 30px; padding: 5px 9px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); background: var(--background-modifier-form-field); color: var(--text-normal); font: inherit; }
+.native-tags-dialog :is(input:not([type=checkbox]), select):focus-visible { outline: 1px solid var(--interactive-accent); outline-offset: 1px; }
 .native-tags-hint { color: var(--text-muted); line-height: 1.6; }
 .native-tags-fields { display: grid; gap: 12px; padding: 0; border: 0; }
 .native-tags-fields > label { display: grid; gap: 5px; }
@@ -27,4 +29,4 @@
 .native-tags-row .native-tags-label { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
 .native-tags-row .native-tags-count { color: var(--text-faint); padding-right: 4px; font-size: 11px; }
 .native-tags-fold { width: 20px; flex: 0 0 20px; }
-.native-tags-hover { position: fixed; z-index: 1000; width: min(440px, 80vw); max-height: 320px; overflow: auto; padding: 14px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; box-shadow: 0 8px 30px #0004; }
+.native-tags-hover { position: fixed; z-index: 1000; width: min(440px, 80vw); max-height: 320px; overflow: auto; padding: 14px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; box-shadow: var(--shadow); }

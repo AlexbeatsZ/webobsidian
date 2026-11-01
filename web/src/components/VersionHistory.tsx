@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
 import { api, type GitCommit } from '../lib/api';
 import Icon from './Icon';
+import { useDialogEscape } from '../lib/useDialogEscape';
 
 /** Git-backed version history for a single note (PRD FR-4 / FR-7). Lists the
  *  commits that touched the file and lets you preview/restore an older version. */
@@ -42,6 +43,7 @@ export default function VersionHistory() {
       .catch(() => setPreview('（无法加载此版本）'));
   }, [path, selected]);
 
+  useDialogEscape(!!path, () => close(null));
   if (!path) return null;
 
   const restore = async () => {
@@ -64,21 +66,21 @@ export default function VersionHistory() {
 
   return (
     <div className="modal-bg" onClick={() => close(null)}>
-      <div className="modal version-history" onClick={(e) => e.stopPropagation()}>
+      <div className="modal version-history" role="dialog" aria-modal="true" aria-labelledby="version-history-title" onClick={(e) => e.stopPropagation()}>
         <div className="vh-head">
           <Icon name="clock" size={16} />
-          <div className="vh-title">版本历史</div>
+          <div className="vh-title" id="version-history-title">版本历史</div>
           <div className="vh-path">{path}</div>
-          <button className="tool-btn" title="关闭" onClick={() => close(null)}>
+          <button type="button" className="tool-btn" title="关闭" aria-label="关闭" onClick={() => close(null)}>
             <Icon name="x" size={16} />
           </button>
         </div>
         <div className="vh-body">
           <div className="vh-list">
-            {loading && <div className="vh-empty">加载中…</div>}
-            {error && <div className="vh-empty">{error}</div>}
+            {loading && <div className="vh-empty" role="status">加载中…</div>}
+            {error && <div className="vh-empty editor-error" role="alert">{error}</div>}
             {!loading && !error && commits.length === 0 && (
-              <div className="vh-empty">暂无历史记录。启用 Git Sync 以跟踪版本。</div>
+              <div className="vh-empty">暂无历史记录。启用 Git 备份后可跟踪版本。</div>
             )}
             {commits.map((c, i) => (
               <div
@@ -87,7 +89,7 @@ export default function VersionHistory() {
                 onClick={() => setSelected(c.hash)}
               >
                 <div className="vh-item-msg">
-                  {i === 0 ? "最新" : c.message || "(无说明)"}
+                  {i === 0 && <span className="vh-latest">最新</span>}{c.message || "(无说明)"}
                 </div>
                 <div className="vh-item-meta">
                   {fmtDate(c.date)} · {c.author}

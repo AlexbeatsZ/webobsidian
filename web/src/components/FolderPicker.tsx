@@ -114,9 +114,10 @@ export default function FolderPicker() {
 
   return (
     <div className="modal-bg" onClick={() => setMovePath(null)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="移动到文件夹" onClick={(e) => e.stopPropagation()}>
         <input
           className="palette-input"
+          aria-label="文件夹名称"
           placeholder={froms.length > 1 ? `移动 ${froms.length} 项至哪个文件夹？` : "输入文件夹名称"}
           autoFocus
           value={q}
@@ -142,7 +143,7 @@ export default function FolderPicker() {
               <span className="kbd">⇧↵</span>
             </div>
           )}
-          {matches.length === 0 && !canCreate && <div className="palette-item">无文件夹</div>}
+          {matches.length === 0 && !canCreate && <div className="palette-empty">无文件夹</div>}
         </div>
         <div className="palette-footer">
           <span>

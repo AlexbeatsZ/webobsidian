@@ -77,6 +77,21 @@ and fieldset-disabled controls; focus-visible uses the shared accent outline.
 Tag and prompt dialogs and formula retry actions reuse these classes rather than
 leaving ordinary buttons to the platform appearance.
 
+### Shared chrome consistency (2026-11-01)
+
+Status colors come from theme tokens: --text-error / --text-success /
+--text-warning are defined per theme from --color-red/green/orange; components
+do not carry their own hex fallbacks. Settings fields keep one look: inside
+.settings-content a .text-input follows the settings field style, direct row
+text/select controls are 260px and number fields 90px, so pages do not set inline
+widths. Sidebar loading/empty/error text uses .panel-empty (never the clickable
+.panel-item); errors add role="alert". Small sidebar icon actions use .nav-action,
+which also owns disabled, pressed and focus-visible states. Modal dialogs declare
+role="dialog" with aria-modal and a label, and close on Escape through
+lib/useDialogEscape.ts unless an inner control already handled the key.
+Every icon name used by native UI must exist in lib/icons.ts; an unknown name
+silently falls back to the file glyph.
+
 Toolbar/icon actions keep the existing .tool-btn family, including plugin search
 clear and ItemView actions. Ordinary settings rules exclude that family. Ribbon,
 tab, navigation, menu, table-handle, source-control and content-tree buttons keep

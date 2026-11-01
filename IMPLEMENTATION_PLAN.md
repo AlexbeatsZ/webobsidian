@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-01 (PRD 1.16 aligned with native scope)
+Cập nhật lần cuối: 2026-11-01 (UI consistency review)
 
 ## PRD alignment (PRD 1.16)
 
@@ -539,6 +539,8 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-01 (UI consistency): theme status tokens, sidebar empty/error rows, settings field widths, missing icons/classes and
+  dialog Escape/semantics unified; types, 500 unit tests and related renderer specs checked (pdf-toolbar:228 pre-existing).
 - 2026-11-01 (PRD 1.16): PRD 与现状对齐——删除登录/分享/深链/Agent REST API/Docker/插件在线安装描述，
   改为本地访问控制、原生文件同步 + Git 备份、MCP、Android 和当前桌面打包；新增 FR-14/15/16。仅文档修改。
 - 2026-10-18 (FR-13 compact desktop title bar): implemented a single Windows/Linux menu row
