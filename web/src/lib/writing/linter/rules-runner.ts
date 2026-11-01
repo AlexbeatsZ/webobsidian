@@ -25,6 +25,7 @@ import YamlTitle from './rules/yaml-title';
 import YamlTitleAlias from './rules/yaml-title-alias';
 import BlockquoteStyle from './rules/blockquote-style';
 import {IgnoreTypes, ignoreListOfTypes} from './utils/ignore-types';
+import {protectFormulaDollars} from '../analysis';
 import MoveMathBlockIndicatorsToOwnLine from './rules/move-math-block-indicators-to-own-line';
 import {LinterSettings} from './settings-data';
 import TrailingSpaces from './rules/trailing-spaces';
@@ -239,6 +240,8 @@ export class RulesRunner {
     return ignoreListOfTypes([IgnoreTypes.customIgnore], oldText, (text: string) => {
       logDebug(getTextInLanguage('logs.running-custom-regex'));
 
+      const formulas = protectFormulaDollars(text);
+      text = formulas.text;
       let newText = text;
       let initialText = text;
       for (const eachRegex of customRegexes) {
@@ -266,7 +269,7 @@ export class RulesRunner {
         initialText = newText;
       }
 
-      return newText;
+      return formulas.restore(newText);
     });
   }
 

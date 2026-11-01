@@ -19,6 +19,21 @@ describe('shared formula source and history', () => {
     expect(regions[1].tex).toBe('\\ce{A <=>[$k_+$][$k_-$] B}');
     expect(formulaAt(regions, regions[0].bodyFrom)?.tex).toBe('x');
   });
+  it('keeps braced internal dollars inside inline formulas', () => {
+    const regions = mathRegions(analyzeMarkdown('rate $\\ce{A <=>[$k_1$][$k_{-1}$] B}$ and $y$'));
+    expect(regions.map((r) => r.tex)).toEqual(['\\ce{A <=>[$k_1$][$k_{-1}$] B}', 'y']);
+    expect(regions[0].closed).toBe(true);
+    // Escaped or unbalanced braces keep the ordinary first closer.
+    expect(mathRegions(analyzeMarkdown('$a\\{b$ and $c$')).map((r) => r.tex)).toEqual(['a\\{b', 'c']);
+    expect(mathRegions(analyzeMarkdown('$a{b$ text')).map((r) => [r.tex, r.closed])).toEqual([['a{b', true]]);
+    expect(mathRegions(analyzeMarkdown('$$\\ce{A ->[$$x$$] B}$$')).map((r) => r.tex)).toEqual(['\\ce{A ->[$$x$$] B}']);
+  });
+  it('rescans formulas when a brace edit changes their closer', () => {
+    const original = analyzeMarkdown('$\\ce{A <=>[$k$] B$');
+    expect(mathRegions(original)[0].tex).toBe('\\ce{A <=>[');
+    const next = updateMarkdown(original, '$\\ce{A <=>[$k$] B}$', [{ fromA: 17, toA: 17, fromB: 17, toB: 18 }]);
+    expect(mathRegions(next).map((r) => r.tex)).toEqual(['\\ce{A <=>[$k$] B}']);
+  });
   it('retains quote source positions while presenting logical TeX', () => {
     const source = '> $$\n> \\frac{a}{b}\n> $$';
     const [region] = mathRegions(analyzeMarkdown(source));

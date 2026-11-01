@@ -155,3 +155,25 @@ test('tall inline math and long TeX retain their natural height and source', asy
   await page.evaluate(() => window.renderHarness.undo(0));
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
 });
+
+test('mhchem arguments with internal dollars render as one inline formula', async ({ page }) => {
+  const tex = String.raw`\ce{A <=>[$k_1$][$k_{-1}$] B}`;
+  const source = `前文位置\n\n反应$${tex}$达到平衡,$x$为转化率\n\n后文位置`;
+  await page.goto('/__render-test'); await page.waitForFunction(() => Boolean(window.renderHarness));
+  await page.evaluate(s => window.renderHarness.reset(s), source);
+  await expect(page.locator('[data-slot="0"] .cm-content')).toContainText('后文位置');
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  for (const mode of ['live', 'reading'] as const) {
+    await page.evaluate(mode => window.renderHarness.mode(0, mode), mode);
+    await expect(page.locator('[data-slot="0"] .math-inline')).toHaveCount(2);
+    await expect(page.locator('[data-render-pending]')).toHaveCount(0);
+    await expect(page.locator('[data-slot="0"] .math-inline').first().locator('svg').first()).toBeVisible();
+    await expect(page.locator('[data-slot="0"]').getByLabel(tex, { exact: true })).toHaveCount(1);
+    await expect(page.locator('[data-slot="0"] [data-mjx-error], [data-slot="0"] mjx-merror')).toHaveCount(0);
+    await expect(page.locator('[data-slot="0"] .cm-line', { hasText: '反应' })).not.toContainText('k_1');
+  }
+  await page.evaluate(() => window.renderHarness.mode(0, 'live'));
+  await page.evaluate(pos => window.renderHarness.cursor(0, pos), source.indexOf(tex) + 3);
+  await expect(page.locator('[data-slot="0"] .cm-math')).toContainText(tex);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
+});

@@ -20,6 +20,21 @@ describe('native formatting compatibility', () => {
     expect(once).toContain('\\ce{A <=>[$k_+$][$k_-$] B}');
     expect(once).toContain('text,test.');
     expect(formatText(once, 'notes/example.md', {}, settings, now)).toBe(once);
+    const inline = '# Example\n\n反应$\\ce{A <=>[$k_1$][$k_{-1}$] B}$，速率常数。\n';
+    const formatted = formatText(inline, 'notes/example.md', {}, settings, now);
+    expect(formatted).toContain('$\\ce{A <=>[$k_1$][$k_{-1}$] B}$');
+    expect(formatText(formatted, 'notes/example.md', {}, settings, now)).toBe(formatted);
+  });
+  it('keeps formula-internal dollars out of custom delimiter replacements', () => {
+    const settings = compileFormattingSettings({
+      customRegexes: [
+        { enabled: true, find: '(?<!\\$)(- |# |. |> |\\+ )? *\\$ *([^$]+?) *\\$ *(?!\\$)', replace: '[[0]]$[[1]]$', flags: 'gm' },
+      ],
+    });
+    const source = '反应 $\\ce{A <=>[$ k_1$][$k_{-1} $] B}$ 成立，$x$ 也是';
+    const formatted = formatText(source, 'x.md', {}, settings, now);
+    expect(formatted).toContain('$\\ce{A <=>[$ k_1$][$k_{-1} $] B}$');
+    expect(formatted).toBe(formatText('反应 $\\ce{AB}$ 成立，$x$ 也是', 'x.md', {}, settings, now).replace('AB', 'A <=>[$ k_1$][$k_{-1} $] B'));
   });
   it('shares LaTeX replacements and inserts tabstop defaults without interactive state', () => {
     const settings = compileFormattingSettings({

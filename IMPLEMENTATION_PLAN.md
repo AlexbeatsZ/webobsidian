@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-01 (PRD 1.22 dropping a tab into the split group swaps places)
+Cập nhật lần cuối: 2026-11-01 (inline mhchem internal dollars in math regions and formatter)
 
 ## Split tab group (PRD 1.18)
 - [x] 分屏时标签栏显示两栏的分屏组，点击聚焦对应栏
@@ -558,6 +558,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-01: 行内公式兼容 mhchem 参数内的 `$`(`$\ce{A <=>[$k_1$][$k_{-1}$] B}$`)，花括号内的 `$` 不再闭合公式；格式化自定义正则运行时遮蔽公式内部 `$`。单元 503/503、Edge 公式规格 37/37。
 - 2026-11-01 (PRD 1.22): 拖入分屏组改为交换位置([A,B],C 拖 C 到 B → [A,C],B)，组内标签可作落点，组员互拖交换两栏；split-editing 41/41、单元 500/500。
 - 2026-11-01 (PRD 1.21): 分屏时 + / new-tab 单独显示新 Homepage、暂存分屏组(不再替换组内一栏)；split-editing 40/40、单元 498/498。
 - 2026-11-01 (PRD 1.20): 名称选择器匹配与排序改用上游 fuzzy-chinese 的 DP 与评分(`rlx` 先出"热力学…",不再被英文长名跳跃命中压过);search-core 11/11、单元 499/500(git 备份测试并发超时,单独重跑 5/5)。

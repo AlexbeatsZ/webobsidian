@@ -117,6 +117,16 @@ snippet expansion, TeX highlighting and preview update immediately without Enter
 No placeholder is inserted into source. Five or more contiguous dollars remain
 invalid, and the four-dollar pair cannot consume following prose or formulas.
 
+Dollar closers are searched like MathJax's own delimiter search: a candidate
+inside unescaped TeX braces belongs to an argument, so inline
+`$\ce{A <=>[$k_1$][$k_{-1}$] B}$` is one formula (display already was). When no
+depth-0 closer exists, the first ordinary closer is used, so a stray `{` cannot
+swallow the rest of the line or document. Brace edits invalidate the incremental
+region mapping. Formatter custom replacements are plain regexes over delimiters
+and are not formula-excluded; while they run, dollars inside closed formula
+bodies are temporarily masked (`protectFormulaDollars`) so user delimiter rules
+such as `\$ *([^$]+?) *\$` cannot pair or trim mhchem internals.
+
 Display and multiline formulas preview within the document below their source.
 Only inline formulas use a tooltip. Both hosts call `mathPreviewTex` and the same
 `renderMath` queue with source-order definition context and transient output.

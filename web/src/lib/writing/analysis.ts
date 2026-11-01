@@ -146,3 +146,23 @@ export function markdownAst(text: string): Node {
   trees.set(model, root);
   return root;
 }
+
+const innerDollar = '\uE024';
+/**
+ * Custom replacements are plain regexes over delimiters. Hide dollars owned by
+ * a formula body (mhchem `\ce{A ->[$k$] B}`) so they cannot pair as delimiters.
+ */
+export function protectFormulaDollars(text: string): { text: string; restore(value: string): string } {
+  if (text.includes(innerDollar)) return { text, restore: (value) => value };
+  let result = '',
+    last = 0;
+  for (const r of mathRegions(writingModel(text)))
+    if (r.closed && r.kind === 'dollar')
+      for (let p = r.bodyFrom; p < r.bodyTo; p++)
+        if (text[p] === '$') {
+          result += text.slice(last, p) + innerDollar;
+          last = p + 1;
+        }
+  if (!last) return { text, restore: (value) => value };
+  return { text: result + text.slice(last), restore: (value) => value.replaceAll(innerDollar, '$') };
+}

@@ -34,7 +34,7 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
   const old = previous && cache.get(previous)?.get(key);
   if (predecessor && previous && old && old.every((r) => r.closed)) {
     const changes = predecessor.changes;
-    const boundary = /[$\\\r\n`~<>%#]/;
+    const boundary = /[$\\\r\n`~<>%#{}]/;
     const protectedRanges = [...old, ...previous.literal, ...previous.htmlBlocks, ...previous.html];
     const harmless = changes.every(
       (c) =>
@@ -216,9 +216,18 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
     const from = p,
       bodyFrom = p + width;
     let end = bodyFrom,
-      closed = false;
+      closed = false,
+      depth = 0,
+      // Like MathJax's own delimiter search, a closer inside TeX braces belongs
+      // to an argument (mhchem `\ce{A <=>[$k_1$] B}`). Unbalanced braces fall
+      // back to the first valid closer so a stray `{` cannot swallow text.
+      fallback = -1;
     for (; end < text.length; end++) {
       if (!display && text[end] === '\n') break;
+      if ((text[end] === '{' || text[end] === '}') && !isEscaped(text, end)) {
+        depth = Math.max(0, depth + (text[end] === '{' ? 1 : -1));
+        continue;
+      }
       if (display && text[end] === '\n' && /^\n(?: {0,3}> ?)*#{1,7}\s/.test(text.slice(end))) {
         // A heading-shaped TeX line is allowed in a properly delimited block.
         // Do not consume the next section's single-line display as its closer.
@@ -235,9 +244,18 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
           ? text[end + 1] === '$' && text[end + 2] !== '$'
           : text[end + 1] !== '$' && !/\d/.test(text[end + 1] ?? '') && !/\s/.test(text[end - 1] ?? '')
       ) {
+        if (depth) {
+          if (fallback < 0) fallback = end;
+          if (display) end++;
+          continue;
+        }
         closed = true;
         break;
       }
+    }
+    if (!closed && fallback >= 0) {
+      end = fallback;
+      closed = true;
     }
     const to = closed ? end + width : end;
     const lineFrom = text.lastIndexOf('\n', from - 1) + 1;
