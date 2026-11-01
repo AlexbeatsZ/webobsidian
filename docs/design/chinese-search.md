@@ -4,7 +4,8 @@
 
 Chinese search is a core feature. Full spelling, initials, mixed Chinese/Latin
 queries and polyphonic characters use `packages/search-core`; names permit gaps,
-body matches are continuous. Only the simplified reading table ships; the
+body matches are continuous. Name matching and ranking follow fuzzy-chinese
+(see [palette-search.md](palette-search.md#name-matching-and-ranking-2026-11-01-prd-120)). Only the simplified reading table ships; the
 traditional table and its setting were removed on 2026-11-01. Explicit
 fuzzy-sound rules are a setting. Russian transliteration, shuangpin, Hover Editor and `linkText`
 are excluded. There is no extra ribbon button or plugin search modal.

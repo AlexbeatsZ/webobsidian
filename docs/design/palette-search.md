@@ -53,13 +53,30 @@ below 1 ms for later keys. An old/new comparison over 1,202,400 matcher calls
 (including pinyin-disabled and fuzzy-rule settings in both cache orders) found no
 output difference.
 
-Reference: lazyloong/obsidian-fuzzy-chinese 2.29.6 uses the same ideas — per-item
-precomputed readings with letter/start masks, a start-character inverted index, a
-per-keystroke history chain and a two-row DP with early exit. Its DP and scoring
-differ from this matcher (single gap-tolerant pass, different ranking), so it was
-used as a reference only; adopting it would change results. Its optional lazy path
-search (only when title matches are few) is also not adopted, because path
-matching here is an explicit setting/filter.
+## Name matching and ranking (2026-11-01, PRD 1.20)
+
+`matchText` (every name picker: files, commands, headings, folders, completion,
+plugin `prepareFuzzySearch`) is a port of lazyloong/obsidian-fuzzy-chinese
+`Pinyin.matchAboveStart` + `getScore`. The previous matcher ranked any literal
+gap match above any pinyin match, so `rlx` put `fudan-vpn-docke**r**-c**l**ash-…-pro**x**y`
+above `热力学…`; the user judged upstream's order better and asked for its logic.
+
+- Match: two-row DP over UTF-16 units of the lowercased name. Each unit consumes
+  the literal query character, a reading initial, a `zh`/`ch`/`sh` initial, or a
+  whole reading; the last unit may consume a prefix of a reading (≤6 letters).
+  Units may be skipped. Fuzzy-sound rules expand readings; pinyin disabled leaves
+  literal characters only. Whitespace in the query is ignored.
+- Score (higher wins): `100·coverage²` (matched units / name length) +
+  `15/√(first+1)` + `25/segments` + `5·(len−1)` per continuous segment.
+- `kind` is `pinyin` if any unit matched through a reading.
+- The letter/start-mask prefilter and the prefix narrowing cache stay valid: the
+  DP is monotone in the query and needs the same reachable letters.
+- Body search (`findText`, server) is unchanged.
+
+Measured with 6,500 synthetic Chinese names: a full scan costs about 6–8 ms per
+key; narrowing makes later keys cheaper. Upstream's lazy path search (only when
+title matches are few) is not adopted, because path matching here is an
+explicit setting/filter.
 
 ## One query grammar
 

@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.19 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Phiên bản: 1.20 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Changelog 1.20 (选择器排序回到上游插件逻辑): 用户反馈快速切换器排序不如原 fuzzy-chinese 插件——`rlx`
+> 会把隔字跳跃命中的英文长文件名排在"热力学…"前面(旧算法字面匹配恒高于拼音匹配)。所有名称选择器
+> (文件/命令/标题/文件夹/补全)改用 lazyloong/obsidian-fuzzy-chinese 的逐字 DP 匹配(字符、声母、zh/ch/sh、
+> 全拼、末音节前缀,允许跳字)与评分(覆盖率² + 靠前 + 段数少 + 连续段长)。正文搜索不变。
 > Changelog 1.19 (分屏组是一个整体标签): 修正 1.18 的组外标签行为。分屏组 [A,B] 相当于浏览器里的一个标签:
 > 点击组外标签 C 时单独显示 C,[A,B] 作为暂存组(`parkedSplit`,随工作区持久化)留在标签栏;再点 A 或 B 恢复整组分屏
 > 并聚焦所点成员。从其他入口在主栏打开暂存组成员同样恢复整组。关闭暂存组的成员会解散该组,另一页保留为普通标签。

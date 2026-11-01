@@ -2,7 +2,6 @@ import simplified from './simplified.js';
 export * from './query.js';
 export * from './hotkeys.js';
 export { prepareQuery, type PreparedQuery } from './literal.js';
-import { prepareQuery, fuzzySearch as literalFuzzy } from './literal.js';
 
 export interface SearchOptions {
   enabled?: boolean;
@@ -47,6 +46,7 @@ const readings = simplified as Record<string, string[]>;
 /** Pronunciation forms of one character under one fuzzy-rule set. */
 interface FormTable {
   forms: Map<string, readonly string[]>;
+  readings: Map<string, readonly string[]>;
   /** a–z letters reachable from a text, and those that can start a match. */
   masks: Map<string, { letters: number; starts: number }>;
 }
@@ -58,7 +58,7 @@ function tableFor(options: SearchOptions): FormTable {
   let table = tables.get(key);
   if (!table) {
     if (tables.size >= 16) tables.clear();
-    table = { forms: new Map(), masks: new Map() };
+    table = { forms: new Map(), readings: new Map(), masks: new Map() };
     tables.set(key, table);
   }
   return table;
@@ -68,23 +68,34 @@ function forms(char: string, options: SearchOptions, table = tableFor(options)):
   const old = table.forms.get(char);
   if (old) return old;
   const values = new Set([char]);
-  for (const reading of readings[char] ?? []) {
-    const variants = new Set([reading]);
-    for (const [a, b] of options.fuzzyRules ?? []) {
-      if (!a || !b) continue;
-      if (reading.startsWith(a)) variants.add(b + reading.slice(a.length));
-      if (reading.startsWith(b)) variants.add(a + reading.slice(b.length));
-      if (reading.endsWith(a)) variants.add(reading.slice(0, -a.length) + b);
-      if (reading.endsWith(b)) variants.add(reading.slice(0, -b.length) + a);
-    }
-    for (const value of variants) {
-      values.add(value);
-      values.add(value[0]);
-    }
+  for (const value of readingsOf(char, options, table)) {
+    values.add(value);
+    values.add(value[0]);
   }
   if (table.forms.size >= 16384) table.forms.clear();
   const result = [...values];
   table.forms.set(char, result);
+  return result;
+}
+/** Readings of one character with fuzzy-sound variants (no character or initial forms). */
+function readingsOf(char: string, options: SearchOptions, table: FormTable): readonly string[] {
+  if (options.enabled === false) return [];
+  const old = table.readings.get(char);
+  if (old) return old;
+  const values = new Set<string>();
+  for (const reading of readings[char] ?? []) {
+    values.add(reading);
+    for (const [a, b] of options.fuzzyRules ?? []) {
+      if (!a || !b) continue;
+      if (reading.startsWith(a)) values.add(b + reading.slice(a.length));
+      if (reading.startsWith(b)) values.add(a + reading.slice(b.length));
+      if (reading.endsWith(a)) values.add(reading.slice(0, -a.length) + b);
+      if (reading.endsWith(b)) values.add(reading.slice(0, -b.length) + a);
+    }
+  }
+  if (table.readings.size >= 16384) table.readings.clear();
+  const result = [...values];
+  table.readings.set(char, result);
   return result;
 }
 
@@ -205,14 +216,108 @@ export function findText(
   return output;
 }
 
+/** Longest syllable; the last syllable may be typed as a prefix of a reading. */
+const MAX_READING = 6;
+interface Step {
+  /** Matched text units so far. */
+  len: number;
+  index: number;
+  pinyin: boolean;
+  prev: Step | null;
+}
+const START: Step = Object.freeze({ len: 0, index: -1, pinyin: false, prev: null });
+
+/**
+ * Name matching ported from lazyloong/obsidian-fuzzy-chinese (`Pinyin.matchAboveStart`,
+ * based on zh-lx's work): a two-row DP over text units where each unit consumes the
+ * literal character, a reading initial, a zh/ch/sh initial or a whole reading, and the
+ * final unit may consume a reading prefix. Text units may be skipped.
+ */
+function matchUnits(query: string, text: string, options: SearchOptions, table: FormTable): Step | null {
+  const n = text.length,
+    m = query.length;
+  const tails: string[] = new Array(m);
+  for (let at = Math.max(0, m - 1 - MAX_READING); at < m; at++) tails[at] = query.slice(at);
+  let prevRow: (Step | null)[] = new Array(m + 1).fill(null);
+  let currRow: (Step | null)[] = new Array(m + 1).fill(null);
+  prevRow[0] = START;
+  let prevMax = 0;
+  const put = (j: number, step: Step) => {
+    const cur = currRow[j];
+    if (cur === null || step.len > cur.len) currRow[j] = step;
+  };
+  for (let i = 0; i < n; i++) {
+    currRow[0] = START;
+    for (let j = 1; j <= m; j++) currRow[j - 1] = prevRow[j - 1];
+    currRow[m] = null;
+    let nextMax = prevMax < m ? prevMax : m - 1;
+    const ch = text[i];
+    const sounds = readingsOf(ch, options, table);
+    const jEnd = prevMax + 1 < m ? prevMax + 1 : m;
+    for (let j = 1; j <= jEnd; j++) {
+      const prev = prevRow[j - 1];
+      if (prev === null || (j !== 1 && prev.len === 0)) continue;
+      const qj = query[j - 1];
+      if (ch === qj) {
+        const step = { len: prev.len + 1, index: i, pinyin: prev.pinyin, prev };
+        if (j === m) return step;
+        put(j, step);
+        if (j > nextMax) nextMax = j;
+      }
+      if (!sounds.length) continue;
+      const step = { len: prev.len + 1, index: i, pinyin: true, prev };
+      if (m - j <= MAX_READING && sounds.some((reading) => reading.startsWith(tails[j - 1]))) return step;
+      if (sounds.some((reading) => reading[0] === qj)) {
+        put(j, step);
+        if (j > nextMax) nextMax = j;
+      }
+      if (j < m && (qj === 'z' || qj === 'c' || qj === 's') && query[j] === 'h'
+        && sounds.some((reading) => reading[0] === qj && reading[1] === 'h')) {
+        put(j + 1, step);
+        if (j + 1 > nextMax) nextMax = j + 1;
+      }
+      for (const reading of sounds)
+        if (query.startsWith(reading, j - 1)) {
+          const end = j - 1 + reading.length;
+          put(end, step);
+          if (end > nextMax) nextMax = end;
+        }
+    }
+    [prevRow, currRow] = [currRow, prevRow];
+    prevMax = nextMax;
+  }
+  return null;
+}
+
+/**
+ * Upstream ranking: squared coverage of the name dominates, then an early first match,
+ * fewer segments and longer continuous segments. Ranges are inclusive unit indexes.
+ */
+function nameScore(ranges: [number, number][], length: number): number {
+  const coverage = ranges.reduce((sum, [a, b]) => sum + b - a + 1, 0) / length;
+  let score = 100 * coverage * coverage + 15 / Math.sqrt(ranges[0][0] + 1) + 25 / ranges.length;
+  for (const [a, b] of ranges) if (b > a) score += 5 * (b - a);
+  return score;
+}
+
 export function matchText(query: string, text: string, options: SearchOptions = {}): TextMatch | null {
-  if (!query.trim()) return { score: 0, matches: [], kind: 'literal' };
-  if (!reachable(query.toLowerCase().replace(/\s+/g, ''), text, options, tableFor(options))) return null;
-  const literal = literalFuzzy(prepareQuery(query), text);
-  if (literal) return { ...literal, score: literal.score / (1 + Math.abs(literal.score)), kind: 'literal' };
-  return options.enabled === false
-    ? null
-    : (findText(query, text, options, true)[0] ?? findText(query, text, options, true, true)[0] ?? null);
+  const q = (options.caseSensitive ? query : query.toLowerCase()).replace(/\s+/g, '');
+  if (!q) return { score: 0, matches: [], kind: 'literal' };
+  const table = tableFor(options);
+  if (!reachable(q, text, options, table)) return null;
+  const end = matchUnits(q, options.caseSensitive ? text : text.toLowerCase(), options, table);
+  if (!end) return null;
+  const ranges: [number, number][] = [];
+  for (let step: Step | null = end; step && step.len > 0; step = step.prev) {
+    const last = ranges[0];
+    if (last && last[0] === step.index + 1) last[0] = step.index;
+    else ranges.unshift([step.index, step.index]);
+  }
+  return {
+    score: nameScore(ranges, text.length),
+    matches: ranges.map(([a, b]) => [a, b + 1]),
+    kind: end.pinyin ? 'pinyin' : 'literal',
+  };
 }
 export function matchPath(query: string, path: string, options: SearchOptions = {}): TextMatch | null {
   const offset = path.lastIndexOf('/') + 1;

@@ -29,4 +29,28 @@ describe('shared Chinese search contract', () => {
   it('applies explicitly requested fuzzy sounds', () => {
     expect(findText('zong', '中', { fuzzyRules: [['zh', 'z']] }).length).toBeGreaterThan(0);
   });
+  it('ranks names like fuzzy-chinese: coverage and early continuous matches first', () => {
+    const names = [
+      'fudan-vpn-docker-clash-wsl-proxy-diagnosis',
+      '热力学中所有偏微分的求解',
+      '热力学势的讨论',
+      'RNA的结构、转录与代谢',
+    ];
+    const ranked = names
+      .map((name) => ({ name, match: matchText('rlx', name) }))
+      .filter((item) => item.match)
+      .sort((a, b) => b.match!.score - a.match!.score)
+      .map((item) => item.name);
+    expect(ranked.slice(0, 2)).toEqual(['热力学势的讨论', '热力学中所有偏微分的求解']);
+    expect(ranked.at(-1)).toBe('fudan-vpn-docker-clash-wsl-proxy-diagnosis');
+    expect(matchText('rlx', '热力学势的讨论')?.matches).toEqual([[0, 3]]);
+  });
+  it('matches full readings, zh/ch/sh initials, a trailing reading prefix and single-letter readings', () => {
+    expect(matchText('relixue', '热力学')?.matches).toEqual([[0, 3]]);
+    expect(matchText('zhs', '张三')?.matches).toEqual([[0, 2]]);
+    expect(matchText('zhangs', '张三')?.kind).toBe('pinyin');
+    expect(matchText('rel', '热力学')?.matches).toEqual([[0, 2]]);
+    expect(matchText('ae', '啊额')?.matches).toEqual([[0, 2]]);
+    expect(matchText('rlx', '热力学', { enabled: false })).toBeNull();
+  });
 });
