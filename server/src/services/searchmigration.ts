@@ -24,8 +24,6 @@ export async function migrateSearchSettings() {
     if (legacy) {
       const global = legacy.global ?? {},
         file = legacy.file ?? {};
-      if (typeof global.traditionalChineseSupport === 'boolean')
-        next.traditional = global.traditionalChineseSupport;
       if (typeof file.usePathToSearch === 'boolean') next.usePath = file.usePathToSearch;
       if (typeof file.showAttachments === 'boolean') next.attachments = file.showAttachments;
       if (typeof file.showTags === 'boolean') next.showTags = file.showTags;

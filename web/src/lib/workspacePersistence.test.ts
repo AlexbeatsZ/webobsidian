@@ -194,11 +194,8 @@ describe('dirty exit save barrier', () => {
     expect(first.snapshot.dirty).toBe(true);
   });
 
-  it('retains the window when Canvas drafts or other writes remain pending', async () => {
+  it('retains the window when writes remain pending', async () => {
     await workspace.useStore.getState().loadUiState();
-    workspace.useStore.setState({ pendingCanvasEdits: 1 });
-    await expect(workspace.saveWorkspaceBeforeExit()).rejects.toThrow('Canvas');
-    workspace.useStore.setState({ pendingCanvasEdits: 0 });
     host.mutations = 1;
     await expect(workspace.saveWorkspaceBeforeExit()).rejects.toThrow('写入请求');
   });

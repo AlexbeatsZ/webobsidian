@@ -16,7 +16,7 @@ export interface CleanupResult {
 export type CleanupRequest = <T>(url: string, options?: RequestInit) => Promise<T>;
 export interface CleanupDialogHost {
   request: CleanupRequest;
-  /** All DocumentRegistry sessions + Canvas buffers, conflicts and pending writes. */
+  /** All DocumentRegistry sessions, conflicts and pending writes. */
   getBlockers(): string[];
   subscribeSafety(changed: () => void): () => void;
   openTrash(): void;

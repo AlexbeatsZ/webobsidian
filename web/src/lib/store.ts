@@ -129,7 +129,6 @@ interface AppState {
   content: string;
   dirty: boolean;
   vaultSessionStale: boolean;
-  pendingCanvasEdits: number;
   viewMode: ViewMode;
   setViewMode: (m: ViewMode) => void;
   pdfToolbarOpen: boolean;
@@ -241,8 +240,6 @@ interface AppState {
   newNote: (dir?: string) => Promise<void>;
   /** Obsidian-style: create a fresh "Untitled" folder (no prompt) and start inline-renaming it. */
   newFolder: (dir?: string) => Promise<void>;
-  /** Obsidian-style: create & open a fresh "Untitled.canvas" (empty JSON Canvas). `dir` = target folder. */
-  newCanvas: (dir?: string) => Promise<void>;
   /** Tree path currently being inline-renamed (null = none); FileTree shows an input for it. */
   renamingPath: string | null;
   setRenamingPath: (path: string | null) => void;
@@ -427,7 +424,6 @@ export async function flushWorkspaceState(): Promise<void> {
 }
 
 export async function saveWorkspaceBeforeExit(): Promise<void> {
-  if (useStore.getState().pendingCanvasEdits) throw new Error('请先完成 Canvas 卡片或连线编辑');
   await documents.pathsSettled();
   for (const snapshot of documents.snapshots()) {
     if (!snapshot.dirty && !snapshot.saving && !snapshot.conflict && !snapshot.locked) continue;
@@ -436,7 +432,7 @@ export async function saveWorkspaceBeforeExit(): Promise<void> {
   }
   await flushWorkspaceState();
   const state = useStore.getState();
-  if (state.pendingCanvasEdits || state.dirty || workspaceHasUnsavedChanges() || pendingMutations() ||
+  if (state.dirty || workspaceHasUnsavedChanges() || pendingMutations() ||
       documents.snapshots().some(snapshot => snapshot.dirty || snapshot.saving || snapshot.conflict || snapshot.locked))
     throw new Error('仍有未保存内容、冲突或写入请求，请处理后再关闭');
 }
@@ -545,7 +541,6 @@ export const useStore = create<AppState>()(
       content: '',
       dirty: false,
       vaultSessionStale: false,
-      pendingCanvasEdits: 0,
       viewMode: 'live',
       setViewMode: (m) => set({ viewMode: m }),
       pdfToolbarOpen: false,
@@ -830,7 +825,6 @@ export const useStore = create<AppState>()(
         if (from === to) return;
         if (!to || to.split('/').some(part => !part || part === '.' || part === '..')) throw new Error('请输入有效的仓库相对路径');
         if (to.startsWith(from + '/')) throw new Error('不能将文件夹移入自身');
-        if (get().pendingCanvasEdits) throw new Error('请先完成 Canvas 卡片或连线编辑，再移动文件');
         openGeneration++; splitGeneration++;
         const validate = expectedRevision === undefined ? undefined : () => {
           const snapshot = documents.get(from)?.snapshot;
@@ -844,7 +838,6 @@ export const useStore = create<AppState>()(
         await get().loadTree();
       },
       removePath: async (path) => {
-        if (get().pendingCanvasEdits) throw new Error('请先完成 Canvas 卡片或连线编辑，再删除文件');
         openGeneration++; splitGeneration++;
         const result = await documents.changePath(path, undefined, () => api.remove(path), () => {
           set(state => remapWorkspacePaths(state, path));
@@ -886,19 +879,6 @@ export const useStore = create<AppState>()(
         for (let i = 1; taken.has(name.toLowerCase()); i++) name = `Untitled ${i}.md`;
         const path = base ? `${base}/${name}` : name;
         await get().createNote(path, '');
-        if (base) get().revealInTree(path);
-      },
-
-      newCanvas: async (dir) => {
-        const active = get().currentPath() ?? '';
-        const source = findNode(get().tree, active)?.type === 'folder' ? `${active}/_` : active;
-        const base = (dir ?? await newFileFolder(source)).replace(/\/+$/, '');
-        const folder = base ? findNode(get().tree, base) : get().tree;
-        const taken = new Set((folder?.children ?? []).map((c) => c.name.toLowerCase()));
-        let name = 'Untitled.canvas';
-        for (let i = 1; taken.has(name.toLowerCase()); i++) name = `Untitled ${i}.canvas`;
-        const path = base ? `${base}/${name}` : name;
-        await get().createNote(path, '{\n\t"nodes":[],\n\t"edges":[]\n}');
         if (base) get().revealInTree(path);
       },
 
@@ -1007,7 +987,6 @@ export const useStore = create<AppState>()(
 
 // Save durable workspace state to the server (debounced) whenever it changes.
 useStore.subscribe((state, prev) => {
-  if (prev.pendingCanvasEdits && !state.pendingCanvasEdits) documents.flushDeferredRefreshes();
   if (state.activePath !== prev.activePath && state.activePath) {
     const doc = documents.get(state.activePath);
     if (doc) useStore.setState({ content: doc.snapshot.raw, dirty: doc.snapshot.dirty });
@@ -1019,14 +998,14 @@ useStore.subscribe((state, prev) => {
   }
 });
 
-// Compatibility mirrors for panels/Canvas; document ownership lives in sessions.
+// Compatibility mirrors for panels; document ownership lives in sessions.
 documents.onError = error => useStore.getState().notify(String(error));
 documents.isOpen = path => {
   const state = useStore.getState();
   return state.tabs.some(tab => tab.path === path) || state.splitPath === path || state.rightTabs.some(tab => tab.type === 'markdown' && tab.state.file === path)
     || [...document.querySelectorAll<HTMLElement>('[data-document-id]')].some(element => element.dataset.documentId === path);
 };
-documents.canRefresh = path => !useStore.getState().vaultSessionStale && (!/\.canvas$/i.test(path) || !useStore.getState().pendingCanvasEdits);
+documents.canRefresh = () => !useStore.getState().vaultSessionStale;
 documents.subscribe((snapshot) => {
   const state = useStore.getState();
   const patch: Partial<AppState> = {};

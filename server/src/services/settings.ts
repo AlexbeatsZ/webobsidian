@@ -43,7 +43,6 @@ const SettingsSchema = z.object({
       chinese: z
         .object({
           enabled: z.boolean().default(true),
-          traditional: z.boolean().default(false),
           fuzzyRules: z
             .array(z.tuple([z.string().regex(/^[a-z]{1,6}$/), z.string().regex(/^[a-z]{1,6}$/)]))
             .max(16)

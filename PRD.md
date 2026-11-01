@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.16 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Phiên bản: 1.17 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Changelog 1.17 (精简与搜索性能): 删除 Canvas 白板(FR-12 退役;现有 .canvas 文件保留,
+> 作为普通文本文件打开,附件清理仍识别其中的引用)与繁体字拼音词典(设置项 `search.chinese.traditional`
+> 删除,索引版本升级后自动重建)。快速切换器拼音匹配改为编译式状态机 + 字母集合预筛,
+> 继续输入时只在上一次结果中筛选,输入框使用延迟排序不被阻塞;匹配结果与原算法逐项一致。
 > Changelog 1.16 (PRD 与现状对齐): 按 1.15 原生应用边界和 2026-10-23 个人本地运行时决定,
 > 改写 §1/§2/§4–§8 及 FR-3/4/5/6/8/9/10/13:删除已退役的登录、公开分享、深链 URL、
 > Agent REST API/API Key、Docker 部署和插件在线安装描述,改为本地访问控制、原生文件同步 +
@@ -152,7 +156,7 @@ Markdown、附件和 Canvas 文件。上游的自托管网页版、登录、公�
 边界见 [原生应用边界](docs/design/native-only.md) 和 [个人本地运行时](docs/design/personal-local-runtime.md)。
 
 ### 1.1 目标
-- 提供与 Obsidian 桌面版相当的编辑/阅读体验(编辑器、实时预览、双链、图谱、反向链接、Canvas)。
+- 提供与 Obsidian 桌面版相当的编辑/阅读体验(编辑器、实时预览、双链、图谱、反向链接)。
 - Vault 是本地真实目录,保留现有 Markdown、附件、Canvas 和 `.obsidian/` 数据;
   配置、主题和插件的兼容程度按 §1.4 单独评估。
 - 原生文件同步(独立 `sync-server/`)负责多设备实时同步,Git(含 LFS)作为定期备份和冲突历史。
@@ -338,7 +342,7 @@ webobsidian/
 - Truy vấn: full-text, prefix, fuzzy, fielded (`tag:`, `path:`, `title:`), boolean.
 - Cập nhật incremental khi file thay đổi (qua watcher).
 - Index lưu/khôi phục trên disk (`data/qmd-index.json`) để khởi động nhanh.
-- 中文/拼音:见 FR-15;繁体词典默认关闭(`search.chinese.traditional`)。
+- 中文/拼音:见 FR-15;只内置简体字读音表(繁体词典已于 1.17 删除)。
 
 ### FR-8 · Community plugins
 - Chỉ dùng plugin đã có trong Vault (không tải/cài trực tuyến). Đọc danh sách plugin từ `.obsidian/plugins/*` (manifest.json, main.js).
@@ -381,46 +385,10 @@ cùng một codebase React.
 - **Viewport & safe-area**: `viewport-fit=cover`; chừa `env(safe-area-inset-*)` cho notch/home-indicator;
   không cho double-tap zoom (app-like) nhưng giữ pinch-zoom ảnh trong reading.
 
-### FR-12 · Canvas (khung vẽ vô hạn — JSON Canvas)
-Mục tiêu: clone tính năng **Canvas** của Obsidian — một mặt phẳng vô hạn để sắp xếp card/note/ảnh/link và nối
-chúng bằng đường có mũi tên, dùng cho brainstorm, moodboard, sơ đồ. Tham chiếu UX Obsidian Canvas.
-
-- **Định dạng file `.canvas`**: tuân thủ chuẩn mở **JSON Canvas** (jsoncanvas.org) để tương thích hai chiều với
-  Obsidian. File là JSON `{ "nodes": [...], "edges": [...] }`.
-  - **Node** (chung): `id`, `type`, `x`, `y`, `width`, `height`, `color?`. `color` là preset `"1".."6"`
-    (đỏ/cam/vàng/lục/lam/tím) hoặc hex `"#RRGGBB"`.
-    - `type:"text"` → `text` (markdown).
-    - `type:"file"` → `file` (đường dẫn vault-relative), `subpath?` (heading/block).
-    - `type:"link"` → `url`.
-    - `type:"group"` → `label?`, `background?`, `backgroundStyle?`.
-  - **Edge**: `id`, `fromNode`, `fromSide?`(top/right/bottom/left), `fromEnd?`(none/arrow), `toNode`,
-    `toSide?`, `toEnd?`(none/arrow, mặc định arrow), `color?`, `label?`.
-- **Tương tác canvas**: **kéo chuột trái trên nền = pan**; **Shift+kéo = marquee chọn nhiều node**; pan cũng
-  qua Space+kéo và kéo nút giữa/phải; cảm ứng 1 ngón pan. Zoom bằng cuộn chuột (con trỏ làm tâm), nút
-  zoom in/out/fit/100%. Lưới chấm nền.
-- **Node**: double-click nền → tạo **text node** và vào chế độ sửa ngay; double-click vào text node để sửa
-  (textarea), Esc/blur để thoát. Kéo node để di chuyển; 8 handle để resize. Drop file note/ảnh từ cây (hoặc
-  nút) → tạo **file node** render embed (note = preview markdown, ảnh = `<img>`). Đổi màu qua palette 6 màu +
-  mặc định. Xóa (Delete/Backspace).
-- **Edge**: hover node hiện 4 chấm cạnh; kéo từ một chấm sang node/cạnh khác → tạo edge. Edge vẽ bằng đường
-  cong Bézier theo hướng cạnh, có mũi tên ở đầu `to`. Double-click giữa edge để thêm/sửa **label**. Chọn edge
-  để đổi màu/xóa.
-- **Select**: click chọn 1 node/edge; kéo marquee trên nền để chọn nhiều; Shift+click thêm/bớt; di chuyển/xóa
-  theo nhóm. Thanh công cụ ngữ cảnh nổi khi có lựa chọn (đổi màu, xóa).
-- **Alignment snap (đường gióng)**: khi kéo node, các cạnh/tâm node tự gióng vào cạnh/tâm các node khác và
-  hiện **đường gióng** (port thuật toán `getSnapping/O3/P3` từ Obsidian: điểm snap = 4 góc + tâm, ngưỡng
-  `ceil(15/scale)` đơn vị canvas). Giữ **Alt** (⌃ trên macOS) để kéo tự do (tắt snap); giữ **Shift** để khoá trục.
-- **Format trong text card**: phím tắt như editor chính (`obsidianKeymap`) — ⌘B đậm, ⌘I nghiêng, ⌘K thêm link,
-  ⌘L task, `⌘/` comment (toggle marker); menu chuột phải mở **đúng tại con trỏ** và tự dịch vào trong màn hình.
-- **Căn lề text** (mở rộng ngoài JSON Canvas spec): `TextNode.textAlign` = `left|center|right`, chọn qua nút trong
-  selection menu (khi chọn text node) hoặc submenu "Align" menu chuột phải; áp cho cả textarea lẫn nội dung render.
-  *Lưu ý: Obsidian thật bỏ qua field này khi mở lại.*
-- **Lưu**: autosave debounce (~900ms) như editor, ghi qua `PUT /api/files/content` (store `content`/`save`,
-  `.canvas` đã nằm trong `TEXT_RE`). Không thêm endpoint mới.
-- **Tạo canvas mới**: context menu cây thư mục ("New canvas") + command palette; tên `Untitled.canvas` không
-  trùng, nội dung khởi tạo `{"nodes":[],"edges":[]}`.
-- **Phạm vi v1 (non-goals)**: không có realtime collaborative cursor; không group auto-resize theo thành viên;
-  không portal/embed canvas-trong-canvas; không liên kết backlink graph từ node file (giữ đơn giản).
+### FR-12 · Canvas 白板(已退役)
+- 2026-11-01 删除白板视图、"新建白板"入口和相关命令。
+- Vault 中现有的 `.canvas` 文件不删除、不改写:文件同步和 Git 备份照常处理它们,打开时按普通文本(JSON)显示;
+  附件清理继续解析其中的文件引用,避免误删仍被旧白板引用的附件。
 
 ### FR-13 · 桌面应用(Electron,多平台)
 - 设计见 [桌面窗口](docs/design/desktop-window.md) 和 [桌面运行时打包](docs/design/desktop-runtime.md)。

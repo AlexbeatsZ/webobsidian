@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { DocumentSession, analyzeMarkdown, fragmentRange, parseLinkTarget, isGlobalContentTarget, contentTargets, type SourceChange } from '@webobsidian/markdown-core';
 import { EditorView } from '@codemirror/view';
-import CanvasView from '../components/CanvasView';
 import { useStore } from '../lib/store';
 import { preparePrintDocument } from '../lib/printDocument';
 import MarkdownView, { type MarkdownMode } from '../components/MarkdownView';
@@ -31,8 +30,6 @@ export interface RenderHarnessApi {
   format: (mark: string) => void;
   coords: (slot: number, position: number) => { left: number; top: number } | null;
   scroll: (slot: number, top: number) => void;
-  canvas: (source: string) => void;
-  canvasRaw: () => string;
   preparePrint: () => Promise<void>;
   notes: (notes: Record<string, string>) => void;
   changeNote: (path: string, source: string) => void;
@@ -78,7 +75,6 @@ export default function RenderHarness() {
   }, [debugging]);
   const [config, setConfig] = useState({ source: '# Title\n\n**bold** and plain.\n\nCaret sentinel.', shared: true, generation: 0 });
   const [modes, setModes] = useState<MarkdownMode[]>(['live', 'reading']);
-  const [canvas, setCanvas] = useState(false);
   const [workspace, setWorkspace] = useState(false);
   const [secondary, setSecondary] = useState(true);
   const refs = useRef<(EditorView | null)[]>([]);
@@ -127,13 +123,6 @@ export default function RenderHarness() {
   }), [sessions]);
   useEffect(() => {
     window.renderHarness = {
-      canvas: source => {
-        useStore.setState({ activePath: 'fixture.canvas', content: source, dirty: false,
-          setContent: content => useStore.setState({ content, dirty: true }),
-          save: async () => { writes.current.push(useStore.getState().content); },
-        }); setCanvas(true);
-      },
-      canvasRaw: () => useStore.getState().content,
       preparePrint: async () => { await preparePrintDocument(sessions[0].snapshot, contexts[0]); },
       notes: entries => { notes.current = new Map(Object.entries(entries).map(([path, source]) => {
         const session = new DocumentSession(path, source, undefined, async () => ({}));
@@ -146,7 +135,7 @@ export default function RenderHarness() {
       editEmbed: (slot, changes) => embedView(slot)?.dispatch({ changes }),
       embedText: slot => embedView(slot)?.state.doc.toString(),
       reset: (source, shared = true) => {
-        setCanvas(false); links.current.length = 0; writes.current.length = 0;
+        links.current.length = 0; writes.current.length = 0;
         setModes(['live', 'reading']); setSecondary(true);
         setConfig((previous) => ({ source, shared, generation: previous.generation + 1 }));
       },
@@ -177,7 +166,6 @@ export default function RenderHarness() {
     };
   }, [sessions]);
   if (workspace) return <NavigationWorkspace />;
-  if (canvas) return <div className="theme-light" style={{ width: 1000, height: 700 }}><CanvasView /></div>;
   return <><div className="theme-light" style={{ minHeight: '100vh', display: 'flex', gap: 12 }}>
     {sessions.map((session, slot) => (slot === 0 || secondary) &&
       <section key={config.generation + ':' + slot} data-slot={slot}

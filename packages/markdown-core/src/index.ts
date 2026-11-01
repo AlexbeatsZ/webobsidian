@@ -11,7 +11,6 @@ export * from './mathPackages.js';
 export * from './mathSource.js';
 export * from './properties.js';
 export * from './tables.js';
-export * from './canvasSource.js';
 export * from './embeds.js';
 export * from './replacement.js';
 export * from './blockEffects.js';

@@ -57,7 +57,7 @@ export const attachmentDialogHost: CleanupDialogHost = {
   subscribeSafety(changed) {
     const stopDocuments = documents.subscribe(changed);
     const stopStore = useStore.subscribe((next, before) => {
-      if (next.dirty !== before.dirty || next.pendingCanvasEdits !== before.pendingCanvasEdits || next.activePath !== before.activePath) changed();
+      if (next.dirty !== before.dirty ||next.activePath !== before.activePath) changed();
     });
     const stopMutations = subscribeMutations(changed);
     window.addEventListener('vault-changed', changed);

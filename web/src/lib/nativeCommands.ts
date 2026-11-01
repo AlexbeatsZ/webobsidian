@@ -48,7 +48,6 @@ export const nativeCommands: NativeCommand[] = [
     },
   },
   { id: 'new', title: '新建笔记', hotkeys: [{ modifiers: ['Mod'], key: 'N' }], run: () => useStore.getState().newNote() },
-  { id: 'new-canvas', title: '新建白板', run: () => useStore.getState().newCanvas() },
   { id: 'save', title: '保存当前文件', hotkeys: [{ modifiers: ['Mod'], key: 'S' }], run: () => useStore.getState().save() },
   {
     id: 'bookmark',

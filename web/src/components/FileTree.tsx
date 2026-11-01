@@ -142,7 +142,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
   const clipboard = useStore((s) => s.clipboard);
   const setClipboard = useStore((s) => s.setClipboard);
   const newNote = useStore((s) => s.newNote);
-  const newCanvas = useStore((s) => s.newCanvas);
   const newFolder = useStore((s) => s.newFolder);
   const renamingPath = useStore((s) => s.renamingPath);
   const setRenamingPath = useStore((s) => s.setRenamingPath);
@@ -288,7 +287,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     const items: ContextMenuItem[] = isFolder
       ? [
           { id: 'file:new-note', label: "新建笔记", onClick: () => newNote(node.path) },
-          { id: 'file:new-canvas', label: "新建白板", onClick: () => newCanvas(node.path) },
           { id: 'file:new-folder', label: "新建文件夹", onClick: () => newFolder(node.path) },
           { label: '', separator: true },
           { id: 'file:copy', label: "复制", onClick: doClipboard('copy') },
@@ -456,7 +454,6 @@ export default function FileTree() {
   const setClipboard = useStore((s) => s.setClipboard);
   const openContextMenu = useStore((s) => s.openContextMenu);
   const newNote = useStore((s) => s.newNote);
-  const newCanvas = useStore((s) => s.newCanvas);
   const newFolder = useStore((s) => s.newFolder);
   const activePath = useStore((s) => s.activePath);
   const autoReveal = useStore((s) => s.autoReveal);
@@ -537,7 +534,6 @@ export default function FileTree() {
       y: e.clientY,
       items: [
         { id: 'file:new-note', label: "新建笔记", onClick: () => newNote('') },
-        { id: 'file:new-canvas', label: "新建白板", onClick: () => newCanvas('') },
         { id: 'file:new-folder', label: "新建文件夹", onClick: () => newFolder('') },
         ...(clipboard
           ? [{ label: '', separator: true }, { id: 'file:paste', label: "粘贴", onClick: pasteToRoot }]

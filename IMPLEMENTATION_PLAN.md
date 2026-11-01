@@ -4,7 +4,13 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-01 (UI consistency review)
+Cập nhật lần cuối: 2026-11-01 (PRD 1.17 canvas/traditional removal, picker performance)
+
+## Simplify and picker performance (PRD 1.17)
+
+- [x] Remove Canvas board view, creation entries and command; keep existing .canvas files as text and in attachment-reference scans.
+- [x] Remove traditional Chinese reading table and `search.chinese.traditional`; bump SEARCH_VERSION so indexes rebuild.
+- [x] Quick switcher: compiled pinyin matcher + letter-mask prefilter, prefix narrowing cache, deferred palette ranking.
 
 ## PRD alignment (PRD 1.16)
 
@@ -539,6 +545,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-01 (PRD 1.17): 删除 Canvas 白板与繁体词典；快速切换器拼音搜索提速（6500 条目每键约 45ms → 首键约 10ms、后续 <1ms，新旧匹配 96 万次比对零差异）。
 - 2026-11-01 (UI consistency): theme status tokens, sidebar empty/error rows, settings field widths, missing icons/classes and
   dialog Escape/semantics unified; types, 500 unit tests and related renderer specs checked (pdf-toolbar:228 pre-existing).
 - 2026-11-01 (PRD 1.16): PRD 与现状对齐——删除登录/分享/深链/Agent REST API/Docker/插件在线安装描述，

@@ -20,9 +20,46 @@ Vault.create/template/folder-tag path; filter expressions cannot become names.
 No unsupported shortcut from the reference is displayed as implemented.
 
 Homepage file picking reuses this same palette for either sidebar. Markdown
-opens in the requested sidebar tab; Canvas and media retain their existing
-central view owners rather than being hidden from the picker or forced into a
-Markdown tab. Existing attachment-visibility preferences still apply.
+opens in the requested sidebar tab; media (and legacy .canvas text files) retain
+their existing central view owners rather than being hidden from the picker or
+forced into a Markdown tab. Existing attachment-visibility preferences still apply.
+
+## Keystroke performance (2026-11-01)
+
+Picker ranking stays synchronous and exact, but each keystroke must stay cheap on
+large Vaults and Android:
+
+- `findText` keeps the original state semantics (query-offset states in Map
+  insertion order, first-emitted match, tie rules) on typed arrays with
+  precomputed suffixes. Pronunciation forms are cached per fuzzy-rule set instead
+  of building a JSON key for every character.
+- `matchText`/`findText` first reject a text whose reachable a–z letters (literal
+  characters plus every reading) do not cover the query letters, or whose
+  possible match starts (a character, a reading or its initial) exclude the first
+  query letter. Both are necessary conditions for literal, continuous and gap
+  matches, so results are unchanged. Masks are cached per text and per
+  pinyin-enabled/fuzzy-rule table.
+- `fileCandidates` caches matched entries per query text for one catalog array,
+  settings object and non-text filter set. A query that extends a cached prefix
+  only re-checks that prefix's matches; all matchers are monotone, so the result
+  equals a full scan (`searchNarrowing.test.ts`). Catalog/settings replacement
+  resets the cache.
+- The palette ranks `useDeferredValue(q)`; the input never waits for ranking.
+  Enter pressed before ranking catches up chooses the fresh first result.
+
+Measured with 6,500 synthetic Chinese names (Node, desktop CPU): typing
+`zhangsan` took about 45 ms per key before; now about 10 ms for the first key and
+below 1 ms for later keys. An old/new comparison over 1,202,400 matcher calls
+(including pinyin-disabled and fuzzy-rule settings in both cache orders) found no
+output difference.
+
+Reference: lazyloong/obsidian-fuzzy-chinese 2.29.6 uses the same ideas — per-item
+precomputed readings with letter/start masks, a start-character inverted index, a
+per-keystroke history chain and a two-row DP with early exit. Its DP and scoring
+differ from this matcher (single gap-tolerant pass, different ranking), so it was
+used as a reference only; adopting it would change results. Its optional lazy path
+search (only when title matches are few) is also not adopted, because path
+matching here is an explicit setting/filter.
 
 ## One query grammar
 

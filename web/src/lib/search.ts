@@ -112,10 +112,33 @@ export function remember(kind: 'recentCommands', id: string) {
 export function matchName(query: string, text: string): TextMatch | null {
   return matchText(query, text, settings);
 }
-export function fileCandidates(query: string, source = entries, recent: readonly string[] = []) {
+// Typing usually extends the previous query, and every matcher used below is
+// monotone (a match for "abc" is also a match for "ab"), so a longer query only
+// needs to re-check the entries the cached shorter query already matched.
+const narrowingLimit = 32;
+let narrowing: { source: readonly CatalogEntry[]; settings: SearchSettings; key: string; results: Map<string, readonly CatalogEntry[]> } | undefined;
+function narrowedSource(source: readonly CatalogEntry[], key: string, text: string): readonly CatalogEntry[] {
+  if (!narrowing || narrowing.source !== source || narrowing.settings !== settings || narrowing.key !== key) {
+    narrowing = { source, settings, key, results: new Map() };
+    return source;
+  }
+  let best: readonly CatalogEntry[] = source, length = 0;
+  for (const [prefix, matched] of narrowing.results)
+    if (prefix.length > length && text.startsWith(prefix)) [best, length] = [matched, prefix.length];
+  return best;
+}
+function rememberNarrowing(text: string, matched: readonly CatalogEntry[]) {
+  if (!narrowing || !text) return;
+  narrowing.results.delete(text);
+  if (narrowing.results.size >= narrowingLimit) narrowing.results.delete(narrowing.results.keys().next().value!);
+  narrowing.results.set(text, matched);
+}
+export function fileCandidates(query: string, source: readonly CatalogEntry[] = entries, recent: readonly string[] = []) {
   const filters = parseSearchQuery(query);
   const text = filters.filterText;
-  return source
+  const { filterText: _filterText, text: _text, ...rest } = filters;
+  const pool = text ? narrowedSource(source, JSON.stringify(rest), text) : source;
+  const found = pool
     .filter((e) => e.kind === 'file' && (settings.attachments || /\.(md|markdown)$/i.test(e.path)))
     .flatMap((entry) => {
       if (!matchesTagFilters(entry.tags, filters) || filters.fields.includes('body')) return [];
@@ -143,7 +166,9 @@ export function fileCandidates(query: string, source = entries, recent: readonly
       }
       matches.sort((a, b) => b.match.score - a.match.score);
       return matches.slice(0, 1);
-    })
+    });
+  if (text) rememberNarrowing(text, found.map((item) => item.entry));
+  return found
     .sort((a, b) =>
       text
         ? b.match.score - a.match.score || a.entry.path.localeCompare(b.entry.path)

@@ -4,8 +4,9 @@
 
 Chinese search is a core feature. Full spelling, initials, mixed Chinese/Latin
 queries and polyphonic characters use `packages/search-core`; names permit gaps,
-body matches are continuous. Traditional readings and explicit fuzzy-sound rules
-are settings. Russian transliteration, shuangpin, Hover Editor and `linkText`
+body matches are continuous. Only the simplified reading table ships; the
+traditional table and its setting were removed on 2026-11-01. Explicit
+fuzzy-sound rules are a setting. Russian transliteration, shuangpin, Hover Editor and `linkText`
 are excluded. There is no extra ribbon button or plugin search modal.
 
 ## Ownership

@@ -3,7 +3,7 @@ import MatchLabel from './MatchLabel';
 import { documents } from '../lib/documents';
 import { extractMetadata } from '@webobsidian/markdown-core';
 import { getActiveEditor } from '../lib/activeEditor';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { fileTitleError, parseSearchQuery, hotkeyLabel, type Hotkey } from '@webobsidian/search-core';
 import { newFilePath } from '../lib/filePlacement';
 import Icon from './Icon';
@@ -46,9 +46,12 @@ export default function CommandPalette() {
   const content = useStore((s) => s.content);
   const recent = useStore((s) => s.recent);
 
+  // Ranking follows the deferred query so typing is never blocked by a large catalog.
+  const rankedQuery = useDeferredValue(q);
   const items = useMemo<Cmd[]>(() => {
     // A closed palette must not rank the whole catalog on every editor keystroke.
     if (!open) return [];
+    const q = rankedQuery;
     const query = q.replace(/^>/, '').trim();
     if (mode === 'headings') {
       const session = activePath ? documents.get(activePath) : undefined;
@@ -136,7 +139,7 @@ export default function CommandPalette() {
     return mode === 'commands' || q.startsWith('>')
       ? commandItems
       : [...commandItems.slice(0, 3), ...fileItems];
-  }, [open, q, mode, entries, settings, hotkeys, pluginVersion, activePath, content, recent, rightTabId]);
+  }, [open, rankedQuery, mode, entries, settings, hotkeys, pluginVersion, activePath, content, recent, rightTabId]);
   const choose = (item: Cmd | undefined, event?: { ctrlKey: boolean; metaKey: boolean; altKey: boolean }) => {
     if (!item) return;
     setOpen(false);
@@ -148,6 +151,15 @@ export default function CommandPalette() {
     item.run();
   };
 
+  // Enter pressed before the deferred ranking caught up chooses the fresh result.
+  const pendingChoice = useRef<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean } | null>(null);
+  useEffect(() => {
+    if (!pendingChoice.current || rankedQuery !== q) return;
+    const event = pendingChoice.current;
+    pendingChoice.current = null;
+    choose(items[sel], event);
+  });
+  useEffect(() => { pendingChoice.current = null; }, [open, mode]);
   useEffect(() => setSel(0), [q, open, mode]);
   useEffect(() => setQ(''), [mode]);
   useEffect(() => {
@@ -219,7 +231,8 @@ export default function CommandPalette() {
       setSel((s) => Math.max(s - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      choose(items[sel], e);
+      if (rankedQuery !== q) pendingChoice.current = { ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey };
+      else choose(items[sel], e);
     }
   };
 

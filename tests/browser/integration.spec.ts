@@ -98,32 +98,6 @@ test('embeds use the shared readonly engine, subscribe to drafts and stop cycles
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('![[b.md#Wanted]]\n\nend');
 });
 
-test('Canvas uses the shared live editor and preserves the surrounding JSON source', async ({ page }) => {
-  await page.route('**/api/tags', route => route.fulfill({ json: { tags: [] } }));
-  const raw = '\ufeff{\r\n "custom": {"keep":1},\n "nodes": [{"id":"a","type":"text","x":0,"y":0,"width":380,"height":220,"text" : "**old** $x^2$","unknown":7}],\r\n "edges": []\r\n}';
-  await page.route('**/api/files/content?path=fixture.canvas', route => route.fulfill({ json: {
-    path: 'fixture.canvas', content: raw, revision: 'fixture', vault: 'browser-fixture',
-  } }));
-  await page.route('**/api/plugins/adapter', route => {
-    const { op } = route.request().postDataJSON();
-    if (op === 'exists') return route.fulfill({ json: { exists: false } });
-    if (op === 'stat') return route.fulfill({ json: { stat: null } });
-    if (op === 'list') return route.fulfill({ json: { files: [], folders: [] } });
-    return route.fallback();
-  });
-  await page.evaluate(source => window.renderHarness.canvas(source), raw);
-  const card = page.locator('.canvas-node.canvas-text');
-  await expect(card.locator('.cm-strong')).toHaveText('old');
-  await expect(card.locator('mjx-container[data-mathjax-version="4.1.3"]')).toHaveCount(1);
-  await card.dblclick();
-  const input = card.locator('[contenteditable="true"]');
-  await expect(input).toBeFocused();
-  await input.press('ControlOrMeta+a'); await input.pressSequentially('**new**');
-  await input.press('Escape');
-  await expect.poll(() => page.evaluate(() => window.renderHarness.canvasRaw())).toBe(raw.replace('**old** $x^2$', '**new**'));
-  await expect(card.locator('.cm-strong')).toHaveText('new');
-});
-
 test('print freezes the entire reading document including content beyond the viewport', async ({ page }) => {
   const source = Array.from({ length: 350 }, (_, i) => `Paragraph ${i} **bold**`).join('\n\n') + '\n\nlast<br>line\n\n$$\nx^2\n$$';
   await page.evaluate(source => window.renderHarness.reset(source), source);

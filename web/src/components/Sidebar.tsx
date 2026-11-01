@@ -14,7 +14,6 @@ export default function Sidebar({ open }: { open: boolean }) {
   const activeId = useStore(s => s.leftActiveId);
   const setSettings = useStore(s => s.setSettings);
   const newNote = useStore((s) => s.newNote);
-  const newCanvas = useStore((s) => s.newCanvas);
   const newFolder = useStore((s) => s.newFolder);
   const setTrash = useStore((s) => s.setTrash);
   const tree = useStore((s) => s.tree);
@@ -56,9 +55,6 @@ export default function Sidebar({ open }: { open: boolean }) {
           <>
             <button className="nav-action" title="新建笔记" onClick={() => newNote()}>
               <Icon name="square-pen" size={16} />
-            </button>
-            <button className="nav-action" title="新建白板" onClick={() => newCanvas()}>
-              <Icon name="layout-dashboard" size={16} />
             </button>
             <button className="nav-action" title="新建文件夹" onClick={() => newFolder()}>
               <Icon name="folder-plus" size={16} />

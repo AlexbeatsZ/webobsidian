@@ -710,7 +710,6 @@ function SearchSettingsPanel() {
   };
   const toggles = [
     ['enabled', '中文拼音搜索'],
-    ['traditional', '繁体字拼音'],
     ['usePath', '文件路径参与搜索'],
     ['attachments', '搜索附件'],
     ['showTags', '显示文件标签'],

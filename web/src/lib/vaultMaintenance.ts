@@ -8,7 +8,6 @@ export function workspaceMaintenanceBlockers(): string[] {
   if (documents.snapshots().some(snapshot => snapshot.dirty || snapshot.conflict || snapshot.saving || snapshot.locked))
     blockers.push('有未保存或冲突的文档，请先保存');
   if (useStore.getState().dirty) blockers.push('当前文件有未保存内容');
-  if (useStore.getState().pendingCanvasEdits) blockers.push('Canvas 卡片或连线仍在编辑');
   if (pendingMutations()) blockers.push('仍有写入请求未完成');
   if ((window as any).webobsidianDesktop?.nativePlugins)
     blockers.push('可信原生插件可直接写入文件，请关闭该模式并在下次启动后清理');

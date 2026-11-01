@@ -99,7 +99,7 @@ export class DocumentRegistry {
   async saveLeaving(path: string | null | undefined): Promise<void> {
     const session = path ? this.sessions.get(path) : undefined;
     if (!session) return;
-    if (path && !this.canRefresh(path)) throw new Error('请先完成 Canvas 卡片或连线编辑');
+    if (path && !this.canRefresh(path)) throw new Error('Vault 已切换，请先处理旧会话的内容');
     if (session.snapshot.locked || session.snapshot.conflict) throw new Error('笔记正在移动或存在冲突，请处理后重试');
     if (session.snapshot.dirty || session.snapshot.saving) await session.save();
     if (session.snapshot.dirty || session.snapshot.conflict || session.snapshot.locked) throw new Error('笔记保存期间又有修改，请保存后重试');

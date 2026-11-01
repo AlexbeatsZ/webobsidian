@@ -197,7 +197,7 @@ export default function App() {
     };
     const beforeUnload = (event: BeforeUnloadEvent) => {
       const state = useStore.getState();
-      if (workspaceHasUnsavedChanges() || state.pendingCanvasEdits || state.dirty ||
+      if (workspaceHasUnsavedChanges() || state.dirty ||
           documents.snapshots().some(snapshot => snapshot.dirty || snapshot.saving || snapshot.conflict || snapshot.locked)) {
         event.preventDefault();
         event.returnValue = '';
@@ -260,7 +260,7 @@ export default function App() {
       const target = e.target instanceof Element ? e.target : null;
       const open = useStore.getState().mobileDrawer;
       const edge = t.clientX <= 28 ? 'left' : t.clientX >= window.innerWidth - 28 ? 'right' : null;
-      if ((!open && !edge) || target?.closest('input, textarea, select, [contenteditable="true"], .canvas-view') && !edge) return;
+      if ((!open && !edge) || target?.closest('input, textarea, select, [contenteditable="true"]') && !edge) return;
       if (!window.getSelection()?.isCollapsed) return;
       // Horizontal tables/code/tab strips keep their native scrolling.
       for (let node = target; node && node !== document.body; node = node.parentElement) {

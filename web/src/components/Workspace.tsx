@@ -6,7 +6,6 @@ import { isFolderPath } from '../lib/tree';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from '../lib/media';
 import Editor from './Editor';
 import GraphView from './GraphView';
-import CanvasView from './CanvasView';
 import FolderView from './FolderView';
 import Icon from './Icon';
 import StatusBar from './StatusBar';
@@ -15,13 +14,9 @@ import WorkspaceLauncher from './WorkspaceLauncher';
 function EditorPane({ path: activePath, navigationId }: { path: string; navigationId: 'main' | 'split' }) {
   if (isHomepagePath(activePath)) return <div className="empty-state"><WorkspaceLauncher key={activePath} /></div>;
   const isImage = activePath ? /\.(png|jpe?g|gif|svg|webp)$/i.test(activePath) : false;
-  const isCanvas = activePath ? /\.canvas$/i.test(activePath) : false;
   const isVideo = activePath ? VIDEO_EXT_RE.test(activePath) : false;
   const isAudio = activePath ? AUDIO_EXT_RE.test(activePath) : false;
 
-  if (isCanvas && navigationId === 'main') {
-    return <CanvasView />;
-  }
   if (activePath && isImage) {
     return (
       <div className="markdown-preview">
