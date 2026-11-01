@@ -2,7 +2,7 @@
 
 ## Delivered behavior
 
-Desktop 0.1.39 ships the native MCP adapter and pinned official Secure MCP
+Desktop 0.1.40 ships the native MCP adapter and pinned official Secure MCP
 Tunnel 0.0.19. The MCP panel no longer looks for a companion source directory,
 PowerShell launcher, Obsidian plugin or external Node installation.
 
@@ -47,6 +47,25 @@ An initial full unit run found nine obsolete desktop test fixtures without
 the new app-path discovery method. Those fixtures were updated; the complete
 469-test rerun passed. An initial server test typecheck needed an explicit
 JSON result type; the final Server/Web/Desktop typechecks pass.
+
+## CI follow-up — 2026-11-01
+
+The first 0.1.39 tag (`ec82cfb`) passed native Windows/macOS/Linux packaging
+in release run 41268820617. General CI 41268818106 exposed an actual new
+Docker/web-only build failure: importing the launcher's state type also
+resolved its Electron safeStorage type. The launcher now declares only the
+three-method encryption boundary it actually calls, keeping Electron out
+of the Web dependency graph. Version 0.1.40 replaces the unpublished 0.1.39
+draft; pushed tags are not rewritten.
+
+That CI run also reported a 5-second runtimeDependencies test timeout and
+318 passed/7 failed browser contracts. The exact previous commit 040dc1a
+(CI 41262143034) already has the same unit timeout and five matching
+browser failures: quoted formula links, rich footnote navigation, footnote
+slot 1, scroll-500 pixel parity and right-ribbon count. The two remaining
+current failures (embedded range editor locator and footnote slot 0) are
+not attributed by that baseline result. They are not relabeled as passing.
+All six MCP browser cases passed in the current CI run as well as locally.
 
 ## Delivery boundary
 

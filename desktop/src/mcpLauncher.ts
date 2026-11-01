@@ -2,7 +2,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { safeStorage } from 'electron';
 
 export interface McpConnectionInput { tunnelId: string; apiKey?: string }
 export interface McpLauncherState {
@@ -21,8 +20,13 @@ interface Options {
   executable: string;
   endpointFile: string;
   serverUrl: string;
-  secrets: Pick<typeof safeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'> &
-    Partial<Pick<typeof safeStorage, 'getSelectedStorageBackend'>>;
+  // Structural boundary keeps web-only builds independent of Electron types.
+  secrets: {
+    isEncryptionAvailable(): boolean;
+    encryptString(value: string): Buffer;
+    decryptString(value: Buffer): string;
+    getSelectedStorageBackend?(): string;
+  };
 }
 interface Connection { tunnelId: string; encryptedKey: string }
 
