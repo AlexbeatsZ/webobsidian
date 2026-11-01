@@ -25,6 +25,7 @@ import { useStore } from '../store';
 import { mountMarkdownFragment } from '../../components/MarkdownFragment';
 import { createVaultRenderContext } from '../vaultRenderContext';
 import { contextOf } from '../renderContext';
+import { subscribeActiveNavigation } from '../activeEditor';
 import { renderMath as renderMathInto, loadMathJax as loadMathJaxRuntime } from '../mathjax';
 import { livePreviewState } from '../livePreview';
 import * as events from './events';
@@ -799,6 +800,10 @@ export async function loadPlugins(): Promise<void> {
         sharedApp.workspace.trigger('layout-change');
       }
     });
+    const stopActiveNavigation = subscribeActiveNavigation(() => {
+      sharedApp.workspace.trigger('active-leaf-change', sharedApp.workspace.activeLeaf);
+      sharedApp.workspace.trigger('file-open', sharedApp.workspace.getActiveFile());
+    });
     const pendingFiles = new Set<string>(),
       structuralFiles = new Set<string>();
     let metadataTimer: number | undefined,
@@ -857,7 +862,7 @@ export async function loadPlugins(): Promise<void> {
       stopCssSnippets();
       stopMenus();
       stopWebPages?.();
-      unsub();
+      unsub(); stopActiveNavigation();
       metadataStopped = true;
       window.clearTimeout(metadataTimer);
       for (const ref of metadataEvents) sharedApp.vault.offref(ref);

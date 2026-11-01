@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Text } from '@codemirror/state';
 import { documents } from '../lib/documents';
 import { useStore } from '../lib/store';
+import { useActivePage } from '../lib/useActivePage';
 import { extractMetadata } from '@webobsidian/markdown-core';
 import TagsPanel from './TagsPanel';
 import Icon from './Icon';
@@ -14,7 +15,7 @@ import { useDocumentSession } from '../lib/useDocumentSession';
 import { sharedApp } from '../lib/plugins';
 import SidebarDock from './SidebarDock';
 import MarkdownMinimap from './MarkdownMinimap';
-import { useMainPdfSession } from '../lib/pdf/react';
+import { usePdfSession } from '../lib/pdf/react';
 import PdfOutlinePanel from './PdfOutlinePanel';
 import PdfThumbnailsPanel from './PdfThumbnailsPanel';
 import McpLauncher from './McpLauncher';
@@ -45,7 +46,7 @@ const TABS = [
 ] as const;
 
 function useActiveMetadata() {
-  const path = useStore(s => s.activePath);
+  const { path } = useActivePage();
   const { session, snapshot } = useDocumentSession(path && MD_RE.test(path) ? path : null);
   return useMemo(() => extractMetadata(session?.analysis ?? ''), [session, snapshot.version]);
 }
@@ -61,7 +62,7 @@ function OutlinePanel() {
         {heads.length === 0 && <div className="panel-item">无标题</div>}
         {heads.map((h, i) => (
           <div key={i} className="outline-item" style={{ paddingLeft: 10 + (h.level - 1) * 12 }} onClick={() => {
-            const path = useStore.getState().activePath;
+            const path = useStore.getState().currentPath();
             if (path) void useStore.getState().navigate(path, { range: { from: h.from, to: h.to } });
           }}>
             {h.text}
@@ -186,8 +187,8 @@ function McpPanel() {
 }
 
 export default function RightSidebar({ open }: { open: boolean; onTheme?: () => void }) {
-  const path = useStore(s => s.activePath);
-  const pdf = useMainPdfSession(path);
+  const { path, viewId } = useActivePage();
+  const pdf = usePdfSession(path, viewId);
   const rightPanel = useStore((s) => s.rightPanel);
   const setRightPanel = useStore((s) => s.setRightPanel);
   const activeId = useStore(s => s.rightActiveId);
@@ -219,7 +220,7 @@ export default function RightSidebar({ open }: { open: boolean; onTheme?: () => 
       )}
       {presented && !activeId && rightPanel === 'outline' && (pdf ? <PdfOutlinePanel session={pdf} /> : <OutlinePanel />)}
       {presented && !activeId && rightPanel === 'minimap' && (pdf ? <PdfThumbnailsPanel session={pdf} />
-        : path && MD_RE.test(path) ? <MarkdownMinimap key={path} path={path} />
+        : path && MD_RE.test(path) ? <MarkdownMinimap key={viewId + ':' + path} path={path} viewId={viewId} />
         : <div className="panel-item">打开 Markdown 或 PDF 查看缩略图</div>)}
       {presented && !activeId && rightPanel === 'mcp' && <McpPanel />}
       <SidebarTabPanels side="right" open={presented} />

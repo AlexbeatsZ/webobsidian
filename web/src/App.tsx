@@ -105,7 +105,7 @@ export default function App() {
       .loadUiState() // restore workspace from server + open note(s)
       .then(() => {
         if (deepLink && deepLink !== useStore.getState().activePath) {
-          return useStore.getState().openFile(deepLink);
+          return useStore.getState().openFile(deepLink, true, 'main');
         }
       })
       .catch(() => {});

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
+import { useActivePage } from '../lib/useActivePage';
+import { useDocumentSession } from '../lib/useDocumentSession';
 import { api } from '../lib/api';
 import Icon from './Icon';
 import PluginElements from './PluginElements';
@@ -7,9 +9,10 @@ import ViewModeMenu from './ViewModeMenu';
 import { pluginStatusItems } from '../lib/plugins';
 
 export default function StatusBar() {
-  const content = useStore((s) => s.content);
-  const activePath = useStore((s) => s.activePath);
-  const dirty = useStore((s) => s.dirty);
+  const { path: activePath } = useActivePage();
+  const { snapshot } = useDocumentSession(activePath && /\.(md|markdown|txt)$/i.test(activePath) ? activePath : null);
+  const content = snapshot.raw;
+  const dirty = snapshot.dirty;
   const loadTree = useStore((s) => s.loadTree);
   const notify = useStore((s) => s.notify);
   const [git, setGit] = useState<any>(null);

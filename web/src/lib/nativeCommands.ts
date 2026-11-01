@@ -46,7 +46,7 @@ export const nativeCommands: NativeCommand[] = [
     title: '移动文件',
     run: () => {
       const s = useStore.getState();
-      if (s.activePath) s.setMovePath(s.activePath);
+      const path = s.currentPath(); if (path) s.setMovePath(path);
     },
   },
   { id: 'new', title: '新建笔记', hotkeys: [{ modifiers: ['Mod'], key: 'N' }], run: () => useStore.getState().newNote() },
@@ -57,7 +57,7 @@ export const nativeCommands: NativeCommand[] = [
     title: '收藏当前文件',
     run: () => {
       const s = useStore.getState();
-      if (s.activePath) s.toggleBookmark(s.activePath);
+      const path = s.currentPath(); if (path) s.toggleBookmark(path);
     },
   },
   {
@@ -65,7 +65,7 @@ export const nativeCommands: NativeCommand[] = [
     title: '在右侧拆分当前文件',
     run: () => {
       const s = useStore.getState();
-      if (s.activePath) void s.openToSide(s.activePath);
+      const path = s.currentPath(); if (path) void s.openToSide(path);
     },
   },
   { id: 'search', title: '搜索整个仓库', hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'F' }], run: () => useStore.getState().setLeftPanel('search') },

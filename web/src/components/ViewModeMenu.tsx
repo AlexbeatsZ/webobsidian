@@ -1,7 +1,17 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { useStore, type ViewMode } from '../lib/store';
 import Icon from './Icon';
 import { MenuList } from './ContextMenu';
+import { useActivePage } from '../lib/useActivePage';
+import { getActiveEditor, setActiveEditorMode } from '../lib/activeEditor';
+import { livePreviewState, livePreviewReadonly } from '../lib/renderState';
+import { subscribeNavigationViews } from '../lib/fragmentNavigation';
+
+const subscribeMode = (listener: () => void) => subscribeNavigationViews(() => listener());
+const currentMode = (): ViewMode => {
+  const view = getActiveEditor();
+  return view ? view.state.field(livePreviewReadonly, false) ? 'reading' : view.state.field(livePreviewState, false) ? 'live' : 'source' : useStore.getState().viewMode;
+};
 
 const modes: { mode: ViewMode; label: string; icon: string }[] = [
   { mode: 'reading', label: '阅读视图', icon: 'book-open' },
@@ -10,9 +20,8 @@ const modes: { mode: ViewMode; label: string; icon: string }[] = [
 ];
 
 export default function ViewModeMenu() {
-  const activePath = useStore((s) => s.activePath);
-  const viewMode = useStore((s) => s.viewMode);
-  const setViewMode = useStore((s) => s.setViewMode);
+  const { path: activePath } = useActivePage();
+  const viewMode = useSyncExternalStore(subscribeMode, currentMode);
   const [open, setOpen] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -59,7 +68,7 @@ export default function ViewModeMenu() {
       {open && (
         <div id={menuId} className="view-mode-menu" role="menu" aria-label="切换视图" onKeyDown={onKeyDown}>
           <MenuList items={modes.map(item => ({ label: item.label, icon: item.icon, checked: item.mode === viewMode,
-            onClick: () => setViewMode(item.mode) }))} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
+            onClick: () => { setActiveEditorMode(item.mode); } }))} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
         </div>
       )}
     </div>

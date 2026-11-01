@@ -47,7 +47,7 @@ export async function reloadMcpContext(): Promise<void> {
 }
 export function captureMcpContextTarget(explicitView?: EditorView | null, explicitPath?: string): CapturedMcpTarget {
   const workspace = useStore.getState(), view = explicitView ?? getActiveEditor();
-  const path = explicitPath ?? (view ? contextOf(view).sourcePath : workspace.activePath) ?? '';
+  const path = explicitPath ?? (view ? contextOf(view).sourcePath : workspace.currentPath()) ?? '';
   const session = path ? documents.get(path) : undefined;
   const fullView = view && session && contextOf(view).sourcePath === path && !contextOf(view).sourceFragment
     && view.state.doc.toString() === session.snapshot.text ? view : null;
@@ -167,7 +167,7 @@ export function bindOperationWorkspace(socket: WebSocket): () => void {
       if (workspace.vaultSessionStale) throw new Error('Vault 已切换，请重新加载工作区');
       let result: unknown;
       if (msg.kind === 'capture') {
-        const active = getActiveEditor(), activePath = active ? contextOf(active).sourcePath : workspace.activePath;
+        const active = getActiveEditor(), activePath = active ? contextOf(active).sourcePath : workspace.currentPath();
         const view = active && !contextOf(active).sourceFragment && active.state.doc.toString() === documents.get(activePath!)?.snapshot.text ? active : null;
         const target = msg.args?.path ?? activePath, session = target ? documents.get(target) : undefined;
         const snapshot = session?.snapshot;

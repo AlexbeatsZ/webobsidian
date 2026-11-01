@@ -20,13 +20,17 @@ export function registerPdfSession(session: PdfSession) {
   };
 }
 export const getActivePdfSession = () => active;
-export const getMainPdfSession = (path: string | null) => sessions.find(session =>
-  session.viewId === 'main' && session.path === path && session.getSnapshot().status !== 'destroyed') ?? null;
+export const getPdfSession = (path: string | null, viewId: string) => sessions.find(session =>
+  session.viewId === viewId && session.path === path && session.getSnapshot().status !== 'destroyed') ?? null;
+export const getMainPdfSession = (path: string | null) => getPdfSession(path, 'main');
 export function subscribeActivePdfSession(listener: () => void) {
   listeners.add(listener); return () => { listeners.delete(listener); };
 }
 export function useActivePdfSession() { return useSyncExternalStore(subscribeActivePdfSession, getActivePdfSession); }
 export function useMainPdfSession(path: string | null) {
   return useSyncExternalStore(subscribeActivePdfSession, () => getMainPdfSession(path));
+}
+export function usePdfSession(path: string | null, viewId: string) {
+  return useSyncExternalStore(subscribeActivePdfSession, () => getPdfSession(path, viewId));
 }
 export function usePdfSnapshot(session: PdfSession) { return useSyncExternalStore(session.subscribe, session.getSnapshot); }

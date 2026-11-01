@@ -6,10 +6,11 @@ import { renderContext } from '../renderContext';
 
 const host = vi.hoisted(() => ({
   active: null as EditorView | null,
+  navigationId: 'main',
   entries: [] as { cm: EditorView; info: { file: { path: string } } }[],
   state: { activePath: 'same.md', splitPath: 'same.md' as string | null, rightTabs: [] as SidebarTab[] },
 }));
-vi.mock('../store', () => ({ useStore: { getState: () => host.state } }));
+vi.mock('../store', () => ({ useStore: { getState: () => ({ ...host.state, currentPath: () => host.state.activePath, currentViewId: () => host.navigationId }) } }));
 vi.mock('../activeEditor', () => ({ getActiveEditor: () => host.active }));
 vi.mock('./editor', () => ({
   Editor: class { constructor(public cm: EditorView) {} },
@@ -23,6 +24,7 @@ import { MarkdownView, Workspace } from './workspace';
 
 beforeEach(() => {
   host.active = null;
+  host.navigationId = 'main';
   host.entries = [];
   host.state.activePath = 'same.md';
   host.state.splitPath = 'same.md';
@@ -49,6 +51,19 @@ function workspace() {
 }
 
 describe('workspace Markdown host identity', () => {
+  it('keeps the split leaf active while its editor is absent or showing Homepage', () => {
+    mounted('main'); host.navigationId = 'split';
+    const ws = workspace();
+    expect(ws.activeLeaf.slot).toBe('split');
+    expect(ws.getActiveViewOfType(MarkdownView)).toBeNull();
+  });
+
+  it('keeps a non-Markdown sidebar active while a palette owns DOM focus', () => {
+    host.navigationId = 'sidebar:guest';
+    host.state.rightTabs = [{ id: 'guest', type: 'empty', state: {}, title: 'Homepage', icon: 'home' }];
+    expect(workspace().activeLeaf.id).toBe('guest');
+  });
+
   it.each([false, true])('keeps same-document editable panes distinct with split-first=%s', splitFirst => {
     const first = mounted(splitFirst ? 'split' : 'main');
     const second = mounted(splitFirst ? 'main' : 'split');

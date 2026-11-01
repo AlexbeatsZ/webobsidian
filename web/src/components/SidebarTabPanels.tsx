@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useStore } from '../lib/store';
+import { activateNavigation } from '../lib/activeEditor';
 import { sharedApp, subscribePlugins, pluginRevision } from '../lib/plugins';
 import type { SidebarTab } from '../lib/sidebarTabs';
 import { openFragment } from '../lib/fragmentNavigation';
@@ -12,7 +13,8 @@ const SidebarNote = memo(function SidebarNote({ tab, active }: { tab: SidebarTab
   const opened = useRef(false);
   const editor = useRef<import('@codemirror/view').EditorView | null>(null);
   if (active) opened.current = true;
-  return <div className="sidebar-note" hidden={!active} data-sidebar-tab={tab.id}>
+  return <div className="sidebar-note" hidden={!active} data-sidebar-tab={tab.id}
+    onPointerDownCapture={() => activateNavigation('sidebar:' + tab.id)} onFocusCapture={() => activateNavigation('sidebar:' + tab.id)}>
     {opened.current && <Editor path={tab.state.file} sidebar navigationId={'sidebar:' + tab.id} onReady={view => {
       editor.current = view;
       if (view && tab.state.fragment) void openFragment(tab.state.file, tab.state.fragment, view, { viewId: 'sidebar:' + tab.id });
@@ -38,7 +40,8 @@ const SidebarView = memo(function SidebarView({ tab, active }: { tab: SidebarTab
     return () => { cancelled = true; };
   }, [active, state, tab.type, revision]);
   useEffect(() => () => { void leaf.current?.closeView(); }, []);
-  return <section className="sidebar-view" hidden={!active} data-sidebar-tab={tab.id}>
+  return <section className="sidebar-view" hidden={!active} data-sidebar-tab={tab.id}
+    onPointerDownCapture={() => activateNavigation('sidebar:' + tab.id)} onFocusCapture={() => activateNavigation('sidebar:' + tab.id)}>
     {error && <p className="editor-error" role="alert">{error}</p>}<div className="sidebar-view-host" ref={host} />
   </section>;
 });

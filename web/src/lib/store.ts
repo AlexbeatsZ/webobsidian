@@ -8,7 +8,7 @@ import { isGlobalContentTarget, parseLinkTarget } from '@webobsidian/markdown-co
 import { resolveContentLink } from './contentReferences';
 import { navigateTo, captureLocation, cancelNavigation, type NavigationLocation, type NavigationRequest, type LinkIntent } from './fragmentNavigation';
 import { sidebarTab, restoreSidebarTabs, type SidebarTab } from './sidebarTabs';
-import { getActiveEditor } from './activeEditor';
+import { getActiveEditor, activateNavigation, getActiveNavigationId } from './activeEditor';
 import { contextOf } from './renderContext';
 import type { MenuContext } from './configuredMenus/types';
 import { TEXT_EXT_RE } from './media';
@@ -118,6 +118,9 @@ interface AppState {
   activePath: string | null;
   /** Back/forward navigation stack of visited paths (incl. GRAPH_PATH). */
   history: NavigationLocation[];
+  viewHistories: Record<string, { history: NavigationLocation[]; histIndex: number }>;
+  currentViewId: () => string;
+  currentPath: (viewId?: string) => string | null;
   recordNavigation: (before: NavigationLocation, after: NavigationLocation) => void;
   navigate: (path: string, request?: NavigationRequest) => Promise<void>;
   histIndex: number;
@@ -225,8 +228,8 @@ interface AppState {
   /** Show a toast. ms=0 keeps it until another notify() replaces it. */
   notify: (msg: string, ms?: number) => void;
 
-  openFile: (path: string, recordHistory?: boolean) => Promise<void>;
-  openHomepage: () => Promise<void>;
+  openFile: (path: string, recordHistory?: boolean, viewId?: string) => Promise<void>;
+  openHomepage: (viewId?: string) => Promise<void>;
   openWikilink: (target: string, sourcePath?: string, intent?: LinkIntent) => Promise<void>;
   closeTab: (path: string) => Promise<void>;
   renamePath: (from: string, to: string, expectedRevision?: string) => Promise<void>;
@@ -274,6 +277,10 @@ function remapWorkspacePaths(state: AppState, from: string, to?: string): Partia
     recent: list(state.recent), bookmarks: list(state.bookmarks), expanded: list(state.expanded), selected: list(state.selected),
     history: state.history.flatMap(location => { const path = map(location.path); return path === null ? [] : [{ ...location, path }]; }),
     histIndex: state.history.slice(0, state.histIndex + 1).filter(location => map(location.path) !== null).length - 1,
+    viewHistories: Object.fromEntries(Object.entries(state.viewHistories).map(([id, stack]) => [id, {
+      history: stack.history.flatMap(location => { const path = map(location.path); return path === null ? [] : [{ ...location, path }]; }),
+      histIndex: stack.history.slice(0, stack.histIndex + 1).filter(location => map(location.path) !== null).length - 1,
+    }])),
     renamingPath: map(state.renamingPath), selectAnchor: map(state.selectAnchor), versionHistoryPath: map(state.versionHistoryPath),
     clipboard: state.clipboard && map(state.clipboard.path) ? { ...state.clipboard, path: map(state.clipboard.path)! } : null,
     movePath: Array.isArray(state.movePath) ? list(state.movePath) : map(state.movePath) };
@@ -340,15 +347,20 @@ function applyPersisted(s: any, set: (p: any) => void): void {
 }
 
 /** Push `path` onto the back/forward stack (truncating any forward entries). */
-function pushHistory(s: { history: NavigationLocation[]; histIndex: number; activePath?: string | null }, path: string, record = true) {
-  if (!record || s.history[s.histIndex]?.path === path && s.history[s.histIndex]?.viewId === 'main') {
-    return { history: s.history, histIndex: s.histIndex };
-  }
-  const prior = s.history.slice(0, s.histIndex + 1);
-  if (s.activePath && prior.length) prior[prior.length - 1] = captureLocation(s.activePath);
-  let history = [...prior, { path, viewId: 'main' }];
-  if (history.length > 100) history = history.slice(history.length - 100);
-  return { history, histIndex: history.length - 1 };
+function historyFor(s: AppState, viewId: string) {
+  return viewId === 'main' ? s : s.viewHistories[viewId] ?? { history: [], histIndex: -1 };
+}
+function historyPatch(s: AppState, viewId: string, history: NavigationLocation[], histIndex: number) {
+  return viewId === 'main' ? { history, histIndex } : { viewHistories: { ...s.viewHistories, [viewId]: { history, histIndex } } };
+}
+function pushHistory(s: AppState, path: string, record = true, viewId = 'main', before?: NavigationLocation) {
+  const stack = historyFor(s, viewId);
+  if (!record || stack.history[stack.histIndex]?.path === path) return {};
+  const prior = stack.history.slice(0, stack.histIndex + 1);
+  before ??= s.currentPath(viewId) ? captureLocation(s.currentPath(viewId)!, viewId) : undefined;
+  if (before) { if (prior.length) prior[prior.length - 1] = before; else prior.push(before); }
+  const history = [...prior, { path, viewId }].slice(-100);
+  return historyPatch(s, viewId, history, history.length - 1);
 }
 
 // Only start saving after the initial load; suppress while applying remote/initial state.
@@ -455,9 +467,26 @@ export const useStore = create<AppState>()(
       activePath: null,
       history: [],
       histIndex: -1,
+      viewHistories: {},
+      currentViewId: () => {
+        const id = getActiveNavigationId(), s = get();
+        if (id === 'split') return s.splitPath ? id : 'main';
+        if (id.startsWith('sidebar:')) {
+          const tab = s.rightTabs.find(tab => 'sidebar:' + tab.id === id);
+          return tab && ((tab.side === 'left' ? s.leftOpen && s.leftActiveId === tab.id : s.rightOpen && s.rightActiveId === tab.id)) ? id : 'main';
+        }
+        return 'main';
+      },
+      currentPath: (viewId) => {
+        const s = get(), id = viewId ?? s.currentViewId();
+        return id === 'split' ? s.splitPath : id.startsWith('sidebar:')
+          ? s.rightTabs.find(tab => 'sidebar:' + tab.id === id)?.state.file ?? null : s.activePath;
+      },
       recordNavigation: (before, after) => {
+        if (before.viewId !== after.viewId) before = { path: after.path, viewId: after.viewId };
         set(state => {
-          const history = state.history.slice(0, state.histIndex + 1);
+          const stack = historyFor(state, after.viewId);
+          const history = stack.history.slice(0, stack.histIndex + 1);
           const current = history.at(-1);
           if (current?.path === after.path && current.viewId === after.viewId && current.anchor === undefined
             && (before.path !== after.path || before.viewId !== after.viewId)) history[history.length - 1] = after;
@@ -465,16 +494,14 @@ export const useStore = create<AppState>()(
             if (history.length) history[history.length - 1] = before; else history.push(before);
             if (before.path !== after.path || before.viewId !== after.viewId || before.anchor !== after.anchor || before.head !== after.head) history.push(after);
           }
-          return { history: history.slice(-100), histIndex: Math.min(history.length, 100) - 1 };
+          return historyPatch(state, after.viewId, history.slice(-100), Math.min(history.length, 100) - 1);
         });
       },
       navigate: async (path, request = {}) => {
         const source = request.source;
-        const origin = source ? contextOf(source).sourcePath : request.viewId?.startsWith('sidebar:')
-          ? get().rightTabs.find(tab => 'sidebar:' + tab.id === request.viewId)?.state.file ?? path
-          : request.viewId === 'split' ? get().splitPath ?? path : get().activePath ?? path;
-        const before = captureLocation(origin, request.viewId ?? 'main', source);
-        let viewId = request.viewId ?? 'main';
+        let viewId = request.viewId ?? (source ? contextOf(source).navigationId : undefined) ?? get().currentViewId();
+        const origin = source ? contextOf(source).sourcePath : get().currentPath(viewId) ?? path;
+        const before = captureLocation(origin, viewId, source);
         if (request.disposition === 'side' || viewId === 'split') {
           viewId = 'split';
           await get().openToSide(path);
@@ -485,7 +512,7 @@ export const useStore = create<AppState>()(
           if (!id) return; viewId = 'sidebar:' + id;
         } else {
           viewId = 'main';
-          await get().openFile(path, request.history !== false);
+          await get().openFile(path, false, 'main');
           if (get().activePath !== path) return;
           if (request.location?.mode) get().setViewMode(request.location.mode);
         }
@@ -494,24 +521,24 @@ export const useStore = create<AppState>()(
         if (result.status === 'opened' && request.history !== false) get().recordNavigation(before, result.location);
       },
       goBack: () => {
-        const { history, histIndex } = get();
+        const viewId = get().currentViewId(), { history, histIndex } = historyFor(get(), viewId);
         if (histIndex <= 0) return;
         const captured = captureLocation(history[histIndex].path, history[histIndex].viewId);
         captured.fragment = history[histIndex].fragment;
         const updated = history.map((item, index) => index === histIndex && captured.anchor !== undefined ? captured : item);
         const target = history[histIndex - 1];
-        set({ history: updated, histIndex: histIndex - 1 });
+        set(s => historyPatch(s, viewId, updated, histIndex - 1));
         Promise.resolve(get().navigate(target.path, { viewId: target.viewId, location: target, history: false }))
           .catch(error => get().notify('恢复历史位置失败：' + String(error)));
       },
       goForward: () => {
-        const { history, histIndex } = get();
+        const viewId = get().currentViewId(), { history, histIndex } = historyFor(get(), viewId);
         if (histIndex >= history.length - 1) return;
         const captured = captureLocation(history[histIndex].path, history[histIndex].viewId);
         captured.fragment = history[histIndex].fragment;
         const updated = history.map((item, index) => index === histIndex && captured.anchor !== undefined ? captured : item);
         const target = history[histIndex + 1];
-        set({ history: updated, histIndex: histIndex + 1 });
+        set(s => historyPatch(s, viewId, updated, histIndex + 1));
         Promise.resolve(get().navigate(target.path, { viewId: target.viewId, location: target, history: false }))
           .catch(error => get().notify('恢复历史位置失败：' + String(error)));
       },
@@ -543,16 +570,15 @@ export const useStore = create<AppState>()(
       splitDirection: 'right',
       openToSide: async (path, direction) => {
         cancelNavigation('split', path);
-        if (!TEXT_EXT_RE.test(path)) return;
         const generation = ++splitGeneration;
         try { await documents.saveLeaving(get().splitPath); }
         catch (error) { if (generation === splitGeneration) get().notify(String(error)); return; }
         if (generation !== splitGeneration) return;
-        const doc = await documents.open(path);
+        const doc = TEXT_EXT_RE.test(path) ? await documents.open(path) : undefined;
         if (generation !== splitGeneration) return;
         set((s) => ({
           splitPath: path,
-          splitContent: doc.snapshot.raw,
+          splitContent: doc?.snapshot.raw ?? '',
           splitDirection: direction ?? s.splitDirection,
         }));
       },
@@ -560,7 +586,10 @@ export const useStore = create<AppState>()(
         const generation = ++splitGeneration;
         try { await documents.saveLeaving(get().splitPath); }
         catch (error) { get().notify(String(error)); return; }
-        if (generation === splitGeneration) set({ splitPath: null, splitContent: '' });
+        if (generation === splitGeneration) {
+          if (getActiveNavigationId() === 'split') activateNavigation('main');
+          set(s => ({ splitPath: null, splitContent: '', viewHistories: Object.fromEntries(Object.entries(s.viewHistories).filter(([id]) => id !== 'split')) }));
+        }
       },
 
       recent: [],
@@ -612,6 +641,7 @@ export const useStore = create<AppState>()(
       updateRightTab: (id, patch) => set(s => ({ rightTabs: s.rightTabs.map(tab => tab.id === id ? { ...tab, ...patch } : tab) })),
       selectRightTab: (id) => set(s => {
         const tab = s.rightTabs.find(tab => tab.id === id);
+        if (tab) activateNavigation('sidebar:' + id);
         return !tab ? {} : tab.side === 'left' ? { leftActiveId: id, leftOpen: true } : { rightActiveId: id, rightOpen: true };
       }),
       closeRightTab: async (id) => {
@@ -632,8 +662,10 @@ export const useStore = create<AppState>()(
           const rightTabs = s.rightTabs.filter(tab => tab.id !== id);
           const remaining = siblings.filter(tab => tab.id !== id);
           const next = remaining[Math.min(index, remaining.length - 1)]?.id ?? null;
+          if (getActiveNavigationId() === 'sidebar:' + id) activateNavigation(next ? 'sidebar:' + next : 'main');
           return { rightTabs, rightActiveId: s.rightActiveId === id ? next : s.rightActiveId,
-            leftActiveId: s.leftActiveId === id ? next : s.leftActiveId };
+            leftActiveId: s.leftActiveId === id ? next : s.leftActiveId,
+            viewHistories: Object.fromEntries(Object.entries(s.viewHistories).filter(([key]) => key !== 'sidebar:' + id)) };
         });
         rightGenerations.delete(id);
       },
@@ -712,8 +744,21 @@ export const useStore = create<AppState>()(
         }
       },
 
-      openHomepage: () => get().openFile(`home://${crypto.randomUUID()}`),
-      openFile: async (path, recordHistory = true) => {
+      openHomepage: (viewId) => get().openFile(`home://${crypto.randomUUID()}`, true, viewId),
+      openFile: async (path, recordHistory = true, viewId = get().currentViewId()) => {
+        const origin = get().currentPath(viewId), before = origin ? captureLocation(origin, viewId) : undefined;
+        if (viewId !== 'main') {
+          if (viewId === 'split') {
+            await get().openToSide(path);
+            if (get().splitPath !== path) return;
+          } else {
+            const id = viewId.slice(8), tab = get().rightTabs.find(tab => tab.id === id);
+            if (!tab || !await get().openSidebarTab(tab.side ?? 'right', isHomepagePath(path) ? 'empty' : 'markdown', { file: path }, id)) return;
+          }
+          activateNavigation(viewId);
+          set(s => ({ recent: isHomepagePath(path) ? s.recent : [path, ...s.recent.filter(p => p !== path)].slice(0, 20), ...pushHistory(s, path, recordHistory, viewId, before) }));
+          return;
+        }
         cancelNavigation('main', path);
         const generation = ++openGeneration;
         if (path === GRAPH_PATH) return get().openGraph(recordHistory);
@@ -728,6 +773,7 @@ export const useStore = create<AppState>()(
           content = doc.snapshot.raw;
         }
         if (generation !== openGeneration) return;
+        activateNavigation('main');
         const title = home ? 'Homepage' : path.split('/').pop() ?? path;
         set((s) => {
           const tabs = s.tabs.find((t) => t.path === path) ? s.tabs : [...s.tabs, { path, title }];
@@ -737,10 +783,10 @@ export const useStore = create<AppState>()(
       },
 
       openWikilink: async (target, sourcePath, intent = {}) => {
-        const viewId = intent.viewId ?? 'main', generation = (linkGenerations.get(viewId) ?? 0) + 1;
+        const viewId = intent.viewId ?? (intent.source ? contextOf(intent.source).navigationId : undefined) ?? get().currentViewId(), generation = (linkGenerations.get(viewId) ?? 0) + 1;
         linkGenerations.set(viewId, generation);
         try {
-          const origin = sourcePath ?? get().activePath ?? '';
+          const origin = sourcePath ?? get().currentPath(viewId) ?? '';
           const resolved = target.startsWith('#') ? { path: origin } : await resolveContentLink(target, origin);
           if (linkGenerations.get(viewId) !== generation) return;
           const { path } = resolved;
@@ -750,7 +796,7 @@ export const useStore = create<AppState>()(
           }
           if (path) {
             const fragment = parseLinkTarget(target).fragment;
-            await get().navigate(path, { ...intent, fragment });
+            await get().navigate(path, { ...intent, viewId, fragment });
           }
           else {
             if (isGlobalContentTarget(target)) { get().notify('未找到引用目标：' + target); return; }
@@ -816,21 +862,22 @@ export const useStore = create<AppState>()(
 
       save: async (cause = 'manual') => {
         const editor = cause === 'manual' ? getActiveEditor() : null;
-        const path = editor && !editor.state.readOnly ? contextOf(editor).sourcePath : get().activePath;
+        const path = editor ? contextOf(editor).sourcePath : get().currentPath();
         if (path && TEXT_EXT_RE.test(path)) {
           if(cause==='manual')await manualSave(path);else await documents.get(path)?.save();
         }
       },
 
       createNote: async (path, body, applyTemplate = true) => {
+        const viewId = get().currentViewId();
         const { sharedApp } = await import('./plugins');
         await sharedApp.vault.create(path, body ?? '', applyTemplate);
-        await get().openFile(path);
+        await get().openFile(path, true, viewId);
       },
 
       newNote: async (dir) => {
         // Pick the first free "Untitled" name in the target folder, like Obsidian.
-        const active = get().activePath ?? '';
+        const active = get().currentPath() ?? '';
         const source = findNode(get().tree, active)?.type === 'folder' ? `${active}/_` : active;
         const base = (dir ?? await newFileFolder(source)).replace(/\/+$/, '');
         const folder = base ? findNode(get().tree, base) : get().tree;
@@ -843,7 +890,7 @@ export const useStore = create<AppState>()(
       },
 
       newCanvas: async (dir) => {
-        const active = get().activePath ?? '';
+        const active = get().currentPath() ?? '';
         const source = findNode(get().tree, active)?.type === 'folder' ? `${active}/_` : active;
         const base = (dir ?? await newFileFolder(source)).replace(/\/+$/, '');
         const folder = base ? findNode(get().tree, base) : get().tree;

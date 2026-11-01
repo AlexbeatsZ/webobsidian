@@ -9,7 +9,7 @@ import { observeMinimapLayout } from '../lib/markdownMinimapLayout';
 import { getSearchResultHighlights, subscribeSearchResultHighlights } from '../lib/search';
 import '../styles/minimap.css';
 
-export default function MarkdownMinimap({ path }: { path: string }) {
+export default function MarkdownMinimap({ path, viewId = 'main' }: { path: string; viewId?: string }) {
   const { session, snapshot, error } = useDocumentSession(path);
   const host = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -33,7 +33,7 @@ export default function MarkdownMinimap({ path }: { path: string }) {
     };
     const scroll = () => schedule();
     const bind = () => {
-      const next = navigationView(path, 'main');
+      const next = navigationView(path, viewId);
       if (view === next) return;
       layout?.dispose();
       view = next;
@@ -70,7 +70,7 @@ export default function MarkdownMinimap({ path }: { path: string }) {
       element.setAttribute('aria-valuemax', String(view.state.doc.lines));
     };
     const stopViews = subscribeNavigationViews(changed => {
-      if (changed !== view && changed !== navigationView(path, 'main')) return;
+      if (changed !== view && changed !== navigationView(path, viewId)) return;
       const nextQuery = getSearchQuery(changed.state), nextOpen = searchPanelOpen(changed.state);
       const nextMode = changed.dom.closest('[data-mode]')?.getAttribute('data-mode') ?? null;
       const redraw = !query?.eq(nextQuery) || searchOpen !== nextOpen || nextMode !== mode;
@@ -89,7 +89,7 @@ export default function MarkdownMinimap({ path }: { path: string }) {
       jumpLine = Math.max(0, Math.min((view?.state.doc.lines ?? 1) - 1, Math.round(line)));
       if (!jumpFrame) jumpFrame = requestAnimationFrame(() => {
         jumpFrame = 0;
-        if (view) void navigateTo(path, { line: jumpLine, viewId: 'main', focus: false, history: false, scrollOnly: true }, view);
+        if (view) void navigateTo(path, { line: jumpLine, viewId, focus: false, history: false, scrollOnly: true }, view);
       });
     };
     const point = (event: PointerEvent) => {
@@ -140,7 +140,7 @@ export default function MarkdownMinimap({ path }: { path: string }) {
       cancelAnimationFrame(frame); cancelAnimationFrame(jumpFrame);
       if (drag && element.hasPointerCapture(drag.pointer)) element.releasePointerCapture(drag.pointer);
     };
-  }, [path, session]);
+  }, [path, viewId, session]);
   useEffect(() => { invalidate.current?.(); }, [snapshot.version]);
 
   return <section className="markdown-minimap-panel" aria-label="Markdown 缩略图" aria-busy={!session && !error}>

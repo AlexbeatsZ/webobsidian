@@ -2,7 +2,7 @@ import { useSearch, fileCandidates, matchName, remember, updateSearch, requestHo
 import MatchLabel from './MatchLabel';
 import { documents } from '../lib/documents';
 import { extractMetadata } from '@webobsidian/markdown-core';
-import { getEditorForPath } from '../lib/activeEditor';
+import { getActiveEditor } from '../lib/activeEditor';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { fileTitleError, parseSearchQuery, hotkeyLabel, type Hotkey } from '@webobsidian/search-core';
 import { newFilePath } from '../lib/filePlacement';
@@ -26,7 +26,11 @@ export default function CommandPalette() {
   const open = useStore((s) => s.paletteOpen);
   const mode = useStore((s) => s.paletteMode);
   const setOpen = useStore((s) => s.setPalette);
-  const activePath = useStore((s) => s.activePath);
+  const target = useMemo(() => {
+    const state = useStore.getState();
+    return { path: state.currentPath(), viewId: state.currentViewId(), view: getActiveEditor() };
+  }, [open]);
+  const activePath = target.path;
   const openFile = useStore((s) => s.openFile);
   const rightTabId = useStore((s) => s.paletteRightTab);
   const openToSide = useStore((s) => s.openToSide);
@@ -58,9 +62,9 @@ export default function CommandPalette() {
             ranges: match.matches,
             level: heading.level,
             run: () => {
-              const view = activePath ? getEditorForPath(activePath) : null;
+              const view = target.view;
               if (view) {
-                void useStore.getState().navigate(activePath!, { range: { from: heading.from, to: heading.to }, source: view });
+                void useStore.getState().navigate(activePath!, { range: { from: heading.from, to: heading.to }, source: view, viewId: target.viewId });
               }
             },
           },
@@ -103,7 +107,7 @@ export default function CommandPalette() {
             });
           } else {
             if (rightTabId && /\.(md|markdown)$/i.test(entry.path)) useStore.getState().openRightTab('markdown', { file: entry.path }, rightTabId);
-            else void openFile(entry.path);
+            else void openFile(entry.path, true, target.viewId);
           }
         },
       }));
@@ -163,7 +167,7 @@ export default function CommandPalette() {
   const create = async () => {
     if (!canCreate) return;
     const path = /\.md$/i.test(q.trim()) ? q.trim() : q.trim() + '.md';
-    try { await useStore.getState().createNote(await newFilePath(path, useStore.getState().activePath ?? '')); setOpen(false); }
+    try { await useStore.getState().createNote(await newFilePath(path, target.path ?? '')); setOpen(false); }
     catch (error) { notify(String(error)); }
   };
 

@@ -72,6 +72,14 @@ App 保留左侧 Sidebar 外壳，只用 open 控制可见固定面板和动态�
 - 不新增输入时全文分析、索引构建或工作区序列化，不宣称性能提升。最终27项相关单元、25项浏览器通过；同笔记12组主题/模式/空白与富文本对照最大差0 CSS px，实际glyph字体一致。实际安装040资源零route覆盖复验通过。覆盖真实编辑落盘、独立模式/选区、共享Undo/Redo、关闭/替换屏障、507恢复及空白阅读页命令定位；报告 `tests/reports/split-editing-20261101.md`。
 - 边界：Canvas 嵌入 Editor 尚未显式传 navigationId，默认 split 身份是待单独回归的静态风险；不因此恢复猜测分支。本轮不声称 Canvas、物理IME、其他平台或用户当前窗口验收。
 
+## 活动页面与命令路由（2026-11-01）
+
+- `activeEditor` 同时保留瞬时 navigationId 与实际活动编辑器。中央 main/split 和 sidebar:<id> 宿主在 pointerdown/focus capture 激活显式身份；原编辑器 focusin/pointerdown 继续处理实际编辑目标。弹窗、标题输入、空白阅读页、加载/卸载编辑器不把身份重置成主栏。身份不持久化，也不在普通光标移动时写工作区。
+- store 的 `currentViewId/currentPath` 校验页面仍存在且可见。`openFile/navigate/openWikilink/openHomepage` 默认使用这一目标；主标签栏点击、初始 deep-link 和浏览器 URL 恢复显式指定 main。保存、收藏、移动、命令面板标题搜索、模板/命令上下文与插件 Workspace 使用同一解析。关闭页面后清理其历史并回到有效页面。
+- 主栏保留原 history/histIndex 结构；副栏和侧栏按 navigationId 保存相同 NavigationLocation 栈。正文、选区定位、变更映射、恢复和代次取消仍调用 fragmentNavigation/DocumentSession；不同页面的返回/前进不互相消耗历史。重命名沿原路径映射同时更新全部栈。
+- 右侧固定属性/引用/大纲/缩略图、底部字数和视图切换读取同一活动页面；缩略图显式传 viewId，避免同路径两个视图时跳到主栏。视图模式仍归各 MarkdownView，通过已有 mode callback 修改，不另存副本。
+- 本修复不增加键盘事件管线、全文解析、索引或保存实现；焦点变化只通知实际订阅页面身份的 UI 和插件。
+
 ## 性能与简化
 
 - 出链和大纲读取同一 DocumentSession.analysis 的共享 metadata。出链从已有本地

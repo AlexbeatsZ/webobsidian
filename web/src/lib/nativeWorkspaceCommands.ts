@@ -1,18 +1,26 @@
 import type { NativeCommand } from './commands';
 import { useStore } from './store';
-import { getActiveEditor } from './activeEditor';
-import { contextOf } from './renderContext';
 import { documents } from './documents';
 import { printDocument } from './printDocument';
 import { createVaultRenderContext } from './vaultRenderContext';
 import { requestHotkeySettings } from './search';
-import { getMainPdfSession } from './pdf/react';
+import { getPdfSession } from './pdf/react';
 import { contentReferenceCommands } from './contentReferenceCommands';
 import { addCurrentMcpContext } from './review/client';
 
-const activePath = () => { const view = getActiveEditor(); return view ? contextOf(view).sourcePath : useStore.getState().activePath; };
-const selectTab = (index: number) => { const state = useStore.getState(), tab = state.tabs.at(index); if (tab) return state.openFile(tab.path); };
-function moveTab(direction: number) { const state = useStore.getState(), index = state.tabs.findIndex(tab => tab.path === state.activePath); return selectTab((index + direction + state.tabs.length) % state.tabs.length); }
+const activePath = () => useStore.getState().currentPath();
+function tabTargets() {
+  const state = useStore.getState(), id = state.currentViewId();
+  if (id.startsWith('sidebar:')) {
+    const active = state.rightTabs.find(tab => 'sidebar:' + tab.id === id);
+    const tabs = state.rightTabs.filter(tab => (tab.side ?? 'right') === (active?.side ?? 'right'));
+    return { length: tabs.length, index: tabs.indexOf(active!), select: (index: number) => { const tab = tabs.at(index); if (tab) state.selectRightTab(tab.id); } };
+  }
+  return { length: state.tabs.length, index: state.tabs.findIndex(tab => tab.path === state.currentPath()),
+    select: (index: number) => { const tab = state.tabs.at(index); if (tab) return state.openFile(tab.path, true, id); } };
+}
+const selectTab = (index: number) => tabTargets().select(index);
+function moveTab(direction: number) { const tabs = tabTargets(); if (tabs.length) return tabs.select((tabs.index + direction + tabs.length) % tabs.length); }
 async function focusPane(direction: number) {
   const { sharedApp } = await import('./plugins');
   const leaves = sharedApp.workspace.getLeavesOfType('markdown').filter(leaf => {
@@ -44,7 +52,7 @@ export const nativeWorkspaceCommands: NativeCommand[] = [
   { id: 'app:go-forward', title: '前进', run: () => useStore.getState().goForward() },
   { id: 'app:toggle-left-sidebar', title: '显示或隐藏左侧栏', hotkeys: [{ modifiers: ['Mod'], key: '\\' }], run: () => useStore.getState().toggleLeft() },
   { id: 'app:toggle-right-sidebar', title: '显示或隐藏右侧栏', run: () => useStore.getState().toggleRight() },
-  { id: 'pdf:toggle-toolbar', title: '显示或隐藏 PDF 工具栏', available: () => !!getMainPdfSession(useStore.getState().activePath), run: () => useStore.getState().togglePdfToolbar() },
+  { id: 'pdf:toggle-toolbar', title: '显示或隐藏 PDF 工具栏', available: () => { const state = useStore.getState(); return !!getPdfSession(state.currentPath(), state.currentViewId()); }, run: () => useStore.getState().togglePdfToolbar() },
   { id: 'file-explorer', title: '打开文件列表', run: () => useStore.getState().setLeftPanel('files') },
   { id: 'tags', title: '打开标签面板', run: () => useStore.getState().setRightPanel('tags') },
   { id: 'outline', title: '打开大纲', run: () => useStore.getState().setRightPanel('outline') },

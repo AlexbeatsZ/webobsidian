@@ -1,8 +1,8 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.42",
+  "version": "0.1.43",
   "private": true,
-  "description": "WebObsidian desktop app (Electron shell around the self-hosted server)",
+  "description": "WebObsidian native desktop application",
   "author": "xnohat <xnohat@gmail.com>",
   "homepage": "https://github.com/xnohat/webobsidian",
   "license": "MIT",

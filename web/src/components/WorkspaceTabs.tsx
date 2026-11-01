@@ -17,7 +17,7 @@ import Icon from './Icon';
 export default function WorkspaceTabs() {
   const tabs = useStore((s) => s.tabs);
   const activePath = useStore((s) => s.activePath);
-  const openFile = useStore((s) => s.openFile);
+  const openFile = (path: string) => useStore.getState().openFile(path, true, 'main');
   const closeTab = useStore((s) => s.closeTab);
   const dirty = useStore((s) => s.dirty);
   const setViewMode = useStore((s) => s.setViewMode);
@@ -31,7 +31,7 @@ export default function WorkspaceTabs() {
   const rightOpen = useStore((s) => s.rightOpen);
   const mobileDrawer = useStore((s) => s.mobileDrawer);
   const setMobileDrawer = useStore((s) => s.setMobileDrawer);
-  const openHomepage = useStore((s) => s.openHomepage);
+  const openHomepage = () => useStore.getState().openHomepage('main');
   const openContextMenu = useStore((s) => s.openContextMenu);
   const setMovePath = useStore((s) => s.setMovePath);
   const setRightPanel = useStore((s) => s.setRightPanel);

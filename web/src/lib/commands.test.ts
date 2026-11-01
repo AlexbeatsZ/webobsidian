@@ -14,7 +14,7 @@ vi.mock('./activeEditor', () => ({ getActiveEditor: () => host.active,
   getEditorForPath: (path: string) => host.views.get(path) ?? null }));
 vi.mock('./renderContext', () => ({ contextOf: (view: object) => ({ sourcePath: host.paths.get(view) ?? '' }) }));
 vi.mock('./documents', () => ({ documents: { get: (path: string) => host.sessions.get(path) } }));
-vi.mock('./store', () => ({ useStore: { getState: () => host.state } }));
+vi.mock('./store', () => ({ useStore: { getState: () => ({ ...host.state, currentPath: () => host.state.activePath }) } }));
 vi.mock('./obsidian/editor', () => ({ Editor: class { constructor(public cm: EditorView) {} } }));
 vi.mock('./obsidian/workspace', () => ({ MarkdownView: class {} }));
 

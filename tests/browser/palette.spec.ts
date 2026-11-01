@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
     if (pathname === '/api/vault-identity') return route.fallback();
     if (pathname === '/api/settings/hotkeys') return route.fulfill({ json: { ...emptyHotkeys(), vault: 'browser-fixture' } });
     return route.fulfill({ json: pathname === '/api/catalog' ? { entries }
-      : pathname === '/api/settings/' ? { search: { chinese: {} } }
+      : /^\/api\/settings\/?$/.test(pathname) ? { search: { chinese: {} }, vault: { newFileLocation: 'root' } }
       : pathname === '/api/writing' ? { version: 1, latex: { snippets: '[]' }, linter: {}, hotkeys: {} }
       : { hits: [], matches: [], enabled: false } });
   });
@@ -94,5 +94,5 @@ test('Shift Enter creates only a plain valid title and never uses tag filters as
   expect(await page.evaluate(() => (window as any).paletteHarness.created)).toEqual([]);
   await page.locator('.palette-input').fill('新文件');
   await page.keyboard.press('Shift+Enter');
-  expect(await page.evaluate(() => (window as any).paletteHarness.created)).toEqual(['新文件.md']);
+  await expect.poll(() => page.evaluate(() => (window as any).paletteHarness.created)).toEqual(['新文件.md']);
 });

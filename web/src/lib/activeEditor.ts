@@ -12,6 +12,19 @@ interface EditorCommands {
 }
 const mounted = new Map<EditorView, EditorCommands>();
 let active: EditorView | null = null;
+let activeNavigationId = 'main';
+const navigationListeners = new Set<() => void>();
+export function subscribeActiveNavigation(listener: () => void) {
+  navigationListeners.add(listener); return () => { navigationListeners.delete(listener); };
+}
+/** Transient page identity survives palette focus and editor replacement/loading. */
+export function activateNavigation(id: string) {
+  const changed = activeNavigationId !== id;
+  activeNavigationId = id;
+  if (active && contextOf(active).navigationId !== id) active = null;
+  if (changed) navigationListeners.forEach(listener => listener());
+}
+export function getActiveNavigationId(): string { return activeNavigationId; }
 export function setActiveEditorMode(mode: ModeRequest): boolean {
   const view = getActiveEditor();
   if (!view) return false;
@@ -23,9 +36,13 @@ const available = (view: EditorView) => view.dom.isConnected && !view.dom.closes
 
 export function registerEditor(view: EditorView, commands: EditorCommands): () => void {
   mounted.set(view, commands);
-  if (view.hasFocus) active = view;
+  const select = () => {
+    active = view;
+    activateNavigation(contextOf(view).navigationId ?? activeNavigationId);
+  };
+  if (view.hasFocus) select();
   const activate = (event: Event) => {
-    if ((event.target as Element).closest('.cm-editor') === view.dom) active = view;
+    if ((event.target as Element).closest('.cm-editor') === view.dom) select();
   };
   view.dom.addEventListener('focusin', activate);
   view.dom.addEventListener('pointerdown', activate);
@@ -39,7 +56,8 @@ export function registerEditor(view: EditorView, commands: EditorCommands): () =
 export function getActiveEditor(): EditorView | null {
   const page = document.activeElement?.closest('[data-sidebar-tab]');
   if (page && !active?.dom.closest('[data-sidebar-tab]')?.isSameNode(page)) return null;
-  return active && mounted.has(active) && available(active) ? active : null;
+  if (active && mounted.has(active) && available(active)) return active;
+  return [...mounted.keys()].find(view => available(view) && contextOf(view).navigationId === activeNavigationId) ?? null;
 }
 export function getEditorForPath(path: string): EditorView | null {
   if (active && mounted.has(active) && available(active) && contextOf(active).sourcePath === path) return active;

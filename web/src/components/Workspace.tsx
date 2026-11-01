@@ -1,6 +1,7 @@
 import { useStore, GRAPH_PATH, isHomepagePath } from '../lib/store';
 import { api } from '../lib/api';
 import { documents } from '../lib/documents';
+import { activateNavigation } from '../lib/activeEditor';
 import { isFolderPath } from '../lib/tree';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from '../lib/media';
 import Editor from './Editor';
@@ -12,6 +13,7 @@ import StatusBar from './StatusBar';
 import WorkspaceLauncher from './WorkspaceLauncher';
 
 function EditorPane({ path: activePath, navigationId }: { path: string; navigationId: 'main' | 'split' }) {
+  if (isHomepagePath(activePath)) return <div className="empty-state"><WorkspaceLauncher key={activePath} /></div>;
   const isImage = activePath ? /\.(png|jpe?g|gif|svg|webp)$/i.test(activePath) : false;
   const isCanvas = activePath ? /\.canvas$/i.test(activePath) : false;
   const isVideo = activePath ? VIDEO_EXT_RE.test(activePath) : false;
@@ -58,7 +60,8 @@ function EditorPane({ path: activePath, navigationId }: { path: string; navigati
 
 function WorkspacePane({ path, navigationId }: { path: string; navigationId: 'main' | 'split' }) {
   const close = useStore((state) => navigationId === 'main' ? state.closeTab : state.closeSplit);
-  return <div className={`pane ${navigationId}-pane`} data-view-id={navigationId}>
+  return <div className={`pane ${navigationId}-pane`} data-view-id={navigationId}
+    onPointerDownCapture={() => activateNavigation(navigationId)} onFocusCapture={() => activateNavigation(navigationId)}>
     <button className="tool-btn pane-close" onClick={() => void close(path)} title={navigationId === 'main' ? '关闭标签页' : '关闭分屏'}>
       <Icon name="x" size={16} />
     </button>
@@ -110,17 +113,17 @@ export default function Workspace() {
     <div className="workspace" onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
       <div className={`editor-area ${splitDirection === 'down' ? 'split-down' : ''}`}>
         {(!activePath || activeIsHome) && (
-          <div className="empty-state">
+          <div className="empty-state" data-view-id="main" onPointerDownCapture={() => activateNavigation('main')} onFocusCapture={() => activateNavigation('main')}>
             <WorkspaceLauncher key={activePath} />
           </div>
         )}
         {activePath === GRAPH_PATH && (
-          <div className="pane main-pane">
+          <div className="pane main-pane" data-view-id="main" onPointerDownCapture={() => activateNavigation('main')} onFocusCapture={() => activateNavigation('main')}>
             <GraphView />
           </div>
         )}
         {activePath && !activeIsHome && activePath !== GRAPH_PATH && activeIsFolder && (
-          <div className="pane main-pane">
+          <div className="pane main-pane" data-view-id="main" onPointerDownCapture={() => activateNavigation('main')} onFocusCapture={() => activateNavigation('main')}>
             <FolderView path={activePath} />
           </div>
         )}

@@ -5,6 +5,13 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+async function runPageCommand(page: Page, id: string) {
+  await page.evaluate(async id => {
+    const module = '/src/lib/plugins.ts';
+    await (await import(module)).sharedApp.commands.execute(id);
+  }, id);
+}
+
 const richParitySource = [
   '---', 'status: parity', 'tags: [layout, shared]', '---', '',
   '# Visible H1 heading', '', 'Parity body 中文 Text123', '', '## Visible H2 heading', '',
@@ -697,3 +704,151 @@ for (const target of ['main', 'split'] as const) {
     expect(await fs.readFile(path.join(backend.vault, file), 'utf8')).toBe(saved);
   });
 }
+
+test('focused page routing: file picker replaces the focused split and preserves main', async ({ page, backend }) => {
+  await openSplit(page);
+  await content(page, 'split').click();
+  await page.keyboard.press(mod + '+o');
+  await page.locator('.palette-input').fill('replacement');
+  await page.keyboard.press('Enter');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+});
+
+test('focused page routing: bookmark and move commands use the focused reading page', async ({ page, backend }) => {
+  await openSplit(page);
+  await setMode(page, 'split', 'reading');
+  await rootEditor(page, 'split').click({ position: { x: 30, y: 300 } });
+  await runPageCommand(page, 'bookmark');
+  await runPageCommand(page, 'move');
+  expect(await page.evaluate(async () => {
+    const module = '/src/lib/store.ts';
+    const state = (await import(module)).useStore.getState();
+    return { bookmarks: state.bookmarks, move: state.movePath };
+  })).toEqual({ bookmarks: ['side.md'], move: 'side.md' });
+});
+
+test('focused page routing: history is independent for main and split', async ({ page, backend }) => {
+  await page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; const state = (await import(module)).useStore.getState();
+    await state.openFile('replacement.md', true, 'main');
+  });
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'replacement.md');
+  await openSplit(page);
+  await content(page, 'split').click();
+  await page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; await (await import(module)).useStore.getState().openFile('main.md');
+  });
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'main.md');
+  await runPageCommand(page, 'app:go-back');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'replacement.md');
+  await runPageCommand(page, 'app:go-forward');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'main.md');
+  await content(page, 'main').click();
+  await runPageCommand(page, 'app:go-back');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'main.md');
+});
+
+test('focused page routing: tab command stays in split, explicit main tab click targets main', async ({ page, backend }) => {
+  await page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; const state = (await import(module)).useStore.getState();
+    await state.openFile('replacement.md', true, 'main'); await state.openFile('main.md', true, 'main');
+  });
+  await openSplit(page, 'main.md');
+  await inlineTitle(page, 'split').click();
+  await runPageCommand(page, 'workspace:next-tab');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  await page.getByRole('tab', { name: /replacement/ }).click();
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'replacement.md');
+});
+
+test('focused page routing: headings palette and outline read and navigate split', async ({ page, backend }) => {
+  await openSplit(page, 'parity-rich.md');
+  await content(page, 'split').click();
+  await runPageCommand(page, 'headings');
+  await page.locator('.palette-input').fill('Visible H2');
+  await page.keyboard.press('Enter');
+  await expect(rootEditor(page, 'split').locator('.cm-navigation-target')).toContainText('Visible H2');
+  await runPageCommand(page, 'outline');
+  await expect(page.locator('.right-sidebar .outline-item').filter({ hasText: 'Visible H2' })).toBeVisible();
+  await page.locator('.right-sidebar .outline-item').filter({ hasText: 'Visible H1' }).click();
+  await expect(rootEditor(page, 'split').locator('.cm-navigation-target')).toContainText('Visible H1');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+});
+
+test('focused page routing: footer mode switch and reading Save target split', async ({ page, backend }) => {
+  await openSplit(page);
+  await content(page, 'split').click();
+  await page.locator('.view-mode-trigger').click();
+  await page.getByRole('menuitemcheckbox', { name: '阅读视图' }).click();
+  await expect(host(page, 'split')).toHaveAttribute('data-mode', 'reading');
+  await expect(host(page, 'main')).toHaveAttribute('data-mode', 'live');
+  await runPageCommand(page, 'save');
+  await expect.poll(() => fs.readFile(path.join(backend.vault, 'side.md'), 'utf8')).toBe(original['side.md'].replace('，', ','));
+  expect(await fs.readFile(path.join(backend.vault, 'main.md'), 'utf8')).toBe(original['main.md']);
+});
+
+test('focused page routing: sidebar picker retains its tab and close restores main routing', async ({ page, backend }) => {
+  const id = await page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; return (await import(module)).useStore.getState().openSidebarTab('right', 'markdown', { file: 'side.md' });
+  });
+  const sidebar = page.locator(`[data-sidebar-tab="${id}"]`);
+  await sidebar.locator('.cm-content').click();
+  await page.keyboard.press(mod + '+o');
+  await page.locator('.palette-input').fill('replacement'); await page.keyboard.press('Enter');
+  await expect(sidebar.locator('[data-document-id]')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  await runPageCommand(page, 'workspace:close');
+  await expect(sidebar).toHaveCount(0);
+  await runPageCommand(page, 'bookmark');
+  expect(await page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; return (await import(module)).useStore.getState().bookmarks;
+  })).toEqual(['main.md']);
+});
+
+test('focused page routing: new Homepage and picker stay in focused split', async ({ page, backend }) => {
+  await openSplit(page);
+  await content(page, 'split').click();
+  await runPageCommand(page, 'new-tab');
+  await expect(pane(page, 'split').locator('.workspace-launcher')).toBeVisible();
+  await runPageCommand(page, 'files');
+  await page.locator('.palette-input').fill('replacement'); await page.keyboard.press('Enter');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  await runPageCommand(page, 'new-tab');
+  await expect(pane(page, 'split').locator('.workspace-launcher')).toBeVisible();
+  await runPageCommand(page, 'workspace:close');
+  await expect(pane(page, 'split')).toHaveCount(0);
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+});
+
+test('focused page routing: same-file palette mode and close keep view identities distinct', async ({ page, backend }) => {
+  await openSplit(page, 'main.md');
+  await inlineTitle(page, 'split').click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press(mod + '+p');
+  await page.locator('.palette-input').fill('切换到源码模式');
+  await page.keyboard.press('Enter');
+  await expect(host(page, 'split')).toHaveAttribute('data-mode', 'source');
+  await expect(host(page, 'main')).toHaveAttribute('data-mode', 'live');
+  await runPageCommand(page, 'workspace:close');
+  await expect(pane(page, 'split')).toHaveCount(0);
+  await runPageCommand(page, 'reading');
+  await expect(host(page, 'main')).toHaveAttribute('data-mode', 'reading');
+});
+
+test('focused page routing: new-note current folder follows split', async ({ page, backend }) => {
+  await fs.mkdir(path.join(backend.vault, 'sub'));
+  await fs.writeFile(path.join(backend.vault, 'sub', 'in-folder.md'), '# In folder');
+  const settings = await page.request.put(backend.url + '/api/settings', { data: { vault: { newFileLocation: 'current' } } });
+  expect(settings.ok()).toBe(true);
+  await openSplit(page, 'sub/in-folder.md');
+  await content(page, 'split').click();
+  await runPageCommand(page, 'new');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'sub/Untitled.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  expect(await fs.readFile(path.join(backend.vault, 'sub', 'Untitled.md'), 'utf8')).toBe('');
+});

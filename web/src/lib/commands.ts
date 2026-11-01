@@ -27,15 +27,15 @@ export interface CommandContext {
 /** Capture once before async work; never rediscover a different target after await. */
 export function commandContext(source: CommandContext['source'] = 'user', path?: string): CommandContext {
   const view = path !== undefined ? null : getActiveEditor();
-  const target = path ?? (view ? contextOf(view).sourcePath : useStore.getState().activePath ?? '');
+  const target = path ?? (view ? contextOf(view).sourcePath : useStore.getState().currentPath() ?? '');
   const state = view?.state, session = documents.get(target), version = session?.snapshot.version;
-  const activePath = useStore.getState().activePath;
+  const activePath = useStore.getState().currentPath();
   return {
     source, path: target, view, state, stack: [], now: new Date(),
     selection: state ? state.sliceDoc(state.selection.main.from, state.selection.main.to) : '',
     assertCurrent() {
       if (useStore.getState().vaultSessionStale) throw new Error('Vault 已切换，请重新加载应用');
-      if ((path === undefined && useStore.getState().activePath !== activePath) || (view && (view.state.doc !== state!.doc ||
+      if ((path === undefined && useStore.getState().currentPath() !== activePath) || (view && (view.state.doc !== state!.doc ||
           !view.state.selection.eq(state!.selection) || getEditorForPath(target) !== view)))
         throw new Error('编辑位置已变化，请重新执行');
       if (session && (documents.get(target) !== session || session.snapshot.version !== version || session.snapshot.conflict))
@@ -136,7 +136,7 @@ export class CommandManager extends Events {
     context.signal?.throwIfAborted();
     if (command.available && !command.available(context)) return false;
     if (command.run) return checking ? true : command.run(args, context);
-    if (context.path && context.path !== this.app.workspace.getActiveFile()?.path) return false;
+    if (context.path && context.path !== (this.app.workspace.getActiveFile()?.path ?? useStore.getState().currentPath())) return false;
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (context.view && view?.editor?.cm !== context.view && (command.editorCallback || command.editorCheckCallback)) return false;
     const target = context.view ? new Editor(context.view) : view?.editor;

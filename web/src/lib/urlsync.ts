@@ -55,7 +55,7 @@ export function initUrlSync(): string | null {
     const path = urlToPath(window.location.pathname);
     if (!path || path === useStore.getState().activePath) return;
     applyingPop = true;
-    Promise.resolve(useStore.getState().openFile(path))
+    Promise.resolve(useStore.getState().openFile(path, true, 'main'))
       .catch(() => {})
       .finally(() => {
         applyingPop = false;
