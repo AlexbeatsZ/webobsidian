@@ -1,46 +1,159 @@
-import { execFile } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import type { safeStorage } from 'electron';
 
+export interface McpConnectionInput { tunnelId: string; apiKey?: string }
 export interface McpLauncherState {
-  projectPath: string;
-  configured: boolean;
+  available: boolean;
+  tunnelId: string;
+  hasKey: boolean;
+  connected: boolean;
+  clientConfig: string;
   ok?: boolean;
   output?: string;
 }
+interface Options {
+  runtimeDir: string;
+  binary: string;
+  mcpEntry: string;
+  executable: string;
+  endpointFile: string;
+  serverUrl: string;
+  secrets: Pick<typeof safeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'> &
+    Partial<Pick<typeof safeStorage, 'getSelectedStorageBackend'>>;
+}
+interface Connection { tunnelId: string; encryptedKey: string }
 
+/** One application-owned Tunnel process; all MCP tools remain in the server. */
 export class McpLauncher {
   private busy = false;
+  private child?: ChildProcess;
+  private output = '';
+  constructor(private readonly options: Options) {}
 
-  async inspect(projectPath: string): Promise<McpLauncherState> {
-    let configured = false;
+  private get configFile() { return path.join(this.options.runtimeDir, 'connection.json'); }
+  private get healthFile() { return path.join(this.options.runtimeDir, 'health.url'); }
+
+  private async readConnection(): Promise<Connection> {
     try {
-      const manifest = JSON.parse(await fs.readFile(path.join(projectPath, 'package.json'), 'utf8'));
-      const entry = await fs.stat(path.join(projectPath, 'scripts', 'manual-start-mcp.ps1'));
-      configured = manifest.name === 'obsidian-context-mcp' && entry.isFile();
-    } catch {}
-    return { projectPath, configured };
+      const value = JSON.parse(await fs.readFile(this.configFile, 'utf8'));
+      if (typeof value.tunnelId !== 'string' || typeof value.encryptedKey !== 'string') throw new Error('MCP 连接设置无效');
+      return value;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return { tunnelId: '', encryptedKey: '' };
+      throw error;
+    }
   }
 
-  async connect(projectPath: string, endpointFile: string): Promise<McpLauncherState> {
-    if (process.platform !== 'win32') throw new Error('手动启动目前仅支持 Windows 桌面端');
+  async inspect(): Promise<McpLauncherState> {
+    const connection = await this.readConnection();
+    const available = await Promise.all([this.options.mcpEntry, this.options.binary].map(file => fs.stat(file).then(entry => entry.isFile(), () => false)));
+    return {
+      available: available.every(Boolean), tunnelId: connection.tunnelId, hasKey: !!connection.encryptedKey,
+      connected: !!this.child && this.child.exitCode === null && !this.child.killed,
+      clientConfig: JSON.stringify({ mcpServers: { webobsidian: {
+        command: this.options.executable, args: [this.options.mcpEntry],
+        env: { ELECTRON_RUN_AS_NODE: '1', WEBOBSIDIAN_ENDPOINT_FILE: this.options.endpointFile },
+      } } }, null, 2),
+    };
+  }
+
+  async configure(input: McpConnectionInput): Promise<McpLauncherState> {
     if (this.busy) throw new Error('MCP 操作仍在进行，请稍候');
     this.busy = true;
     try {
-      const state = await this.inspect(projectPath);
-      if (!state.configured) throw new Error('请选择包含手动启动脚本的 obsidian-context-mcp 项目');
-      const command = '$ProgressPreference = "SilentlyContinue"; $OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new(); try { & $env:WEBOBSIDIAN_MCP_MANUAL -Action $env:WEBOBSIDIAN_MCP_ACTION -EndpointFile $env:WEBOBSIDIAN_MCP_ENDPOINT *>&1 | ForEach-Object { $_.ToString() }; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }';
-      const executable = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-      return await new Promise(resolve => {
-        execFile(executable, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], {
-          cwd: projectPath, windowsHide: true, timeout: 60_000, maxBuffer: 32 * 1024, encoding: 'utf8',
-          env: { ...process.env, WEBOBSIDIAN_MCP_MANUAL: path.join(projectPath, 'scripts', 'manual-start-mcp.ps1'),
-            WEBOBSIDIAN_MCP_ACTION: 'Connect', WEBOBSIDIAN_MCP_ENDPOINT: endpointFile },
-        }, (error, stdout, stderr) => {
-          const output = [stdout.trim(), stderr.trim(), error?.killed ? '连接操作超时；未自动重试，请稍后手动连接' : error && !stdout && !stderr ? error.message : ''].filter(Boolean).join('\n');
-          resolve({ ...state, ok: !error, output });
-        });
-      });
+      if (!input || typeof input.tunnelId !== 'string' || !/^tunnel_[a-zA-Z0-9_-]{8,120}$/.test(input.tunnelId.trim()))
+        throw new Error('Tunnel ID 无效');
+      if (input.apiKey !== undefined && (typeof input.apiKey !== 'string' || input.apiKey.length > 4096 || /[\r\n\0]/.test(input.apiKey)))
+        throw new Error('运行密钥无效');
+      const previous = await this.readConnection();
+      const apiKey = input.apiKey?.trim();
+      let encryptedKey = previous.encryptedKey;
+      if (apiKey) {
+        if (!this.options.secrets.isEncryptionAvailable() || this.options.secrets.getSelectedStorageBackend?.() === 'basic_text')
+          throw new Error('系统密钥存储不可用，无法保存运行密钥');
+        encryptedKey = this.options.secrets.encryptString(apiKey).toString('base64');
+      }
+      if (!encryptedKey) throw new Error('请填写 Tunnel 运行密钥');
+      const connection = { tunnelId: input.tunnelId.trim(), encryptedKey };
+      await fs.mkdir(this.options.runtimeDir, { recursive: true });
+      const temporary = `${this.configFile}.${randomUUID()}.tmp`;
+      try {
+        await fs.writeFile(temporary, JSON.stringify(connection), { mode: 0o600 });
+        await fs.rename(temporary, this.configFile);
+      } finally { await fs.rm(temporary, { force: true }); }
+      await this.stop();
+      return await this.inspect();
     } finally { this.busy = false; }
+  }
+
+  private async healthy(): Promise<boolean> {
+    if (!this.child || this.child.exitCode !== null || this.child.killed) return false;
+    try {
+      const url = new URL((await fs.readFile(this.healthFile, 'utf8')).trim());
+      if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.username || url.password) return false;
+      const result = await fetch(new URL('/readyz', url), { signal: AbortSignal.timeout(1500) });
+      return result.ok;
+    } catch { return false; }
+  }
+
+  async connect(): Promise<McpLauncherState> {
+    if (this.busy) throw new Error('MCP 操作仍在进行，请稍候');
+    this.busy = true;
+    try {
+      const state = await this.inspect();
+      if (!state.available) throw new Error('安装包缺少内置 MCP 组件，请重新安装 WebObsidian');
+      if (!state.tunnelId || !state.hasKey) throw new Error('请先在连接设置中填写 Tunnel ID 和运行密钥');
+      const local = await fetch(`${this.options.serverUrl}/healthz`, { signal: AbortSignal.timeout(3000) });
+      if (!local.ok) throw new Error('本机 WebObsidian 服务尚未就绪');
+      if (await this.healthy()) return { ...state, connected: true, ok: true, output: '已连接' };
+      await this.stop();
+      const connection = await this.readConnection();
+      const apiKey = this.options.secrets.decryptString(Buffer.from(connection.encryptedKey, 'base64'));
+      await fs.mkdir(this.options.runtimeDir, { recursive: true });
+      await fs.rm(this.healthFile, { force: true });
+      const env = { ...process.env };
+      for (const key of Object.keys(env)) if (/^(CONTROL_PLANE_|OPENAI_|TUNNEL_|MCP_|ELECTRON_RUN_AS_NODE)/i.test(key)) delete env[key];
+      env.CONTROL_PLANE_API_KEY = apiKey;
+      this.output = '';
+      const child = spawn(this.options.binary, [
+        'run', '--control-plane.tunnel-id', connection.tunnelId,
+        '--mcp.server-url', `${this.options.serverUrl}/mcp`,
+        '--health.listen-addr', '127.0.0.1:0', '--health.url-file', this.healthFile,
+      ], { cwd: this.options.runtimeDir, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      this.child = child;
+      let failure: Error | undefined;
+      const capture = (chunk: Buffer) => {
+        this.output = (this.output + chunk.toString('utf8')).split(apiKey).join('[redacted]').slice(-16384);
+      };
+      child.stdout?.on('data', capture); child.stderr?.on('data', capture);
+      child.on('error', error => { failure = error; });
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline) {
+        if (failure) throw new Error(`MCP 连接失败：${failure.message}`);
+        if (child.exitCode !== null) throw new Error(`MCP 连接失败：${this.output.trim() || `exit ${child.exitCode}`}`);
+        if (await this.healthy()) return { ...state, connected: true, ok: true, output: '已连接' };
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      throw new Error(`MCP 连接超时：${this.output.trim() || '请检查网络和运行密钥'}`);
+    } catch (error) {
+      await this.stop();
+      return { ...await this.inspect(), ok: false, connected: false, output: (error as Error).message };
+    } finally { this.busy = false; }
+  }
+
+  async stop(): Promise<void> {
+    const child = this.child;
+    if (!child || child.exitCode !== null || !child.pid) { this.child = undefined; return; }
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('MCP 连接尚未停止')), 5000);
+      child.once('close', () => { clearTimeout(timer); if (this.child === child) this.child = undefined; resolve(); });
+      if (!child.kill()) {
+        clearTimeout(timer);
+        reject(new Error('无法停止 MCP 连接'));
+      }
+    });
   }
 }

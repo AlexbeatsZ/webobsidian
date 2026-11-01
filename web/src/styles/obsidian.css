@@ -2031,6 +2031,9 @@ audio.media-embed { display: block; width: min(100%, 480px); max-width: 100%; ma
 .mcp-launcher-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .mcp-launcher-actions .btn { padding: 4px 8px; font-size: 12px; }
 .mcp-launcher-actions .btn:disabled { opacity: .45; cursor: default; }
+.mcp-connection-settings { display: flex; flex-direction: column; gap: 8px; }
+.mcp-connection-settings label { display: flex; flex-direction: column; gap: 4px; }
+.mcp-connection-settings input { width: 100%; min-width: 0; box-sizing: border-box; }
 .mcp-launcher summary { cursor: pointer; color: var(--text-muted); }
 .mcp-launcher pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow: auto; user-select: text; }
 .mcp-context-item { display: flex; flex-direction: column; gap: 4px; }

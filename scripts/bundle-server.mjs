@@ -22,5 +22,11 @@ export async function bundleServer(repoDir, outputDir) {
     logLevel: 'info',
   });
   checkServerBundle(bundle);
+  await build({
+    entryPoints: [path.join(repoDir, 'server/dist/mcp.js')], bundle: true,
+    platform: 'node', format: 'cjs', target: 'node20',
+    outfile: path.join(outputDir, 'dist/mcp.cjs'), logLevel: 'info',
+  });
+  checkServerBundle(path.join(outputDir, 'dist/mcp.cjs'));
   cpSync(publicDir, path.join(outputDir, 'public'), { recursive: true });
 }

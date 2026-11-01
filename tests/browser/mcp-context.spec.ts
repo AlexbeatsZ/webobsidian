@@ -216,12 +216,12 @@ test('desktop manual controls do not auto-start, serialize actions and expose fa
   await page.addInitScript(() => {
     const host = window as any;
     host.mcpCalls = [];
-    const state = { projectPath: 'C:/fixture/mcp', configured: true };
+    const state = { available: true, tunnelId: 'tunnel_fixture123', hasKey: true, connected: false, clientConfig: '{}' };
     host.webobsidianDesktop = {
       platform: 'win32', nativePlugins: false, isDesktop: true,
       onBeforeClose: () => () => {}, openVaultPath: async () => {},
       webviewer: { subscribe: () => () => {} }, userscripts: { subscribe: () => () => {}, request: async () => [] },
-      mcp: { inspect: async () => state, selectProject: async () => null,
+      mcp: { inspect: async () => state, copyConfig: async () => {}, configure: async () => state,
         connect: () => {
           host.mcpCalls.push('Connect');
           return new Promise(resolve => { host.finishMcp = (ok: boolean) => resolve({ ...state, ok, output: ok ? 'fixture ready' : 'fixture offline' }); });
@@ -236,7 +236,8 @@ test('desktop manual controls do not auto-start, serialize actions and expose fa
   expect(await page.evaluate(() => (window as any).mcpCalls)).toEqual([]);
   await launcher.getByRole('button', { name: '连接', exact: true }).click();
   await expect(launcher.getByRole('button', { name: '连接', exact: true })).toBeDisabled();
-  await expect(launcher.getByRole('button', { name: '选择项目', exact: true })).toBeDisabled();
+  await expect(launcher.getByRole('button', { name: '选择项目', exact: true })).toHaveCount(0);
+  await expect(launcher.getByRole('button', { name: '连接设置', exact: true })).toBeDisabled();
   await page.evaluate(() => (window as any).finishMcp(true));
   await expect(launcher.getByRole('status')).toHaveText('连接完成');
   await launcher.getByRole('button', { name: '连接', exact: true }).click();
@@ -250,24 +251,31 @@ test('desktop manual controls do not auto-start, serialize actions and expose fa
   await page.screenshot({ path: test.info().outputPath('mcp-native-controls.png') });
 });
 
-test('desktop project selection is explicit and cancellation keeps the current state', async ({ page }) => {
+test('built-in MCP works without a project directory and stores only explicit connection settings', async ({ page }) => {
   await page.addInitScript(() => {
     const host = window as any;
-    let choose = 0;
-    host.webobsidianDesktop = { platform: 'win32',
+    const state = { available: true, tunnelId: '', hasKey: false, connected: false, clientConfig: '{}' };
+    host.savedMcp = null; host.copiedMcp = false;
+    host.webobsidianDesktop = { platform: 'darwin',
       onBeforeClose: () => () => {}, webviewer: { subscribe: () => () => {} }, userscripts: { subscribe: () => () => {}, request: async () => [] },
-      mcp: { inspect: async () => ({ configured: false, projectPath: 'missing' }),
-        selectProject: async () => ++choose === 1 ? null : { configured: true, projectPath: 'selected' },
+      mcp: { inspect: async () => state,
+        configure: async (input: unknown) => { host.savedMcp = input; return { ...state, tunnelId: 'tunnel_fixture123', hasKey: true }; },
+        copyConfig: async () => { host.copiedMcp = true; },
         connect: async () => { throw new Error('fixture failed to launch'); } } };
   });
   await page.reload();
   await page.getByRole('button', { name: 'MCP', exact: true }).click();
   const launcher = page.getByLabel('MCP 连接', { exact: true });
-  await expect(launcher.getByRole('button', { name: '连接', exact: true })).toBeDisabled();
-  await launcher.getByRole('button', { name: '选择项目', exact: true }).click();
-  await expect(launcher.getByRole('button', { name: '连接', exact: true })).toBeDisabled();
-  await launcher.getByRole('button', { name: '选择项目', exact: true }).click();
   await expect(launcher.getByRole('button', { name: '连接', exact: true })).toBeEnabled();
+  await expect(launcher.getByRole('button', { name: '选择项目', exact: true })).toHaveCount(0);
+  await expect(launcher).not.toContainText('项目目录');
+  await launcher.getByRole('button', { name: '连接设置', exact: true }).click();
+  await launcher.getByLabel('Tunnel ID').fill('tunnel_fixture123');
+  await launcher.getByLabel('运行密钥').fill('fixture-secret');
+  await launcher.getByRole('button', { name: '保存', exact: true }).click();
+  expect(await page.evaluate(() => (window as any).savedMcp)).toEqual({ tunnelId: 'tunnel_fixture123', apiKey: 'fixture-secret' });
+  await launcher.getByRole('button', { name: '复制配置', exact: true }).click();
+  expect(await page.evaluate(() => (window as any).copiedMcp)).toBe(true);
   await launcher.getByRole('button', { name: '连接', exact: true }).click();
   await expect(launcher.getByRole('alert')).toContainText('fixture failed to launch');
   await expect(launcher.getByRole('button', { name: '连接', exact: true })).toBeEnabled();

@@ -20,6 +20,7 @@ function fixture(platform = 'win32') {
     whenReady: () => new Promise<void>(() => {}),
     quit: vi.fn(),
     isPackaged: false,
+    getPath: () => 'C:/fixture/profile',
   });
   const ipc = Object.assign(new EventEmitter(), { handle: vi.fn() });
   const scripts = { stop: vi.fn().mockResolvedValue(undefined) };
@@ -56,7 +57,7 @@ function fixture(platform = 'win32') {
   runInNewContext(compiled + '\nexports.fixture = { createWindow, requestWindowClose, initialize: (scripts, server) => { serverPort = 8787; userscripts = scripts; serverProc = server; registerDesktopRequests(); } };', {
     exports: moduleExports,
     require: (id: string) => id === 'electron' ? electron : id === './mcpLauncher' ? { McpLauncher } : id === './userscripts/service' || id === './paths' ? {} : nativeRequire(id),
-    process: { platform },
+    process: { platform, arch: 'x64', execPath: 'WebObsidian' },
     __dirname: fileURLToPath(new URL('../../../desktop/src', import.meta.url)),
     URL, Buffer, setTimeout, clearTimeout, console,
   });
@@ -83,7 +84,7 @@ describe('desktop close coordinator against the production main implementation',
       { sender: host.window.webContents, senderFrame: { url: frame.url } },
       { sender: host.window.webContents, senderFrame: null },
     ];
-    for (const event of denied) for (const channel of ['desktop:mcp-inspect', 'desktop:mcp-connect', 'desktop:mcp-select-project']) {
+    for (const event of denied) for (const channel of ['desktop:mcp-inspect', 'desktop:mcp-connect', 'desktop:mcp-configure', 'desktop:mcp-copy-config']) {
       await expect(host.invoke(channel, event, 'Start')).rejects.toThrow('Local application frame');
     }
     frame.url = 'https://untrusted.example/';

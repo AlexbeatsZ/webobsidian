@@ -16,6 +16,7 @@ import { errorHandler } from './middleware/error.js';
 import { requireLocal, isLocalRequest } from './middleware/localAccess.js';
 import { filesRouter } from './routes/files.js';
 import { operationsRouter } from './routes/operations.js';
+import { mcpRouter } from './routes/mcp.js';
 import { bindOperationClient, operationWorkspaceMessage } from './services/operationWorkspace.js';
 import { searchRouter } from './routes/search.js';
 import { settingsRouter, configureVaultSwitch, assertVaultPathAllowed } from './routes/settings.js';
@@ -120,6 +121,7 @@ async function main() {
   // Specific routes precede the shared search router. Access is checked once above.
   app.use('/api/files', filesRouter);
   app.use('/api/operations', operationsRouter);
+  app.use('/mcp', mcpRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/writing', writingRouter);
   app.use('/api/git', gitRouter);

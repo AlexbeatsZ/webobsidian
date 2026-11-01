@@ -24,6 +24,12 @@ the matching prebuilt Electron binary — no cross-compilation, no `node-gyp`.
   reading/source/live views. The left ribbon hides with the left sidebar.
   macOS keeps its system menu bar (including File → Switch Vault…).
 - Git sync needs `git` on the machine; without it the app still works for local editing.
+- MCP is built in: **复制配置** provides the local stdio client command using
+  this application's runtime. **连接设置** accepts an existing Secure MCP Tunnel
+  ID/runtime key, and **连接** starts the bundled official Tunnel client.
+  No separate project, plugin, Node installation or startup task is needed.
+  The key is encrypted in the OS-backed application store; application quit
+  stops its own Tunnel process. See `docs/design/native-mcp.md` in the repository.
 
 ## Build locally
 
@@ -32,6 +38,13 @@ The supplied platform icons live in `buildResources/`: macOS packages use
 `icon-windows.ico` (transparent crystal, 16–256px). Development windows use the
 same Windows ICO; development macOS Dock uses `icon-macos.png`. Packaged apps
 use their native application icon. Linux retains `icon.png`.
+
+Desktop builds download the pinned Secure MCP Tunnel 0.0.19 release for each
+target platform/architecture, verify its archive digest, and ship its binary
+and redistribution notices under `resources/mcp-tunnel`. Builds need GitHub
+release download access. For a restricted local build, place the exact release
+ZIP and `-licenses.txt` under `desktop/.gen/tunnel-downloads`; the ZIP is still
+verified against the pinned digest. Runtime never downloads dependencies.
 
 Android shares the macOS PNG design. Regenerate its launcher sizes with
 `uv run --no-project --with pillow python android/scripts/generate-icons.py`.

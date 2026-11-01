@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, net, shell, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, net, shell, safeStorage, clipboard, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { promises as fs } from 'node:fs';
@@ -27,7 +27,6 @@ const SERVER_STARTUP_TIMEOUT_MS = 120_000;
 interface DesktopConfig {
   vaultPath?: string;
   trustedPlugins?: boolean;
-  mcpProjectPath?: string;
 }
 
 let serverProc: ChildProcess | null = null;
@@ -35,6 +34,7 @@ let serverPort = 0;
 let mainWindow: BrowserWindow | null = null;
 let desktopConfig: DesktopConfig | undefined;
 let userscripts: UserscriptService | undefined;
+let mcpLauncher: McpLauncher | undefined;
 let initialVaultChoice: string | undefined;
 let finishingQuit = false;
 let quitRequest: Promise<void> | undefined;
@@ -70,7 +70,7 @@ function requestWindowClose(window: BrowserWindow, quit: boolean): Promise<void>
     try {
       await prepareWindowClose(window);
       if (quitRequested) {
-        await userscripts?.stop();
+        await Promise.all([userscripts?.stop(), mcpLauncher?.stop()]);
         finishingQuit = true;
         app.quit();
       } else if (!window.isDestroyed()) {
@@ -504,27 +504,29 @@ function registerTitleBar(): void {
 // App lifecycle
 // ---------------------------------------------------------------------------
 function registerDesktopRequests(): void {
-  const mcp = new McpLauncher();
-  const mcpProject = () => desktopConfig?.mcpProjectPath ?? path.join(os.homedir(), 'Project', 'Workspaces', 'obsidian-context-mcp');
+  const mcp = mcpLauncher = new McpLauncher({
+    runtimeDir: path.join(app.getPath('userData'), 'mcp'),
+    binary: path.join(app.isPackaged ? path.join(process.resourcesPath, 'mcp-tunnel')
+      : path.join(__dirname, '..', '.gen', 'tunnel', process.arch), process.platform === 'win32' ? 'tunnel-client.exe' : 'tunnel-client'),
+    mcpEntry: path.join(path.dirname(serverEntry()), 'mcp.cjs'),
+    executable: process.execPath, endpointFile: path.join(DATA_DIR(), 'operations-endpoint.json'),
+    serverUrl: baseUrl(serverPort), secrets: safeStorage,
+  });
   ipcMain.handle('desktop:mcp-inspect', async event => {
     if (!desktopWindow(event)) throw new Error('Local application frame required');
-    return mcp.inspect(mcpProject());
+    return mcp.inspect();
   });
-  ipcMain.handle('desktop:mcp-select-project', async event => {
-    const window = desktopWindow(event);
-    if (!window) throw new Error('Local application frame required');
-    const selected = await dialog.showOpenDialog(window, { title: '选择 obsidian-context-mcp 项目', defaultPath: mcpProject(), properties: ['openDirectory'] });
-    if (selected.canceled || !selected.filePaths[0]) return null;
-    const state = await mcp.inspect(selected.filePaths[0]);
-    if (!state.configured) throw new Error('所选目录缺少 obsidian-context-mcp 手动启动脚本');
-    const config = { ...desktopConfig, mcpProjectPath: state.projectPath };
-    await writeConfig(config);
-    desktopConfig = config;
-    return state;
+  ipcMain.handle('desktop:mcp-configure', async (event, input) => {
+    if (!desktopWindow(event)) throw new Error('Local application frame required');
+    return mcp.configure(input);
+  });
+  ipcMain.handle('desktop:mcp-copy-config', async event => {
+    if (!desktopWindow(event)) throw new Error('Local application frame required');
+    clipboard.writeText((await mcp.inspect()).clientConfig);
   });
   ipcMain.handle('desktop:mcp-connect', async event => {
     if (!desktopWindow(event)) throw new Error('Local application frame required');
-    return mcp.connect(mcpProject(), path.join(DATA_DIR(), 'operations-endpoint.json'));
+    return mcp.connect();
   });
   ipcMain.on('desktop:close-result', (event, token: unknown, result: unknown) => {
     const window = desktopWindow(event);
@@ -603,9 +605,9 @@ if (!app.requestSingleInstanceLock()) {
       void requestWindowClose(mainWindow, true);
       return;
     }
-    if (!finishingQuit && userscripts) {
+    if (!finishingQuit && (userscripts || mcpLauncher)) {
       event.preventDefault();
-      if (!quitRequest) quitRequest = userscripts.stop().then(() => { finishingQuit = true; app.quit(); })
+      if (!quitRequest) quitRequest = Promise.all([userscripts?.stop(), mcpLauncher?.stop()]).then(() => { finishingQuit = true; app.quit(); })
         .catch(error => dialog.showErrorBox('无法退出 WebObsidian', String(error))).finally(() => { quitRequest = undefined; });
       return;
     }

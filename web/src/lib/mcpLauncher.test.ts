@@ -1,86 +1,103 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { McpLauncher } from '../../../desktop/src/mcpLauncher';
 
-vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
+vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
 const fixtures: string[] = [];
 afterEach(async () => {
-  vi.clearAllMocks();
+  vi.clearAllMocks(); vi.unstubAllGlobals();
   await Promise.all(fixtures.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true })));
 });
-
-async function project() {
+async function fixture() {
   const parent = path.join(os.tmpdir(), '.agents');
   await fs.mkdir(parent, { recursive: true });
-  const directory = await fs.mkdtemp(path.join(parent, "mcp launcher ' test-"));
-  fixtures.push(directory);
-  await fs.mkdir(path.join(directory, 'scripts'));
-  await fs.writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'obsidian-context-mcp' }));
-  await fs.writeFile(path.join(directory, 'scripts', 'manual-start-mcp.ps1'), 'exit 0');
-  return directory;
+  const directory = await fs.mkdtemp(path.join(parent, "mcp built-in ' test-")); fixtures.push(directory);
+  const binary = path.join(directory, 'tunnel-client'), mcpEntry = path.join(directory, 'mcp.cjs');
+  await fs.writeFile(binary, 'fixture'); await fs.writeFile(mcpEntry, 'fixture');
+  const secrets = { isEncryptionAvailable: () => true, encryptString: (text: string) => Buffer.from(`encrypted:${text}`),
+    decryptString: (bytes: Buffer) => bytes.toString().slice('encrypted:'.length) };
+  const options = { runtimeDir: path.join(directory, 'state'), binary, mcpEntry, executable: 'WebObsidian',
+    endpointFile: path.join(directory, 'operations-endpoint.json'), serverUrl: 'http://127.0.0.1:18787', secrets };
+  return { directory, options, launcher: new McpLauncher(options) };
 }
-
-function complete(error: Error | null, stdout = '', stderr = '') {
-  const callback = vi.mocked(execFile).mock.calls.at(-1)![3] as unknown as (error: Error | null, stdout: string, stderr: string) => void;
-  callback(error, stdout, stderr);
+function child() {
+  const value = Object.assign(new EventEmitter(), {
+    pid: 123, exitCode: null as number | null, killed: false,
+    stdout: new EventEmitter(), stderr: new EventEmitter(),
+    kill() { this.killed = true; this.exitCode = 0; queueMicrotask(() => value.emit('close', 0)); return true; },
+  });
+  return value;
 }
-
-describe('native MCP manual launcher', () => {
-  it('inspects without running a command and rejects unrelated projects or missing entries', async () => {
-    const directory = await project(), launcher = new McpLauncher();
-    expect(await launcher.inspect(directory)).toEqual({ projectPath: directory, configured: true });
-    await fs.writeFile(path.join(directory, 'package.json'), '{"name":"other"}');
-    expect((await launcher.inspect(directory)).configured).toBe(false);
-    expect((await launcher.inspect(path.join(directory, 'missing'))).configured).toBe(false);
-    expect(execFile).not.toHaveBeenCalled();
+describe('bundled MCP connection owner', () => {
+  it('discovers bundled components without a project, Node or process execution', async () => {
+    const { launcher, options } = await fixture();
+    const state = await launcher.inspect();
+    expect(state).toMatchObject({ available: true, hasKey: false, tunnelId: '', connected: false });
+    const config = JSON.parse(state.clientConfig).mcpServers.webobsidian;
+    expect(config).toEqual({ command: 'WebObsidian', args: [options.mcpEntry],
+      env: { ELECTRON_RUN_AS_NODE: '1', WEBOBSIDIAN_ENDPOINT_FILE: options.endpointFile } });
+    expect(spawn).not.toHaveBeenCalled();
+    await fs.rm(options.mcpEntry);
+    expect((await launcher.inspect()).available).toBe(false);
   });
-
-  it.skipIf(process.platform !== 'win32')('rejects a missing project without executing commands', async () => {
-    const launcher = new McpLauncher();
-    await expect(launcher.connect('missing', 'endpoint')).rejects.toThrow('请选择');
-    expect(execFile).not.toHaveBeenCalled();
+  it('encrypts credentials, keeps blank keys, rejects invalid config and never returns secrets', async () => {
+    const { launcher, options } = await fixture();
+    await expect(launcher.configure({ tunnelId: '../bad', apiKey: 'secret' })).rejects.toThrow('Tunnel ID');
+    await expect(launcher.configure({ tunnelId: 'tunnel_fixture123' })).rejects.toThrow('运行密钥');
+    const state = await launcher.configure({ tunnelId: 'tunnel_fixture123', apiKey: 'fixture-secret' });
+    expect(JSON.stringify(state)).not.toContain('fixture-secret');
+    const saved = await fs.readFile(path.join(options.runtimeDir, 'connection.json'), 'utf8');
+    expect(saved).not.toContain('fixture-secret');
+    await launcher.configure({ tunnelId: 'tunnel_fixture456' });
+    expect(JSON.parse(await fs.readFile(path.join(options.runtimeDir, 'connection.json'), 'utf8')).encryptedKey)
+      .toBe(JSON.parse(saved).encryptedKey);
+    expect(spawn).not.toHaveBeenCalled();
   });
-
-  it.skipIf(process.platform !== 'win32')('passes fixed encoded script and literal paths via environment, then returns UTF-8 output', async () => {
-    const directory = await project(), endpoint = path.join(directory, "app's data", 'operations-endpoint.json');
-    const running = new McpLauncher().connect(directory, endpoint);
-    await vi.waitFor(() => expect(execFile).toHaveBeenCalledOnce());
-    const [executable, args, options] = vi.mocked(execFile).mock.calls[0] as unknown as [string, string[], { cwd: string; windowsHide: boolean; timeout: number; maxBuffer: number; env: NodeJS.ProcessEnv }];
-    expect(executable).toMatch(/System32.*powershell.exe$/);
-    expect(args).toContain('Hidden');
-    const command = Buffer.from(args.at(-1)!, 'base64').toString('utf16le');
-    expect(command).toContain('$env:WEBOBSIDIAN_MCP_MANUAL');
-    expect(command).toContain('$ProgressPreference = "SilentlyContinue"');
-    expect(command).toContain('*>&1 | ForEach-Object');
-    expect(command).not.toContain(directory);
-    expect(command).not.toContain('LaunchApp');
-    expect(options).toMatchObject({ cwd: directory, windowsHide: true, timeout: 60000, maxBuffer: 32768,
-      env: { WEBOBSIDIAN_MCP_ACTION: 'Connect', WEBOBSIDIAN_MCP_ENDPOINT: endpoint } });
-    complete(null, '已启动\n');
-    expect(await running).toMatchObject({ ok: true, output: '已启动' });
+  it('fails closed when the OS cannot protect a new key', async () => {
+    const { options } = await fixture();
+    options.secrets.isEncryptionAvailable = () => false;
+    await expect(new McpLauncher(options).configure({ tunnelId: 'tunnel_fixture123', apiKey: 'secret' })).rejects.toThrow('密钥存储');
   });
-
-  it.skipIf(process.platform !== 'win32')('serializes every action and releases ownership after failure', async () => {
-    const directory = await project(), launcher = new McpLauncher();
-    const running = launcher.connect(directory, 'endpoint');
-    await expect(launcher.connect(directory, 'endpoint')).rejects.toThrow('进行');
-    await vi.waitFor(() => expect(execFile).toHaveBeenCalledOnce());
-    complete(new Error('exit 1'), 'preflight', 'offline');
-    expect(await running).toMatchObject({ ok: false, output: 'preflight\noffline' });
-    const checking = launcher.connect(directory, 'endpoint');
-    await vi.waitFor(() => expect(execFile).toHaveBeenCalledTimes(2));
-    complete(null, 'ready');
-    expect(await checking).toMatchObject({ ok: true, output: 'ready' });
+  it('keeps healthy runtime, serializes clicks and stops only its own child', async () => {
+    const { launcher, options } = await fixture();
+    await launcher.configure({ tunnelId: 'tunnel_fixture123', apiKey: 'fixture-secret' });
+    const runtime = child();
+    vi.mocked(spawn).mockImplementationOnce((() => {
+      void fs.writeFile(path.join(options.runtimeDir, 'health.url'), 'http://127.0.0.1:19999');
+      return runtime;
+    }) as any);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')));
+    const connecting = launcher.connect();
+    await expect(launcher.connect()).rejects.toThrow('进行');
+    expect(await connecting).toMatchObject({ ok: true, connected: true });
+    expect(spawn).toHaveBeenCalledOnce();
+    const [binary, args, spawnOptions] = vi.mocked(spawn).mock.calls[0] as any;
+    expect(binary).toBe(options.binary);
+    expect(args).toContain('http://127.0.0.1:18787/mcp');
+    expect(args.join(' ')).not.toContain('fixture-secret');
+    expect(spawnOptions.env.CONTROL_PLANE_API_KEY).toBe('fixture-secret');
+    expect(await launcher.connect()).toMatchObject({ ok: true, connected: true });
+    expect(spawn).toHaveBeenCalledOnce();
+    await launcher.stop();
+    expect(runtime.killed).toBe(true);
+    expect((await launcher.inspect()).connected).toBe(false);
   });
-
-  it.skipIf(process.platform !== 'win32')('reports bounded-command timeouts instead of claiming startup succeeded', async () => {
-    const directory = await project();
-    const running = new McpLauncher().connect(directory, 'endpoint');
-    await vi.waitFor(() => expect(execFile).toHaveBeenCalledOnce());
-    complete(Object.assign(new Error('timeout'), { killed: true }));
-    expect(await running).toMatchObject({ ok: false, output: expect.stringContaining('超时') });
+  it('reports child failure with bounded redacted output and permits a manual retry', async () => {
+    const { launcher } = await fixture();
+    await launcher.configure({ tunnelId: 'tunnel_fixture123', apiKey: 'fixture-secret' });
+    const runtime = child();
+    vi.mocked(spawn).mockImplementationOnce((() => {
+      queueMicrotask(() => { runtime.stderr.emit('data', Buffer.from('bad fixture-secret')); runtime.exitCode = 1; });
+      return runtime;
+    }) as any);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')));
+    const result = await launcher.connect();
+    expect(result).toMatchObject({ ok: false, connected: false, output: expect.stringContaining('[redacted]') });
+    expect(result.output).not.toContain('fixture-secret');
+    expect((await launcher.connect()).ok).toBe(false);
   });
 });

@@ -11,6 +11,7 @@ import { rmSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundleServer } from '../../scripts/bundle-server.mjs';
+import { bundleTunnel } from './bundle-tunnel.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktopDir = path.resolve(here, '..');
@@ -43,5 +44,6 @@ await build({
 //    keep it external (chokidar swallows the require failure and falls back).
 const genServer = path.join(desktopDir, '.gen', 'server');
 await bundleServer(repoDir, genServer);
+await bundleTunnel(process.platform, process.arch);
 
 console.log('[desktop] build complete → dist/ + .gen/server/');

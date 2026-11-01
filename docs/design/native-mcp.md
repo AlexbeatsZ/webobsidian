@@ -149,8 +149,8 @@ Persistence failures retain context and are logged, not answered twice.
 MCP server instructions tell clients to call get_context at each user request.
 Connecting alone cannot force a model to read it: transport completion is not
 proof of remote model receipt. No remote ChatGPT acceptance is claimed by local
-HTTP/browser tests. Manual recovery delegates scripts/start-mcp.ps1 to the
-existing obsidian-context-mcp launcher, preserving its host-local identity.
+HTTP/browser tests. Desktop connection is owned by the application as described
+below; it has no companion checkout, script, plugin or external Node dependency.
 
 ## Editing performance
 
@@ -167,31 +167,52 @@ to the independent acceptance run, not compilation evidence.
 
 ## CLI/MCP and isolated acceptance entrypoints
 
-### Desktop manual Tunnel controls
+### Built-in desktop MCP (2026-10-31)
 
-Windows desktop exposes a single **连接** action in the right MCP panel. The
-main process calls the companion project's existing `scripts/manual-start-mcp.ps1`;
-it does not implement another Tunnel runtime or expose process execution over
-HTTP/MCP. A parameter-free Connect IPC is single-flight, bounded to 60 seconds/32 KiB,
-and require the local application's top-level frame through `desktopWindow`.
-No command runs on panel mount; inspection only checks local files. Web/mobile
-and non-Windows desktop do not display unsupported launch controls.
+The application ships its own MCP entry and the pinned official OpenAI
+`tunnel-client` 0.0.19 with redistribution notices. Build-time downloads verify
+the release archive checksum; runtime never downloads software or searches for
+a source checkout, PowerShell script, system Node or plugin. The old project
+picker, `mcpProjectPath` reader, external launcher and `scripts/start-mcp.ps1`
+are removed. Old desktop-config fields may remain inert to preserve user bytes.
 
-The default project is `~/Project/Workspaces/obsidian-context-mcp`. Users may
-select another trusted project directory through the native picker. Its package
-name and manual entry are validated before persisting `mcpProjectPath` in the
-existing host-local desktop config; no Vault configuration, shortcut, login task,
-Tunnel alias/identity or credentials are rewritten. The current instance's endpoint
-file is passed explicitly for the script's health preflight. The companion still
-owns its configured stdio target; selecting a different instance does not retarget
-that configuration. External Node and an already configured companion installation
-are required (companion 0.2.2+). Only clicking Connect checks runtime status, once:
-healthy ready/running stays unchanged, stopped starts, unhealthy/stale running
-disconnects and starts once. Stop failure or unreadable status fails safely. The
-companion owns this decision and reuses its existing start/restart branches. No
-separate Start/Restart/Status commands are exposed through the desktop bridge.
-The UI reports command completion and retains bounded output, not remote ChatGPT
-end-to-end health. There is no watchdog or background status polling.
+`operations/mcpServer.ts` creates the one MCP tool catalog from
+`operationContract`. Both bundled `server/dist/mcp.cjs` (stdio) and `/mcp`
+(stateless Streamable HTTP on the existing loopback server) call the same
+operation HTTP dispatcher. HTTP binds to the actual listening instance, even
+when another instance's endpoint environment variable is present. Existing
+local-access, operation leases, context persistence, DocumentSession and
+local-only review decisions remain authoritative. No second listener, index,
+parser, file writer or remote accept tool is introduced.
+
+All desktop platforms expose **连接**, **复制配置**, and **连接设置**. Copy
+provides a stdio client JSON using this WebObsidian executable in
+`ELECTRON_RUN_AS_NODE` mode plus its own endpoint file; external Node is not
+required. HTTP clients may connect to the instance's `/mcp` URL directly.
+Connection settings accept the user's existing Tunnel ID/runtime key without
+creating a cloud Tunnel or registering/installing a client plugin.
+
+Desktop main owns one foreground `tunnel-client run` child, bound through HTTP
+to this exact application instance. Only an explicit Connect click checks
+local health and the owned child's `/readyz`; a healthy child is retained,
+otherwise it is stopped before starting once. Readiness waits at most 30
+seconds; output retains at most 16 KiB and redacts the key across chunk
+boundaries. Failure stops the child and permits manual retry. A failed stop
+retains ownership and prevents duplicate startup. No login task, detached
+runtime, automatic startup, periodic monitoring or background retry is added.
+Normal application quit stops this child after the existing save barrier.
+
+Host-local `userData/mcp/connection.json` stores only the Tunnel ID and an
+Electron safeStorage-encrypted key. The key is never returned to the renderer;
+empty-key saves retain the existing secret. Unavailable encryption (including
+Linux basic_text fallback) fails closed. There is no automatic import from
+retired companion credentials, identities or unrelated services.
+
+`desktop:mcp-inspect`, `configure`, `copy-config`, and parameter-free `connect`
+all require the local top-level frame through `desktopWindow`. No process or
+Tunnel management command is exposed through HTTP/MCP. Component discovery,
+successful transport/tool calls, owned Tunnel readiness and actual remote
+ChatGPT receipt are separate acceptance levels.
 
 Source development (Node >=20 and project dependencies installed):
 
@@ -208,8 +229,9 @@ Set `WEBOBSIDIAN_URL=http://127.0.0.1:18787` for the stdio child. Alternatively 
 `WEBOBSIDIAN_ENDPOINT_FILE` to the chosen instance's
 `DATA_DIR/operations-endpoint.json`; the server writes its actual loopback URL
 after listening (including desktop-selected or PORT=0 ports). No real client
-configuration is installed or rewritten. Compiled entries are server/dist/cli.js
-and server/dist/mcp.js. Do not launch the HTTP server by importing the MCP entry.
+configuration is installed or rewritten. Compiled development entries are
+server/dist/cli.js and server/dist/mcp.js; desktop additionally packages
+standalone server/dist/mcp.cjs. Do not launch the HTTP server by importing the MCP entry.
 
 `POST /api/operations/call` accepts `{name,arguments}`. Example arguments:
 
@@ -236,7 +258,8 @@ For an isolated test instance use separate absolute `DATA_DIR` and copied
 that could override the fixture path. Open that instance's URL in an isolated
 browser/profile. In production bundles the SPA is sibling `server/public` to
 `server/dist/index.mjs`. Never point these variables at the live original Vault
-or existing profile. No runtime process is launched by this implementation pass.
+or existing profile. Current built-in desktop acceptance is recorded in
+`tests/reports/mcp-builtin-20261031.md`.
 
 Independent coordinator regression list: CLI/MCP tool discovery and result/error
 agreement; no accept tool; unsupported operations; propose causes no disk write;

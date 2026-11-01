@@ -2,6 +2,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { installTitleBar } from './titlebar';
 import { installGuestUserscripts } from './userscripts/guest';
+import type { McpConnectionInput } from './mcpLauncher';
 
 if (process.argv.includes('--webobsidian-userscript-guest')) {
   installGuestUserscripts();
@@ -13,7 +14,8 @@ const desktopApi = {
   nativePlugins: !!nativeArg,
   mcp: {
     inspect: () => ipcRenderer.invoke('desktop:mcp-inspect'),
-    selectProject: () => ipcRenderer.invoke('desktop:mcp-select-project'),
+    configure: (input: McpConnectionInput) => ipcRenderer.invoke('desktop:mcp-configure', input),
+    copyConfig: () => ipcRenderer.invoke('desktop:mcp-copy-config'),
     connect: () => ipcRenderer.invoke('desktop:mcp-connect'),
   },
   openVaultPath: (path: string): Promise<void> => ipcRenderer.invoke('desktop:open-vault-path', path),

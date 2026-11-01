@@ -1,5 +1,5 @@
 import type { UserscriptBridge } from './userscripts/types';
-import type { McpLauncherState } from '../../../desktop/src/mcpLauncher';
+import type { McpLauncherState, McpConnectionInput } from '../../../desktop/src/mcpLauncher';
 
 declare global {
   interface Window {
@@ -9,7 +9,8 @@ declare global {
       nativePlugins: boolean;
       mcp?: {
         inspect(): Promise<McpLauncherState>;
-        selectProject(): Promise<McpLauncherState | null>;
+        configure(input: McpConnectionInput): Promise<McpLauncherState>;
+        copyConfig(): Promise<void>;
         connect(): Promise<McpLauncherState>;
       };
       vaultPath?: string;
