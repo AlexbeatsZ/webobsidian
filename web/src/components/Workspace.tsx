@@ -1,5 +1,6 @@
 import { useStore, GRAPH_PATH, isHomepagePath } from '../lib/store';
 import { api } from '../lib/api';
+import { documents } from '../lib/documents';
 import { isFolderPath } from '../lib/tree';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from '../lib/media';
 import Editor from './Editor';
@@ -60,8 +61,6 @@ export default function Workspace() {
   const activePath = useStore((s) => s.activePath);
   const splitPath = useStore((s) => s.splitPath);
   const closeSplit = useStore((s) => s.closeSplit);
-  const content = useStore((s) => s.content);
-  const setContent = useStore((s) => s.setContent);
   const notify = useStore((s) => s.notify);
   const splitDirection = useStore((s) => s.splitDirection);
   const tree = useStore((s) => s.tree);
@@ -69,12 +68,15 @@ export default function Workspace() {
   const activeIsFolder = !activeIsHome && isFolderPath(tree, activePath);
 
   // Paste / drop image → upload to attachments and insert an embed.
-  const handleFiles = async (files: FileList | File[]) => {
+  const handleFiles = async (files: FileList | File[], sourcePath: string) => {
+    const session = documents.get(sourcePath);
+    if (!session || session.snapshot.locked) return;
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
       try {
-        const { path } = await api.upload(file);
-        setContent(`${content}\n![[${path}]]\n`);
+        const { path } = await api.upload(file, undefined, sourcePath);
+        if (documents.get(session.id) !== session) throw new Error(`笔记已关闭，附件已保存到 ${path}`);
+        session.setRawText(`${session.snapshot.raw}\n![[${path}]]\n`);
         notify(`已插入 ${path}`);
       } catch (e: any) {
         notify(e.message);
@@ -85,13 +87,14 @@ export default function Workspace() {
     const imgs = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'));
     if (imgs.length) {
       e.preventDefault();
-      handleFiles(imgs);
+      void handleFiles(imgs, (e.target as Element).closest<HTMLElement>('[data-document-id]')?.dataset.documentId ?? activePath ?? '');
     }
   };
   const onDrop = (e: React.DragEvent) => {
     if (e.dataTransfer.files.length) {
       e.preventDefault();
-      handleFiles(e.dataTransfer.files);
+      if ((e.target as Element).closest('[data-mode="reading"]')) return;
+      void handleFiles(e.dataTransfer.files, (e.target as Element).closest<HTMLElement>('[data-document-id]')?.dataset.documentId ?? activePath ?? '');
     }
   };
   return (

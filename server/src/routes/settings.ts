@@ -14,6 +14,7 @@ import { readCssSnippets, readCssSnippet, setCssSnippetEnabled } from '../servic
 import { readHotkeys, patchHotkeys } from '../services/hotkeySettings.js';
 import { DebugLog } from '../services/debugLog.js';
 import { UiSettingsSchema } from '../contracts/uiSettings.js';
+import { FilePlacementSchema } from '../contracts/filePlacement.js';
 import { gitPreferences, redactGitPreferences, saveGitPreferences } from '../services/gitPreferences.js';
 
 let switchRuntime = async (_commit: () => Promise<void>): Promise<void> => { throw new Error('Vault switch runtime is not ready'); };
@@ -63,6 +64,8 @@ settingsRouter.put(
       throw Object.assign(new Error('请先切换 Vault，再修改该 Vault 的 Git 配置'), { status: 400 });
     const ui = body.ui === undefined ? undefined : UiSettingsSchema.partial().strict().safeParse(body.ui);
     if (ui && !ui.success) throw Object.assign(new Error(ui.error.message), { status: 400 });
+    const placement = FilePlacementSchema.partial().safeParse(body.vault ?? {});
+    if (!placement.success) throw Object.assign(new Error(placement.error.message), { status: 400 });
     let previous = await getSettings();
     let previousRoot = previous.vault.path;
     // A changed vault.path turns the whole files API into read/write over that
@@ -123,7 +126,7 @@ function sanitizeVault(v: any) {
   if (typeof v.path === 'string') out.path = v.path;
   if (typeof v.trash === 'string') out.trash = v.trash;
   if (v.deleteMode === 'trash' || v.deleteMode === 'permanent') out.deleteMode = v.deleteMode;
-  if (typeof v.attachmentDir === 'string') out.attachmentDir = v.attachmentDir;
+  Object.assign(out, FilePlacementSchema.partial().parse(v));
   if (Array.isArray(v.allowedRoots)) {
     // allowedRoots is the gate for vault.path / Browse, so keep it well-formed:
     // only non-empty strings, normalised to absolute paths. Drops anything else

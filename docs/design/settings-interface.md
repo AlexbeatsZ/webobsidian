@@ -1,5 +1,35 @@
 # Settings interface
 
+## File destinations and inline title (2026-11-01)
+
+Files and Links exposes one Default Location group. New files choose Vault root,
+the current file's folder, or a specified Vault-relative folder. Attachments also
+offer a subfolder of the current file's folder. Existing defaults remain root for
+new files and `attachments` for uploads; the existing `vault.attachmentDir` stays
+authoritative. Settings saves all placement fields together through the existing
+settings API. The shared `contracts/filePlacement` schema rejects invalid or
+escaping folder paths before persistence. Empty folders denote the Vault root.
+
+The pure directory rule is shared by settings validation and server upload
+selection. Native note/Canvas creation, file-search creation and unresolved bare
+links use the browser placement entry. Explicit folder actions and paths keep
+their destination. Missing folders are created by the existing Vault writer only
+when a file is actually written. There is no bulk move of existing files. Uploads
+send the receiving note's path; the server selects the destination when `dir` is
+absent and retains explicit upload destinations and case-insensitive folder reuse.
+Workspace image insertion reads the receiving DocumentSession after each upload,
+so multiple images and changes made during upload do not replace previous edits.
+
+The existing inlineTitle owns the filename title DOM. In native Markdown pages it
+becomes a single-line plaintext textbox in live, reading and source modes, even
+when the first H1 matches the filename. Enter or blur submits; Escape restores.
+Editor supplies only a filename-validation/rename callback into RenderContext;
+the callback calls store.renamePath and preserves the existing extension/folder.
+DocumentRegistry remains responsible for save, relocation, undo and workspace
+path mapping. Rejected names/collisions restore the authoritative title and use
+the existing notification UI. Locked documents and embedded fragments have no
+rename capability. No title text enters the Markdown body or source history.
+
 ## macOS modal close control (2026-10-30)
 
 The settings surface is an in-app modal, not another BrowserWindow. On macOS its

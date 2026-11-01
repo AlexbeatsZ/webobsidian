@@ -817,7 +817,7 @@ export default function CanvasView() {
     e.target.value = '';
     if (!f) return;
     try {
-      const { path } = await api.upload(f);
+      const { path } = await api.upload(f, undefined, activePath ?? '');
       const c = viewCenter();
       addFileNode(path, c.x, c.y);
       notify(`已插入 ${path}`);

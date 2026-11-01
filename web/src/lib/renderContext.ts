@@ -33,6 +33,7 @@ export interface EmbeddedNote {
 /** Services are scoped to a view's source document and capability boundary. */
 export interface RenderContext {
   sourcePath: string;
+  renameTitle?: (title: string) => Promise<void>;
   /** Full-source semantic snapshot, optionally projected into a fragment. */
   equations?: EquationContext;
   mathSource?: { model: MarkdownModel; from: number };

@@ -5,6 +5,7 @@ import { extractMetadata } from '@webobsidian/markdown-core';
 import { getEditorForPath } from '../lib/activeEditor';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { fileTitleError, parseSearchQuery, hotkeyLabel, type Hotkey } from '@webobsidian/search-core';
+import { newFilePath } from '../lib/filePlacement';
 import Icon from './Icon';
 import { sharedApp, pluginRevision, subscribePlugins } from '../lib/plugins';
 import { useStore } from '../lib/store';
@@ -162,7 +163,7 @@ export default function CommandPalette() {
   const create = async () => {
     if (!canCreate) return;
     const path = /\.md$/i.test(q.trim()) ? q.trim() : q.trim() + '.md';
-    try { await useStore.getState().createNote(path); setOpen(false); }
+    try { await useStore.getState().createNote(await newFilePath(path, useStore.getState().activePath ?? '')); setOpen(false); }
     catch (error) { notify(String(error)); }
   };
 

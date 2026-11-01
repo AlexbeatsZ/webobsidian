@@ -479,6 +479,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-editor .cm-content { font-size: var(--font-text-size); line-height: var(--line-height-normal); caret-color: var(--text-normal); }
 .cm-editor .cm-note-title-row { font-size: var(--font-text-size); }
 .cm-editor .cm-inline-title { width: 100%; padding-bottom: .5em; }
+.cm-inline-title[contenteditable="plaintext-only"] { cursor: text; outline: none; border-radius: var(--radius-s); }
+.cm-inline-title[contenteditable="plaintext-only"]:focus-visible { box-shadow: 0 0 0 1px var(--interactive-accent); }
 .markdown-source-view.is-readable-line-width .cm-content,
 .markdown-source-view.is-readable-line-width .cm-inline-title { max-width: var(--file-line-width); }
 .cm-editor .cm-line { padding: 0; }

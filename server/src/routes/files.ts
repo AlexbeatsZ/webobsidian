@@ -9,6 +9,7 @@ import { resolveFile } from '../services/fileindex.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 import { vaultConfigurationIdentity } from '../services/vaultConfiguration.js';
+import { defaultFileFolder, VaultFolderSchema } from '../contracts/filePlacement.js';
 
 export const filesRouter = Router();
 
@@ -82,7 +83,11 @@ filesRouter.post(
   '/upload',
   upload.single('file'),
   asyncHandler(async (req, res) => {
-    const dir = String(req.body?.dir ?? '');
+    const settings = await getSettings();
+    const selected = req.body?.dir ?? defaultFileFolder(settings.vault, String(req.body?.sourcePath ?? ''), true);
+    const folder = VaultFolderSchema.safeParse(selected);
+    if (!folder.success) throw Object.assign(new Error('请输入有效的附件文件夹路径'), { status: 400 });
+    const dir = folder.data;
     const file = req.file;
     if (!file) {
       res.status(400).json({ error: 'file required' });

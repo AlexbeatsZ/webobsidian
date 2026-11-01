@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { config, SETTINGS_FILE } from '../config.js';
 import { UiSettingsSchema } from '../contracts/uiSettings.js';
+import { FilePlacementSchema } from '../contracts/filePlacement.js';
 
 /** ---- Schema (PRD §6) ---------------------------------------------------- */
 
@@ -34,8 +35,8 @@ const SettingsSchema = z.object({
       // Xoá file: 'trash' = chuyển vào thư mục .trash (khôi phục được);
       // 'permanent' = xoá vĩnh viễn ngay.
       deleteMode: z.enum(['trash', 'permanent']).default('trash'),
-      attachmentDir: z.string().default('attachments'),
     })
+    .extend(FilePlacementSchema.shape)
     .default({}),
   search: z
     .object({

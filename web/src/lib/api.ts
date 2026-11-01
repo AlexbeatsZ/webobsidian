@@ -154,9 +154,10 @@ export const api = {
     req<{ ok: true }>(`/api/files/trash/item?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
   emptyTrash: () => req<{ ok: true }>('/api/files/trash', { method: 'DELETE' }),
   uploadUrl: () => `/api/files/upload?vault=${encodeURIComponent(vaultIdentity ?? 'unbound')}`,
-  upload: async (file: File, dir = 'attachments') => {
+  upload: async (file: File, dir?: string, sourcePath = '') => {
     const fd = new FormData();
-    fd.append('dir', dir);
+    if (dir !== undefined) fd.append('dir', dir);
+    fd.append('sourcePath', sourcePath);
     fd.append('file', file);
     return req<{ ok: true; path: string; size: number }>('/api/files/upload', { method: 'POST', body: fd });
   },

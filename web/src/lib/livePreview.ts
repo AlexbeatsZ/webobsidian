@@ -1894,9 +1894,10 @@ export const noteTitleField = StateField.define<string>({
 });
 
 function inlineTitleText(state: EditorState): string {
-  if (!state.field(livePreviewState, false)) return '';
+  if (!state.field(livePreviewState, false) && !state.facet(renderContext).renameTitle) return '';
   const title = state.field(noteTitleField, false) ?? '';
   if (!title) return '';
+  if (state.facet(renderContext).renameTitle) return title;
   // Skip when the note already opens with an H1 equal to the title — the Trilium
   // export repeats the title as a heading, and Obsidian would otherwise show it twice.
   const head = state.doc.sliceString(0, Math.min(state.doc.length, 2000));
@@ -1911,20 +1912,42 @@ function inlineTitleText(state: EditorState): string {
 export const inlineTitle = ViewPlugin.fromClass(class {
   readonly row: HTMLDivElement;
   readonly title: HTMLDivElement;
+  pending = false;
+  disposed = false;
   constructor(readonly view: EditorView) {
     const doc = view.dom.ownerDocument;
     this.row = doc.createElement('div');
     this.row.className = 'cm-note-title-row';
     this.title = this.row.appendChild(doc.createElement('div'));
     this.title.className = 'cm-inline-title';
+    this.title.setAttribute('aria-label', '笔记标题');
+    this.title.setAttribute('aria-multiline', 'false');
+    this.title.addEventListener('keydown', event => {
+      event.stopPropagation();
+      if (event.isComposing) return;
+      if (event.key === 'Enter') { event.preventDefault(); this.title.blur(); }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.title.textContent = inlineTitleText(this.view.state);
+        this.title.blur(); this.view.focus();
+      }
+    });
+    this.title.addEventListener('blur', () => { void this.commit(); });
+    this.title.addEventListener('paste', event => event.stopPropagation());
+    this.title.addEventListener('drop', event => { event.preventDefault(); event.stopPropagation(); });
     this.sync();
   }
   update(update: ViewUpdate) {
-    if (update.docChanged || update.transactions.some(tr =>
+    if (update.docChanged || update.startState.facet(renderContext) !== update.state.facet(renderContext) || update.transactions.some(tr =>
       tr.effects.some(e => e.is(setNoteTitle) || e.is(setLivePreviewEnabled)))) this.sync();
   }
   sync() {
     const title = inlineTitleText(this.view.state);
+    const context = this.view.state.facet(renderContext);
+    const editable = !!context.renameTitle && !context.sourceFragment && !context.embedTrail?.length && !this.pending;
+    this.title.contentEditable = editable ? 'plaintext-only' : 'false';
+    if (editable) this.title.setAttribute('role', 'textbox'); else this.title.removeAttribute('role');
+    if (this.title.ownerDocument.activeElement === this.title) return;
     if (this.title.textContent === title && !!this.row.parentNode === !!title) return;
     this.title.textContent = title;
     if (title) {
@@ -1935,7 +1958,22 @@ export const inlineTitle = ViewPlugin.fromClass(class {
     this.view.scrollDOM.classList.toggle('cm-has-inline-title', !!title);
     this.view.requestMeasure();
   }
+  async commit() {
+    const rename = this.view.state.facet(renderContext).renameTitle;
+    const title = this.title.textContent ?? '';
+    if (!rename || this.pending || title === inlineTitleText(this.view.state)) return;
+    this.pending = true;
+    this.title.contentEditable = 'false';
+    this.title.setAttribute('aria-busy', 'true');
+    try { await rename(title); }
+    catch (error) { if (!this.disposed) this.view.state.facet(renderContext).reportError?.(String(error)); }
+    finally {
+      this.pending = false;
+      if (!this.disposed) { this.title.removeAttribute('aria-busy'); this.sync(); }
+    }
+  }
   destroy() {
+    this.disposed = true;
     this.row.remove();
     this.view.scrollDOM.classList.remove('cm-has-inline-title');
   }

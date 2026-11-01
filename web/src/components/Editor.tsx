@@ -50,7 +50,17 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
   const context = useMemo(() => ({ ...createVaultRenderContext(path ?? '', {
     bindEditor: registerEditor, openLink: (target, sourcePath, intent) => { void openLink(target, sourcePath ?? path ?? undefined, intent); }, openMenu, reportError: notify,
     files: () => [...files],
-  }), navigationId: navigationId ?? (suppliedPath ? 'split' : 'main'), recordNavigation: useStore.getState().recordNavigation }), [path, openLink, openMenu, files, propertyTypes, notify, navigationId, suppliedPath]);
+  }), navigationId: navigationId ?? (suppliedPath ? 'split' : 'main'), recordNavigation: useStore.getState().recordNavigation,
+    renameTitle: !embedded && !fragment && session && !snapshot.locked && /\.(md|markdown)$/i.test(session.id)
+      ? async (value: string) => {
+        const title = value.trim();
+        if (!title || title === '.' || title === '..' || /[\/#<>:"\\|?*\u0000-\u001f]/.test(title) || /[. ]$/.test(title))
+          throw new Error('请输入有效的笔记标题，不能包含 #、斜杠或文件名保留字符');
+        const from = session.id, slash = from.lastIndexOf('/');
+        const extension = from.slice(from.lastIndexOf('.'));
+        await useStore.getState().renamePath(from, from.slice(0, slash + 1) + title + extension);
+      } : undefined,
+  }), [path, openLink, openMenu, files, propertyTypes, notify, navigationId, suppliedPath, embedded, fragment, session, snapshot.locked]);
   const numberedContext = useMemo(() => {
     const model = session?.analysis;
     if (!model) return context;

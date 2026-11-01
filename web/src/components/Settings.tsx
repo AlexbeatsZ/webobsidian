@@ -1,5 +1,5 @@
 import { useSearch, updateSearch } from '../lib/search';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import {
   pluginRevision,
   subscribePlugins,
@@ -28,6 +28,7 @@ import { documents } from '../lib/documents';
 import { workspaceMaintenanceBlockers } from '../lib/vaultMaintenance';
 import { SettingRow as Row, SettingGroup } from './SettingRow';
 import { documentAppearance, UiSettingsSchema, type UiSettings } from '../../../server/src/contracts/uiSettings';
+import { FilePlacementSchema, type FilePlacement } from '../../../server/src/contracts/filePlacement';
 
 type Section =
   'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'userscripts' | 'menus' | 'tags' | 'vault' | 'sync' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
@@ -268,6 +269,7 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
   return (
     <div>
       <h2>文件与链接</h2>
+      <FileLocationSettings vault={s.vault} />
       <SettingGroup title="仓库位置">
       <Row name="仓库路径" desc="服务器上存放笔记的文件夹">
         <input
@@ -341,6 +343,38 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
       </SettingGroup>
     </div>
   );
+}
+
+function FileLocationSettings({ vault }: { vault: unknown }) {
+  const [value, setValue] = useState(() => FilePlacementSchema.parse(vault));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const folderList = useId();
+  const folders = useSearch().entries.filter(entry => entry.kind === 'folder');
+  const save = async () => {
+    const parsed = FilePlacementSchema.safeParse(value);
+    if (!parsed.success) { setError(parsed.error.issues[0].message); return; }
+    setSaving(true); setError('');
+    try { await api.putSettings({ vault: parsed.data }); }
+    catch (cause) { setError(String(cause)); }
+    finally { setSaving(false); }
+  };
+  const patch = <K extends keyof FilePlacement>(key: K, next: FilePlacement[K]) => setValue(current => ({ ...current, [key]: next }));
+  return <SettingGroup title="默认位置">
+    <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <Row name="新建文件的默认位置"><select className="text-input" aria-label="新建文件的默认位置" value={value.newFileLocation} onChange={event => patch('newFileLocation', event.target.value as FilePlacement['newFileLocation'])}>
+        <option value="root">仓库根目录</option><option value="current">当前文件所在文件夹</option><option value="folder">指定文件夹</option>
+      </select></Row>
+      {value.newFileLocation === 'folder' && <Row name="新建文件夹路径"><input className="text-input" aria-label="新建文件夹路径" placeholder="如 Notes/Inbox" list={folderList} value={value.newFileFolder} onChange={event => patch('newFileFolder', event.target.value)} /></Row>}
+      <Row name="附件的默认位置"><select className="text-input" aria-label="附件的默认位置" value={value.attachmentLocation} onChange={event => patch('attachmentLocation', event.target.value as FilePlacement['attachmentLocation'])}>
+        <option value="root">仓库根目录</option><option value="current">当前文件所在文件夹</option><option value="folder">指定文件夹</option><option value="subfolder">当前文件夹下的子文件夹</option>
+      </select></Row>
+      {(value.attachmentLocation === 'folder' || value.attachmentLocation === 'subfolder') && <Row name={value.attachmentLocation === 'subfolder' ? '附件子文件夹路径' : '附件文件夹路径'}><input className="text-input" aria-label="附件文件夹路径" placeholder="如 attachments" list={folderList} value={value.attachmentDir} onChange={event => patch('attachmentDir', event.target.value)} /></Row>}
+      <datalist id={folderList}>{folders.map(folder => <option key={folder.path} value={folder.path} />)}</datalist>
+      <div className="setting-actions"><button className="btn" onClick={() => void save()}>{saving ? '正在保存…' : '保存默认位置'}</button></div>
+    </fieldset>
+    {error && <p className="editor-error" role="alert">{error}</p>}
+  </SettingGroup>;
 }
 
 function GitSettings({ s, reload }: { s: any; reload: () => void }) {

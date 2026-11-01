@@ -1,6 +1,7 @@
 import { manualSave } from './writing/format';
 import { create } from 'zustand';
 import { api, pendingMutations, type TreeNode } from './api';
+import { newFileFolder, newFilePath } from './filePlacement';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
 import { isGlobalContentTarget, parseLinkTarget } from '@webobsidian/markdown-core';
@@ -745,7 +746,7 @@ export const useStore = create<AppState>()(
             // like `Foo.canvas` must stay `Foo.canvas`, not become `Foo.canvas.md`.
             const destination = resolved.normalizedTarget ?? parseLinkTarget(target).path;
             const hasExt = /\.[^./]+$/.test(destination);
-            const newPath = hasExt ? destination : `${destination}.md`;
+            const newPath = await newFilePath(hasExt ? destination : `${destination}.md`, origin);
             await get().createNote(newPath, `# ${target.replace(/\.md$/, '')}\n`);
           }
         } catch (error) {
@@ -817,7 +818,9 @@ export const useStore = create<AppState>()(
 
       newNote: async (dir) => {
         // Pick the first free "Untitled" name in the target folder, like Obsidian.
-        const base = (dir ?? '').replace(/\/+$/, '');
+        const active = get().activePath ?? '';
+        const source = findNode(get().tree, active)?.type === 'folder' ? `${active}/_` : active;
+        const base = (dir ?? await newFileFolder(source)).replace(/\/+$/, '');
         const folder = base ? findNode(get().tree, base) : get().tree;
         const taken = new Set((folder?.children ?? []).map((c) => c.name.toLowerCase()));
         let name = 'Untitled.md';
@@ -828,7 +831,9 @@ export const useStore = create<AppState>()(
       },
 
       newCanvas: async (dir) => {
-        const base = (dir ?? '').replace(/\/+$/, '');
+        const active = get().activePath ?? '';
+        const source = findNode(get().tree, active)?.type === 'folder' ? `${active}/_` : active;
+        const base = (dir ?? await newFileFolder(source)).replace(/\/+$/, '');
         const folder = base ? findNode(get().tree, base) : get().tree;
         const taken = new Set((folder?.children ?? []).map((c) => c.name.toLowerCase()));
         let name = 'Untitled.canvas';
