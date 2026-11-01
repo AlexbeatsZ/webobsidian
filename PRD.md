@@ -1,7 +1,10 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.20 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Phiên bản: 1.21 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Changelog 1.21 (分屏时新建标签页): 标签栏 + 与"新建标签页"命令在分屏时不再把 Homepage 放进分屏组的某一栏,
+> 而是像点击组外标签一样单独显示新 Homepage,分屏组暂存为一个整体标签。只有"向右/向下分屏"在新侧打开 Homepage;
+> 侧栏聚焦时新建标签页仍在侧栏打开。
 > Changelog 1.20 (选择器排序回到上游插件逻辑): 用户反馈快速切换器排序不如原 fuzzy-chinese 插件——`rlx`
 > 会把隔字跳跃命中的英文长文件名排在"热力学…"前面(旧算法字面匹配恒高于拼音匹配)。所有名称选择器
 > (文件/命令/标题/文件夹/补全)改用 lazyloong/obsidian-fuzzy-chinese 的逐字 DP 匹配(字符、声母、zh/ch/sh、
@@ -309,6 +312,8 @@ webobsidian/
     tab bar; click A hoặc B → khôi phục cả nhóm split và focus vào mục được click. Đóng tab thành viên của nhóm tạm
     cất → giải tán nhóm, tab còn lại thành tab thường. Đóng tab của một pane khi đang split → pane còn lại chiếm
     toàn bộ, giữ mode của nó.
+  - Tab mới (nút + / lệnh new-tab) khi đang split → Homepage mới hiển thị riêng, nhóm [A,B] được tạm cất như khi
+    click tab ngoài nhóm (1.21). Chỉ "split right/down" mở Homepage trong split.
   - "Split right/down" trên tab và lệnh split giữ trang hiện tại, mở Homepage ở phía mới (không nhân bản trang);
     Homepage phía mới bị thay thế bởi file được mở từ nó. Chuột phải tab trong nhóm: đổi hướng, bỏ split (giữ cả hai tab).
   - Kéo tab thả vào một pane để mở ở pane đó; khi chưa split, thả vào nửa phải/dưới của vùng soạn thảo để tạo split.

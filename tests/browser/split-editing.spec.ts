@@ -805,6 +805,23 @@ test('split group is one tab: another tab shows alone and a member restores the 
   await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'replacement.md');
 });
 
+test('a new tab during split shows a Homepage alone and keeps the split group', async ({ page, backend }) => {
+  await openSplit(page, 'side.md');
+  await groupTab(page, 'side.md').click();
+  await page.getByRole('button', { name: '新建中央标签页' }).click();
+  await expect(pane(page, 'split')).toHaveCount(0);
+  const state = () => page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; const s = (await import(module)).useStore.getState();
+    return { active: s.activePath, split: s.splitPath, parked: s.parkedSplit && [s.parkedSplit.main, s.parkedSplit.side] };
+  });
+  await expect.poll(async () => (await state()).active?.startsWith('home://')).toBe(true);
+  expect((await state()).parked).toEqual(['main.md', 'side.md']);
+  await expect(page.locator('.tab-bar .tab-split-group.is-parked .tab')).toHaveText([/main/, /side/]);
+  await groupTab(page, 'main.md').click();
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
+  await expect(page.locator('.tab-bar .tab-scroll > .tab')).toHaveText([/Homepage/]);
+});
+
 test('split group tab pairs both panes, focuses each pane and closes either pane', async ({ page, backend }, info) => {
   await openSplit(page);
   const group = page.locator('.tab-bar .tab-split-group');
@@ -914,17 +931,19 @@ test('focused page routing: sidebar picker retains its tab and close restores ma
   })).toEqual(['main.md']);
 });
 
-test('focused page routing: new Homepage and picker stay in focused split', async ({ page, backend }) => {
+test('focused page routing: new-tab leaves the split group, picker stays in focused split', async ({ page, backend }) => {
   await openSplit(page);
   await content(page, 'split').click();
   await runPageCommand(page, 'new-tab');
-  await expect(pane(page, 'split').locator('.workspace-launcher')).toBeVisible();
+  await expect(pane(page, 'split')).toHaveCount(0);
+  await expect(page.locator('.editor-area .workspace-launcher')).toBeVisible();
+  await groupTab(page, 'side.md').click();
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
+  await content(page, 'split').click();
   await runPageCommand(page, 'files');
   await page.locator('.palette-input').fill('replacement'); await page.keyboard.press('Enter');
   await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
   await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
-  await runPageCommand(page, 'new-tab');
-  await expect(pane(page, 'split').locator('.workspace-launcher')).toBeVisible();
   await runPageCommand(page, 'workspace:close');
   await expect(pane(page, 'split')).toHaveCount(0);
   await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');

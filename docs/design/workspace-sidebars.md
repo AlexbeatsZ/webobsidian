@@ -78,6 +78,7 @@ App 保留左侧 Sidebar 外壳，只用 open 控制可见固定面板和动态�
 - `openToSide` 把副栏页面放进 `tabs`(紧跟当前主栏标签)。副栏原本是 Homepage 时，被打开的文件原位替换该 Homepage 标签，避免残留新标签页。旧 uistate 中不在 `tabs` 的 `splitPath` 仍可显示(组内临时合成标签)。
 - 标签栏把 `activePath` 与 `splitPath` 两个标签合成 `.tab-split-group`(方向图标 + 两个同构 `.tab`)，副栏标签不在组外重复出现。组内点击只 `activateNavigation` 并聚焦编辑器。这取代了旧约定"主标签栏点击显式指定 main"。键盘左右按 `tabs` 顺序，通过 `data-tab-path` 定位焦点。
 - 分屏组是一个整体标签(用户 2026-11-01 纠正：不能把组外标签塞进聚焦栏)。标签栏点击统一走 `showTab(path)`：分屏可见时点组外标签 C → `closeSplit`(保存屏障)后记录 `parkedSplit = { main, side, direction }`，再在主栏单独打开 C；点暂存组成员 → 清空 `parkedSplit`、主栏打开 main、`openToSide(side, direction)`，聚焦所点成员。`openFile(path, _, 'main')` 遇到暂存组成员也转给 showTab，所以快速切换器等入口同样恢复整组。不变式：`parkedSplit` 只在 `splitPath === null` 时存在；`openToSide` 建立新分屏时丢弃旧暂存组(只支持一个分屏组)。`parkedSplit` 进入 PERSIST_KEYS，路径重命名/删除时随 remap 更新或解散。关闭暂存组成员 → 解散组；关闭当前标签后若下一个活动标签是暂存组成员则恢复整组。暂存组在标签栏以 `.is-parked`(细边框、无活动底色)渲染在 main 成员的位置。`workspace:next-tab` 等命令仍在聚焦栏内切换页面，不经过 showTab。
+- 中央新建标签页(+、`new-tab`)调用 `showTab(home://…)`：分屏时与点组外标签相同，暂存分屏组并单独显示新 Homepage，不替换组内任一栏(用户 2026-11-01 指出旧逻辑未改)。只有 `splitWithHomepage` 传 `openHomepage('split')` 在分屏内打开 Homepage。
 - `closePane(view)` 是关闭一栏的唯一入口：关闭副栏 = `closeSplit` 后移除其标签；关闭主栏 = 保存屏障后把副栏页面提升为 `activePath`，并把副栏 DOM 上的 `data-mode` 写入 workspace `viewMode`，保持存活页面的模式。同文件双栏关闭任一栏只退出分屏，不删标签。`closeTab`、正文 overlay ×、`workspace:close`、`WorkspaceLeaf.detach` 都走这条路径。`closeSplit` 只表示"取消分屏"，两页都保留为标签。
 - 标签右键"向右/向下分屏"、命令 `split`/`split-down` 调 `splitWithHomepage`：保留该页在主栏，新侧 `openHomepage('split')` 并聚焦。文件树/书签/链接的"在右侧打开"仍打开指定文件。
 - 拖拽：标签 `draggable`，数据类型 `TAB_DRAG_TYPE`，dragover 期间路径放在 `lib/tabDrag.ts`(dragover 读不到数据)。`.editor-area` 用 capture 阶段的 dragover/drop 并 stopPropagation，防止 CodeMirror 把标签当文本插入。分屏时落点为指针下的栏；未分屏时右半/下半区域建立 right/down 分屏，其余替换主栏。指示层 `.pane-drop-indicator` 相对 `.workspace` 绝对定位，`.editor-area` 不加定位以免影响子元素。
@@ -85,7 +86,7 @@ App 保留左侧 Sidebar 外壳，只用 open 控制可见固定面板和动态�
 ## 活动页面与命令路由（2026-11-01）
 
 - `activeEditor` 同时保留瞬时 navigationId 与实际活动编辑器。中央 main/split 和 sidebar:<id> 宿主在 pointerdown/focus capture 激活显式身份；原编辑器 focusin/pointerdown 继续处理实际编辑目标。弹窗、标题输入、空白阅读页、加载/卸载编辑器不把身份重置成主栏。身份不持久化，也不在普通光标移动时写工作区。
-- store 的 `currentViewId/currentPath` 校验页面仍存在且可见。`openFile/navigate/openWikilink/openHomepage` 默认使用这一目标；初始 deep-link 和浏览器 URL 恢复显式指定 main；标签栏点击见“平等分屏与分屏标签组”。保存、收藏、移动、命令面板标题搜索、模板/命令上下文与插件 Workspace 使用同一解析。关闭页面后清理其历史并回到有效页面。
+- store 的 `currentViewId/currentPath` 校验页面仍存在且可见。`openFile/navigate/openWikilink` 默认使用这一目标(`openHomepage` 只在侧栏聚焦时进侧栏，中央新建标签页走 showTab，见分屏标签组)；初始 deep-link 和浏览器 URL 恢复显式指定 main；标签栏点击见“平等分屏与分屏标签组”。保存、收藏、移动、命令面板标题搜索、模板/命令上下文与插件 Workspace 使用同一解析。关闭页面后清理其历史并回到有效页面。
 - 主栏保留原 history/histIndex 结构；副栏和侧栏按 navigationId 保存相同 NavigationLocation 栈。正文、选区定位、变更映射、恢复和代次取消仍调用 fragmentNavigation/DocumentSession；不同页面的返回/前进不互相消耗历史。重命名沿原路径映射同时更新全部栈。
 - 右侧固定属性/引用/大纲/缩略图、底部字数和视图切换读取同一活动页面；缩略图显式传 viewId，避免同路径两个视图时跳到主栏。视图模式仍归各 MarkdownView，通过已有 mode callback 修改，不另存副本。
 - 本修复不增加键盘事件管线、全文解析、索引或保存实现；焦点变化只通知实际订阅页面身份的 UI 和插件。

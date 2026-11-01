@@ -826,7 +826,12 @@ export const useStore = create<AppState>()(
         }
       },
 
-      openHomepage: (viewId) => get().openFile(`home://${crypto.randomUUID()}`, true, viewId),
+      // A central new tab is shown alone and leaves a split group intact, like selecting another tab;
+      // only splitWithHomepage asks for a Homepage inside the split.
+      openHomepage: (viewId) => {
+        const path = `home://${crypto.randomUUID()}`, id = viewId ?? get().currentViewId();
+        return id.startsWith('sidebar:') || viewId === 'split' ? get().openFile(path, true, id) : get().showTab(path);
+      },
       openFile: async (path, recordHistory = true, viewId = get().currentViewId()) => {
         const origin = get().currentPath(viewId), before = origin ? captureLocation(origin, viewId) : undefined;
         if (viewId !== 'main') {
