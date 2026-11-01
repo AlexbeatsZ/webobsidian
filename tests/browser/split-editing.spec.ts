@@ -759,27 +759,50 @@ function focusedPane(page: Page) {
 }
 function groupTab(page: Page, file: string): Locator { return page.locator(`.tab-split-group [data-tab-path="${file}"]`); }
 
-test('focused page routing: tab command stays in split, tabs open in the focused pane', async ({ page, backend }) => {
+test('focused page routing: tab command stays in split', async ({ page, backend }) => {
   await page.evaluate(async () => {
     const module = '/src/lib/store.ts'; const state = (await import(module)).useStore.getState();
-    await state.openFile('side.md', true, 'main'); await state.openFile('replacement.md', true, 'main'); await state.openFile('main.md', true, 'main');
+    await state.openFile('replacement.md', true, 'main'); await state.openFile('main.md', true, 'main');
   });
   await openSplit(page, 'main.md');
   await inlineTitle(page, 'split').click();
   await runPageCommand(page, 'workspace:next-tab');
-  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
-  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
-  // A grouped tab focuses its own pane; any other tab opens in the focused pane.
-  await groupTab(page, 'side.md').click();
-  await expect.poll(() => focusedPane(page)).toBe('split');
-  await page.getByRole('tab', { name: /replacement/ }).click();
   await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
   await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+});
+
+test('split group is one tab: another tab shows alone and a member restores the group', async ({ page, backend }, info) => {
+  await page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; const state = (await import(module)).useStore.getState();
+    await state.openFile('replacement.md', true, 'main'); await state.openFile('main.md', true, 'main');
+  });
+  await openSplit(page, 'side.md');
   await groupTab(page, 'main.md').click();
   await expect.poll(() => focusedPane(page)).toBe('main');
-  await page.getByRole('tab', { name: /side/ }).click();
-  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'side.md');
-  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+  // [main, side], replacement: selecting replacement shows it alone, not inside the split.
+  await page.locator('.tab-bar [data-tab-path="replacement.md"]').click();
+  await expect(pane(page, 'split')).toHaveCount(0);
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'replacement.md');
+  const parked = page.locator('.tab-bar .tab-split-group.is-parked');
+  await expect(parked.locator('.tab')).toHaveText([/main/, /side/]);
+  await page.locator('.tab-bar').screenshot({ path: info.outputPath('parked-split-group.png') });
+  // Selecting either member restores the whole group, focused on that member.
+  await groupTab(page, 'side.md').click();
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
+  await expect.poll(() => focusedPane(page)).toBe('split');
+  await expect(page.locator('.tab-bar .tab-split-group.is-parked')).toHaveCount(0);
+  await page.locator('.tab-bar [data-tab-path="replacement.md"]').click();
+  await expect(pane(page, 'split')).toHaveCount(0);
+  await groupTab(page, 'main.md').click();
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
+  await expect.poll(() => focusedPane(page)).toBe('main');
+  // Closing a member of a set-aside group dissolves it; the other page stays a tab.
+  await page.locator('.tab-bar [data-tab-path="replacement.md"]').click();
+  await groupTab(page, 'side.md').getByRole('button', { name: '关闭 side.md' }).click();
+  await expect(page.locator('.tab-bar .tab-split-group')).toHaveCount(0);
+  await expect(page.locator('.tab-bar .tab')).toHaveText([/main/, /replacement/]);
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'replacement.md');
 });
 
 test('split group tab pairs both panes, focuses each pane and closes either pane', async ({ page, backend }, info) => {

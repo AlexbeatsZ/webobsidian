@@ -6,7 +6,6 @@ import { printDocument } from '../lib/printDocument';
 import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { activateNavigation, editorFind, getActiveEditor, getActiveNavigationId, setActiveEditorMode, subscribeActiveNavigation } from '../lib/activeEditor';
 import { TAB_DRAG_TYPE, tabDrag } from '../lib/tabDrag';
-import { isFolderPath } from '../lib/tree';
 import { triggerAddProperty } from '../lib/livePreview';
 import { extendFileMenu } from '../lib/obsidian/menus';
 import { nativeBatchTagMenuItems } from '../lib/tags/actions';
@@ -21,7 +20,7 @@ type Tab = { path: string; title: string };
 export default function WorkspaceTabs() {
   const tabs = useStore((s) => s.tabs);
   const activePath = useStore((s) => s.activePath);
-  const openFile = (path: string) => useStore.getState().openFile(path, true, 'main');
+  const openFile = (path: string) => useStore.getState().showTab(path);
   const closeTab = useStore((s) => s.closeTab);
   const dirty = useStore((s) => s.dirty);
   const setViewMode = useStore((s) => s.setViewMode);
@@ -50,17 +49,18 @@ export default function WorkspaceTabs() {
   const closeSplit = useStore((s) => s.closeSplit);
   const closePane = useStore((s) => s.closePane);
   const splitWithHomepage = useStore((s) => s.splitWithHomepage);
+  const parkedSplit = useStore((s) => s.parkedSplit);
   const focusedView = useSyncExternalStore(subscribeActiveNavigation, getActiveNavigationId);
   const isMobile = useIsMobile();
   const scroll = useRef<HTMLDivElement>(null);
 
-  // A tab in the split group already shows its page: focus that pane instead of reopening it in main.
-  const inTab = async (path: string, action: () => void, view?: Pane) => {
-    if (view) focusPane(view);
-    else if (useStore.getState().activePath !== path) await openFile(path);
+  // Show the tab (restoring or focusing its split pane) before running a view command on it.
+  const inTab = async (path: string, action: () => void) => {
+    await selectTab(path);
     // Let the requested editor/graph mount before invoking its view command.
     window.requestAnimationFrame(() => {
-      if (view || useStore.getState().activePath === path) action();
+      const s = useStore.getState();
+      if (s.activePath === path || s.splitPath === path) action();
     });
   };
 
@@ -68,26 +68,25 @@ export default function WorkspaceTabs() {
     scroll.current?.querySelector('.tab-split-group, .tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [activePath, tabs.length, splitPath]);
 
-  // Both split panes are equal: a grouped tab focuses its pane, and any other
-  // tab opens in whichever pane is focused.
+  // A split group is one browser-style tab: selecting a member shows the whole
+  // group focused on it; any other tab is shown alone and the group is set aside.
   const focusedPane: Pane = splitPath && focusedView === 'split' ? 'split' : 'main';
   const focusPane = (viewId: Pane) => {
     activateNavigation(viewId);
     getActiveEditor()?.focus();
   };
-  const selectTab = (path: string) => {
+  const selectTab = async (path: string) => {
+    await useStore.getState().showTab(path);
     const s = useStore.getState();
-    if (s.splitPath && (path === s.activePath || path === s.splitPath)) return focusPane(path === s.activePath ? 'main' : 'split');
-    const sideable = isHomepagePath(path) || (path !== GRAPH_PATH && !isFolderPath(s.tree, path));
-    void s.openFile(path, true, s.splitPath && sideable ? focusedPane : 'main');
+    if (s.splitPath && (path === s.activePath || path === s.splitPath)) focusPane(path === s.activePath ? 'main' : 'split');
   };
 
   // Obsidian's "Add file property": focus a new property-key field in the
   // Properties widget with the key suggester open (NOT a text prompt). The
   // widget only renders in Live Preview, so switch out of source/reading first.
-  const addFileProperty = async (path: string, view?: Pane) => {
-    if (view) focusPane(view); else await openFile(path);
-    if (view === 'split') setActiveEditorMode('live');
+  const addFileProperty = async (path: string) => {
+    await selectTab(path);
+    if (getActiveNavigationId() === 'split') setActiveEditorMode('live');
     else if (useStore.getState().viewMode !== 'live') setViewMode('live');
     // Let the editor swap modes / mount the Properties widget, then start the add.
     window.setTimeout(() => {
@@ -97,8 +96,8 @@ export default function WorkspaceTabs() {
     }, 80);
   };
 
-  const exportToPdf = async (path: string, view?: Pane) => {
-    if (!view) await openFile(path);
+  const exportToPdf = async (path: string) => {
+    if (!documents.get(path)) await openFile(path);
     const snapshot = documents.get(path)?.snapshot; if (!snapshot) return;
     const context = createVaultRenderContext(path, { openLink: () => {}, openMenu: () => {}, files: () => [], reportError: notify });
     void printDocument(snapshot, context).catch(error => notify(error.message));
@@ -137,7 +136,7 @@ export default function WorkspaceTabs() {
       items = [
         // GraphView owns the Pixi renderer — it listens for this event and
         // extracts the stage to a PNG (a plain canvas read would be blank).
-        { id: 'tab:copy-screenshot', label: "复制截图", icon: 'camera', onClick: () => void inTab(path, () => window.dispatchEvent(new CustomEvent('wo-graph-screenshot')), view) },
+        { id: 'tab:copy-screenshot', label: "复制截图", icon: 'camera', onClick: () => void inTab(path, () => window.dispatchEvent(new CustomEvent('wo-graph-screenshot'))) },
         { label: '', separator: true },
         ...splitItems,
         { label: '', separator: true },
@@ -175,15 +174,15 @@ export default function WorkspaceTabs() {
         },
       };
       items = [
-        ...(isMd ? [{ id: 'file:backlinks', label: "文档中的反向链接", icon: 'link', onClick: () => void inTab(path, () => setRightPanel('backlinks'), view) }, sep] : []),
+        ...(isMd ? [{ id: 'file:backlinks', label: "文档中的反向链接", icon: 'link', onClick: () => void inTab(path, () => setRightPanel('backlinks')) }, sep] : []),
         ...splitItems,
         sep,
         renameItem,
         moveItem,
         copyItem,
         { label: bookmarks.includes(path) ? "移除书签" : "添加书签", icon: 'bookmark', onClick: () => toggleBookmark(path) },
-        ...(isMd ? [{ id: 'file:add-property', label: "添加文件属性", icon: 'plus', onClick: () => void addFileProperty(path, view) }] : []),
-        ...(isMd ? [{ id: 'file:export-pdf', label: "导出为 PDF…", icon: 'file-pdf', onClick: () => void exportToPdf(path, view) }] : []),
+        ...(isMd ? [{ id: 'file:add-property', label: "添加文件属性", icon: 'plus', onClick: () => void addFileProperty(path) }] : []),
+        ...(isMd ? [{ id: 'file:export-pdf', label: "导出为 PDF…", icon: 'file-pdf', onClick: () => void exportToPdf(path) }] : []),
         ...(canSplit
           ? [
               sep,
@@ -192,7 +191,7 @@ export default function WorkspaceTabs() {
                 icon: 'search',
                 onClick: () => void inTab(path, () => {
                   if (!editorFind()) notify("打开笔记以在其中搜索");
-                }, view),
+                }),
               },
             ]
           : []),
@@ -204,9 +203,9 @@ export default function WorkspaceTabs() {
                 id: 'file:linked-view', label: "打开关联视图",
                 icon: 'arrow-up-right',
                 submenu: [
-                  { label: "反向链接", icon: 'link', onClick: () => void inTab(path, () => setRightPanel('backlinks'), view) },
-                  { label: "出链", icon: 'arrow-up-right', onClick: () => void inTab(path, () => setRightPanel('outgoing'), view) },
-                  { id: 'file:outline', label: "大纲", icon: 'list', onClick: () => void inTab(path, () => setRightPanel('outline'), view) },
+                  { label: "反向链接", icon: 'link', onClick: () => void inTab(path, () => setRightPanel('backlinks')) },
+                  { label: "出链", icon: 'arrow-up-right', onClick: () => void inTab(path, () => setRightPanel('outgoing')) },
+                  { id: 'file:outline', label: "大纲", icon: 'list', onClick: () => void inTab(path, () => setRightPanel('outline')) },
                 ],
               },
             ]
@@ -250,7 +249,7 @@ export default function WorkspaceTabs() {
       <div key={view ? `${view}:${tab.path}` : tab.path} data-tab-path={tab.path}
         className={`tab${view || activePath === tab.path ? ' active' : ''}${view && selected ? ' is-focused' : ''}`}
         role="tab" aria-selected={selected} tabIndex={selected ? 0 : -1} draggable
-        onClick={() => selectTab(tab.path)}
+        onClick={() => void selectTab(tab.path)}
         onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close(); } }}
         onContextMenu={(event) => openTabMenu(event, tab.path, view)}
         onDragStart={(event) => {
@@ -262,7 +261,7 @@ export default function WorkspaceTabs() {
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget) return;
           if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault(); selectTab(tab.path);
+            event.preventDefault(); void selectTab(tab.path);
           } else if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
             event.preventDefault();
             const index = Math.max(0, tabs.findIndex((item) => item.path === tab.path));
@@ -270,7 +269,7 @@ export default function WorkspaceTabs() {
               : (index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
             if (!next) return;
             scroll.current?.querySelector<HTMLElement>(`[data-tab-path="${CSS.escape(next.path)}"]`)?.focus();
-            selectTab(next.path);
+            void selectTab(next.path);
           }
         }}
         title={tab.path}>
@@ -286,15 +285,17 @@ export default function WorkspaceTabs() {
   };
 
   // Browser-style split group: the two visible pages read as one unit of equal tabs.
-  const splitTab: Tab | null = splitPath
-    ? tabs.find((tab) => tab.path === splitPath) ?? { path: splitPath, title: isHomepagePath(splitPath) ? 'Homepage' : splitPath.split('/').pop() ?? splitPath }
-    : null;
-  const splitGroup = (main?: Tab) => splitTab && (
-    <div key="split-group" className={`tab-split-group${splitDirection === 'down' ? ' is-down' : ''}`}
-      role="group" aria-label={splitDirection === 'down' ? '上下分屏' : '左右分屏'}>
-      <Icon name={splitDirection === 'down' ? 'rows' : 'columns'} size={13} className="split-icon" />
-      {main && tabNode(main, 'main')}
-      {tabNode(splitTab, 'split')}
+  const tabFor = (path: string): Tab => tabs.find((tab) => tab.path === path)
+    ?? { path, title: isHomepagePath(path) ? 'Homepage' : path.split('/').pop() ?? path };
+  const group = splitPath ? { main: activePath, side: splitPath, direction: splitDirection, parked: false }
+    : parkedSplit ? { ...parkedSplit, parked: true } : null;
+  const splitTab: Tab | null = group ? tabFor(group.side) : null;
+  const splitGroup = (main?: Tab) => group && splitTab && (
+    <div key="split-group" className={`tab-split-group${group.direction === 'down' ? ' is-down' : ''}${group.parked ? ' is-parked' : ''}`}
+      role="group" aria-label={group.direction === 'down' ? '上下分屏' : '左右分屏'}>
+      <Icon name={group.direction === 'down' ? 'rows' : 'columns'} size={13} className="split-icon" />
+      {main && (group.parked ? tabNode(main) : tabNode(main, 'main'))}
+      {group.parked ? tabNode(splitTab) : tabNode(splitTab, 'split')}
     </div>
   );
 
@@ -307,9 +308,9 @@ export default function WorkspaceTabs() {
         <Icon name={isMobile ? 'menu' : 'panel-left'} size={16} />
       </button>
       <div className="tab-scroll" role="tablist" aria-label="已打开的文件" ref={scroll}>
-        {tabs.map((tab) => splitTab && tab.path === activePath ? splitGroup(tab)
-          : splitTab && tab.path === splitPath ? null : tabNode(tab))}
-        {splitTab && !tabs.some((tab) => tab.path === activePath) && splitGroup()}
+        {tabs.map((tab) => group && tab.path === group.main ? splitGroup(tab)
+          : group && tab.path === group.side ? null : tabNode(tab))}
+        {group && !tabs.some((tab) => tab.path === group.main) && splitGroup()}
       </div>
       <button type="button" className="tab-new tab-ctl" title="主页" aria-label="新建中央标签页"
         onClick={() => void openHomepage().catch(error => notify(String(error)))}>

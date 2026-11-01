@@ -158,6 +158,10 @@ interface AppState {
   splitWithHomepage: (path?: string | null, direction?: 'right' | 'down') => Promise<void>;
   /** Close one central pane and its tab; the remaining pane fills the workspace. */
   closePane: (viewId: 'main' | 'split') => Promise<void>;
+  /** A split group set aside while another tab is shown alone; selecting either member restores it. */
+  parkedSplit: { main: string; side: string; direction: 'right' | 'down' } | null;
+  /** Select a tab like a browser: a split group behaves as one tab. */
+  showTab: (path: string) => Promise<void>;
 
   recent: string[];
   removeRecent: (path: string) => void;
@@ -272,8 +276,10 @@ function remapWorkspacePaths(state: AppState, from: string, to?: string): Partia
     return file === null ? [] : [{ ...tab, state: { ...tab.state, file }, title: file.split('/').pop()! }];
   });
   const activePath = state.activePath === null ? null : map(state.activePath) ?? tabs.at(-1)?.path ?? null, splitPath = map(state.splitPath);
+  const parked = state.parkedSplit, parkedMain = parked && map(parked.main), parkedSide = parked && map(parked.side);
+  const parkedSplit = parked && parkedMain && parkedSide ? { ...parked, main: parkedMain, side: parkedSide } : null;
   const snapshot = activePath ? documents.get(activePath)?.snapshot : undefined;
-  return { tabs, rightTabs, activePath, splitPath, content: snapshot?.raw ?? (activePath === state.activePath ? state.content : ''),
+  return { tabs, rightTabs, activePath, splitPath, parkedSplit, content: snapshot?.raw ?? (activePath === state.activePath ? state.content : ''),
     dirty: snapshot?.dirty ?? (activePath === state.activePath ? state.dirty : false), splitContent: splitPath ? documents.get(splitPath)?.snapshot.raw ?? state.splitContent : '',
     rightActiveId: rightTabs.some(tab => tab.id === state.rightActiveId) ? state.rightActiveId : null,
     leftActiveId: rightTabs.some(tab => tab.id === state.leftActiveId) ? state.leftActiveId : null,
@@ -291,7 +297,7 @@ function remapWorkspacePaths(state: AppState, from: string, to?: string): Partia
 
 // ---- server-side workspace persistence (shared across browsers/devices) ----
 const PERSIST_KEYS = [
-  'tabs', 'activePath', 'viewMode', 'expanded', 'splitPath', 'splitDirection',
+  'tabs', 'activePath', 'viewMode', 'expanded', 'splitPath', 'splitDirection', 'parkedSplit',
   'recent', 'bookmarks', 'leftPanel', 'rightPanel', 'leftOpen', 'rightOpen', 'graphSettings',
   'treeSort', 'autoReveal',
   'rightTabs', 'rightActiveId', 'leftActiveId',
@@ -335,6 +341,8 @@ function applyPersisted(s: any, set: (p: any) => void): void {
     autoReveal: s.autoReveal === true,
     splitPath: typeof s.splitPath === 'string' ? s.splitPath : null,
     splitDirection: s.splitDirection === 'down' ? 'down' : 'right',
+    parkedSplit: typeof s.splitPath !== 'string' && typeof s.parkedSplit?.main === 'string' && typeof s.parkedSplit?.side === 'string'
+      ? { main: s.parkedSplit.main, side: s.parkedSplit.side, direction: s.parkedSplit.direction === 'down' ? 'down' : 'right' } : null,
     recent: Array.isArray(s.recent) ? s.recent : [],
     bookmarks: Array.isArray(s.bookmarks) ? s.bookmarks : [],
     leftPanel: s.leftPanel === 'search' ? 'search' : 'files',
@@ -589,6 +597,7 @@ export const useStore = create<AppState>()(
           } else if (home) tabs = tabs.filter(t => t.path !== prev);
           return {
             tabs,
+            parkedSplit: null,
             splitPath: path,
             splitContent: doc?.snapshot.raw ?? '',
             splitDirection: direction ?? s.splitDirection,
@@ -611,6 +620,31 @@ export const useStore = create<AppState>()(
         }
         if (direction) set({ splitDirection: direction });
         await get().openHomepage('split');
+      },
+      parkedSplit: null,
+      showTab: async (path) => {
+        const s = get(), parked = s.parkedSplit;
+        if (!s.splitPath && parked && (path === parked.main || path === parked.side)) {
+          // Restore the whole group, focused on the member that was selected.
+          set({ parkedSplit: null });
+          await get().openFile(parked.main, true, 'main');
+          if (get().activePath !== parked.main) return;
+          await get().openToSide(parked.side, parked.direction);
+          if (get().splitPath === parked.side) activateNavigation(path === parked.main ? 'main' : 'split');
+          return;
+        }
+        if (s.splitPath && (path === s.activePath || path === s.splitPath)) {
+          activateNavigation(path === s.activePath ? 'main' : 'split');
+          return;
+        }
+        if (s.splitPath && s.activePath) {
+          // Another tab is shown alone; the split group stays together as one tab.
+          const group = { main: s.activePath, side: s.splitPath, direction: s.splitDirection };
+          await get().closeSplit();
+          if (get().splitPath !== null) return;
+          set({ parkedSplit: group });
+        }
+        await get().openFile(path, true, 'main');
       },
       closePane: async (viewId) => {
         const s = get(), path = viewId === 'split' ? s.splitPath : s.activePath, other = viewId === 'split' ? s.activePath : s.splitPath;
@@ -807,6 +841,8 @@ export const useStore = create<AppState>()(
           set(s => ({ recent: isHomepagePath(path) ? s.recent : [path, ...s.recent.filter(p => p !== path)].slice(0, 20), ...pushHistory(s, path, recordHistory, viewId, before) }));
           return;
         }
+        const parked = get().parkedSplit;
+        if (parked && !get().splitPath && (path === parked.main || path === parked.side)) return get().showTab(path);
         cancelNavigation('main', path);
         const generation = ++openGeneration;
         if (path === GRAPH_PATH) return get().openGraph(recordHistory);
@@ -861,7 +897,9 @@ export const useStore = create<AppState>()(
       },
 
       closeTab: async (path) => {
-        const { activePath, splitPath } = get();
+        const { activePath, splitPath, parkedSplit } = get();
+        // Closing a member of a set-aside group dissolves the group; the other page stays a tab.
+        if (parkedSplit && (path === parkedSplit.main || path === parkedSplit.side)) set({ parkedSplit: null });
         if (splitPath !== null && splitPath !== activePath && (path === splitPath || path === activePath))
           return get().closePane(path === splitPath ? 'split' : 'main');
         if (splitPath !== null && path === splitPath) {
@@ -878,6 +916,8 @@ export const useStore = create<AppState>()(
           const activePath = wasActive ? (tabs.at(-1)?.path ?? null) : s.activePath;
           return { tabs, activePath, ...(wasActive ? { content: '', dirty: false } : {}) };
         });
+        const next = get();
+        if (next.activePath && next.parkedSplit && [next.parkedSplit.main, next.parkedSplit.side].includes(next.activePath)) await get().showTab(next.activePath);
       },
 
       renamePath: async (from, requested, expectedRevision) => {

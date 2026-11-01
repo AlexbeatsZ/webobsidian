@@ -4,10 +4,11 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-01 (PRD 1.18 equal split panes, split tab group, tab drag)
+Cập nhật lần cuối: 2026-11-01 (PRD 1.19 split group behaves as one tab)
 
 ## Split tab group (PRD 1.18)
-- [x] 分屏时标签栏显示两栏的分屏组，点击聚焦对应栏，组外标签在聚焦栏打开
+- [x] 分屏时标签栏显示两栏的分屏组，点击聚焦对应栏
+- [x] (PRD 1.19) 分屏组是一个整体标签：组外标签单独显示并暂存该组，点组员恢复整组分屏
 - [x] 两栏平等：副栏页面进入标签列表，关闭任一栏后另一栏铺满并保留模式
 - [x] 向右/向下分屏保留当前页，新侧打开 Homepage，被打开的文件替换
 - [x] 标签拖到某一栏替换内容，未分屏时拖到右/下半边建立分屏
@@ -551,6 +552,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-01 (PRD 1.19): 分屏组改为整体标签——点击组外标签单独显示、暂存分屏组(parkedSplit)，点组员恢复；split-editing 39/39、单元 498/498。
 - 2026-11-01 (PRD 1.18): 平等分屏——分屏标签组、副栏标签化、关闭一栏另一栏铺满、分屏新侧打开 Homepage、标签拖入分栏；split-editing 38/38、相关规格 39/40(pdf-toolbar:228 既有失败)、单元 498/498。
 - 2026-11-01 (PRD 1.17): 删除 Canvas 白板与繁体词典；快速切换器拼音搜索提速（6500 条目每键约 45ms → 首键约 10ms、后续 <1ms，新旧匹配 96 万次比对零差异）。
 - 2026-11-01 (UI consistency): theme status tokens, sidebar empty/error rows, settings field widths, missing icons/classes and
