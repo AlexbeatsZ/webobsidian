@@ -81,7 +81,7 @@ App 保留左侧 Sidebar 外壳，只用 open 控制可见固定面板和动态�
 - 中央新建标签页(+、`new-tab`)调用 `showTab(home://…)`：分屏时与点组外标签相同，暂存分屏组并单独显示新 Homepage，不替换组内任一栏(用户 2026-11-01 指出旧逻辑未改)。只有 `splitWithHomepage` 传 `openHomepage('split')` 在分屏内打开 Homepage。
 - `closePane(view)` 是关闭一栏的唯一入口：关闭副栏 = `closeSplit` 后移除其标签；关闭主栏 = 保存屏障后把副栏页面提升为 `activePath`，并把副栏 DOM 上的 `data-mode` 写入 workspace `viewMode`，保持存活页面的模式。同文件双栏关闭任一栏只退出分屏，不删标签。`closeTab`、正文 overlay ×、`workspace:close`、`WorkspaceLeaf.detach` 都走这条路径。`closeSplit` 只表示"取消分屏"，两页都保留为标签。
 - 标签右键"向右/向下分屏"、命令 `split`/`split-down` 调 `splitWithHomepage`：保留该页在主栏，新侧 `openHomepage('split')` 并聚焦。文件树/书签/链接的"在右侧打开"仍打开指定文件。
-- 拖拽：标签 `draggable`，数据类型 `TAB_DRAG_TYPE`，dragover 期间路径放在 `lib/tabDrag.ts`(dragover 读不到数据)。`.editor-area` 用 capture 阶段的 dragover/drop 并 stopPropagation，防止 CodeMirror 把标签当文本插入。分屏时落点为指针下的栏；未分屏时右半/下半区域建立 right/down 分屏，其余替换主栏。指示层 `.pane-drop-indicator` 相对 `.workspace` 绝对定位，`.editor-area` 不加定位以免影响子元素。
+- 拖拽：标签 `draggable`，数据类型 `TAB_DRAG_TYPE`，dragover 期间路径放在 `lib/tabDrag.ts`(dragover 读不到数据)。`.editor-area` 用 capture 阶段的 dragover/drop 并 stopPropagation，防止 CodeMirror 把标签当文本插入。分屏时落点为指针下的栏，交给 `replacePane(view, path)`：打开后在 `tabs` 中交换被拖标签与被替换页，使 [A,B],C 拖 C 到 B 得到 [A,C],B(用户 2026-11-01 指出旧行为让 C 原地不动、反直觉)；拖的是另一组员时交换两栏；副栏不接受 Graph/文件夹。分屏组中可见成员的标签也是落点(`.is-drop-target` 高亮)，行为相同。未分屏时右半/下半区域建立 right/down 分屏，其余替换主栏。指示层 `.pane-drop-indicator` 相对 `.workspace` 绝对定位，`.editor-area` 不加定位以免影响子元素。
 
 ## 活动页面与命令路由（2026-11-01）
 

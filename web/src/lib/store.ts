@@ -162,6 +162,8 @@ interface AppState {
   parkedSplit: { main: string; side: string; direction: 'right' | 'down' } | null;
   /** Select a tab like a browser: a split group behaves as one tab. */
   showTab: (path: string) => Promise<void>;
+  /** Put a tab into one pane of the visible split group; the page it replaces takes the tab's old place. */
+  replacePane: (viewId: 'main' | 'split', path: string) => Promise<void>;
 
   recent: string[];
   removeRecent: (path: string) => void;
@@ -645,6 +647,30 @@ export const useStore = create<AppState>()(
           set({ parkedSplit: group });
         }
         await get().openFile(path, true, 'main');
+      },
+      replacePane: async (viewId, path) => {
+        const s = get(), old = viewId === 'split' ? s.splitPath : s.activePath, other = viewId === 'split' ? s.activePath : s.splitPath;
+        if (!s.splitPath || !old || !other || old === path) return;
+        if (viewId === 'split' && !isHomepagePath(path) && (path === GRAPH_PATH || findNode(s.tree, path)?.type === 'folder')) return;
+        if (path === other) {
+          // Dropping one member onto the other swaps the two panes.
+          const main = viewId === 'main' ? other : old, side = viewId === 'main' ? old : other;
+          await get().openFile(main, true, 'main');
+          if (get().activePath !== main) return;
+          await get().openToSide(side);
+          if (get().splitPath !== side) return;
+        } else {
+          await get().openFile(path, true, viewId);
+          if ((viewId === 'split' ? get().splitPath : get().activePath) !== path) return;
+        }
+        // [A,B],C with C dropped on B → [A,C],B: the group keeps its place and B goes where C was.
+        set(st => {
+          const i = st.tabs.findIndex(t => t.path === path), j = st.tabs.findIndex(t => t.path === old);
+          if (i < 0 || j < 0) return {};
+          const tabs = [...st.tabs]; [tabs[i], tabs[j]] = [tabs[j], tabs[i]];
+          return { tabs };
+        });
+        activateNavigation(viewId);
       },
       closePane: async (viewId) => {
         const s = get(), path = viewId === 'split' ? s.splitPath : s.activePath, other = viewId === 'split' ? s.activePath : s.splitPath;

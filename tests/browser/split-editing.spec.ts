@@ -887,6 +887,33 @@ test('dragging a tab onto a pane opens it there, or onto the far half to split',
   expect((await snapshot(page, 'replacement.md')).raw).toBe(original['replacement.md']);
 });
 
+test('dragging an outside tab into the split group swaps it with the replaced page', async ({ page, backend }) => {
+  await page.evaluate(async () => {
+    const module = '/src/lib/store.ts'; const state = (await import(module)).useStore.getState();
+    await state.openFile('replacement.md', true, 'main'); await state.openFile('main.md', true, 'main');
+  });
+  await openSplit(page, 'side.md');
+  const order = page.locator('.tab-bar .tab');
+  await expect(order).toHaveText([/main/, /side/, /replacement/]);
+  // [main,side],replacement with replacement dropped on the side pane → [main,replacement],side.
+  await page.locator('.tab-bar [data-tab-path="replacement.md"]').dragTo(content(page, 'split'));
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'main.md');
+  await expect(order).toHaveText([/main/, /replacement/, /side/]);
+  await expect(page.locator('.tab-bar .tab-scroll > .tab')).toHaveText([/side/]);
+  await expect.poll(() => focusedPane(page)).toBe('split');
+  // Dropping on a member tab in the tab bar works the same: [main,replacement],side → [side,replacement],main.
+  await page.locator('.tab-bar .tab-scroll > [data-tab-path="side.md"]').dragTo(groupTab(page, 'main.md'));
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'side.md');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(order).toHaveText([/side/, /replacement/, /main/]);
+  // Dropping one member on the other swaps the panes.
+  await groupTab(page, 'replacement.md').dragTo(content(page, 'main'));
+  await expect(host(page, 'main')).toHaveAttribute('data-document-id', 'replacement.md');
+  await expect(host(page, 'split')).toHaveAttribute('data-document-id', 'side.md');
+  await expect(page.locator('.tab-bar .tab-scroll > .tab')).toHaveText([/main/]);
+});
+
 test('focused page routing: headings palette and outline read and navigate split', async ({ page, backend }) => {
   await openSplit(page, 'parity-rich.md');
   await content(page, 'split').click();

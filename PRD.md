@@ -1,7 +1,9 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.21 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Phiên bản: 1.22 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Changelog 1.22 (拖入分屏组时交换位置): [A,B],C 时把 C 拖到 B 的栏(或组内 B 的标签)上得到 [A,C],B——
+> 分屏组留在原位,被替换的页面回到 C 原来的位置;把组内一页拖到另一页上则交换两栏。
 > Changelog 1.21 (分屏时新建标签页): 标签栏 + 与"新建标签页"命令在分屏时不再把 Homepage 放进分屏组的某一栏,
 > 而是像点击组外标签一样单独显示新 Homepage,分屏组暂存为一个整体标签。只有"向右/向下分屏"在新侧打开 Homepage;
 > 侧栏聚焦时新建标签页仍在侧栏打开。
@@ -317,6 +319,8 @@ webobsidian/
   - "Split right/down" trên tab và lệnh split giữ trang hiện tại, mở Homepage ở phía mới (không nhân bản trang);
     Homepage phía mới bị thay thế bởi file được mở từ nó. Chuột phải tab trong nhóm: đổi hướng, bỏ split (giữ cả hai tab).
   - Kéo tab thả vào một pane để mở ở pane đó; khi chưa split, thả vào nửa phải/dưới của vùng soạn thảo để tạo split.
+    Khi đang split, thả tab C lên pane B (hoặc lên tab B trong nhóm): [A,B],C → [A,C],B — nhóm giữ nguyên vị trí, B về
+    chỗ cũ của C; thả một thành viên lên thành viên kia → đổi chỗ hai pane (1.22).
   - **Find/Replace trong note**: tích hợp `@codemirror/search` (panel top, ⌘F mở Find, ⌘⇧F Replace, ⌘G next).
   - **Reveal file in navigation**: mở rộng folder tổ tiên + cuộn/nháy sáng row trong file tree.
   - **Add file property**: chèn property rỗng vào frontmatter YAML (tạo block nếu chưa có) → render trong Properties widget.

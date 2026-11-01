@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useStore, GRAPH_PATH, isHomepagePath, type ContextMenuItem } from '../lib/store';
 import { api } from '../lib/api';
 import { documents } from '../lib/documents';
@@ -53,6 +53,7 @@ export default function WorkspaceTabs() {
   const focusedView = useSyncExternalStore(subscribeActiveNavigation, getActiveNavigationId);
   const isMobile = useIsMobile();
   const scroll = useRef<HTMLDivElement>(null);
+  const [dropOn, setDropOn] = useState<Pane | null>(null);
 
   // Show the tab (restoring or focusing its split pane) before running a view command on it.
   const inTab = async (path: string, action: () => void) => {
@@ -247,7 +248,7 @@ export default function WorkspaceTabs() {
     const close = () => void (view ? closePane(view) : closeTab(tab.path));
     return (
       <div key={view ? `${view}:${tab.path}` : tab.path} data-tab-path={tab.path}
-        className={`tab${view || activePath === tab.path ? ' active' : ''}${view && selected ? ' is-focused' : ''}`}
+        className={`tab${view || activePath === tab.path ? ' active' : ''}${view && selected ? ' is-focused' : ''}${view && dropOn === view ? ' is-drop-target' : ''}`}
         role="tab" aria-selected={selected} tabIndex={selected ? 0 : -1} draggable
         onClick={() => void selectTab(tab.path)}
         onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close(); } }}
@@ -257,7 +258,20 @@ export default function WorkspaceTabs() {
           event.dataTransfer.setData(TAB_DRAG_TYPE, tab.path);
           event.dataTransfer.effectAllowed = 'move';
         }}
-        onDragEnd={() => { tabDrag.path = null; }}
+        onDragEnd={() => { tabDrag.path = null; setDropOn(null); }}
+        // Dropping another tab on a member of the visible split group puts it in that pane.
+        onDragOver={view ? (event) => {
+          if (!event.dataTransfer.types.includes(TAB_DRAG_TYPE) || !tabDrag.path || tabDrag.path === tab.path) return;
+          event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropOn(view);
+        } : undefined}
+        onDragLeave={view ? (event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropOn(null); } : undefined}
+        onDrop={view ? (event) => {
+          const path = tabDrag.path;
+          setDropOn(null);
+          if (!event.dataTransfer.types.includes(TAB_DRAG_TYPE) || !path || path === tab.path) return;
+          event.preventDefault();
+          void useStore.getState().replacePane(view, path).catch(error => notify(String(error)));
+        } : undefined}
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget) return;
           if (event.key === 'Enter' || event.key === ' ') {

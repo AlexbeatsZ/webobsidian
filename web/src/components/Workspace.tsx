@@ -120,6 +120,7 @@ export default function Workspace() {
     if (!target || !path) return;
     const s = useStore.getState();
     if (target.view === 'right' || target.view === 'down') void s.openToSide(path, target.view);
+    else if (s.splitPath) void s.replacePane(target.view, path);
     else if ((target.view === 'split' ? s.splitPath : s.activePath) !== path) void s.openFile(path, true, target.view);
   };
 
