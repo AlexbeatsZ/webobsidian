@@ -2,6 +2,7 @@ import { Events, Component } from './events';
 import { createDiv, createEl } from './dom';
 import { useStore } from '../store';
 import { getActiveEditor } from '../activeEditor';
+import { contextOf } from '../renderContext';
 import { Editor, editorEntries, refreshPluginExtensions } from './editor';
 import type { TFile } from './vault';
 import { Modal } from './ui';
@@ -313,29 +314,14 @@ export class Workspace extends Events {
     return path ? this.app.vault.getFileByPath(path) : null;
   }
   markdown(slot: 'main' | 'split' | 'right', id?: string): MarkdownView | null {
-    if (slot === 'right') {
-      const tab = useStore.getState().rightTabs.find(tab => tab.id === id && tab.type === 'markdown');
-      if (!tab) return null;
-      const entry = editorEntries().find(entry => entry.cm.dom.closest<HTMLElement>('[data-sidebar-tab]')?.dataset.sidebarTab === id);
-      if (!entry) return null;
-      const view = this.rightLeaf(tab).view as MarkdownView;
-      view.file = entry.info.file; view.editor = new Editor(entry.cm);
-      view.containerEl = entry.cm.dom.closest<HTMLElement>('.cm-host') ?? entry.cm.dom; view.contentEl = view.containerEl;
-      return view;
-    }
-    const path =
-      slot === 'split'
-        ? useStore.getState().splitPath
-        : useStore.getState().activePath;
-    const entries = editorEntries().filter(entry => !entry.cm.dom.closest('[data-sidebar-tab]'));
-    const entry =
-      entries.find(
-        (e) =>
-          e.info.file?.path === path &&
-          (slot === 'split' ? e.cm.state.readOnly : !e.cm.state.readOnly)
-      ) ?? entries.find((e) => e.info.file?.path === path);
+    const tab = slot === 'right'
+      ? useStore.getState().rightTabs.find(tab => tab.id === id && tab.type === 'markdown')
+      : undefined;
+    if (slot === 'right' && !tab) return null;
+    const navigationId = slot === 'right' ? 'sidebar:' + id : slot;
+    const entry = editorEntries().find(entry => contextOf(entry.cm).navigationId === navigationId);
     if (!entry) return null;
-    const leaf = slot === 'main' ? this.main : this.split;
+    const leaf = tab ? this.rightLeaf(tab) : slot === 'split' ? this.split : this.main;
     const view = leaf.view as MarkdownView;
     view.file = entry.info.file;
     view.editor = new Editor(entry.cm);
@@ -346,13 +332,13 @@ export class Workspace extends Events {
   }
   get activeLeaf() {
     const cm = getActiveEditor();
-    const id = (document.activeElement?.closest<HTMLElement>('[data-sidebar-tab]')
-      ?? cm?.dom.closest<HTMLElement>('[data-sidebar-tab]'))?.dataset.sidebarTab;
+    const navigationId = cm ? contextOf(cm).navigationId : undefined;
+    const id = cm
+      ? (navigationId?.startsWith('sidebar:') ? navigationId.slice('sidebar:'.length) : undefined)
+      : document.activeElement?.closest<HTMLElement>('[data-sidebar-tab]')?.dataset.sidebarTab;
     const tab = id && useStore.getState().rightTabs.find(tab => tab.id === id);
     if (tab) { const leaf = this.rightLeaf(tab); if (tab.type === 'markdown') this.markdown('right', tab.id); return leaf; }
-    return cm && cm === this.markdown('split')?.editor?.cm
-      ? this.split
-      : this.main;
+    return this.markdown(navigationId === 'split' ? 'split' : 'main')?.leaf ?? this.main;
   }
   getActiveViewOfType<T>(Type: new (...args: any[]) => T): T | null {
     const leaf = this.activeLeaf;

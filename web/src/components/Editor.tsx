@@ -24,11 +24,12 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
 }) {
   const activePath = useStore((s) => suppliedPath ? null : s.activePath);
   const path = suppliedPath ?? activePath;
-  const workspaceMode = useStore((s) => sidebar ? 'live' : s.viewMode);
+  const localMode = sidebar || (!!suppliedPath && navigationId !== 'main');
+  const workspaceMode = useStore((s) => localMode ? 'live' : s.viewMode);
   const workspaceSetMode = useStore((s) => s.setViewMode);
-  const [sidebarMode, setSidebarMode] = useState<import('../lib/store').ViewMode>('live');
-  const mode = sidebar ? sidebarMode : workspaceMode;
-  const setMode = sidebar ? setSidebarMode : workspaceSetMode;
+  const [paneMode, setPaneMode] = useState<import('../lib/store').ViewMode>('live');
+  const mode = localMode ? paneMode : workspaceMode;
+  const setMode = localMode ? setPaneMode : workspaceSetMode;
   const workspaceOpenLink = useStore((s) => s.openWikilink);
   const openLink = onOpenLink ?? workspaceOpenLink;
   const openMenu = useStore((s) => s.openContextMenu);

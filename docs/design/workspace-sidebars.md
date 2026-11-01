@@ -63,6 +63,15 @@ App 保留左侧 Sidebar 外壳，只用 open 控制可见固定面板和动态�
 相同状态的 setState 不重复执行。React StrictMode cleanup 后可以安全重新挂载。
 手动保存指向活动编辑器的路径；MarkdownView.save 指向自身 file，后台保存保留原含义。
 
+## 中央分屏编辑（2026-11-01）
+
+- 两个中央 Markdown 栏必须复用完整宿主链 `WorkspacePane → EditorPane → Editor → MarkdownView`，均显式传 `path` 和 `navigationId: main | split`；不是两个不同宿主各自调用 MarkdownView。删除副栏独有路径标题行、`.split-head` 和直接挂 Editor 的分支。两栏共用 `.pane` 布局与不占正文流的 overlay 关闭按钮；inset 分隔不扣除单栏正文宽度。Canvas 保持原中央能力，不代表支持双 Canvas。
+- 不再强制分栏 `reading`。主栏即使显式传 path，仍使用既有持久化 workspace viewMode；仅侧栏及显式 path 的非 main 栏使用实例内 live/source/reading。选区、折叠与滚动继续归各 MarkdownView，不增加共享视图状态。
+- 同文件复用同一 DocumentSession 的正文、历史、分析和 autosave；不同文件继续各自会话。Workspace Markdown/activeLeaf 通过注册 context.navigationId 定位 main/split/sidebar，删除 readOnly、同路径及 DOM 位置猜测。activeEditor 原 activate handler 同时处理 focusin/pointerdown，空白阅读页点击也能激活正确栏；保留 nearest-editor 过滤及对称清理，不强制 focus、不二次改 selection、不另建保存或键盘管线。
+- `openToSide` 替换前和 `closeSplit` 关闭前统一等待 DocumentRegistry.saveLeaving。保存失败或保存期间再输入时保留分栏／草稿并报告错误；现有 splitGeneration 防止过期异步操作关闭或覆盖新分栏。远端布局应用也先保存原分栏，导航在打开失败后不继续定位到旧视图。
+- 不新增输入时全文分析、索引构建或工作区序列化，不宣称性能提升。最终27项相关单元、25项浏览器通过；同笔记12组主题/模式/空白与富文本对照最大差0 CSS px，实际glyph字体一致。实际安装040资源零route覆盖复验通过。覆盖真实编辑落盘、独立模式/选区、共享Undo/Redo、关闭/替换屏障、507恢复及空白阅读页命令定位；报告 `tests/reports/split-editing-20261101.md`。
+- 边界：Canvas 嵌入 Editor 尚未显式传 navigationId，默认 split 身份是待单独回归的静态风险；不因此恢复猜测分支。本轮不声称 Canvas、物理IME、其他平台或用户当前窗口验收。
+
 ## 性能与简化
 
 - 出链和大纲读取同一 DocumentSession.analysis 的共享 metadata。出链从已有本地

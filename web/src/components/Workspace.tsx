@@ -11,14 +11,13 @@ import Icon from './Icon';
 import StatusBar from './StatusBar';
 import WorkspaceLauncher from './WorkspaceLauncher';
 
-function EditorPane() {
-  const activePath = useStore((s) => s.activePath);
+function EditorPane({ path: activePath, navigationId }: { path: string; navigationId: 'main' | 'split' }) {
   const isImage = activePath ? /\.(png|jpe?g|gif|svg|webp)$/i.test(activePath) : false;
   const isCanvas = activePath ? /\.canvas$/i.test(activePath) : false;
   const isVideo = activePath ? VIDEO_EXT_RE.test(activePath) : false;
   const isAudio = activePath ? AUDIO_EXT_RE.test(activePath) : false;
 
-  if (activePath && isCanvas) {
+  if (isCanvas && navigationId === 'main') {
     return <CanvasView />;
   }
   if (activePath && isImage) {
@@ -54,13 +53,23 @@ function EditorPane() {
     );
   }
   // Reading mode = the same Live Preview editor in read-only (identical render).
-  return <Editor />;
+  return <Editor path={activePath} navigationId={navigationId} />;
+}
+
+function WorkspacePane({ path, navigationId }: { path: string; navigationId: 'main' | 'split' }) {
+  const close = useStore((state) => navigationId === 'main' ? state.closeTab : state.closeSplit);
+  return <div className={`pane ${navigationId}-pane`} data-view-id={navigationId}>
+    <button className="tool-btn pane-close" onClick={() => void close(path)} title={navigationId === 'main' ? '关闭标签页' : '关闭分屏'}>
+      <Icon name="x" size={16} />
+    </button>
+    <EditorPane path={path} navigationId={navigationId} />
+  </div>;
 }
 
 export default function Workspace() {
   const activePath = useStore((s) => s.activePath);
   const splitPath = useStore((s) => s.splitPath);
-  const closeSplit = useStore((s) => s.closeSplit);
+
   const notify = useStore((s) => s.notify);
   const splitDirection = useStore((s) => s.splitDirection);
   const tree = useStore((s) => s.tree);
@@ -116,22 +125,9 @@ export default function Workspace() {
           </div>
         )}
         {activePath && !activeIsHome && activePath !== GRAPH_PATH && !activeIsFolder && (
-          <div className="pane main-pane">
-            <EditorPane />
-          </div>
+          <WorkspacePane path={activePath} navigationId="main" />
         )}
-        {splitPath && (
-          <div className="pane split-pane">
-            <div className="split-head">
-              <span className="crumbs">{splitPath}</span>
-              <span className="grow" />
-              <button className="tool-btn" onClick={closeSplit} title="关闭分屏">
-                <Icon name="x" size={16} />
-              </button>
-            </div>
-            <Editor path={splitPath} navigationId="split" reading />
-          </div>
-        )}
+        {splitPath && <WorkspacePane path={splitPath} navigationId="split" />}
       </div>
       <StatusBar />
     </div>

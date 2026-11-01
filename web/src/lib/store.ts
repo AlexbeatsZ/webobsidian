@@ -149,7 +149,7 @@ interface AppState {
   /** Which edge the split pane is docked to ('right' = columns, 'down' = rows). */
   splitDirection: 'right' | 'down';
   openToSide: (path: string, direction?: 'right' | 'down') => Promise<void>;
-  closeSplit: () => void;
+  closeSplit: () => Promise<void>;
 
   recent: string[];
   removeRecent: (path: string) => void;
@@ -475,7 +475,11 @@ export const useStore = create<AppState>()(
           : request.viewId === 'split' ? get().splitPath ?? path : get().activePath ?? path;
         const before = captureLocation(origin, request.viewId ?? 'main', source);
         let viewId = request.viewId ?? 'main';
-        if (request.disposition === 'side' || viewId === 'split') { viewId = 'split'; await get().openToSide(path); }
+        if (request.disposition === 'side' || viewId === 'split') {
+          viewId = 'split';
+          await get().openToSide(path);
+          if (get().splitPath !== path) return;
+        }
         else if (request.disposition === 'tab' || viewId.startsWith('sidebar:')) {
           const id = await get().openRightTab('markdown', { file: path }, request.disposition === 'tab' ? undefined : viewId.slice(8));
           if (!id) return; viewId = 'sidebar:' + id;
@@ -541,6 +545,9 @@ export const useStore = create<AppState>()(
         cancelNavigation('split', path);
         if (!TEXT_EXT_RE.test(path)) return;
         const generation = ++splitGeneration;
+        try { await documents.saveLeaving(get().splitPath); }
+        catch (error) { if (generation === splitGeneration) get().notify(String(error)); return; }
+        if (generation !== splitGeneration) return;
         const doc = await documents.open(path);
         if (generation !== splitGeneration) return;
         set((s) => ({
@@ -549,7 +556,12 @@ export const useStore = create<AppState>()(
           splitDirection: direction ?? s.splitDirection,
         }));
       },
-      closeSplit: () => { splitGeneration++; set({ splitPath: null, splitContent: '' }); },
+      closeSplit: async () => {
+        const generation = ++splitGeneration;
+        try { await documents.saveLeaving(get().splitPath); }
+        catch (error) { get().notify(String(error)); return; }
+        if (generation === splitGeneration) set({ splitPath: null, splitContent: '' });
+      },
 
       recent: [],
       removeRecent: (path) => set((s) => ({ recent: s.recent.filter((p) => p !== path) })),
@@ -925,6 +937,7 @@ export const useStore = create<AppState>()(
         const prevActive = get().activePath;
         const prevSplit = get().splitPath;
         await documents.saveLeaving(get().activePath);
+        await documents.saveLeaving(prevSplit);
         const incoming = restoreSidebarTabs(state.rightTabs);
         for (const tab of get().rightTabs) {
           const next = incoming.find(next => next.id === tab.id);

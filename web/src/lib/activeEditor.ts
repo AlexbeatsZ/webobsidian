@@ -24,12 +24,14 @@ const available = (view: EditorView) => view.dom.isConnected && !view.dom.closes
 export function registerEditor(view: EditorView, commands: EditorCommands): () => void {
   mounted.set(view, commands);
   if (view.hasFocus) active = view;
-  const focus = (event: FocusEvent) => {
+  const activate = (event: Event) => {
     if ((event.target as Element).closest('.cm-editor') === view.dom) active = view;
   };
-  view.dom.addEventListener('focusin', focus);
+  view.dom.addEventListener('focusin', activate);
+  view.dom.addEventListener('pointerdown', activate);
   return () => {
-    view.dom.removeEventListener('focusin', focus);
+    view.dom.removeEventListener('focusin', activate);
+    view.dom.removeEventListener('pointerdown', activate);
     mounted.delete(view);
     if (active === view) active = null;
   };
