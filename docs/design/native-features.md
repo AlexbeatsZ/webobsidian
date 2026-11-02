@@ -11,7 +11,7 @@ are deleted. They must not be reintroduced as compatibility adapters. See
 | --- | --- |
 | Configured menus | `ContextMenuItem`, React ContextMenu, Obsidian Menu and extendFileMenu share one declarative transformation after native/plugin contributions. Stable IDs, contexts and command dispatch retain their existing owner. |
 | Unused attachments | VaultCatalog, TargetIndex, link graph and the file-update queue provide reference evidence. Preview, explicit selection and fresh revalidation precede existing Vault trash/restore operations. Unknown/dynamic reference data never authorizes deletion. |
-| Tags | Shared source/property tools, TagsPanel and the catalog own hierarchy, batches, rename/merge, Tag Pages and counts. Local source patches and DocumentSession history preserve unrelated YAML and text. |
+| Tags | Shared source/property tools, TagsPanel and the catalog own hierarchy, batches, in-place rename, multi-select merge/delete, Tag Pages and counts. Local source patches and DocumentSession history preserve unrelated YAML and text. |
 
 App initializes/disposes native menu integration. Settings and nativeCommands use
 the existing configuration and command owners. Vault changes invalidate old menus

@@ -102,21 +102,21 @@ function McpPanel() {
     <>
       <div className="nav-header">
         <span className="nav-title">MCP</span>
-        <button
-          type="button"
-          className="nav-action"
-          title="添加选中内容或当前页面"
-          aria-label="添加选中内容或当前页面"
-          disabled={ctx.busy}
-          onClick={() => void addCurrentMcpContext()}
-        >
-          <Icon name="plus" size={14} />
-        </button>
       </div>
       <div className="sidebar-body">
-        {ctx.error && <div className="panel-empty" role="alert">{ctx.error}</div>}
-        <McpLauncher />
-        <Section title="上下文" count={ctx.items.length} open={openContext} onToggle={() => setOpenContext(!openContext)}>
+        <Section title="上下文" count={ctx.items.length} open={openContext} onToggle={() => setOpenContext(!openContext)} actions={
+          <button
+            type="button"
+            className="nav-action"
+            title="添加选中内容或当前页面"
+            aria-label="添加选中内容或当前页面"
+            disabled={ctx.busy}
+            onClick={() => { setOpenContext(true); void addCurrentMcpContext(); }}
+          >
+            <Icon name="plus" size={14} />
+          </button>
+        }>
+          {ctx.error && <div className="panel-empty" role="alert">{ctx.error}</div>}
           {ctx.items.length === 0 && <div className="panel-empty">暂无待发送上下文</div>}
           {ctx.items.map((item) => (
             <div key={item.id} className="mention-box mcp-context-item" data-context-id={item.id} data-context-kind={item.kind}>
@@ -148,7 +148,7 @@ function McpPanel() {
                     disabled={ctx.busy}
                     onClick={() => void removeMcpContext(item.id)}
                   >
-                    <Icon name="trash" size={14} />
+                    <Icon name="x" size={14} />
                   </button>
                 </div>
               </div>
@@ -175,12 +175,17 @@ function McpPanel() {
           {review.error && <div className="panel-empty" role="alert">{review.error}</div>}
           {review.proposals.length === 0 && <div className="panel-empty">暂无候选修改</div>}
           {review.proposals.map((p) => (
-            <div key={p.id} className="mention-box mcp-review-item" onClick={() => void selectReview(p.id)}>
+            <button type="button" key={p.id} className="mention-box mcp-review-item" onClick={() => {
+              void selectReview(p.id).catch(error => useStore.getState().notify(String(error)));
+            }}>
               <div className="mention-src">{p.title}</div>
-              <div className="mcp-context-path">{p.path} · {p.pending ? '待审阅' : '已处理'}</div>
-            </div>
+              <div className="mcp-context-path">
+                {p.kind === 'create' ? '新建 · ' : p.kind === 'rename' ? '重命名 · ' : ''}{p.path}{p.to ? ` → ${p.to}` : ''} · {p.pending ? '待审阅' : '已处理'}
+              </div>
+            </button>
           ))}
         </Section>
+        <McpLauncher />
       </div>
     </>
   );

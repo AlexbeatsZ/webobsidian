@@ -3,9 +3,10 @@ import { useStore, type TreeSort, type ContextMenuItem } from '../lib/store';
 import { extendFileMenu } from '../lib/obsidian/menus';
 import { api, type TreeNode } from '../lib/api';
 import { findNode, pruneDescendants } from '../lib/tree';
-import { nativeBatchTagMenuItems } from '../lib/tags/actions';
+import { nativeBatchTagMenuItems, openTagOperation } from '../lib/tags/actions';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import Icon from './Icon';
+import SelectionBar from './SelectionBar';
 
 /** Inline rename box shown in place of a tree row's name (Obsidian-style). */
 function RenameInput({ node, onDone }: { node: TreeNode; onDone: () => void }) {
@@ -67,6 +68,24 @@ function fileIcon(node: TreeNode): string | null {
 function parentDir(path: string): string {
   const i = path.lastIndexOf('/');
   return i < 0 ? '' : path.slice(0, i);
+}
+
+/** Files covered by a selection; folders include their saved descendants. */
+function selectedFiles(selection: string[]): string[] {
+  return useStore.getState().filePaths.filter(path => selection.some(parent => path === parent || path.startsWith(parent + '/')));
+}
+
+async function deleteSelected(captured: string[]) {
+  const { removePath, notify, setSelected } = useStore.getState();
+  const paths = pruneDescendants(captured);
+  if (!paths.length || !confirm(`删除 ${paths.length} 项？`)) return;
+  let n = 0;
+  for (const p of paths) {
+    try { await removePath(p); n++; }
+    catch (error) { notify(String(error)); }
+  }
+  setSelected([]);
+  notify(`已删除 ${n} 项`);
 }
 
 /** Parse the dragged path list from a drag event (multi-select aware). */
@@ -185,18 +204,6 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     else openFile(node.path);
   };
 
-  const doDeleteMany = async (captured: string[]) => {
-    const paths = pruneDescendants(captured);
-    if (!paths.length || !confirm(`删除 ${paths.length} 项${paths.length > 1 ? 's' : ''}？`)) return;
-    let n = 0;
-    for (const p of paths) {
-      try { await removePath(p); n++; }
-      catch (error) { notify(String(error)); }
-    }
-    setSelected([]);
-    notify(`已删除 ${n} 项${n > 1 ? 's' : ''}`);
-  };
-
   const doRename = () => setRenamingPath(node.path);
   const doDelete = async () => {
     if (confirm(`删除 "${node.name}"？`)) {
@@ -275,9 +282,9 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
         y: e.clientY,
         items: extendFileMenu([
           { id: 'file:move-selected', label: `移动 ${sel.length} 项至…`, onClick: () => setMovePath(sel) },
-          ...nativeBatchTagMenuItems({ kind: 'files', paths: useStore.getState().filePaths.filter(path => sel.some(parent => path === parent || path.startsWith(parent + '/'))) }),
+          ...nativeBatchTagMenuItems({ kind: 'files', paths: selectedFiles(sel) }),
           { label: '', separator: true },
-          { id: 'file:delete-selected', label: `删除 ${sel.length} 项`, danger: true, onClick: () => { void doDeleteMany(sel); } },
+          { id: 'file:delete-selected', label: `删除 ${sel.length} 项`, danger: true, onClick: () => { void deleteSelected(sel); } },
         ], sel, menuContext(sel)),
       });
       return;
@@ -458,6 +465,8 @@ export default function FileTree() {
   const activePath = useStore((s) => s.activePath);
   const autoReveal = useStore((s) => s.autoReveal);
   const setExpanded = useStore((s) => s.setExpanded);
+  const selected = useStore((s) => s.selected);
+  const setMovePath = useStore((s) => s.setMovePath);
 
   // Auto-reveal: when enabled, expand ancestors of the active file + scroll to it.
   useEffect(() => {
@@ -561,6 +570,11 @@ export default function FileTree() {
       onClick={(e) => { if (e.target === e.currentTarget) setSelected([]); }}
       style={{ minHeight: '100%' }}
     >
+      {selected.length > 1 && <SelectionBar label="所选文件操作" count={selected.length} onClose={() => setSelected([])}>
+        <button type="button" onClick={() => setMovePath(selected)}><Icon name="folder" size={13} />移动</button>
+        <button type="button" onClick={() => openTagOperation({ scope: { kind: 'files', paths: selectedFiles(selected) }, title: '修改所选文件的标签' })}><Icon name="hash" size={13} />标签</button>
+        <button type="button" className="mod-warning" onClick={() => { void deleteSelected(selected); }}><Icon name="trash" size={13} />删除</button>
+      </SelectionBar>}
       {tree.children.map((c) => (
         <Node key={c.path} node={c} depth={0} />
       ))}

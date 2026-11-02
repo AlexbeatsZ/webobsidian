@@ -48,8 +48,15 @@ export function openTagOperation(value: TagOperationRequest) { setRequest({ kind
 export function renameNativeTag(tag: string, destination = tag) {
   openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'rename', from: tagName(tag), to: tagName(destination) }, title: '重命名标签层级' });
 }
-export function deleteNativeTag(tag = '') {
-  openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'remove', tags: tag ? [tagName(tag)] : [], descendants: true }, title: '删除标签' });
+export function deleteNativeTag(tag: string | string[] = '') {
+  const tags = (Array.isArray(tag) ? tag : [tag]).filter(Boolean).map(tagName);
+  openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'remove', tags, descendants: true },
+    title: tags.length > 1 ? `删除 ${tags.length} 个标签` : '删除标签' });
+}
+/** The selection is already the merge source; the dialog only asks for the target. */
+export function mergeNativeTags(tags: string[]) {
+  const sources = tags.map(tagName);
+  openTagOperation({ scope: { kind: 'vault' }, operation: { kind: 'merge', tags: sources, to: sources[0] }, title: `合并 ${sources.length} 个标签` });
 }
 export function searchNativeTag(tag: string, mode: 'new' | 'include' | 'exclude' = 'new') {
   const state = useStore.getState();
@@ -76,14 +83,26 @@ export type NativeTagMenuItem = ContextMenuItem & { id: string; section: string;
 export interface TagMenuOptions {
   tag: string; hasPage?: boolean; wranglerEnabled?: boolean; batchEnabled?: boolean;
   collapseSiblings?: () => void; expandSiblings?: () => void;
+  /** Edits the name where the tag is shown; otherwise rename opens the dialog. */
+  startRename?: () => void;
+  /** Current multi-selection containing this tag; two or more act as one batch. */
+  selection?: string[]; clearSelection?: () => void;
   readonly?: boolean; source?: 'tags-panel' | 'editor' | 'reading' | 'property';
 }
 export function nativeTagMenuItems(options: TagMenuOptions): NativeTagMenuItem[] {
-  const { tag } = options;
+  const { tag, selection } = options;
   const items: NativeTagMenuItem[] = [];
+  if (!options.readonly && selection && selection.length > 1) {
+    if (options.wranglerEnabled !== false || options.batchEnabled !== false)
+      items.push({ id: 'tags.selection.merge', section: 'tag-selection', label: `合并所选 ${selection.length} 个标签…`, icon: 'merge', onClick: () => mergeNativeTags(selection) });
+    if (options.batchEnabled !== false)
+      items.push({ id: 'tags.selection.delete', section: 'tag-selection', label: `删除所选 ${selection.length} 个标签…`, icon: 'trash', danger: true, onClick: () => deleteNativeTag(selection) });
+    if (options.clearSelection) items.push({ id: 'tags.selection.clear', section: 'tag-selection', label: '取消选择', icon: 'x', onClick: options.clearSelection });
+    return items;
+  }
   const hasPage = options.hasPage ?? nativeTagPages(tag).length > 0;
   if (options.wranglerEnabled !== false) {
-    if (!options.readonly) items.push({ id: 'tags.rename', section: 'tag-rename', label: `重命名 #${tagName(tag)}`, icon: 'pencil', onClick: () => renameNativeTag(tag) });
+    if (!options.readonly) items.push({ id: 'tags.rename', section: 'tag-rename', label: `重命名 #${tagName(tag)}`, icon: 'pencil', onClick: options.startRename ?? (() => renameNativeTag(tag)) });
     if (!options.readonly || hasPage) items.push({ id: 'tags.page', section: 'tag-page', label: hasPage ? '打开标签页' : '创建标签页', icon: 'file', onClick: () => { void openNativeTagPage(tag, false, !options.readonly); } });
   }
   if (!options.readonly && options.batchEnabled !== false) items.push({ id: 'tags.delete', section: 'tag-delete', label: `删除 #${tagName(tag)}…`, icon: 'trash', danger: true, onClick: () => deleteNativeTag(tag) });

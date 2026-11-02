@@ -76,8 +76,10 @@ operations requiring a trustworthy editor snapshot.
 1. Propose verifies the raw revision and normalized expected text, applies source
    ranges, and prepares fixed folder tags using the existing planner. It persists
    baseline/hunks/idempotency before reporting success. It does not write notes.
-2. The UI inbox (bottom-right badge or command `审阅候选修改`) lets the user select a
-   proposal without unsolicited navigation. Existing note text is red-tinted;
+2. The proposal list has one place: the MCP sidebar's 候选修改 section. The
+   bottom-right badge and the command `审阅候选修改` open that section (the badge
+   hides while it is visible); only a selected create/rename file operation opens
+   its detail dialog. Selecting does not navigate unsolicited. Existing note text is red-tinted;
    proposed additions are green readonly widgets with per-hunk Accept/Reject and
    a source/preview toggle. The toolbar also accepts/rejects remaining hunks and
    offers explicit recovery. Finished records stay available for recovery.
@@ -185,8 +187,11 @@ With no selection, only the focused page path is enqueued, never its body.
 characters of serialized context. Local context routes add, remove and pin;
 they are not exposed as remote mutation tools. Workspace capture and the
 existing DocumentSession/SourceDocument preflight validate source selection.
-The sixth fixed right ribbon panel shows pending context and native review
-candidates. Socket mutation notifications update other windows without polling.
+The MCP right ribbon panel is organized by the user's task: 上下文 first (its
+add button sits in that section's header, not the panel title), then 候选修改,
+then a 连接 section. 连接 shows its state in the header and is folded once
+connected; not connected or failed keeps it open with the output, error and
+settings in view. Removing a context item uses the list-removal x, not trash. Socket mutation notifications update other windows without polling.
 Selection links use the existing navigation range/text fallback, not a second
 coordinate/history pipeline; ambiguous changed text does not jump speculatively.
 

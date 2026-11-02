@@ -258,14 +258,17 @@ test('desktop manual controls do not auto-start, serialize actions and expose fa
   await expect(launcher.getByRole('button', { name: '选择项目', exact: true })).toHaveCount(0);
   await expect(launcher.getByRole('button', { name: '连接设置', exact: true })).toBeDisabled();
   await page.evaluate(() => (window as any).finishMcp(true));
-  await expect(launcher.getByRole('status')).toHaveText('连接完成');
-  await launcher.getByRole('button', { name: '连接', exact: true }).click();
+  // Success folds the connection section; its head keeps the state.
+  await expect(launcher.locator('.section-head')).toContainText('已连接');
+  await expect(launcher.locator('.mcp-launcher')).toHaveCount(0);
+  await launcher.locator('.section-head').click();
+  await launcher.getByRole('button', { name: '重新连接', exact: true }).click();
   await page.evaluate(() => (window as any).finishMcp(false));
   await expect(launcher.locator('details')).toHaveAttribute('open', '');
   await expect(launcher.locator('pre')).toHaveText('fixture offline');
   await launcher.getByRole('button', { name: '连接', exact: true }).click();
   await page.evaluate(() => (window as any).finishMcp(true));
-  await expect(launcher.getByRole('status')).toHaveText('连接完成');
+  await expect(launcher.locator('.section-head')).toContainText('已连接');
   expect(await page.evaluate(() => (window as any).mcpCalls)).toEqual(['Connect', 'Connect', 'Connect']);
   await page.screenshot({ path: test.info().outputPath('mcp-native-controls.png') });
 });
@@ -319,7 +322,9 @@ test('MCP creates a reviewed note with exact bytes, skips templates, then rename
     operations: [{ kind: 'create', path: 'MCP/新笔记.md', content }] });
   expect(proposed.status).toBe('awaiting_user_review');
   await expect(fs.readFile(path.join(backend.vault, 'MCP/新笔记.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await page.getByRole('button', { name: '标签', exact: true }).click();
   await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
+  await expect(page.getByRole('button', { name: '待审阅修改 1', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: /新建测试笔记.*MCP\/新笔记/ }).click();
   const dialog = page.getByRole('dialog', { name: '笔记操作审阅' });
   await expect(dialog.locator('pre')).toContainText('中文 😀');
@@ -333,9 +338,8 @@ test('MCP creates a reviewed note with exact bytes, skips templates, then rename
   const renamed = await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'rename-reviewed', title: '重命名测试笔记',
     operations: [{ kind: 'rename', path: 'MCP/新笔记.md', to: 'MCP/重命名.md', base_revision: current.revision }] });
   expect(await fs.readFile(path.join(backend.vault, 'MCP/新笔记.md'), 'utf8')).toBe(content);
-  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
-  // The inbox keeps its selected file proposal until the user returns to the list.
-  await dialog.getByRole('button', { name: '返回列表', exact: true }).click();
+  // The sidebar list is already in view, so the floating inbox stays hidden.
+  await expect(page.getByRole('button', { name: '待审阅修改 1', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: /重命名测试笔记.*MCP\/新笔记/ }).click();
   await expect(dialog).toContainText('MCP/新笔记.md → MCP/重命名.md');
   await page.screenshot({ path: test.info().outputPath('mcp-rename-review.png') });
@@ -356,7 +360,6 @@ test('MCP creates a reviewed note with exact bytes, skips templates, then rename
 test('MCP file review rejects safely and reports a target created after proposal', async ({ page, backend, expectedErrors }) => {
   const proposed = await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'reject-created', title: '拒绝新建',
     operations: [{ kind: 'create', path: 'rejected.md', content: 'Never written' }] });
-  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
   await page.getByRole('button', { name: /拒绝新建.*rejected.md/ }).click();
   const dialog = page.getByRole('dialog', { name: '笔记操作审阅' });
   await dialog.getByRole('button', { name: '拒绝', exact: true }).click();
@@ -364,11 +367,10 @@ test('MCP file review rejects safely and reports a target created after proposal
   await expect(fs.readFile(path.join(backend.vault, 'rejected.md'))).rejects.toMatchObject({ code: 'ENOENT' });
   expect(await noteTool(backend.url, 'obsidian_get_change_status', { proposal_id: proposed.proposal_id })).toMatchObject({ operation: { status: 'rejected' } });
   await dialog.getByRole('button', { name: '返回列表', exact: true }).click();
-  await page.getByRole('dialog', { name: '候选修改', exact: true }).getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
   await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'collision-created', title: '冲突新建',
     operations: [{ kind: 'create', path: 'collision.md', content: 'Must not overwrite' }] });
   await fs.writeFile(path.join(backend.vault, 'collision.md'), 'Existing file');
-  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
   await page.getByRole('button', { name: /冲突新建.*collision.md/ }).click();
   expectedErrors.push('409');
   await dialog.getByRole('button', { name: '接受', exact: true }).click();
@@ -381,7 +383,6 @@ test('MCP rename refuses changed source at local acceptance', async ({ page, bac
   await noteTool(backend.url, 'obsidian_propose_changes', { request_id: 'stale-rename', title: '过期重命名',
     operations: [{ kind: 'rename', path: 'context.md', to: 'renamed.md', base_revision: current.revision }] });
   await fs.writeFile(path.join(backend.vault, 'context.md'), source + '\nExternal edit\n');
-  await page.getByRole('button', { name: '待审阅修改 1', exact: true }).click();
   await page.getByRole('button', { name: /过期重命名.*context.md/ }).click();
   const dialog = page.getByRole('dialog', { name: '笔记操作审阅' });
   expectedErrors.push('409');

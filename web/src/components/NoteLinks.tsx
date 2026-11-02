@@ -16,21 +16,27 @@ export function NoteLinkSection({
   count,
   open,
   onToggle,
+  actions,
   children,
 }: {
   title: string;
-  count: number;
+  count: number | string;
   open: boolean;
   onToggle: () => void;
+  /** Operations on this section's items sit beside its title. */
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const head = (
+    <button type="button" className="section-head" aria-expanded={open} onClick={onToggle}>
+      <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
+      <span>{title}</span>
+      <span className="count">{count}</span>
+    </button>
+  );
   return (
     <>
-      <button type="button" className="section-head" aria-expanded={open} onClick={onToggle}>
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
-        <span>{title}</span>
-        <span className="count">{count}</span>
-      </button>
+      {actions ? <div className="section-head-row">{head}<span className="section-head-actions">{actions}</span></div> : head}
       {open && children}
     </>
   );

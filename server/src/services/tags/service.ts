@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { catalog, type VaultCatalog } from '../catalog.js';
 import { writeFileText } from '../vault.js';
 import { getVaultRoot, resolveInVault, readFileSnapshot, exists } from '../vaultFile.js';
-import { folderRuleTags, planFolderTags, inTagScope, planTagSource, transformTag, validateTagOperation, readTagSourceNames } from '@webobsidian/markdown-core';
+import { folderRuleTags, planFolderTags, inTagScope, planTagSource, renamesTags, tagRenameSource, transformTag, validateTagOperation, readTagSourceNames } from '@webobsidian/markdown-core';
 import { matchesTag, normalizeStoredTags, tagKey, tagName, tagPageAliases, validTag } from '@webobsidian/search-core';
 import type { TagApplyResult, TagCollision, TagFilePreview, TagOperation, TagPreferences, TagPreview, TagPreviewRequest, TagSummary } from '@webobsidian/markdown-core';
 export type { TagPreferences } from '@webobsidian/markdown-core';
@@ -30,13 +30,13 @@ function allTagNames(current: VaultCatalog): string[] {
   return [...names];
 }
 export function tagCollisions(operation: TagOperation, tags: readonly string[]): TagCollision[] {
-  if (operation.kind !== 'rename' || tagKey(operation.from) === tagKey(operation.to)) return [];
+  if (!renamesTags(operation)) return [];
   const existing = new Set(tags.map(tagKey));
   const collisions = new Map<string, TagCollision>();
   for (const tag of tags) {
-    if (!matchesTag(tag, operation.from, operation.descendants !== false)) continue;
+    if (tagRenameSource(tag, operation) === undefined) continue;
     const to = transformTag(tag, operation);
-    if (existing.has(tagKey(to))) collisions.set(tagKey(tag) + '\0' + tagKey(to), { from: tag, to });
+    if (tagKey(to) !== tagKey(tag) && existing.has(tagKey(to))) collisions.set(tagKey(tag) + '\0' + tagKey(to), { from: tag, to });
   }
   return [...collisions.values()].sort((a, b) => tagKey(a.from).localeCompare(tagKey(b.from)));
 }
@@ -82,7 +82,7 @@ export class NativeTagService {
       if (!preferences.folderTags?.rules.length) fail('请先在标签设置中配置文件夹规则', 403);
       return preferences;
     }
-    if ((operation.kind === 'rename' ? !preferences.wranglerEnabled && !preferences.batchEnabled : !preferences.batchEnabled))
+    if ((renamesTags(operation) ? !preferences.wranglerEnabled && !preferences.batchEnabled : !preferences.batchEnabled))
       fail('This native tag operation is disabled in settings', 403);
     return preferences;
   }
@@ -101,8 +101,8 @@ export class NativeTagService {
         if (folderRuleTags(note.path, preferences.folderTags).length) candidates.add(note.path);
         continue;
       }
-      if (operation.kind === 'add' || [...note.tags, ...(operation.kind === 'rename' ? note.aliases.flatMap(tagPageAliases) : [])]
-        .some((tag) => operation.kind === 'rename' ? matchesTag(tag, operation.from, operation.descendants !== false) :
+      if (operation.kind === 'add' || [...note.tags, ...(renamesTags(operation) ? note.aliases.flatMap(tagPageAliases) : [])]
+        .some((tag) => renamesTags(operation) ? tagRenameSource(tag, operation) !== undefined :
           operation.tags.some((wanted) => matchesTag(tag, wanted, operation.descendants !== false)))) candidates.add(note.path);
     }
     // Unsaved tags may have no saved catalog entry; overlays always join the
@@ -123,7 +123,7 @@ export class NativeTagService {
         const snapshot = overlay ?? await readFileSnapshot(file);
         const raw = 'raw' in snapshot ? snapshot.raw : snapshot.content;
         const plan = operation.kind === 'folder-rules' ? planFolderTags(raw, file, preferences.folderTags) : planTagSource(raw, operation);
-        if (plan.changes.length && operation.kind === 'rename') generatedByFile.set(file,
+        if (plan.changes.length && renamesTags(operation)) generatedByFile.set(file,
           [...extractMetadata(new SourceDocument(plan.raw).text).tags, ...readTagSourceNames(plan.raw)].map(tagKey));
         files.push({ path: file, status: plan.changes.length ? 'ready' : 'unchanged',
           revision: snapshot.revision, version: overlay?.version, local: Boolean(overlay),
@@ -134,7 +134,7 @@ export class NativeTagService {
     }
     this.prune();
     const preview: TagPreview = { id: randomUUID(), expiresAt: Date.now() + 15 * 60_000,
-      operation, files, collisions: operation.kind === 'rename' ? tagCollisions(operation, [...allTagNames(current), ...extraTags]) : [] };
+      operation, files, collisions: tagCollisions(operation, [...allTagNames(current), ...extraTags]) };
     // Keep only revision/ownership markers. Patches are returned to the client,
     // then recomputed from the revision-checked current snapshot on remote apply.
     this.previews.set(preview.id, { public: { ...preview, files: [] }, root, cancelled: false, applying: false, generated: new Set(),
@@ -161,7 +161,7 @@ export class NativeTagService {
     if (item.applying) fail('Apply one tag file at a time', 409);
     if (item.public.collisions.length && !confirmMerge) fail('Explicit merge confirmation is required', 409);
     // A newly introduced destination collision was not shown in this preview.
-    const currentCollisions = item.public.operation.kind === 'rename' ? tagCollisions(item.public.operation, allTagNames(catalog)) : [];
+    const currentCollisions = tagCollisions(item.public.operation, allTagNames(catalog));
     const confirmed = new Set(item.public.collisions.map((c) => tagKey(c.from) + '\0' + tagKey(c.to)));
     if (currentCollisions.some((c) => !confirmed.has(tagKey(c.from) + '\0' + tagKey(c.to)) && !item.generated.has(tagKey(c.to))))
       fail('Merge targets changed after preview; preview again', 409);

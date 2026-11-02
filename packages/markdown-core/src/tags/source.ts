@@ -9,12 +9,24 @@ import type { TagOperation } from './types.js';
 
 export function validateTagOperation(operation: TagOperation): TagOperation {
   if (operation.kind === 'folder-rules') return operation;
-  const values = operation.kind === 'rename' ? [operation.from, operation.to] : operation.tags;
+  const values = operation.kind === 'rename' ? [operation.from, operation.to] : operation.kind === 'merge' ? [...operation.tags, operation.to] : operation.tags;
   if (!values.length || values.length > 128 || values.some((value) => !validTag(value)))
     throw Object.assign(new Error('Tags must contain letters, marks, numbers, _, - or /; numeric-only names and empty path segments are unsupported'), { status: 400 });
-  return operation.kind === 'rename'
-    ? { ...operation, from: tagName(operation.from), to: tagName(operation.to) }
-    : { ...operation, tags: [...new Set(operation.tags.map(tagName))] };
+  if (operation.kind === 'rename') return { ...operation, from: tagName(operation.from), to: tagName(operation.to) };
+  const tags = [...new Set(operation.tags.map(tagName))];
+  return operation.kind === 'merge' ? { ...operation, tags, to: tagName(operation.to) } : { ...operation, tags };
+}
+
+export type TagRenameOperation = Extract<TagOperation, { kind: 'rename' | 'merge' }>;
+/** Rename is the one-source case of merge: both rewrite tags and Tag Page aliases. */
+export function renamesTags(operation: TagOperation): operation is TagRenameOperation {
+  return operation.kind === 'rename' || operation.kind === 'merge';
+}
+/** The longest matching source owns a tag, so a selected child keeps its own suffix. */
+export function tagRenameSource(tag: string, operation: TagOperation): string | undefined {
+  if (!renamesTags(operation)) return undefined;
+  const sources = operation.kind === 'rename' ? [operation.from] : operation.tags;
+  return [...sources].sort((a, b) => b.length - a.length).find((source) => matchesTag(tag, source, operation.descendants !== false));
 }
 
 export function inTagScope(path: string, scope: import('./types.js').TagScope): boolean {
@@ -26,15 +38,15 @@ export function inTagScope(path: string, scope: import('./types.js').TagScope): 
 }
 
 function selected(tag: string, operation: TagOperation): boolean {
-  return operation.kind === 'rename' ? matchesTag(tag, operation.from, operation.descendants !== false) :
+  return renamesTags(operation) ? tagRenameSource(tag, operation) !== undefined :
     operation.kind === 'remove' && operation.tags.some((wanted) => matchesTag(tag, wanted, operation.descendants !== false));
 }
 export function transformTag(value: string, operation: TagOperation): string {
   if (!selected(value, operation)) return value;
   if (operation.kind === 'remove') return '';
-  if (operation.kind !== 'rename') return value;
+  if (!renamesTags(operation)) return value;
   const original = value.trim().replace(/^#+/, '');
-  const suffix = original.split('/').slice(tagName(operation.from).split('/').length);
+  const suffix = original.split('/').slice(tagName(tagRenameSource(value, operation)!).split('/').length);
   const next = tagName(operation.to) + (suffix.length ? '/' + suffix.join('/') : '');
   return (value.startsWith('#') ? '#' : '') + next;
 }
@@ -77,7 +89,7 @@ function frontmatterSpan(text: string): { from: number; to: number } | null {
 
 function fieldValue(value: string, alias: boolean, operation: TagOperation): string {
   if (alias) {
-    if (operation.kind !== 'rename') return value;
+    if (!renamesTags(operation)) return value;
     return value.split(/(\s*,\s*)/).map((part, index) => index % 2 || !part.trim().startsWith('#') || !validTag(part) ? part :
       part.replace(part.trim(), transformTag(part.trim(), operation))).join('');
   }
@@ -98,7 +110,7 @@ export function planTagSource(raw: string, input: TagOperation, analysis?: Markd
     if (!canEditProperties(yaml)) throw new Error('Invalid YAML, duplicate keys or complex mapping; file skipped');
     const rows = readPropertyRows(yaml);
     if (rows.some((row) => row.key === '<<')) throw new Error('YAML merge keys may supply tags indirectly; file skipped');
-    const targets = rows.filter((row) => /^tags?$/i.test(row.key) || (operation.kind === 'rename' && /^alias(?:es)?$/i.test(row.key)));
+    const targets = rows.filter((row) => /^tags?$/i.test(row.key) || (renamesTags(operation) && /^alias(?:es)?$/i.test(row.key)));
     if (targets.some((row) => !row.editable)) throw new Error('Anchored, aliased, block or complex tag/alias values require source editing; file skipped');
     const existing = new Set(targets.filter((row) => /^tags?$/i.test(row.key)).flatMap((row) => row.values.flatMap(normalizeStoredTags)).map(tagKey));
     const mergedKeys = operation.kind === 'add' ? [...existing, ...operation.tags.map(tagKey)] : [];
@@ -106,12 +118,20 @@ export function planTagSource(raw: string, input: TagOperation, analysis?: Markd
     let added = false;
     const desired = rows.map((row) => {
       const alias = /^alias(?:es)?$/i.test(row.key);
-      if (!/^tags?$/i.test(row.key) && !(operation.kind === 'rename' && alias)) return row;
+      if (!/^tags?$/i.test(row.key) && !(renamesTags(operation) && alias)) return row;
       let values = row.values.map((value) => fieldValue(value, alias, operation));
       if (operation.kind === 'add' && ancestors.size) values = values.map(value =>
         value.split(/([,，\s]+)/u).map((part, index) => index % 2 || !ancestors.has(tagKey(part)) ? part : '').join('')
           .replace(/^[,，\s]+|[,，\s]+$/gu, '')).filter(Boolean);
       if (operation.kind === 'remove' && row.list) values = values.filter((v) => normalizeStoredTags(v).length > 0);
+      // Renaming into an existing tag merges list items instead of repeating them.
+      if (renamesTags(operation) && !alias && row.list) {
+        const seen = new Set<string>();
+        values = values.filter((v) => {
+          const key = normalizeStoredTags(v).map(tagKey).join(' ');
+          return !key || (!seen.has(key) && Boolean(seen.add(key)));
+        });
+      }
       if (operation.kind === 'add' && !alias && !added) {
         const additions = operation.tags.filter((tag) => !existing.has(tagKey(tag)) && !ancestors.has(tagKey(tag)));
         added = true;

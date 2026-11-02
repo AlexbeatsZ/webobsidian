@@ -64,7 +64,7 @@ try {
     assert.equal(await fs.readFile(path.join(vault, 'fixture.md'), 'utf8'), original);
   }
   await panel.getByRole('button', { name: '连接', exact: true }).click();
-  await expect(panel.getByRole('status')).toHaveText('连接失败', { timeout: 10000 });
+  await expect(panel.locator('.section-head')).toContainText('连接失败', { timeout: 10000 });
   await expect(panel.locator('pre')).toContainText('Tunnel ID');
   await expect(panel.getByLabel('Tunnel ID')).toBeVisible();
   await panel.getByLabel('Tunnel ID').fill('tunnel_fixture123');

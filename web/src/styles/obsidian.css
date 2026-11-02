@@ -1101,31 +1101,10 @@ div.section-head { cursor: default; }
 .text-btn:hover { color: var(--text-normal); }
 .mention-context { margin-top: 4px; padding: 4px 6px; border-radius: var(--radius-s); color: var(--text-muted); cursor: pointer; }
 .mention-context:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
-button.section-head { width: 100%; border: 0; border-radius: var(--radius-s); background: transparent; font-family: inherit; text-align: left; }
-button.section-head:hover { color: var(--text-normal); }
-button.section-head:focus-visible, .text-btn:focus-visible, .mention-context:focus-visible { outline: 1px solid var(--text-accent); outline-offset: -1px; }
-div.section-head { cursor: default; }
-.text-btn { padding: 0; border: 0; background: transparent; color: var(--text-faint); font: 12px var(--font-ui); cursor: pointer; }
-.text-btn:hover { color: var(--text-normal); }
-.mention-context { margin-top: 4px; padding: 4px 6px; border-radius: var(--radius-s); color: var(--text-muted); cursor: pointer; }
-.mention-context:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
-button.section-head { width: 100%; border: 0; border-radius: var(--radius-s); background: transparent; font-family: inherit; text-align: left; }
-button.section-head:hover { color: var(--text-normal); }
-button.section-head:focus-visible, .text-btn:focus-visible, .mention-context:focus-visible { outline: 1px solid var(--text-accent); outline-offset: -1px; }
-div.section-head { cursor: default; }
-.text-btn { padding: 0; border: 0; background: transparent; color: var(--text-faint); font: 12px var(--font-ui); cursor: pointer; }
-.text-btn:hover { color: var(--text-normal); }
-.mention-context { margin-top: 4px; padding: 4px 6px; border-radius: var(--radius-s); color: var(--text-muted); cursor: pointer; }
-.mention-context:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
-button.section-head { width: 100%; border: 0; border-radius: var(--radius-s); background: transparent; font-family: inherit; text-align: left; }
-button.section-head:hover { color: var(--text-normal); }
-button.section-head:focus-visible, .text-btn:focus-visible, .mention-context:focus-visible { outline: 1px solid var(--text-accent); outline-offset: -1px; }
-div.section-head { cursor: default; }
-.text-btn { padding: 0; border: 0; background: transparent; color: var(--text-faint); font: 12px var(--font-ui); cursor: pointer; }
-.text-btn:hover { color: var(--text-normal); }
-.mention-context { margin-top: 4px; padding: 4px 6px; border-radius: var(--radius-s); color: var(--text-muted); cursor: pointer; }
-.mention-context:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
 .section-head .count { margin-left: auto; font-weight: 400; color: var(--text-faint); font-size: 12px; }
+.section-head-row { display: flex; align-items: center; gap: 2px; padding-right: 6px; }
+.section-head-row > .section-head { flex: 1; min-width: 0; }
+.section-head-actions { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .outgoing-item { display: flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 13px;
   border-radius: var(--radius-s); cursor: pointer; color: var(--text-normal); }
 .outgoing-item:hover { background: var(--bg-modifier-hover); }
@@ -1805,4 +1784,15 @@ audio.media-embed { display: block; width: min(100%, 480px); max-width: 100%; ma
 }
 .mcp-context-snippet:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
 .mcp-context-range { font-size: 11px; font-family: var(--font-mono); color: var(--interactive-accent); }
-.mcp-review-item { cursor: pointer; }
+/* Shared multi-selection action bar (file tree, tags). */
+.selection-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 4px; margin: 0 0 6px; padding: 3px 4px 3px 8px; border-radius: var(--radius-s); background: var(--background-secondary-alt, var(--bg-modifier-hover)); font-size: 12px; color: var(--text-muted); }
+.selection-bar > [role=status] { flex: 1; min-width: 0; }
+.selection-bar button { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 0; border-radius: var(--radius-s); background: transparent; box-shadow: none; color: var(--text-normal); font: inherit; cursor: pointer; }
+.selection-bar button:hover:not(:disabled) { background: var(--bg-modifier-hover); }
+.selection-bar button:focus-visible { outline: 1px solid var(--text-accent); outline-offset: -1px; }
+.selection-bar button:disabled { opacity: .4; cursor: default; }
+.selection-bar button.mod-warning:not(:disabled) { color: var(--text-error); }
+.selection-bar .selection-bar-close { padding: 3px; color: var(--text-muted); }
+.mcp-review-item { display: block; width: calc(100% - 16px); background: transparent; text-align: left; font: inherit; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+.mcp-review-item:focus-visible { outline: 1px solid var(--text-accent); outline-offset: -1px; }
+.mcp-launcher-message { font-size: 12px; color: var(--text-muted); }

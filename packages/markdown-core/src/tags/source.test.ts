@@ -20,6 +20,14 @@ describe('native tag source preservation', () => {
       'custom: >-', '  untouched  text', '---', '#science/physics/Sub and #foo-other', '',
     ].join('\r\n'));
   });
+  it('merges several selected tags into one target and keeps descendant suffixes', () => {
+    const raw = '---\ntags: [Physics, physics-old/wave, keep]\naliases: ["#physics-old"]\n---\n#physics-old/wave/x and #mechanics\n';
+    const result = planTagSource(raw, { kind: 'merge', tags: ['physics-old', 'mechanics', 'physics'], to: 'physics' });
+    expect(result.raw).toBe('---\ntags: [physics, physics/wave, keep]\naliases: ["#physics"]\n---\n#physics/wave/x and #physics\n');
+    const list = ['---', 'tags:', '  - a', '  - b', '  - k', '---', ''].join('\n');
+    expect(planTagSource(list, { kind: 'merge', tags: ['a', 'b'], to: 'b' }).raw).toBe(['---', 'tags:', '  - b', '  - k', '---', ''].join('\n'));
+    expect(transformTag('#Physics-Old/wave', { kind: 'merge', tags: ['physics-old', 'physics-old/wave'], to: 'p' })).toBe('#p');
+  });
   it('keeps code, formula, HTML, links, wikilinks and comments literal', () => {
     const raw = '#old\n`#old`\n$#old$\n%% #old %%\n[[note #old]]\n[label #old](note)\n<!-- #old -->\n```md\n#old\n```\n';
     expect(planTagSource(raw, { kind: 'rename', from: 'old', to: 'new' }).raw).toBe(raw.replace(/^#old/, '#new'));

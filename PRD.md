@@ -1,7 +1,12 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.25 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Phiên bản: 1.26 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Changelog 1.26 (UX 原则): 用户要求操作发生在对象所在位置、选择与操作解耦、不重复索取已知信息。标签面板去掉独立的
+> 批量修改(铅笔)入口;多选(工具栏开关、Ctrl/Shift 点选)后顶部出现共享选择操作栏(合并/删除),合并为核心操作
+> `merge`,对话框只选目标名;重命名在行内编辑。文件树多选同样显示该操作栏。MCP 侧栏改为 上下文(添加按钮在其标题旁)
+> → 候选修改 → 连接(状态在标题,连接成功收起、失败展开修复入口);待审阅徽标打开侧栏列表,不再弹出第二个列表。
+> 原则见 docs/design/ux-principles.md。
 > Changelog 1.25 (Git 备份迁到同步服务器): 用户决定 Git 备份只由常开的同步中心服务器(ROG)负责,客户端 Git
 > 在服务端备份上线后移除。sync-server 新增可选 `backup` 配置与 `--backup-once`/`--backup-dry-run`:按清单版本快照
 > 生成提交(Git 自己判断快照中的 ignore/LFS 规则,LFS 复用同步 blob,core.autocrlf=true 与现有历史一致),接续远程

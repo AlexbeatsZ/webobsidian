@@ -11,6 +11,7 @@ const operation = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('add'), tags: z.array(tag).min(1).max(128) }),
   z.object({ kind: z.literal('remove'), tags: z.array(tag).min(1).max(128), descendants: z.boolean().optional() }),
   z.object({ kind: z.literal('rename'), from: tag, to: tag, descendants: z.boolean().optional() }),
+  z.object({ kind: z.literal('merge'), tags: z.array(tag).min(1).max(127), to: tag, descendants: z.boolean().optional() }),
 ]);
 const scope = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('vault') }),

@@ -4,7 +4,8 @@ export type TagOperation =
   | { kind: 'add'; tags: string[]; pruneAncestors?: boolean }
   | { kind: 'folder-rules' }
   | { kind: 'remove'; tags: string[]; descendants?: boolean }
-  | { kind: 'rename'; from: string; to: string; descendants?: boolean };
+  | { kind: 'rename'; from: string; to: string; descendants?: boolean }
+  | { kind: 'merge'; tags: string[]; to: string; descendants?: boolean };
 export type TagScope = { kind: 'vault' } | { kind: 'folder'; path: string } | { kind: 'files'; paths: string[] };
 export interface TagOverlay { path: string; raw: string; revision?: string; version: number }
 export interface TagSummary { tag: string; count: number; directCount: number; pages: string[] }

@@ -4,7 +4,14 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-02 (sync-server Git backup, step 1 of moving backup to ROG)
+Cập nhật lần cuối: 2026-11-02 (UX principles: tags multi-select/merge, MCP sidebar)
+
+## UX principles (PRD 1.26)
+- [x] 标签面板去掉铅笔批量入口;多选开关 + Ctrl/Shift 点选,顶部操作栏合并/删除,右键所选批量菜单
+- [x] 核心 `merge` 标签操作(服务端预览/应用、别名、YAML 去重),对话框只选目标并自动预览
+- [x] 标签行内重命名(右键/双击/F2),已知对象的对话框隐藏操作选择与来源输入
+- [x] 文件树多选显示同一共享选择操作栏(移动/标签/删除),修正"项s"文案
+- [x] MCP 侧栏:添加上下文移到"上下文"标题旁,连接分区按状态收起/展开,待审阅徽标打开侧栏列表
 
 ## Split tab group (PRD 1.18)
 - [x] 分屏时标签栏显示两栏的分屏组，点击聚焦对应栏

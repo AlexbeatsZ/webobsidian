@@ -6,6 +6,7 @@ import { tagsApi, assertTagVaultCurrent } from '../lib/tags/api';
 import { closeTagDialog, useTagDialogRequest, useNativeTagHover, type TagOperationRequest, type TagDialogRequest } from '../lib/tags/actions';
 import { inTagScope, validateCapturedTagChanges, validateTagOperation } from '@webobsidian/markdown-core';
 import type { TagFilePreview, TagOperation, TagPreview } from '@webobsidian/markdown-core';
+import { tagKey } from '@webobsidian/search-core';
 import './nativeTags.css';
 import TagPageHover from './TagPageHover';
 
@@ -17,11 +18,17 @@ export default function TagOperationsHost() {
 }
 
 function TagOperationDialog({ request }: { request: TagOperationRequest }) {
-  const [kind, setKind] = useState<TagOperation['kind']>(request.operation?.kind ?? 'add');
-  const [tags, setTags] = useState(request.operation && 'tags' in request.operation ? request.operation.tags.join(', ') : '');
-  const [from, setFrom] = useState(request.operation?.kind === 'rename' ? request.operation.from : '');
-  const [to, setTo] = useState(request.operation?.kind === 'rename' ? request.operation.to : '');
-  const [descendants, setDescendants] = useState(request.operation && 'descendants' in request.operation ? request.operation.descendants !== false : true);
+  const initial = request.operation;
+  const [kind, setKind] = useState<TagOperation['kind']>(initial?.kind ?? 'add');
+  const [tags, setTags] = useState(initial && 'tags' in initial ? initial.tags.join(', ') : '');
+  const [from, setFrom] = useState(initial?.kind === 'rename' ? initial.from : '');
+  const [to, setTo] = useState(initial?.kind === 'rename' || initial?.kind === 'merge' ? initial.to : '');
+  const [descendants, setDescendants] = useState(initial && 'descendants' in initial ? initial.descendants !== false : true);
+  // Objects chosen where they are shown arrive fixed: never ask for them again.
+  const fixedTags = initial && 'tags' in initial && initial.tags.length ? initial.tags : null;
+  const fixedFrom = initial?.kind === 'rename' && initial.from ? initial.from : null;
+  const complete = initial?.kind === 'folder-rules' || initial?.kind === 'merge' || (initial?.kind === 'remove' && Boolean(fixedTags)) ||
+    (initial?.kind === 'rename' && Boolean(fixedFrom && initial.to) && tagKey(initial.from) !== tagKey(initial.to));
   const [preview, setPreview] = useState<TagPreview | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,11 +42,14 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
   const token = useRef<string | null>(null);
   useEffect(() => {
     alive.current = true;
+    if (complete) void prepare();
     return () => {
       alive.current = false; cancelled.current = true; controller.current?.abort();
       if (token.current) void tagsApi.cancel(token.current).catch(() => {});
     };
   }, []);
+  // A merge is the confirmation that the selected tags combine.
+  const accepted = confirmed || kind === 'merge';
   const invalidate = () => {
     if (preview) void tagsApi.cancel(preview.id).catch(() => {});
     token.current = null; setPreview(null); setConfirmed(false); setResults([]); setProgress(''); setError('');
@@ -50,7 +60,7 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
     try {
       const inputTags = tags.split(/[,，\s]+/u).filter(Boolean);
       const operation = validateTagOperation(kind === 'folder-rules' ? { kind } : kind === 'rename' ? { kind, from, to, descendants } :
-        kind === 'remove' ? { kind, tags: inputTags, descendants } : { kind, tags: inputTags });
+        kind === 'merge' ? { kind, tags: inputTags, to, descendants } : kind === 'remove' ? { kind, tags: inputTags, descendants } : { kind, tags: inputTags });
       const snapshots = documents.snapshots().filter((s) => /\.(md|markdown)$/i.test(s.id));
       const state = useStore.getState();
       const visible = new Set([...state.tabs.map((tab) => tab.path), state.activePath, state.splitPath]);
@@ -81,7 +91,7 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
     return true;
   }
   async function apply() {
-    if (!preview || (preview.collisions.length && !confirmed)) return;
+    if (!preview || (preview.collisions.length && !accepted)) return;
     setBusy(true); setRunning(true); setError(''); cancelled.current = false;
     const report: string[] = [];
     let written = 0;
@@ -93,9 +103,9 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
         if (alive.current) setProgress(`${i + 1} / ${ready.length} · ${file.path}`);
         try {
           if (file.local || documents.get(file.path)) {
-            if (!await applyLocal(file, preview.id, confirmed)) break;
+            if (!await applyLocal(file, preview.id, accepted)) break;
           } else {
-            await tagsApi.apply(preview.id, file.path, confirmed);
+            await tagsApi.apply(preview.id, file.path, accepted);
           }
           written++; report.push(`已保存：${file.path}`);
         } catch (error) {
@@ -121,24 +131,31 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
   return <div className="modal-backdrop native-tags-backdrop" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); cancel(); } }}>
     <section className="native-tags-dialog" role="dialog" aria-modal="true" aria-label={request.title ?? '批量修改标签'}>
       <h2>{request.title ?? '批量修改标签'}</h2>
-      <p className="native-tags-hint">范围：{request.scope.kind === 'vault' ? '整个 Vault' : request.scope.kind === 'folder' ? request.scope.path || '根目录及子目录' : `${request.scope.paths.length} 个所选文件`}。先预览，再逐个保存；打开文档包含当前未保存内容并保留撤销历史。</p>
-      <fieldset disabled={busy} className="native-tags-fields">
-        <label>操作<select value={kind} onChange={(e) => { invalidate(); setKind(e.target.value as TagOperation['kind']); }}>
+      <p className="native-tags-hint">范围：{request.scope.kind === 'vault' ? '整个 Vault' : request.scope.kind === 'folder' ? request.scope.path || '根目录及子目录' : `${request.scope.paths.length} 个所选文件`}</p>
+      <fieldset disabled={busy} className="native-tags-fields" onKeyDown={(event) => {
+        const input = event.target as HTMLInputElement;
+        if (event.key === 'Enter' && input.tagName === 'INPUT' && input.type === 'text') { event.preventDefault(); void prepare(); }
+      }}>
+        {!initial && <label>操作<select value={kind} onChange={(e) => { invalidate(); setKind(e.target.value as TagOperation['kind']); }}>
           <option value="add">添加至 YAML 标签</option><option value="remove">删除标签</option><option value="rename">替换 / 重命名标签</option>
           <option value="folder-rules">按已保存的文件夹规则补标签</option>
-        </select></label>
-        {kind === 'folder-rules' ? <p>使用“设置 → 标签”中已保存的规则，叠加匹配路径的固定标签。预览会显示逐文件改动。</p> : kind === 'rename' ? <><label>原标签<input autoFocus value={from} onChange={(e) => { invalidate(); setFrom(e.target.value); }} placeholder="原标签" /></label>
-          <label>新标签<input value={to} onChange={(e) => { invalidate(); setTo(e.target.value); }} placeholder="新标签 / 子标签" /></label></> :
+        </select></label>}
+        {kind === 'folder-rules' ? (!initial && <p>使用“设置 → 标签”中已保存的规则补齐固定标签。</p>) :
+          kind === 'rename' ? <>{fixedFrom ? <div className="native-tags-fixed">原标签 <TagChips tags={[fixedFrom]} /></div> :
+            <label>原标签<input autoFocus value={from} onChange={(e) => { invalidate(); setFrom(e.target.value); }} placeholder="原标签" /></label>}
+            <label>新标签<input autoFocus={Boolean(fixedFrom)} value={to} onChange={(e) => { invalidate(); setTo(e.target.value); }} placeholder="新标签 / 子标签" /></label></> :
+          kind === 'merge' ? <MergeTarget sources={fixedTags ?? []} value={to} onChange={(value) => { invalidate(); setTo(value); }} /> :
+          fixedTags ? <div className="native-tags-fixed"><TagChips tags={fixedTags} /></div> :
           <label>标签<input autoFocus value={tags} onChange={(e) => { invalidate(); setTags(e.target.value); }} placeholder="物理, 化学/主题" /></label>}
-        {(kind === 'remove' || kind === 'rename') && <label className="native-tags-check"><input type="checkbox" checked={descendants} onChange={(e) => { invalidate(); setDescendants(e.target.checked); }} />包含所有子标签（忽略大小写）</label>}
-        {kind === 'remove' && <p className="native-tags-hint">删除匹配的 YAML 标签和正文标签。标签页笔记及其 aliases 声明会保留；通过 aliases 声明的标签仍会显示，可在对应标签页中编辑。</p>}
+        {(kind === 'remove' || kind === 'rename' || kind === 'merge') && <label className="native-tags-check"><input type="checkbox" checked={descendants} onChange={(e) => { invalidate(); setDescendants(e.target.checked); }} />包含所有子标签（忽略大小写）</label>}
+        {kind === 'remove' && <p className="native-tags-hint">标签页笔记的 aliases 声明会保留。</p>}
       </fieldset>
       {error && <p role="alert" className="native-tags-error">{error}</p>}
       {preview && <div className="native-tags-preview">
         <p>将修改 {ready.length} 个文件；不变 {preview.files.filter((f) => f.status === 'unchanged').length} 个；跳过 {preview.files.filter((f) => f.status === 'skipped').length} 个。</p>
-        {preview.collisions.length > 0 && <div className="native-tags-merge"><strong>标签会合并</strong>
+        {preview.collisions.length > 0 && <div className="native-tags-merge"><strong>{kind === 'merge' ? '合并结果' : '标签会合并'}</strong>
           <ul>{preview.collisions.map((c) => <li key={c.from + c.to}>#{c.from} → #{c.to}</li>)}</ul>
-          <label className="native-tags-check"><input type="checkbox" checked={confirmed} disabled={busy} onChange={(e) => setConfirmed(e.target.checked)} />我已检查预览，确认合并这些标签。</label>
+          {kind !== 'merge' && <label className="native-tags-check"><input type="checkbox" checked={confirmed} disabled={busy} onChange={(e) => setConfirmed(e.target.checked)} />我已检查预览，确认合并这些标签。</label>}
         </div>}
         <ul>{preview.files.map((file) => <li key={file.path}><strong>{file.path}</strong> · {file.status === 'ready' ? `${file.changes.length} 处${file.local ? ' · 文档会话' : ''}` : file.status === 'unchanged' ? '不变' : file.reason}
           {file.status === 'ready' && <details><summary>查看源文改动</summary>{file.changes.map((change, i) => <div key={i} className="native-tags-change"><del>{file.expected[i] || '∅'}</del><ins>{change.insert || '∅'}</ins></div>)}</details>}
@@ -147,11 +164,25 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
       {progress && <p role="status">{progress}</p>}
       {results.length > 0 && <ul className="native-tags-results">{results.map((result, i) => <li key={i}>{result}</li>)}</ul>}
       <div className="native-tags-actions"><button className="btn secondary" onClick={cancel}>{running ? '停止后续文件' : '关闭'}</button>
-        <button className="btn secondary" disabled={busy} onClick={() => { void prepare(); }}>预览改动</button>
-        {preview && <button className="btn mod-cta" disabled={busy || !ready.length || Boolean(preview.collisions.length && !confirmed)} onClick={() => { void apply(); }}>应用并保存 {ready.length} 个文件</button>}
+        {!preview && !results.length && <button className="btn secondary" disabled={busy} onClick={() => { void prepare(); }}>预览改动</button>}
+        {preview && <button className="btn mod-cta" disabled={busy || !ready.length || Boolean(preview.collisions.length && !accepted)} onClick={() => { void apply(); }}>应用并保存 {ready.length} 个文件</button>}
       </div>
     </section>
   </div>;
+}
+
+function TagChips({ tags }: { tags: readonly string[] }) {
+  return <ul className="native-tags-chips">{tags.map((tag) => <li key={tag}>#{tag}</li>)}</ul>;
+}
+
+/** The selected tags are the candidates; another name creates a new target. */
+function MergeTarget({ sources, value, onChange }: { sources: readonly string[]; value: string; onChange: (value: string) => void }) {
+  const custom = !sources.some((source) => tagKey(source) === tagKey(value));
+  return <fieldset className="native-tags-target"><legend>合并为</legend>
+    {sources.map((source) => <label key={source}><input type="radio" name="native-tags-merge-target" checked={tagKey(source) === tagKey(value)} onChange={() => onChange(source)} />#{source}</label>)}
+    <label><input type="radio" name="native-tags-merge-target" aria-label="其他名称" checked={custom} onChange={() => onChange('')} />
+      <input type="text" aria-label="新标签名" placeholder="其他名称" value={custom ? value : ''} onChange={(e) => onChange(e.target.value)} /></label>
+  </fieldset>;
 }
 
 function TagPageDialog({ request }: { request: Extract<TagDialogRequest, { kind: 'page' }> }) {

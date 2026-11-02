@@ -1,12 +1,12 @@
 .native-tags-backdrop { z-index: 1100; position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, .4); padding: 24px; }
 .native-tags-dialog { background: var(--background-primary); color: var(--text-normal); border: 1px solid var(--background-modifier-border); border-radius: 10px; width: min(740px, 96vw); max-height: 90vh; overflow: auto; padding: 24px; box-shadow: var(--shadow); }
 .native-tags-dialog h2 { margin: 0 0 12px; font: 600 16px/1.4 var(--font-ui); }
-.native-tags-dialog :is(input:not([type=checkbox]), select) { min-height: 30px; padding: 5px 9px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); background: var(--background-modifier-form-field); color: var(--text-normal); font: inherit; }
-.native-tags-dialog :is(input:not([type=checkbox]), select):focus-visible { outline: 1px solid var(--interactive-accent); outline-offset: 1px; }
+.native-tags-dialog :is(input:not([type=checkbox], [type=radio]), select) { min-height: 30px; padding: 5px 9px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); background: var(--background-modifier-form-field); color: var(--text-normal); font: inherit; }
+.native-tags-dialog :is(input:not([type=checkbox], [type=radio]), select):focus-visible { outline: 1px solid var(--interactive-accent); outline-offset: 1px; }
 .native-tags-hint { color: var(--text-muted); line-height: 1.6; }
 .native-tags-fields { display: grid; gap: 12px; padding: 0; border: 0; }
 .native-tags-fields > label { display: grid; gap: 5px; }
-.native-tags-fields input:not([type=checkbox]), .native-tags-fields select, .native-tags-dialog > input { width: 100%; }
+.native-tags-fields input:not([type=checkbox], [type=radio]), .native-tags-fields select, .native-tags-dialog > input { width: 100%; }
 .native-tags-fields .native-tags-check, .native-tags-check { display: flex; align-items: flex-start; gap: 8px; }
 .native-tags-check input { margin-top: 4px; }
 .native-tags-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
@@ -30,3 +30,14 @@
 .native-tags-row .native-tags-count { color: var(--text-faint); padding-right: 4px; font-size: 11px; }
 .native-tags-fold { width: 20px; flex: 0 0 20px; }
 .native-tags-hover { position: fixed; z-index: 1000; width: min(440px, 80vw); max-height: 320px; overflow: auto; padding: 14px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 6px; box-shadow: var(--shadow); }
+.native-tags-row.is-selected { background: var(--background-modifier-active-hover, var(--background-modifier-hover)); color: var(--text-normal); }
+.native-tags-row .native-tags-check-row { margin: 0 2px 0 0; flex: 0 0 auto; }
+.native-tags-rename { flex: 1; min-width: 0; height: 24px; padding: 0 6px; border: 1px solid var(--interactive-accent); border-radius: var(--radius-s); background: var(--background-modifier-form-field); color: var(--text-normal); font: inherit; }
+.native-tags-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.native-tags-chips li { padding: 1px 8px; border-radius: 10px; background: var(--background-modifier-hover); color: var(--text-accent); }
+.native-tags-target { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; }
+.native-tags-target legend { padding: 0; margin-bottom: 4px; }
+.native-tags-target label { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.native-tags-target input[type=radio] { margin: 0; flex: 0 0 auto; }
+.native-tags-target input[type=text] { flex: 1; min-width: 0; }
+.native-tags-fixed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

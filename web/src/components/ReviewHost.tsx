@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { reviewSnapshot, subscribeReview, hideReviews, selectReview, showReviews, showReviewList, decideReview } from '../lib/review/client';
+import { reviewSnapshot, subscribeReview, hideReviews, showReviews, showReviewList, decideReview } from '../lib/review/client';
+import { useStore } from '../lib/store';
 import { useDialogEscape } from '../lib/useDialogEscape';
 import '../styles/review.css';
 
@@ -21,13 +22,15 @@ export function ReviewToolbar({ path }: { path: string }) {
 
 export default function ReviewHost() {
   const state = useSyncExternalStore(subscribeReview, reviewSnapshot);
-  useDialogEscape(state.panel, () => { if (!state.busy) hideReviews(); });
-  if (!state.panel) {
+  // The inbox only points at the sidebar list; it hides while that list is in view.
+  const listVisible = useStore(s => s.rightOpen && !s.rightActiveId && s.rightPanel === 'mcp');
+  const selected = state.selected, op = selected?.fileOperation, detail = Boolean(state.panel && selected && op);
+  useDialogEscape(detail, () => { if (!state.busy) hideReviews(); });
+  if (!detail || !selected || !op) {
     const pending = state.proposals.filter(p => p.pending).length;
-    return pending ? <button className="btn secondary native-review-inbox" onClick={showReviews}>待审阅修改 {pending}</button> : null;
+    return pending && !listVisible ? <button className="btn secondary native-review-inbox" onClick={showReviews}>待审阅修改 {pending}</button> : null;
   }
-  const selected = state.selected, op = selected?.fileOperation;
-  if (selected && op) return <div className="modal-bg" onClick={() => { if (!state.busy) hideReviews(); }}>
+  return <div className="modal-bg" onClick={() => { if (!state.busy) hideReviews(); }}>
     <div className="modal native-review-list native-review-file" role="dialog" aria-modal="true" aria-label="笔记操作审阅" onClick={e => e.stopPropagation()}>
       <h2>{selected.title}</h2>
       <p>{op.kind === 'create' ? '新建笔记' : '重命名笔记'}</p>
@@ -44,13 +47,4 @@ export default function ReviewHost() {
       </div>
     </div>
   </div>;
-  return <div className="modal-bg" onClick={hideReviews}><div className="modal native-review-list" role="dialog" aria-modal="true" aria-label="候选修改" onClick={e => e.stopPropagation()}>
-    <h2>候选修改</h2>
-    {state.error && <p role="alert">{state.error}</p>}
-    {!state.proposals.length && <p>没有候选修改</p>}
-    {state.proposals.map(p => <button className="btn secondary native-review-choice" key={p.id} onClick={() => {
-      void selectReview(p.id).catch(error => alert(String(error)));
-    }}><strong>{p.title}</strong><span>{p.kind === 'create' ? '新建 · ' : p.kind === 'rename' ? '重命名 · ' : ''}{p.path}{p.to ? ` → ${p.to}` : ''} · {p.pending ? '待审阅' : '已处理'}</span></button>)}
-    <button className="btn secondary" onClick={hideReviews}>关闭</button>
-  </div></div>;
 }

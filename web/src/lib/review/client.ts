@@ -24,7 +24,8 @@ export const mcpContextSnapshot = () => contextState;
 export const subscribeMcpContext = (fn: () => void) => { contextListeners.add(fn); return () => { contextListeners.delete(fn); }; };
 function update(patch: Partial<ReviewState>) { state = { ...state, ...patch }; for (const fn of listeners) fn(); }
 function updateContext(patch: Partial<McpContextState>) { contextState = { ...contextState, ...patch }; for (const fn of contextListeners) fn(); }
-export function showReviews() { update({ panel: true }); void reloadReviews().catch(report); }
+/** The proposal list lives in the MCP sidebar; only a selected file operation opens a dialog. */
+export function showReviews() { update({ panel: false }); useStore.getState().setRightPanel('mcp'); void reloadReviews().catch(report); }
 export function hideReviews() { update({ panel: false }); }
 export function showReviewList() { update({ selected: null }); showReviews(); }
 function report(error: unknown) { update({ error: String(error) }); }

@@ -47,6 +47,16 @@ it('requires merge confirmation before any file write', async () => {
   await service.apply(preview.id, 'a.md', true);
   expect(state.writes).toEqual(['a.md']);
 });
+it('previews a multi-tag merge from saved candidates and writes the merged target', async () => {
+  state.files.set('b.md', { content: '#other', revision: 'revision-b.md' });
+  state.notes.set('b.md', { path: 'b.md', tags: ['other'], aliases: [] });
+  const service = new NativeTagService();
+  const preview = await service.preview({ operation: { kind: 'merge', tags: ['old', 'other'], to: 'other' }, scope: { kind: 'vault' } });
+  expect(preview.files.map(file => [file.path, file.status])).toEqual([['a.md', 'ready'], ['b.md', 'unchanged']]);
+  expect(preview.collisions).toEqual([{ from: 'old', to: 'other' }]);
+  await service.apply(preview.id, 'a.md', true);
+  expect(state.files.get('a.md')!.content).toBe('#other');
+});
 it('rejects changed revisions and changed Vault roots before applying', async () => {
   const service = new NativeTagService(), preview = await service.preview(request);
   state.files.set('a.md', { content: '#old changed externally', revision: 'external' });
