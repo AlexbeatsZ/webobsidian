@@ -34,7 +34,8 @@ import { catalog } from './services/catalog.js';
 import { guardVaultMutations, bindMaintenanceClients, maintenanceClientConnected,
   maintenanceClientMessage, vaultGeneration, inspectMaintenanceWorkspace,
   assertMaintenanceWorkspaceSafe, withVaultMaintenance, noteVaultMutation } from './services/vaultMaintenance.js';
-import { initSearch } from './services/search.js';
+import { initSearch, qmd } from './services/search.js';
+import { loadSearchCache } from './services/vaultindex.js';
 import { setBroadcaster, broadcast } from './services/realtime.js';
 import { isVaultConfigurationPath } from './services/vaultConfiguration.js';
 import { ensureVault } from './services/vault.js';
@@ -152,15 +153,19 @@ async function main() {
   app.use(errorHandler);
 
   // Build search index + link graph
+  const indexStarted = Date.now();
   console.log('[boot] indexing vault...');
   await migrateSearchSettings().catch((error) => console.warn('[search migration]', error));
   enableFileUpdates();
+  // The saved index is independent of live Vault state; load it while the watcher scans.
+  const searchCache = loadSearchCache();
   await rebuildFileIndexes(async () => {
     await setupWatcher();
-    await initSearch();
+    await initSearch(searchCache);
   });
   await drainFileUpdates();
-  console.log('[boot] index ready');
+  console.log(`[boot] index ready after ${Date.now() - indexStarted}ms`);
+  void qmd.loaded().then(() => console.log(`[boot] search index loaded after ${Date.now() - indexStarted}ms`));
 
   const server = http.createServer(app);
   setupWebsocket(server);

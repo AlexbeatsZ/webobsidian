@@ -161,7 +161,9 @@ No second parser or anchor finder is introduced.
 
 Startup and switching reserve the existing rebuildFileIndexes workers, establish
 the single watcher and await ready, build/publish catalog/search/graph, then
-release/drain the ordinary per-path queue. Events during construction wait in
+release/drain the ordinary per-path queue. Since 2026-11-02 a restored cache
+publishes its catalog first and loads the full-text index afterwards; index edits
+queue inside QmdEngine (performance.md "Startup index cache"). Events during construction wait in
 that queue rather than falling between scan and watcher startup. Polling fallback
 carries readiness to its replacement. The full walk tolerates disappearing paths.
 Old-root events remain guarded by watcher identity; settings rollback remains the

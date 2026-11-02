@@ -570,6 +570,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
 - 2026-11-02 (PRD 1.24): Git 备份不再提交含令牌的 `sync.jsonc`/`git.jsonc`(写入 `.git/info/exclude`、移出旧索引、冲突分支跳过),本地文件与文件同步不变;fileSyncGit 5/5。
 - 2026-11-02 (PRD 1.23): 代码审查修复——附件上传同名不覆盖(`name N.ext`)、剪贴板 `image.png` 改名 `Pasted image <时间>.png`、multipart 中文文件名 UTF-8;Windows/macOS `.GIT`/`.git.` 路径保护;trash/remove/copy/restore 与保存共用文件写锁;搜索索引达阈值时同步 vacuum、冷启动用 `loadJS` 免二次序列化;移除无调用的 `listMarkdownFiles`。单元 506/506、file-defaults 4/4。
 - 2026-11-01: 行内公式兼容 mhchem 参数内的 `$`(`$\ce{A <=>[$k_1$][$k_{-1}$] B}$`)，花括号内的 `$` 不再闭合公式；格式化自定义正则运行时遮蔽公式内部 `$`。单元 503/503、Edge 公式规格 37/37；桌面 0.1.49 已构建并安装到本机。
+- 2026-11-02: 启动提速——搜索索引缓存增量恢复(只重新解析 stamp 变化的笔记,无变化不重写,有变化延后 30s 保存),catalog 先发布、全文索引在监听后后台加载(加载期间编辑排队回放,搜索等待);STEM 副本实测监听 缓存命中 3.7-3.9s(原 7-11s)、改 10 篇 3.8s(原全量约 24s)。单元 514/514;未打包安装。
 - 2026-11-01 (PRD 1.22): 拖入分屏组改为交换位置([A,B],C 拖 C 到 B → [A,C],B)，组内标签可作落点，组员互拖交换两栏；split-editing 41/41、单元 500/500。
 - 2026-11-01 (PRD 1.21): 分屏时 + / new-tab 单独显示新 Homepage、暂存分屏组(不再替换组内一栏)；split-editing 40/40、单元 498/498。
 - 2026-11-01 (PRD 1.20): 名称选择器匹配与排序改用上游 fuzzy-chinese 的 DP 与评分(`rlx` 先出"热力学…",不再被英文长名跳跃命中压过);search-core 11/11、单元 499/500(git 备份测试并发超时,单独重跑 5/5)。

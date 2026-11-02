@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import MiniSearch from 'minisearch';
 import { getSettings } from './settings.js';
 import { INDEX_FILE, config } from '../config.js';
-import { getVaultRoot, readFileText } from './vaultFile.js';
+import { readFileText } from './vaultFile.js';
 import { catalog as activeCatalog, VaultCatalog, CORE_LIST_PROPS, CATALOG_SCHEMA_VERSION } from './catalog.js';
 import { matchesTagFilters } from '@webobsidian/search-core';
 import {
@@ -17,6 +17,7 @@ import {
 import { parseNote, type ParsedNote } from './markdown.js';
 import { SourceDocument } from '@webobsidian/markdown-core';
 import type { SearchHit, MatchContext, NoteMatches } from '../contracts.js';
+import type { SearchCache } from './vaultindex.js';
 export type { SearchHit, MatchContext, NoteMatches } from '../contracts.js';
 
 /**
@@ -50,6 +51,9 @@ function shiftRanges(untrimmed: string, ranges: [number, number][]): [number, nu
 export class QmdEngine {
   private mini: MiniSearch<QmdDoc>;
   private ready = false;
+  private loading: Promise<void> | undefined;
+  private loadFailed = false;
+  private readonly pending = new Map<string, QmdDoc | null>();
   constructor(readonly catalog: VaultCatalog = activeCatalog) {
     this.mini = this.newIndex();
   }
@@ -83,7 +87,7 @@ export class QmdEngine {
     await rebuildVaultIndex();
   }
   finish() {
-    this.ready = true;
+    this.ready = !this.loadFailed;
   }
 
   async upsert(rel: string): Promise<void> {
@@ -96,16 +100,25 @@ export class QmdEngine {
   }
 
   upsertNote(rel: string, note: ParsedNote): void {
-    const doc = this.fromNote(rel, note);
-    if (this.mini.has(rel)) this.mini.replace(doc);
-    else this.mini.add(doc);
+    this.applyDoc(rel, this.fromNote(rel, note));
     this.catalog.putNote(rel, note);
-    this.vacuumDiscarded();
   }
 
   remove(rel: string): void {
-    if (this.mini.has(rel)) this.mini.discard(rel);
+    this.applyDoc(rel, null);
     this.catalog.remove(rel);
+  }
+
+  /** `null` discards. While a saved index loads, only the latest edit per path is kept. */
+  private applyDoc(rel: string, doc: QmdDoc | null): void {
+    if (this.loading) {
+      this.pending.set(rel, doc);
+      return;
+    }
+    if (doc) {
+      if (this.mini.has(rel)) this.mini.replace(doc);
+      else this.mini.add(doc);
+    } else if (this.mini.has(rel)) this.mini.discard(rel);
     this.vacuumDiscarded();
   }
 
@@ -126,6 +139,7 @@ export class QmdEngine {
 
   /** `limit <= 0` returns every match (caller renders incrementally). */
   async search(query: string, limit = 0, mode: 'literal' | 'pinyin' = 'literal'): Promise<SearchHit[]> {
+    await this.loaded();
     if (!this.ready) {
       const { rebuildVaultIndex } = await import('./vaultindex.js');
       await rebuildVaultIndex();
@@ -366,13 +380,16 @@ export class QmdEngine {
       .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
   }
 
-  async save(): Promise<void> {
+  /** `root` is the Vault this engine was built from, not the current setting. */
+  async save(root: string): Promise<void> {
     try {
+      await this.loaded();
+      if (!this.ready) return;
       await fs.mkdir(config.dataDir, { recursive: true });
       const payload = {
         version: SEARCH_VERSION,
         catalogSchema: CATALOG_SCHEMA_VERSION,
-        root: await getVaultRoot(),
+        root,
         mini: this.mini.toJSON(),
         catalog: this.catalog.serialize(),
       };
@@ -383,9 +400,31 @@ export class QmdEngine {
       /* disposable cache */
     }
   }
-  restoreMini(json: Parameters<typeof MiniSearch.loadJS>[0]) {
-    this.mini = MiniSearch.loadJS<QmdDoc>(json, this.indexOptions());
-    this.ready = true;
+  /**
+   * Load a saved index in the background once `start` resolves (chunked, so
+   * requests keep flowing). The catalog is already current; index edits made meanwhile wait in `pending`
+   * and replay in the same synchronous step that installs the loaded index.
+   * A failed load clears readiness, so the next search takes the rebuild path.
+   */
+  loadMini(json: Parameters<typeof MiniSearch.loadJS>[0], start: Promise<void> = Promise.resolve()): void {
+    this.loading = start.then(() => MiniSearch.loadJSAsync<QmdDoc>(json, this.indexOptions())).then(
+      mini => {
+        this.mini = mini;
+      },
+      error => {
+        console.warn('[search] saved index load failed; rebuilding on demand', error);
+        this.loadFailed = true;
+        this.ready = false;
+      },
+    ).finally(() => {
+      this.loading = undefined;
+      const pending = [...this.pending];
+      this.pending.clear();
+      if (!this.loadFailed) for (const [rel, doc] of pending) this.applyDoc(rel, doc);
+    });
+  }
+  async loaded(): Promise<void> {
+    await this.loading;
   }
 }
 
@@ -395,7 +434,7 @@ export function replaceSearch(next: QmdEngine) {
 }
 
 /** Initialize the engine: restore from disk or build fresh. */
-export async function initSearch(): Promise<void> {
+export async function initSearch(cache?: Promise<SearchCache | undefined>): Promise<void> {
   const { rebuildVaultIndex } = await import('./vaultindex.js');
-  await rebuildVaultIndex(true);
+  await rebuildVaultIndex(cache ?? true);
 }

@@ -104,6 +104,46 @@ WeakMaps keyed by immutable model identity. Outline/embeds/plugin metadata share
 session analysis; fragment caches are scoped to the full parent model and range.
 Grammar reuse does not make the complete derived-node traversal incremental.
 
+## Startup index cache (2026-11-02)
+
+The HTTP listener opens only after boot indexing, so `qmd-index.json` restore is
+the desktop startup path. The cache used to be written only at boot and accepted
+only when every walked stamp matched; any note edited during the previous session
+(or pulled by sync) discarded it and re-parsed every note (STEM: 388 notes /
+6,581 entries, 17-19s warm, logged 16-28s).
+
+- `loadSearchCache()` reads/parses the saved index and restores its catalog without
+  live Vault state; boot starts it before the watcher scan. The full-text index is
+  not loaded yet: `QmdEngine.loadMini(json, start)` waits for a gate that opens
+  only after the engine is published. Starting the chunked `loadJSAsync` earlier
+  starves the walk (one loop turn per awaited stat, one ~12ms index chunk per turn),
+  so the listener waited for the whole load anyway (measured 12.3s vs 3.2s).
+- While the index loads, the catalog/graph/file tree are current and served.
+  `upsertNote`/`remove` update the catalog immediately and keep the latest index
+  edit per path in `pending`; the loaded index is installed and `pending` replayed
+  in one synchronous step. `search()` and `save()` await `loaded()`. A failed load
+  marks the engine unready, so the next search takes the existing rebuild path.
+- `rebuildVaultIndex` walks once (siblings stat in parallel, inserted in directory
+  order depth-first as before), then applies only differences to the restored
+  engine: kind change/missing paths are removed, stamp-changed Markdown is re-read
+  and upserted, other entries update their stamp. Failure falls back to a full build.
+  A cache for another root is rejected before any index load.
+- Nothing is written when nothing changed. Otherwise the save runs 30s later
+  (serializing ~50MB blocks the loop ~2s), only if that engine is still published,
+  and records the root it was built from.
+- Incremental replaces leave stale MiniSearch postings (as runtime edits always
+  did), so ranking of lower hits can differ from a fresh build; hit sets match, and
+  an unchanged restore matches a fresh build exactly.
+
+Measured on a disposable STEM copy (built server, time to listen): no cache 24-28s;
+exact hit 3.7-3.9s (7-11s before this work; 8.5-9.2s with the index load still on
+the boot path); 10 edited notes 3.8s (formerly a full rebuild). The search index
+finishes about 6s after listening; searches issued earlier (search panel, unlinked
+mentions, query blocks) wait instead of failing. Load cost comes from the default
+tokenizer keeping whole CJK clauses as terms (`body` 244k + `py_body` 244k of
+490k terms for 388 notes); reducing that is a search-design change (chinese-search.md).
+The remaining boot path is mostly chokidar readiness (~2.4s, per-directory fs.watch).
+
 ## File update pipeline
 
 Vault write/binary/create/copy/rename/remove/trash/restore operations and chokidar
