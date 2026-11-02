@@ -1,7 +1,10 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.23 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Phiên bản: 1.24 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Changelog 1.24 (连接令牌不进 Git): 用户决定访问令牌只需忽略、不加密。Git 备份不再提交
+> `.obsidian/webobsidian/sync.jsonc` 与 `git.jsonc`(两者可含令牌),写入仓库 `.git/info/exclude` 并把旧版本
+> 提交的副本移出索引(本地文件保留),冲突分支同样跳过;文件同步仍在用户设备间复制它们。新克隆需在设置中填写一次连接。
 > Changelog 1.23 (附件上传不覆盖): 上传/粘贴/拖入的附件绝不替换已有文件,同名时按 Obsidian 规则依次使用
 > `name 1.ext`、`name 2.ext`…;剪贴板位图(Chromium 统一命名 `image.png`)改名为 `Pasted image YYYYMMDDHHmmss.png`,
 > 复制来的文件保留原名;multipart 文件名按 UTF-8 解析,中文名不再乱码。

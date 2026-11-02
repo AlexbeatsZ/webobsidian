@@ -3,8 +3,8 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git';
-import { GIT_CONFIGURATION_PATH, gitPreferences, readGitPreferencesSource } from './gitPreferences.js';
-import { FILE_SYNC_CONFIGURATION_PATH, fileSyncPreferences, readFileSyncPreferencesSource } from './fileSyncPreferences.js';
+import { GIT_CONFIGURATION_PATH, gitPreferences } from './gitPreferences.js';
+import { FILE_SYNC_CONFIGURATION_PATH, fileSyncPreferences } from './fileSyncPreferences.js';
 import { getVaultRoot, vaultPathKey } from './vaultFile.js';
 import type { ConflictSnapshot } from './fileSyncEngine.js';
 import { redactUrlCreds } from '../lib/redact.js';
@@ -101,6 +101,22 @@ export const clone = (): Promise<void> => withGitLock(async () => { await requir
 export const sync = (message?: string): Promise<{ ok: boolean; log: string[] }> =>
   withGitLock(async () => await nativeSyncEnabled() ? backupImpl(message) : syncImpl(message));
 
+/** Connection files hold access tokens. Git backup never records them; file sync still carries them between devices. */
+const CREDENTIAL_CONFIGURATION_PATHS = [FILE_SYNC_CONFIGURATION_PATH, GIT_CONFIGURATION_PATH];
+
+/** Exclude the connection files and untrack copies committed by earlier versions; working files stay. */
+async function excludeCredentialConfigurations(client: SimpleGit): Promise<void> {
+  const exclude = path.join((await client.raw(['rev-parse', '--absolute-git-dir'])).trim(), 'info', 'exclude');
+  const existing = await fs.readFile(exclude, 'utf8').catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return ''; throw error; });
+  const lines = new Set(existing.split(/\r?\n/));
+  const missing = CREDENTIAL_CONFIGURATION_PATHS.map(file => `/${file}`).filter(line => !lines.has(line));
+  if (missing.length) {
+    await fs.mkdir(path.dirname(exclude), { recursive: true });
+    await fs.appendFile(exclude, (existing && !existing.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
+  }
+  await client.raw(['rm', '--cached', '--ignore-unmatch', '-q', '--', ...CREDENTIAL_CONFIGURATION_PATHS]);
+}
+
 async function nativeSyncEnabled(): Promise<boolean> {
   return (await fileSyncPreferences()).enabled;
 }
@@ -149,7 +165,7 @@ export function recordSyncConflict(root: string, snapshot: ConflictSnapshot): Pr
     try {
       for (const side of ['local', 'remote'] as const) {
         await isolated.raw(parent ? ['read-tree', parent] : ['read-tree', '--empty']);
-        for (const file of snapshot.files) {
+        for (const file of snapshot.files.filter(entry => !CREDENTIAL_CONFIGURATION_PATHS.includes(entry.path))) {
           const source = file[side];
           if (source) {
             const object = (await isolated.raw(['hash-object', '-w', '--no-filters', '--', source])).trim();
@@ -442,10 +458,8 @@ async function commitAllImpl(message?: string): Promise<string> {
   const g = await git();
   await configureIdentity(g);
   await ensureLfsAttributes();
+  await excludeCredentialConfigurations(g);
   await g.add('.');
-  const sharedConfigurations = await Promise.all([readFileSyncPreferencesSource(), readGitPreferencesSource()]);
-  const paths = [FILE_SYNC_CONFIGURATION_PATH, GIT_CONFIGURATION_PATH].filter((_, index) => sharedConfigurations[index].source.exists);
-  if (paths.length) await g.add(['--force', '--', ...paths]);
   const st = await g.status();
   if (st.staged.length === 0 && st.isClean()) return 'Nothing to commit';
   const { subject, body } = describeChanges(st);

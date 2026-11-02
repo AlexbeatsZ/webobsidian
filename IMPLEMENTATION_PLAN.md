@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-02 (attachment upload naming, path locks, search index vacuum)
+Cập nhật lần cuối: 2026-11-02 (connection tokens excluded from Git backup)
 
 ## Split tab group (PRD 1.18)
 - [x] 分屏时标签栏显示两栏的分屏组，点击聚焦对应栏
@@ -558,6 +558,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-02 (PRD 1.24): Git 备份不再提交含令牌的 `sync.jsonc`/`git.jsonc`(写入 `.git/info/exclude`、移出旧索引、冲突分支跳过),本地文件与文件同步不变;fileSyncGit 5/5。
 - 2026-11-02 (PRD 1.23): 代码审查修复——附件上传同名不覆盖(`name N.ext`)、剪贴板 `image.png` 改名 `Pasted image <时间>.png`、multipart 中文文件名 UTF-8;Windows/macOS `.GIT`/`.git.` 路径保护;trash/remove/copy/restore 与保存共用文件写锁;搜索索引达阈值时同步 vacuum、冷启动用 `loadJS` 免二次序列化;移除无调用的 `listMarkdownFiles`。单元 506/506、file-defaults 4/4。
 - 2026-11-01: 行内公式兼容 mhchem 参数内的 `$`(`$\ce{A <=>[$k_1$][$k_{-1}$] B}$`)，花括号内的 `$` 不再闭合公式；格式化自定义正则运行时遮蔽公式内部 `$`。单元 503/503、Edge 公式规格 37/37；桌面 0.1.49 已构建并安装到本机。
 - 2026-11-01 (PRD 1.22): 拖入分屏组改为交换位置([A,B],C 拖 C 到 B → [A,C],B)，组内标签可作落点，组员互拖交换两栏；split-editing 41/41、单元 500/500。

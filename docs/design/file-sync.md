@@ -10,8 +10,9 @@ editor, parser or index is introduced. Git is only periodic backup and conflict 
 Each Vault stores its enabled flag, ordered addresses, token and interval in
 `.obsidian/webobsidian/sync.jsonc`. The existing Vault configuration reader/JSONC parser
 and revision-checked physical writer are authoritative; application settings contain no
-second copy or implicit import. Git backup explicitly includes this one file even if
-`.obsidian` is ignored, so cloning a private Vault repository bootstraps native transport.
+second copy or implicit import. The file carries the access token, so Git backup never
+records it (see Vault Git configuration); native transport itself replicates it between
+the user's synchronized devices. A fresh clone enters the connection once in settings.
 Only local checkpoint/outbox/incoming journals, caches and recovery files stay in the
 device's application data directory. Every pass starts at entry one; attempts are sequential.
 No direct/public categories, probing races, speed ranking or last-success promotion.
@@ -99,11 +100,13 @@ conflict history read this one authority; application-global `settings.json.git`
 is no longer used. A fresh Vault defaults to Git disabled. Existing legacy
 settings bytes are not silently imported or assigned to a different Vault.
 
-Both connection files are explicitly included in Git commits even if `.obsidian`
-is ignored. Tokens are masked in API responses. Leave the Git token empty to use
-the device's existing Git credential helper; no GitHub access token is required
-in the shared file. Only the private Vault repository may contain the native
-sync token. Git configuration is read by Git/API operations, not every editor
+Both connection files can hold tokens, so Git backup excludes them: each commit
+writes `/.obsidian/webobsidian/sync.jsonc` and `/.obsidian/webobsidian/git.jsonc`
+to the repository's `.git/info/exclude` and untracks copies committed by earlier
+versions (`git rm --cached`, working files stay). Conflict branches skip them too.
+No token is stored in Git history or encrypted; the files stay plain device/Vault
+data. Tokens are masked in API responses. Leave the Git token empty to use
+the device's existing Git credential helper. Git configuration is read by Git/API operations, not every editor
 input or ordinary application-settings read.
 
 Git LFS progress is explicitly enabled for the existing child process. The
