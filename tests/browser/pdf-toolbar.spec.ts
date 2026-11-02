@@ -254,9 +254,18 @@ test('narrow touch layout keeps the control, split and sidebar views do not stea
   await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().toggleRight());
   await toggle(page).click();
   await expect(toolbar(page)).toBeVisible();
-  await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().openFile('note.md'));
+  const routed = await page.evaluate(async () => {
+    const store = (window as any).pdfToolbarFixture.store;
+    const target = store.getState().currentViewId();
+    await store.getState().openFile('note.md');
+    return { target, main: store.getState().activePath, split: store.getState().splitPath };
+  });
+  expect(routed).toEqual({ target: 'split', main: 'paper.pdf', split: 'note.md' });
+  await expect(toolbar(page)).toBeVisible();
+  // This assertion replaces the main PDF, independently of the focused split.
+  await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().openFile('note.md', true, 'main'));
   await expect(toggle(page)).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().pdfToolbarOpen)).toBe(true);
-  await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().openFile('paper.pdf'));
+  await page.evaluate(() => (window as any).pdfToolbarFixture.store.getState().openFile('paper.pdf', true, 'main'));
   await expect(toolbar(page)).toBeVisible();
 });

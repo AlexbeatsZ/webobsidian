@@ -21,6 +21,7 @@ async function workspace(page: Page, source: string, reading = false) {
       stat: { type: 'file', ctime: 1, mtime: 1, size: raw.length },
     } });
     if (url.pathname === '/api/property-types') return route.fulfill({ json: { types: {} } });
+    if (url.pathname === '/api/properties') return route.fulfill({ json: { properties: [] } });
     return route.fulfill({ json: { hits: [], matches: [], backlinks: ['ref.md'], enabled: false } });
   });
   await page.goto('/__render-test');
@@ -130,6 +131,35 @@ test('manual Save formats configured rules even when the active view is reading'
   });
   expect(saved.at(-1)).toBe('# Note\n\nbefore,after\n');
   await expect(page.locator('.cm-content')).toContainText('before,after');
+});
+
+test('sidebar creates the first property with shared Undo and does not write a stale Vault', async ({ page }) => {
+  const original = '# Note\n\nOriginal body.\n';
+  await workspace(page, original);
+  const sidebar = page.locator('.note-properties');
+  await sidebar.locator('.cm-props-add').click();
+  const key = sidebar.locator('.prop-new-key');
+  await key.fill('status');
+  await key.press('Enter');
+  const row = sidebar.locator('.prop-row').filter({ has: page.locator('.prop-key', { hasText: /^status$/ }) });
+  await expect(row).toBeVisible();
+  await row.locator('.prop-val-input').fill('created');
+  await row.locator('.prop-val-input').press('Tab');
+  const read = () => page.evaluate(async () => (await import('/src/lib/documents.ts')).documents.get('note.md')!.snapshot.raw);
+  await expect.poll(read).toBe('---\nstatus: "created"\n\n---\n' + original);
+  await expect(page.locator('.cm-content .prop-row').filter({ hasText: 'status' })).toContainText('created');
+  await page.evaluate(async () => {
+    const session = (await import('/src/lib/documents.ts')).documents.get('note.md')!;
+    session.undo();
+    session.undo();
+  });
+  await expect.poll(read).toBe(original);
+  await page.evaluate(async () => {
+    const store = await import('/src/lib/store.ts');
+    store.useStore.setState({ vaultSessionStale: true });
+  });
+  await expect(sidebar.locator('[contenteditable="true"]')).toHaveCount(0);
+  await expect.poll(read).toBe(original);
 });
 
 test('macOS settings closes from its left red control', async ({ page }, info) => {

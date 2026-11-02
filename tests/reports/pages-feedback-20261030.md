@@ -37,3 +37,7 @@ The first new snippet fixture omitted explicit file-source flags, and the first 
 ## Build, publication and document annotations
 
 Pending exact-commit production builds, native Electron33 verification, release publication and original Pages annotation readback. Do not interpret this section as delivered until the recorded completion below.
+
+## 2026-11-01 targeted acceptance follow-up
+
+The new authoritative source document is `Y:/Users/meta/Documents/Personal Documents/开发/Webobsidian.pages`. User accepted the existing single left red settings close control and approved WO02/WO05-WO08 targeted acceptance. Current results, versions and preserved historical boundaries are in `tests/reports/pages-feedback-20261101.md`:28/28 focused units,13/13 renderer cases, installed Windows0.1.49 resources in isolated Electron33, and Mac0.1.37 installed resources rendering a copied real textbook and formatting with Cmd+S. The old PDF narrow failure was an implicit current-pane fixture assumption; only tests/evidence changed. Android/physicalIME acceptance remains pending. No claim that historical0.1.37 release publication was completed.
