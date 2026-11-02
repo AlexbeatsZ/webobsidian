@@ -23,8 +23,8 @@ export async function writeTextFile(absolutePath: string, content: string, baseR
   return { revision: revisionOf(bytes) };
 }
 
-export async function writeBinaryFile(absolutePath: string, bytes: Buffer): Promise<void> {
-  await writeBytes(absolutePath, bytes, undefined, false, false);
+export async function writeBinaryFile(absolutePath: string, bytes: Buffer, createOnly = false): Promise<void> {
+  await writeBytes(absolutePath, bytes, undefined, createOnly, false);
 }
 
 async function writeBytes(absolutePath: string, bytes: Buffer, baseRevision?: string, createOnly = false, compareExisting = true): Promise<void> {

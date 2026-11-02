@@ -26,6 +26,13 @@ drive body contexts. Arbitrary custom fuzzy-sound rules use the Han candidate
 token as a conservative fallback; these queries can inspect many Chinese notes.
 No second search library, persistent phonetic database or watcher is introduced.
 
+Replace/discard leave stale postings. MiniSearch's batched vacuum (including
+`autoVacuum`) awaits between batches while iterating its radix tree, and an
+interleaved save crashed `TreeIterator.dive`, so `autoVacuum` stays off. The engine
+vacuums once `dirtCount >= 1000` and `dirtFactor >= 0.1` with an unbounded batch
+size, which finishes synchronously inside the triggering mutation. Cold start
+restores the already parsed cache object with `MiniSearch.loadJS`.
+
 `vaultindex` is the full-build owner: one file enumeration, one read/parse per
 Markdown file, then synchronous publication of catalog/search/graph. The existing
 file-update queue handles incremental mutations. Cache restore checks schema,

@@ -63,7 +63,10 @@ export async function resolveVaultPath(root: string, relPath: string, rejectLink
   }
   // Never resolve into the vault's own git metadata: an authenticated write to
   // e.g. .git/hooks/post-merge would execute on the next git sync.
-  if (path.relative(root, abs).split(path.sep).includes('.git')) {
+  // Windows/macOS names are case-insensitive and Windows drops trailing dots/spaces.
+  const gitName = (segment: string) => process.platform === 'win32' ? segment.toLowerCase().replace(/[. ]+$/, '')
+    : process.platform === 'darwin' ? segment.toLowerCase() : segment;
+  if (path.relative(root, abs).split(path.sep).some(segment => gitName(segment) === '.git')) {
     throw Object.assign(new Error('Path not allowed'), { status: 400 });
   }
   // Symlink guard: a symlink *inside* the vault could point outside it, which the
@@ -195,29 +198,4 @@ export async function exists(rel: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/** List all markdown files (vault-relative) for indexing. */
-export async function listMarkdownFiles(): Promise<string[]> {
-  const root = await getVaultRoot();
-  const out: string[] = [];
-  async function walk(dir: string) {
-    let entries;
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      // Skip dotfiles/dot-dirs (`.trash`, `.obsidian`, …) like the tree view and
-      // file index do — a note moved to `.trash` must not stay a live link target
-      // (and would otherwise shadow a real file with the same basename).
-      if (ignoredVaultNames.has(e.name) || e.name.startsWith('.')) continue;
-      const abs = path.join(dir, e.name);
-      if (e.isDirectory()) await walk(abs);
-      else if (e.isFile() && /\.(md|markdown)$/i.test(e.name)) out.push(toRel(root, abs));
-    }
-  }
-  await walk(root);
-  return out;
 }

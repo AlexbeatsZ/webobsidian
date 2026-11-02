@@ -100,11 +100,23 @@ export class QmdEngine {
     if (this.mini.has(rel)) this.mini.replace(doc);
     else this.mini.add(doc);
     this.catalog.putNote(rel, note);
+    this.vacuumDiscarded();
   }
 
   remove(rel: string): void {
     if (this.mini.has(rel)) this.mini.discard(rel);
     this.catalog.remove(rel);
+    this.vacuumDiscarded();
+  }
+
+  /**
+   * Every replace/discard leaves stale postings. Batched (auto) vacuuming awaits
+   * while iterating the radix tree and crashes when edits interleave, so clean in
+   * one unbatched pass that finishes synchronously before any other mutation.
+   */
+  private vacuumDiscarded(): void {
+    if (this.mini.dirtCount >= 1000 && this.mini.dirtFactor >= 0.1)
+      void this.mini.vacuum({ batchSize: Number.MAX_SAFE_INTEGER });
   }
 
   async rename(from: string, to: string): Promise<void> {
@@ -371,8 +383,8 @@ export class QmdEngine {
       /* disposable cache */
     }
   }
-  restoreMini(json: unknown) {
-    this.mini = MiniSearch.loadJSON<QmdDoc>(JSON.stringify(json), this.indexOptions());
+  restoreMini(json: Parameters<typeof MiniSearch.loadJS>[0]) {
+    this.mini = MiniSearch.loadJS<QmdDoc>(json, this.indexOptions());
     this.ready = true;
   }
 }

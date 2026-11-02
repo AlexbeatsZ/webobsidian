@@ -187,9 +187,11 @@ async function main() {
     void fs.writeFile(path.join(config.dataDir, 'operations-endpoint.json'), JSON.stringify({
       protocol: 1, pid: process.pid, url: `http://127.0.0.1:${port}`,
     }), { mode: 0o600 }).catch(error => console.warn('[operations endpoint]', error));
-    console.log(`\n  WebObsidian server → http://${config.host}:${config.port}`);
-    console.log(`  Vault: ${config.defaultVaultPath}`);
-    console.log(`  Data:  ${config.dataDir}\n`);
+    void getVaultRoot().then(vault => {
+      console.log(`\n  WebObsidian server → http://${config.host}:${port}`);
+      console.log(`  Vault: ${vault}`);
+      console.log(`  Data:  ${config.dataDir}\n`);
+    });
   });
 }
 

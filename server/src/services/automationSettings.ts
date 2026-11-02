@@ -3,7 +3,7 @@ export { AutomationSchema, type AutomationSettings } from '../contracts/automati
 import { modify, applyEdits } from 'jsonc-parser';
 import { readVaultConfiguration, writeVaultConfiguration, parseConfiguration, type VaultConfigurationSource } from './vaultConfiguration.js';
 import { getSettings } from './settings.js';
-import path from 'node:path';
+import { vaultPathKey } from './vaultFile.js';
 
 
 export async function readAutomationConfiguration() {
@@ -26,9 +26,8 @@ export async function saveAutomationConfiguration(input: { source: VaultConfigur
 /** Explicit, preserved-source migration; reading defaults never writes a Vault. */
 export async function importAutomationConfiguration(source: VaultConfigurationSource) {
   if (source.exists) throw Object.assign(new Error('Configuration already exists; original file preserved'), { status: 409 });
-  const legacy = await getSettings(), root = path.resolve(legacy.vault.path);
-  const key = process.platform === 'win32' ? root.toLowerCase() : root;
-  const old = AutomationSchema.parse(legacy.nativeFeatures[key]?.automation ?? {});
+  const legacy = await getSettings();
+  const old = AutomationSchema.parse(legacy.nativeFeatures[vaultPathKey(legacy.vault.path)]?.automation ?? {});
   const settings = AutomationSchema.parse({ ...old, templates: { ...old.templates,
     folder: old.templates.folder || legacy.search.chinese.templateFolder } });
   return saveAutomationConfiguration({ source, settings });

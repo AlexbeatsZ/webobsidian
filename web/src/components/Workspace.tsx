@@ -141,7 +141,14 @@ export default function Workspace() {
     }
   };
   const onPaste = (e: React.ClipboardEvent) => {
-    const imgs = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'));
+    // Chromium names raw clipboard bitmaps image.png; name those like Obsidian's pasted
+    // images. Copied files keep their own names (the server still avoids replacement).
+    const imgs = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/')).map((f) => {
+      if (f.name !== 'image.png') return f;
+      const stamp = new Date(), pad = (n: number) => String(n).padStart(2, '0');
+      const time = `${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}`;
+      return new File([f], `Pasted image ${time}.png`, { type: f.type });
+    });
     if (imgs.length) {
       e.preventDefault();
       void handleFiles(imgs, (e.target as Element).closest<HTMLElement>('[data-document-id]')?.dataset.documentId ?? activePath ?? '');

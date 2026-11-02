@@ -1,7 +1,10 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.22 · Cập nhật: 2026-11-01 · Trạng thái: Draft
+> Phiên bản: 1.23 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Changelog 1.23 (附件上传不覆盖): 上传/粘贴/拖入的附件绝不替换已有文件,同名时按 Obsidian 规则依次使用
+> `name 1.ext`、`name 2.ext`…;剪贴板位图(Chromium 统一命名 `image.png`)改名为 `Pasted image YYYYMMDDHHmmss.png`,
+> 复制来的文件保留原名;multipart 文件名按 UTF-8 解析,中文名不再乱码。
 > Changelog 1.22 (拖入分屏组时交换位置): [A,B],C 时把 C 拖到 B 的栏(或组内 B 的标签)上得到 [A,C],B——
 > 分屏组留在原位,被替换的页面回到 C 原来的位置;把组内一页拖到另一页上则交换两栏。
 > Changelog 1.21 (分屏时新建标签页): 标签栏 + 与"新建标签页"命令在分屏时不再把 Homepage 放进分屏组的某一栏,
@@ -279,7 +282,9 @@ webobsidian/
   folder vào chính nó/thư mục con.
 - Hỗ trợ attachments (ảnh/pdf/…); thêm/kéo thả vào app. Thư mục đích upload resolve **case-insensitive** với folder
   sẵn có (`vault.resolveDirCaseInsensitive`) — tránh tạo thư mục trùng khác hoa-thường (vd `attachments` cạnh
-  `Attachments` có sẵn) trên filesystem phân biệt hoa-thường (Linux).
+  `Attachments` có sẵn) trên filesystem phân biệt hoa-thường (Linux). Upload không bao giờ ghi đè file có sẵn:
+  trùng tên thì dùng `name 1.ext`, `name 2.ext`… (createOnly); ảnh clipboard `image.png` đổi thành
+  `Pasted image YYYYMMDDHHmmss.png`; tên file multipart giải mã UTF-8.
 - Watch filesystem (chokidar) để phản ánh thay đổi ngoài (git pull, sửa trực tiếp).
 - Tương thích cấu trúc `.obsidian/` (config, plugins, themes).
 

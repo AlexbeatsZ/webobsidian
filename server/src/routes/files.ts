@@ -13,7 +13,12 @@ import { defaultFileFolder, VaultFolderSchema } from '../contracts/filePlacement
 
 export const filesRouter = Router();
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512 * 1024 * 1024 } });
+// Browsers send multipart filenames as UTF-8; multer's latin1 default garbles CJK names.
+// multer 2 supports this option; @types/multer has not declared it yet.
+const uploadOptions: multer.Options & { defParamCharset: 'utf8' } = {
+  storage: multer.memoryStorage(), defParamCharset: 'utf8', limits: { fileSize: 512 * 1024 * 1024 },
+};
+const upload = multer(uploadOptions);
 
 filesRouter.get(
   '/',
@@ -96,8 +101,7 @@ filesRouter.post(
     // Reuse an existing folder that differs only in case (e.g. an Obsidian vault's
     // "Attachments") instead of creating a duplicate "attachments". See vaultFile.ts.
     const resolvedDir = dir ? await resolveDirCaseInsensitive(dir) : '';
-    const rel = path.posix.join(resolvedDir, file.originalname);
-    await vault.writeFileBuffer(rel, file.buffer);
+    const rel = await vault.createFileBuffer(resolvedDir, path.posix.basename(file.originalname.replace(/\\/g, '/')), file.buffer);
     res.json({ ok: true, path: rel, size: file.size });
   }),
 );

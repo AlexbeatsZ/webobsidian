@@ -193,6 +193,14 @@ test('pasted images retain every attachment and leave the other split unchanged'
     element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   });
   await expect.poll(() => fs.readFile(path.join(vault, 'Notes/original.md'), 'utf8')).toContain('Notes/assets/second.png');
+  // Raw clipboard bitmaps all arrive as image.png; neither paste may replace the other.
+  for (let round = 0; round < 2; round++) await page.locator('.main-pane .cm-content').evaluate(element => {
+    const data = new DataTransfer();
+    data.items.add(new File([Uint8Array.from([137, 80, 78, 71])], 'image.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect.poll(async () => (await fs.readdir(path.join(vault, 'Notes/assets'))).filter(name => name.startsWith('Pasted image ')).length).toBe(2);
+  await expect.poll(() => fs.readFile(path.join(vault, 'Notes/original.md'), 'utf8')).toContain('Notes/assets/second.png');
   const text = await fs.readFile(path.join(vault, 'Notes/original.md'), 'utf8');
   expect(text).toContain('Notes/assets/first.png'); expect(text).toContain('正文保持不变');
   expect(await fs.readFile(path.join(vault, 'Notes/taken.md'), 'utf8')).toBe('existing target');

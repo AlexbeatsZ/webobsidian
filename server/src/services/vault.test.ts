@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({ root: '', native: {} as Record<string, unknown
 vi.mock('./settings.js', () => ({ getSettings: async () => ({ vault: { path: state.root, trash: '.trash' }, nativeFeatures: state.native }) }));
 vi.mock('./git.js', () => ({ scheduleAutoCommitOnSave: vi.fn() }));
 vi.mock('./fileupdates.js', () => ({ queueFileUpdate: vi.fn(() => state.index ?? Promise.resolve()) }));
-import { writeFileText, writeFileBuffer, createFolder, rename, copy, remove, trash, restoreFromTrash } from './vault.js';
+import { writeFileText, writeFileBuffer, createFileBuffer, createFolder, rename, copy, remove, trash, restoreFromTrash } from './vault.js';
 import { clearVaultStats, vaultPathKey, readFileSnapshot, resolveInVault, listTree, invalidateStat } from './vaultFile.js';
 import { scheduleAutoCommitOnSave } from './git.js';
 import { queueFileUpdate } from './fileupdates.js';
@@ -108,9 +108,23 @@ it('folder and binary writes retain their existing non-Git behavior', async () =
   expect(scheduleAutoCommitOnSave).not.toHaveBeenCalled();
 });
 
+it('uploaded attachments never replace an existing file', async () => {
+  const first = await createFileBuffer('attachments', 'image.png', Buffer.from('first'));
+  const second = await createFileBuffer('attachments', 'image.png', Buffer.from('second'));
+  const third = await createFileBuffer('attachments', 'image.png', Buffer.from('third'));
+  expect([first, second, third]).toEqual(['attachments/image.png', 'attachments/image 1.png', 'attachments/image 2.png']);
+  expect(await fs.readFile(path.join(state.root, 'attachments/image.png'), 'utf8')).toBe('first');
+  expect(await fs.readFile(path.join(state.root, 'attachments/image 2.png'), 'utf8')).toBe('third');
+  expect(queueFileUpdate).toHaveBeenCalledWith('attachments/image 1.png', 'add');
+});
+
 it('the lower file module retains traversal, Git metadata and symlink escape checks', async () => {
   await expect(resolveInVault('../escape.md')).rejects.toMatchObject({ status: 400 });
   await expect(resolveInVault('.git/config')).rejects.toMatchObject({ status: 400 });
+  if (process.platform === 'win32' || process.platform === 'darwin')
+    await expect(resolveInVault('.GIT/hooks/post-merge')).rejects.toMatchObject({ status: 400 });
+  if (process.platform === 'win32')
+    await expect(resolveInVault('.git. /hooks/post-merge')).rejects.toMatchObject({ status: 400 });
   const outside = path.join(fixture, 'outside');
   await fs.mkdir(outside);
   await fs.symlink(outside, path.join(state.root, 'external'), 'junction');

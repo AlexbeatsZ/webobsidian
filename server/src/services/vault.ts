@@ -23,8 +23,7 @@ export async function ensureVault(): Promise<void> {
 export async function prepareNoteSave(rel: string, content: string): Promise<string> {
   if (!/\.(md|markdown)$/i.test(rel)) return content;
   const settings = await getSettings();
-  const root = path.resolve(settings.vault.path), key = process.platform === 'win32' ? root.toLowerCase() : root;
-  const rules = settings.nativeFeatures[key]?.tags.folderTags;
+  const rules = settings.nativeFeatures[vaultPathKey(settings.vault.path)]?.tags.folderTags;
   if (rules?.enabled) {
     try { return planFolderTags(content, rel, rules).raw; }
     catch (error) { console.warn('[folder tags] source preserved:', rel, error); }
@@ -50,11 +49,25 @@ export async function writeFileText(rel: string, content: string, baseRevision?:
   return { ...result, ...(indexing && indexing.status !== 'indexed' ? { indexing } : {}) };
 }
 
-export async function writeFileBuffer(rel: string, buf: Buffer): Promise<void> {
+export async function writeFileBuffer(rel: string, buf: Buffer, createOnly = false): Promise<void> {
   const abs = await resolveInVault(rel);
-  if (!await exists(rel)) assertFileTitle(rel);
-  await writeBinaryFile(abs, buf);
-  void queueFileUpdate(rel);
+  if (createOnly || !await exists(rel)) assertFileTitle(rel);
+  await writeBinaryFile(abs, buf, createOnly);
+  void queueFileUpdate(rel, createOnly ? 'add' : 'change');
+}
+
+/** Never replaces an attachment: `name.ext`, then `name 1.ext`, … like Obsidian's available path. */
+export async function createFileBuffer(dir: string, name: string, buf: Buffer): Promise<string> {
+  const ext = path.posix.extname(name), stem = name.slice(0, name.length - ext.length);
+  for (let index = 0; ; index++) {
+    const rel = path.posix.join(dir, index ? `${stem} ${index}${ext}` : name);
+    try {
+      await writeFileBuffer(rel, buf, true);
+      return rel;
+    } catch (error) {
+      if ((error as { status?: number }).status !== 409) throw error;
+    }
+  }
 }
 
 export async function createFolder(rel: string): Promise<void> {
@@ -63,10 +76,21 @@ export async function createFolder(rel: string): Promise<void> {
   void queueFileUpdate(rel, 'addDir');
 }
 
+/** Path mutations queue with saves of the same paths; sorted keys cannot deadlock. */
+async function withPathWrites<T>(paths: string[], work: () => Promise<T>): Promise<T> {
+  const keys = [...new Set(paths.map(vaultPathKey))].sort();
+  let result!: T;
+  const run = (index: number): Promise<void> => index < keys.length
+    ? withFileWrite(keys[index], () => run(index + 1))
+    : work().then(value => { result = value; });
+  await run(0);
+  return result;
+}
+
 export async function rename(from: string, to: string, baseRevision?: string): Promise<void> {
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
-  const run = async () => {
+  await withPathWrites([absFrom, absTo], async () => {
     if (vaultPathKey(absFrom) !== vaultPathKey(absTo) && await pathExists(absTo))
       throw Object.assign(new Error('目标路径已存在，请选择其他名称'), { status: 409 });
     if ((await fs.stat(absFrom)).isFile() && path.basename(from) !== path.basename(to)) assertFileTitle(to);
@@ -80,9 +104,7 @@ export async function rename(from: string, to: string, baseRevision?: string): P
       void queueFileUpdate(to + child.slice(from.length), 'add');
     }
     scheduleAutoCommitOnSave();
-  };
-  const [first, second] = [...new Set([vaultPathKey(absFrom), vaultPathKey(absTo)])].sort();
-  await withFileWrite(first, () => second ? withFileWrite(second, run) : run());
+  });
 }
 
 /**
@@ -93,8 +115,10 @@ export async function copy(from: string, to: string): Promise<string[]> {
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
   if ((await fs.stat(absFrom)).isFile()) assertFileTitle(to);
-  await fs.mkdir(path.dirname(absTo), { recursive: true });
-  await fs.cp(absFrom, absTo, { recursive: true, errorOnExist: true, force: false });
+  await withPathWrites([absFrom, absTo], async () => {
+    await fs.mkdir(path.dirname(absTo), { recursive: true });
+    await fs.cp(absFrom, absTo, { recursive: true, errorOnExist: true, force: false });
+  });
   const root = await getVaultRoot();
   const out: string[] = [];
   const st = await fs.stat(absTo);
@@ -122,7 +146,7 @@ export async function copy(from: string, to: string): Promise<string[]> {
 export async function remove(rel: string): Promise<void> {
   const abs = await resolveInVault(rel);
   const children = indexedFilesUnder(rel);
-  await fs.rm(abs, { recursive: true, force: true });
+  await withPathWrites([abs], () => fs.rm(abs, { recursive: true, force: true }));
   for (const child of new Set([rel, ...children])) void queueFileUpdate(child, 'unlink');
   scheduleAutoCommitOnSave();
 }
@@ -142,7 +166,7 @@ export async function trash(rel: string): Promise<string> {
     finalDest = `${dest.slice(0, dest.length - ext.length)}.${Date.now()}${ext}`;
   }
   const children = indexedFilesUnder(rel);
-  await fs.rename(absFrom, finalDest);
+  await withPathWrites([absFrom, finalDest], () => fs.rename(absFrom, finalDest));
   for (const child of new Set([rel, ...children])) void queueFileUpdate(child, 'unlink');
   scheduleAutoCommitOnSave();
   return toRel(root, finalDest);
@@ -247,7 +271,7 @@ export async function restoreFromTrash(trashRel: string): Promise<string> {
     absTo = await resolveInVault(destRel);
   }
   await fs.mkdir(path.dirname(absTo), { recursive: true });
-  await fs.rename(absFrom, absTo);
+  await withPathWrites([absFrom, absTo], () => fs.rename(absFrom, absTo));
   void queueFileUpdate(destRel, 'add');
   await pruneEmptyDirs(path.dirname(absFrom), trashRoot);
   scheduleAutoCommitOnSave();
