@@ -565,6 +565,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-02: 紧挨着写的独立公式 `$$a$$$$b$$` 拆成两个公式(与 Obsidian 一致):`$$` 只在第一个未转义的 `$$` 处闭合,刚闭合公式的 `$` 不再阻止下一个公式开始;此前第二个公式不被识别,渲染错位、无法编号或引用。markdown-core 新增粘连用例,单元 509/509、typecheck 通过;未在应用中目视验收。
 - 2026-11-02 (PRD 1.25): sync-server 服务端 Git 备份(第 1 步,未部署):`backup.mjs` 只读快照→提交→LFS→非强制推送,CLI `--backup-once`/`--backup-dry-run`;服务端测试 13/13、打包 2/2;STEM 真实数据 dry-run 对 3b3f1cc 差异 0(6445 文件/5573 LFS)。待办:ROG 部署(第 2 步)、客户端移除 Git(第 3 步)。
 - 2026-11-02 (PRD 1.24): Git 备份不再提交含令牌的 `sync.jsonc`/`git.jsonc`(写入 `.git/info/exclude`、移出旧索引、冲突分支跳过),本地文件与文件同步不变;fileSyncGit 5/5。
 - 2026-11-02 (PRD 1.23): 代码审查修复——附件上传同名不覆盖(`name N.ext`)、剪贴板 `image.png` 改名 `Pasted image <时间>.png`、multipart 中文文件名 UTF-8;Windows/macOS `.GIT`/`.git.` 路径保护;trash/remove/copy/restore 与保存共用文件写锁;搜索索引达阈值时同步 vacuum、冷启动用 `loadJS` 免二次序列化;移除无调用的 `listMarkdownFiles`。单元 506/506、file-defaults 4/4。

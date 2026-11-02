@@ -70,6 +70,10 @@ describe('shared formula source and history', () => {
     expect(mathRegions(analyzeMarkdown('> $$$$\n> following'))[0]).toMatchObject({ from: 2, to: 6, tex: '', closed: true });
     expect(mathRegions(analyzeMarkdown('$$$$$'))).toEqual([]);
   });
+  it('splits display formulas written back to back', () => {
+    const glued = mathRegions(analyzeMarkdown('> $$a$$$$b \\tag{1}$$$$c$$ ^eq-c\ntext $y$'));
+    expect(glued.map(r => [r.tex, r.display, r.closed])).toEqual([['a', true, true], ['b \\tag{1}', true, true], ['c', true, true], ['y', false, true]]);
+    expect(mathRegions(analyzeMarkdown('text $$a$$$$b$$ more')).map(r => r.tex)).toEqual(['a', 'b']);  });
   it('keeps untouched raw line endings and restores exact inverse changes', () => {
     const raw = '\ufeffkeep\r\nalpha\nbeta\r\nend';
     const doc = new SourceDocument(raw);

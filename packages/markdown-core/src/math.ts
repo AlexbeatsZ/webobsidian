@@ -188,7 +188,7 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
   excluded.push(...result.filter((r) => r.kind === 'html'));
   excluded.sort((a, b) => a.from - b.from);
 
-  let blocked = 0;
+  let blocked = 0, closedAt = -1;
   for (let p = 0; p < text.length; ) {
     while (blocked < excluded.length && excluded[blocked].to <= p) blocked++;
     if (blocked < excluded.length && excluded[blocked].from <= p) {
@@ -205,7 +205,9 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
     // with an empty body. Keep that bounded region in the incremental model so
     // ordinary typing inside it invalidates the previous formula analysis.
     const emptyDisplay = display && text[p + 2] === '$' && text[p + 3] === '$' && text[p + 4] !== '$';
-    if (text[p - 1] === '$' || (text[p + width] === '$' && !emptyDisplay)) {
+    // A dollar that just closed the previous formula does not glue onto this
+    // opener: `$$a$$$$b$$` is two display formulas, as in Obsidian.
+    if ((text[p - 1] === '$' && p !== closedAt) || (text[p + width] === '$' && !emptyDisplay)) {
       p += width;
       continue;
     }
@@ -241,7 +243,7 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
       if (text[end] !== '$' || isEscaped(text, end)) continue;
       if (
         display
-          ? text[end + 1] === '$' && text[end + 2] !== '$'
+          ? text[end + 1] === '$'
           : text[end + 1] !== '$' && !/\d/.test(text[end + 1] ?? '') && !/\s/.test(text[end - 1] ?? '')
       ) {
         if (depth) {
@@ -265,6 +267,7 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
       /^\s*(?:\n|$)/.test(text.slice(bodyFrom)) &&
       text.slice(bodyFrom, end).includes('\n');
     add(standalone ? lineFrom : from, to, bodyFrom, end, display, closed, 'dollar', standalone);
+    if (closed) closedAt = to;
     p = Math.max(to, bodyFrom);
   }
   result.sort((a, b) => a.from - b.from);

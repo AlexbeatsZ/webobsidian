@@ -90,6 +90,12 @@ no extra whole-Vault body cache.
 Table-cell host equality uses these definition prefixes and referenced-equation
 presentation data, so a plain paragraph edit does not rebuild every table.
 
+A display formula closes at the first unescaped `$$` outside TeX braces. A dollar
+that just closed a formula does not block the next opener, so back-to-back
+`$$a$$$$b$$` is two formulas, matching Obsidian. The empty snippet `$$$$` at an
+opener stays one empty display. Notes should still put each display formula on
+its own line; only a standalone closing line can carry an `^eq-` ID.
+
 Each conversion starts a MathJax `begingroupSandbox`; macro/global definitions
 cannot escape into the next conversion. Packages may also keep state outside
 the macro namespace. Their declared option/data fields are checkpointed after
