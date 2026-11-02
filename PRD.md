@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.24 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Phiên bản: 1.25 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Changelog 1.25 (Git 备份迁到同步服务器): 用户决定 Git 备份只由常开的同步中心服务器(ROG)负责,客户端 Git
+> 在服务端备份上线后移除。sync-server 新增可选 `backup` 配置与 `--backup-once`/`--backup-dry-run`:按清单版本快照
+> 生成提交(Git 自己判断快照中的 ignore/LFS 规则,LFS 复用同步 blob,core.autocrlf=true 与现有历史一致),接续远程
+> 历史、非强制推送,连接配置永不提交。
 > Changelog 1.24 (连接令牌不进 Git): 用户决定访问令牌只需忽略、不加密。Git 备份不再提交
 > `.obsidian/webobsidian/sync.jsonc` 与 `git.jsonc`(两者可含令牌),写入仓库 `.git/info/exclude` 并把旧版本
 > 提交的副本移出索引(本地文件保留),冲突分支同样跳过;文件同步仍在用户设备间复制它们。新克隆需在设置中填写一次连接。

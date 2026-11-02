@@ -31,6 +31,33 @@ node sync-server/server.mjs --help
 
 在终端使用 Ctrl+C 或 SIGTERM 有序关闭：等待已接收请求和提交完成后释放数据根单写者锁。Windows 计划任务强制结束进程不等同于有序关闭；停止后必须确认原进程已退出再替换代码，不能同时启动两个写入者。
 
+## Git 备份(可选)
+
+服务端可以作为唯一的 Git 备份写入方:按清单版本把整个工作区快照提交到备份仓库并推送。它只读取 `state.json` 和 `blobs/`,不修改同步数据。在配置文件中加入:
+
+```json
+"backup": {
+  "repository": "C:/Users/Meta/AppData/Local/WebObsidianSync/backup",
+  "remote": "https://github.com/<owner>/<vault>.git",
+  "branch": "main",
+  "intervalSec": 600,
+  "authorName": "AlexbeatsZ",
+  "authorEmail": "<id>+<name>@users.noreply.github.com"
+}
+```
+
+- `repository` 是独立的本地 Git 目录(必须位于 `dataDir` 之外),首次运行会自动初始化,并接在远程分支的现有历史后面。
+- 需要主机上的 `git` 和 `git-lfs`。凭据来自主机的 Git 凭据管理器(先手动登录一次),配置里不写 token,远程 URL 也不能带凭据。
+- `.gitignore` 和 `.gitattributes` 规则取自 Vault 快照本身,由 Git 自己判断;LFS 文件直接复用同步 blob(硬链接)。连接配置 `sync.jsonc` / `git.jsonc` 永不提交。
+- 推送从不强制。远程被其他写入者推进时本轮报错,下个周期重试,需要人工处理。
+
+部署前后可以手动运行(与服务进程共用仓库锁,可在服务运行时执行):
+
+```text
+node sync-server/server.mjs --backup-dry-run <配置文件>   # 只报告与远程分支的差异,不提交
+node sync-server/server.mjs --backup-once <配置文件>      # 立即备份一次
+```
+
 ## 接入已有 Sakura Web
 
 新增专用 `/webobsidian-sync/v1/` 路由转发到回环 `18744`；保留 Mojian、Dayweave、订阅服务及其他原处理器。ROG 的 `18742` 和 `18743` 已被 Mojian 使用，不复用其端口或凭据：

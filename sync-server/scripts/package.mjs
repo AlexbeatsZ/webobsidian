@@ -25,7 +25,7 @@ const stage = path.join(temporary, folder);
 const target = path.join(stage, 'sync-server');
 try {
   await mkdir(target, { recursive: true });
-  for (const name of ['server.mjs', 'cli.mjs', 'protocol.mjs', 'gateway-route.mjs', 'shared-gateway.mjs', 'package.json', 'core-source.json', 'server.example.json', 'README.md']) {
+  for (const name of ['server.mjs', 'cli.mjs', 'backup.mjs', 'protocol.mjs', 'gateway-route.mjs', 'shared-gateway.mjs', 'package.json', 'core-source.json', 'server.example.json', 'README.md']) {
     await cp(path.join(root, name), path.join(target, name));
   }
   // Copy the installed, pinned package. The release never resolves a sibling checkout.

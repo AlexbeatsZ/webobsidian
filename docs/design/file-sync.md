@@ -89,6 +89,34 @@ rejects the update, the successful device backup remains available; never pull, 
 force-push or overwrite the other device's repository history to make this succeed.
 Manual pull/clone is blocked while native synchronization owns file transport.
 
+## Server-side Git backup (sync-server)
+
+Direction (user, 2026-11-02): the always-on sync server is the single Git backup writer;
+client Git is removed in a later step after the server backup is live. The server's
+manifest is the merged authoritative state and each revision is an atomic snapshot, so
+history is linear and never captures a half-edited working tree.
+
+`sync-server/backup.mjs` runs inside the server process (opt-in `backup` config object)
+and as `--backup-once` / `--backup-dry-run` CLI modes. It never changes sync data: it reads
+`state.json` (renamed atomically by the core) and immutable `blobs/<sha256>` files.
+The backup repository is a separate non-bare Git directory whose work tree holds only the
+snapshot's `.gitignore`/`.gitattributes` files. Git itself decides ignore and LFS rules
+(`check-ignore --no-index`, `check-attr filter`, `core.ignorecase=true` like the Windows
+clients), so no gitignore/attribute matcher is reimplemented. Connection files
+(`sync.jsonc`, `git.jsonc`) are always excluded. LFS entries become standard spec-v1
+pointers; the sync hash is already the LFS SHA-256 oid, so the blob is hard-linked (copy
+fallback) into `.git/lfs/objects` and nothing is re-hashed. Regular files are written
+with `hash-object -w` under `core.autocrlf=true`: the existing history was committed by
+Windows clients with that system default, so CRLF text is stored as LF (sync keeps the raw
+bytes). With raw bytes, a real STEM dry run reported hundreds of modified SVGs; with
+normalization it matched `3b3f1cc` exactly (6445 files, 5573 LFS, 0 changes). A
+temporary index builds the tree; an unchanged tree
+creates no commit. The first run fetches the remote branch and continues its history;
+later runs commit on the local branch, `git lfs push`, then a normal non-forced push.
+A rejected push stops with an error and is retried next interval; never force, pull into
+data or merge. One lock file serializes runs. Credentials come from the host's Git
+credential helper (`GIT_TERMINAL_PROMPT=0`), never from configuration.
+
 ## Vault Git configuration
 
 Git backup settings now belong to `.obsidian/webobsidian/git.jsonc`: enabled,
