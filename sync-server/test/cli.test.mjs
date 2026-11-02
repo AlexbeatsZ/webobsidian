@@ -13,7 +13,7 @@ test('supports help/version without configuration, secrets or a data directory',
   const entry = fileURLToPath(new URL('../server.mjs', import.meta.url));
   const options = { encoding: 'utf8', env: { ...process.env, WEBOBSIDIAN_SYNC_TOKEN: '' } };
   assert.match(execFileSync(process.execPath, [entry, '--help'], options), /18744/);
-  assert.equal(execFileSync(process.execPath, [entry, '--version'], options).trim(), '0.1.0');
+  assert.equal(execFileSync(process.execPath, [entry, '--version'], options).trim(), '0.2.0');
 });
 
 test('preserves config/env precedence, cwd-relative dataDir and graceful lock release', async t => {

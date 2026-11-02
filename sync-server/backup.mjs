@@ -16,7 +16,7 @@ export function parseBackupOptions(value, dataRoot) {
   if (typeof repository !== 'string' || !path.isAbsolute(repository)) throw invalid('backup.repository must be an absolute path');
   const repo = path.resolve(repository), data = path.resolve(dataRoot);
   if (repo === data || repo.startsWith(data + path.sep) || data.startsWith(repo + path.sep)) throw invalid('backup.repository must be outside dataDir');
-  if (typeof remote !== 'string' || !remote.trim() || /[\r\n]/.test(remote) || /\/\/[^/]*@/.test(remote)) throw invalid('backup.remote must be a URL without credentials');
+  if (typeof remote !== 'string' || !remote.trim() || /[\r\n]/.test(remote) || /^https?:\/\/[^/]*@/i.test(remote)) throw invalid('backup.remote must be a URL without credentials');
   if (typeof branch !== 'string' || !/^[A-Za-z0-9._/-]{1,200}$/.test(branch) || branch.includes('..') || branch.startsWith('/') || branch.endsWith('/')) throw invalid('Invalid backup.branch');
   if (!Number.isInteger(intervalSec) || intervalSec < 60 || intervalSec > 86400) throw invalid('backup.intervalSec must be 60-86400');
   for (const field of [authorName, authorEmail]) if (typeof field !== 'string' || !field.trim() || /[\r\n<>]/.test(field)) throw invalid('Invalid backup author');

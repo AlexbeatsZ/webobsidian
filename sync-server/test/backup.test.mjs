@@ -115,8 +115,9 @@ test('backup configuration rejects embedded credentials and data-root repositori
   const data = await fixture(t); const root = path.join(data.directory, 'data');
   const base = { repository: path.join(data.directory, 'repo'), remote: 'https://github.com/o/r.git' };
   assert.equal(parseBackupOptions(base, root).branch, 'main');
+  assert.equal(parseBackupOptions({ ...base, remote: 'git@github.com:o/r.git' }, root).remote, 'git@github.com:o/r.git');
   for (const bad of [{ ...base, remote: 'https://user:token@github.com/o/r.git' }, { ...base, repository: path.join(root, 'repo') },
-    { ...base, repository: 'relative' }, { ...base, branch: '../main' }, { ...base, intervalSec: 5 }])
+    { ...base, repository: 'relative' }, { ...base, branch: '../main' }, { ...base, intervalSec: 5 }, { ...base, remote: 'HTTPS://t@github.com/o/r.git' }])
     assert.throws(() => parseBackupOptions(bad, root), { code: 'invalid_backup_config' });
   await mkdir(root, { recursive: true });
 });
