@@ -58,6 +58,22 @@ typecheck passed. The unpacked executable reports 0.1.53.
   release target both equal the exact build commit above.
 - Remote uploaded assets verified: setup EXE 129682101 bytes; blockmap 135161 bytes;
   `latest.yml` 370 bytes. The local installer was moved into the task's outputs.
-- Installed OMEN executable freshly read as 0.1.52. No installation or user
-  application restart was performed. Installed UI/native clipboard acceptance
-  remains pending.
+- At publication, the installed OMEN executable was still 0.1.52. Installation
+  was subsequently authorized by the user's explicit request below.
+
+## Authorized OMEN installation
+
+The user requested installation on 2026-11-02. Normal window close completed the
+application's existing save-before-exit handshake; no app processes remained and
+none were forcibly terminated. The exact published NSIS installer exited 0, and
+the installed executable reports 0.1.53.
+
+Desktop configuration and server settings were byte-identical immediately after
+installation. The configured Vault remains `C:/Users/Meta/Documents/Obsidian/STEM`.
+Small configuration backups and the installation receipt are under
+`Temp/.agents/webobsidian-install-0153`.
+
+The installed application reopened with a native window (PID 44304); its new
+loopback server on port 65271 returned health 200. The current launch log reports
+healthy after 3524ms. These are installation/startup checks; manual feature
+interaction and native clipboard acceptance remain pending.
