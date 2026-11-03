@@ -35,7 +35,28 @@ JS 大纲直接使用统一 headings 元数据。旧小标题的识别和范围�
 - `eq-`：沿用公式的严格锚点绑定；历史公式名称不隐式重写。
 - `code-`：完整围栏代码块，不按相邻段落缩进推断。
 - `callout-`：完整 Callout 语法容器；其结构仍受 Markdown 引用前缀影响。
+- `table-`：表格后空一行、同一引用容器前缀下的独立 ID 行。紧贴表格的行会被 GFM 当作表格行，不能挂 ID。
+- `html-`：HTML 块后空一行的独立 ID 行。HTML 块延续到空行为止，紧贴的 ID 行会被吞进 HTML 块。
 - `range-`：独立行 `^range-ID:start` 和 `^range-ID:end` 明确包围完整块。
+
+种类名单只在 markdown-core `links.ts` 的 `CONTENT_TARGET_NAMESPACES` 定义，链接识别、片段解析和
+目标校验都引用它；不在各处重复写正则。
+
+## 块角落按钮
+
+公式、表格、代码块（含 Mermaid 与 HTML 预览）、Callout 和 HTML 块悬停时，右上角在 `</>` 前显示：
+剪贴板复制显式引用 `![[^id]]`，link 复制隐式引用 `[[^id]]`。与命令面板“复制稳定内容引用/复制可编辑内容嵌入”
+共用 `contentReferenceCommands.ts` 的 `copyContentReference(view, range, embed, kind)`：已有身份直接复制，
+没有则用 `createContentTarget` 创建一次（一个事务，可撤销）。只读视图只复制已有身份，需要新建时提示。
+片段/嵌入视图不显示按钮（身份属于源笔记）。表格内公式、闭合行后还有正文的公式不能引用，不显示按钮。
+
+按钮组 `.cm-block-controls` 由 `blockControls.ts` 统一创建，`</>` 仍由 `sourceControls.ts` 提供并放进同一组；
+复制会用到 store，而 store 的导航链依赖 sourceControls，所以按钮组不能放进 sourceControls（会形成导入环）。
+与 `</>` 一样只在悬停对应块时出现：整块 widget（公式、表格、Mermaid、HTML）悬停整块即显示；
+代码块和 Callout 仍是可编辑文本行，按钮挂在首行行尾，由 `.md-code`/`.md-callout` 块包装器的悬停显示，
+Callout 的按钮与标题行的公式 `</>` 共用同一个控件。代码块和 Callout 的按钮在点击时按自身 DOM 位置找所属块，
+上方编辑不会重建它们。按钮只在创建 DOM 时生成，点击时才计算身份，不增加每次输入的工作。
+窄表格上按钮组以不透明底色盖在表头右上角：表格上方是列拖动手柄，右侧是加列按钮，都不能占用。
 
 范围允许完整嵌套，禁止交叉、缺失配对和切断结构；代码等字面量里的标记不生效。
 重复、错误类型或无效范围必须失败关闭，不能选第一个或退回普通块推断。
@@ -56,6 +77,7 @@ JS 大纲直接使用统一 headings 元数据。旧小标题的识别和范围�
 
 ## 验证边界
 
-本次源码实现使用隔离测试笔记，不修改真实 Vault、安装版本或发布包。
+源码回归使用隔离测试笔记。真实 Vault、安装版本与发布包的交付状态分别记录，不能由源码测试推定。
 目标验证包括同名标题、改名和移动、重复 ID、错误范围、未保存覆盖、跨文件链接与嵌入、
 编辑同步、撤销、边界保护和循环限制。具体结果记录在 tests/reports/content-references-20261026.md。
+块角落按钮的当前源码回归结果见 tests/reports/block-reference-buttons-20261102.md。

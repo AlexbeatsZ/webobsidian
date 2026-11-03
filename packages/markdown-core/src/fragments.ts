@@ -1,10 +1,11 @@
 import type { MarkdownModel, SourceSpan } from './syntax.js';
 import { extractMetadata } from './metadata.js';
 import { footnotes, footnoteFragment } from './footnotes.js';
-import { contentTargets } from './contentTargets.js';
+import { contentTargets, type ContentTarget } from './contentTargets.js';
+import { contentTargetPrefix } from './links.js';
 
 export interface FragmentRange extends SourceSpan {
-  kind: 'document' | 'heading' | 'block' | 'equation' | 'footnote' | 'reference' | 'code' | 'callout' | 'range';
+  kind: 'document' | 'block' | 'footnote' | 'reference' | ContentTarget['kind'];
   /** The landing mark may be smaller than the section used for a preview/embed. */
   focus: SourceSpan;
 }
@@ -25,7 +26,7 @@ export function fragmentRange(model: MarkdownModel, fragment: string): FragmentR
     return result(note.inline ? { from: definition.bodyFrom, to: definition.to - 1 } : definition, 'footnote', definition);
   }
   if (decoded.startsWith('^')) {
-    if (/^\^(?:heading|eq|code|callout|range)-/.test(decoded)) {
+    if (contentTargetPrefix.test(decoded.slice(1))) {
       const target = contentTargets(model).targets.find(candidate => candidate.id === decoded.slice(1));
       return target ? result(target, target.kind, target.focus) : null;
     }

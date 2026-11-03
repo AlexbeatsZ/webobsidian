@@ -4,9 +4,14 @@ export interface ResolvedTarget extends LinkTarget {
   candidates: string[];
 }
 
+/** The only list of typed content-target ID namespaces. */
+export const CONTENT_TARGET_NAMESPACES = ['heading', 'eq', 'code', 'callout', 'table', 'html', 'range'] as const;
+/** Matches a typed namespace prefix such as `table-` at the start of an ID. */
+export const contentTargetPrefix = new RegExp(`^(?:${CONTENT_TARGET_NAMESPACES.join('|')})-`);
+
 export function isGlobalContentTarget(raw: string): boolean {
   const destination = raw.split(/(?<!\\)\|/, 1)[0].trim();
-  return /^\^(?:heading|eq|code|callout|range)-/.test(destination);
+  return destination.startsWith('^') && contentTargetPrefix.test(destination.slice(1));
 }
 
 export function parseLinkTarget(raw: string): LinkTarget {

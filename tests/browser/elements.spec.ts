@@ -424,7 +424,7 @@ test('elements: all whole-block renderers share quoted origins, mode switches an
     await expect(host.locator('.cm-hr-widget hr')).toHaveCount(1);
     await expect(host.locator('.math-block mjx-container')).toHaveCount(1);
     await expect(host.locator('.cm-image-wrap img')).toHaveCount(1);
-    await expect(host.locator('.cm-mermaid svg')).toHaveCount(1);
+    await expect(host.locator('.cm-mermaid > div > svg')).toHaveCount(1);
     await expect(host.locator('.cm-html-block')).toContainText('HTML正文');
     expect(await host.locator('.cm-html-block').evaluate(el => el.textContent?.trim().startsWith('>'))).toBe(false);
     await expect(host.locator('.md-code')).toContainText('const x = 1;');

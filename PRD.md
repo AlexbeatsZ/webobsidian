@@ -1,7 +1,10 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.26 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Phiên bản: 1.27 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Changelog 1.27 (块角落引用按钮): 用户要求在公式、表格等块的右上角直接复制引用。公式、表格、代码块(含 Mermaid、
+> HTML 预览)、Callout 和 HTML 块在悬停时显示 剪贴板(复制显式引用 `![[^id]]`)/ link(复制隐式引用 `[[^id]]`)/
+> `</>` 按钮,与命令面板"复制稳定内容引用"共用同一实现。内容身份新增 `table-`、`html-`:ID 放在块后空一行的独立行。
 > Changelog 1.26 (UX 原则): 用户要求操作发生在对象所在位置、选择与操作解耦、不重复索取已知信息。标签面板去掉独立的
 > 批量修改(铅笔)入口;多选(工具栏开关、Ctrl/Shift 点选)后顶部出现共享选择操作栏(合并/删除),合并为核心操作
 > `merge`,对话框只选目标名;重命名在行内编辑。文件树多选同样显示该操作栏。MCP 侧栏改为 上下文(添加按钮在其标题旁)
@@ -477,6 +480,8 @@ cùng một codebase React.
 - 设计见 [工作区侧栏](docs/design/workspace-sidebars.md)、[文档导航](docs/design/document-navigation.md)。
 - 分屏编辑(左右/上下),命令和导航跟随当前聚焦的页面;左右侧栏支持固定入口和动态标签页。
 - PDF 阅读器(页面缩略图、目录大纲)、Markdown 小地图、链接悬停预览、内容引用与块引用跳转。
+- 公式、表格、代码块、Callout、HTML 块悬停时右上角显示 剪贴板(复制 `![[^id]]`)和 link(复制 `[[^id]]`)按钮,
+  需要时自动创建稳定身份(见 [稳定内容引用](docs/design/content-references.md))。
 - 整篇文档只读打印/导出 PDF(通过本地 iframe 打印)。
 
 ---

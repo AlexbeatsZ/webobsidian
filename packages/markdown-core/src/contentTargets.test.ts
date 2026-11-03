@@ -2,14 +2,14 @@ import { expect, it } from 'vitest';
 import { analyzeMarkdown } from './syntax.js';
 import { contentTargets, createContentTarget } from './contentTargets.js';
 import { fragmentRange } from './fragments.js';
-import { isGlobalContentTarget, parseLinkTarget, resolveTarget, TargetIndex } from './links.js';
+import { CONTENT_TARGET_NAMESPACES, isGlobalContentTarget, parseLinkTarget, resolveTarget, TargetIndex } from './links.js';
 import { extractMetadata } from './metadata.js';
 import { equations } from './equations.js';
 import { blockContainers } from './blocks.js';
 import { footnotes } from './footnotes.js';
 
 it('distinguishes global raw typed links and scoped legacy links, including aliases', () => {
-  for (const namespace of ['heading', 'eq', 'code', 'callout', 'range']) {
+  for (const namespace of CONTENT_TARGET_NAMESPACES) {
     expect(isGlobalContentTarget(`^${namespace}-ID|alias`)).toBe(true);
     expect(parseLinkTarget(`^${namespace}-ID|alias`)).toEqual({ path: '', fragment: `^${namespace}-ID`, alias: 'alias' });
     expect(isGlobalContentTarget(`#^${namespace}-ID|alias`)).toBe(false);
@@ -46,6 +46,17 @@ it('attaches fenced code and callouts only to their own structural ends', () => 
   expect(contentTargets(model).targets.every(target => target.protectedSpans.length === 1)).toBe(true);
 });
 
+it('attaches tables and HTML blocks only after one blank line in the same container', () => {
+  const model = analyzeMarkdown('| a |\n|---|\n| 1 |\n\n^table-one\n\n<div>\nx\n</div>\n\n^html-one\n\n| b |\n|---|\n| 2 |\n^table-glued\n\n> | c |\n> |---|\n>\n> ^table-quoted');
+  expect(contentTargets(model).targets.map(target => [target.id, target.kind])).toEqual([['table-one', 'table'], ['html-one', 'html'], ['table-quoted', 'table']]);
+  const table = contentTargets(model).targets[0];
+  expect(model.text.slice(table.focus.from, table.focus.to)).toBe('| a |\n|---|\n| 1 |');
+  expect(fragmentRange(model, '^html-one')?.kind).toBe('html');
+  expect(isGlobalContentTarget('^table-one')).toBe(true);
+  // In a table, an ID typed on the next line is a table row, not an anchor.
+  expect(contentTargets(model).issues.some(issue => issue.id === 'table-glued')).toBe(true);
+});
+
 it('resolves a complete explicit block range without guessing an unclosed tail', () => {
   const model = analyzeMarkdown('^range-one:start\n\n# Title\n\nbody\n\n^range-one:end\n\n^range-open:start\n\ntail');
   const target = contentTargets(model).targets[0];
@@ -80,6 +91,9 @@ it('creates validated source edits for each node kind and reuses existing owners
     ['$$x$$', 'equation', 'eq-created'],
     ['```js\nx\n```', 'code', 'code-created'],
     ['> [!note] Title\n> body', 'callout', 'callout-created'],
+    ['| a |\n|---|\n| 1 |', 'table', 'table-created'],
+    ['> | a |\n> |---|\n> | 1 |', 'table', 'table-quoted'],
+    ['<div>\nx\n</div>', 'html', 'html-created'],
     ['first\n\nsecond', 'range', 'range-created'],
   ] as const) {
     const model = analyzeMarkdown(source);

@@ -154,7 +154,7 @@ test('Mermaid cancelled during fonts cannot write late output', async ({ page })
     if (!calls) throw new Error('Mermaid did not reach font loading');
     const dom = host.querySelector('.cm-mermaid')!; view.destroy(); release();
     await new Promise(resolve => setTimeout(resolve, 100)); document.fonts.load = nativeLoad;
-    const result = { calls, pending: dom.hasAttribute('data-render-pending'), svg: dom.querySelectorAll('svg').length, orphans: document.querySelectorAll('[id^="dcm-mmd-"]').length };
+    const result = { calls, pending: dom.hasAttribute('data-render-pending'), svg: dom.querySelectorAll(':scope > div > svg').length, orphans: document.querySelectorAll('[id^="dcm-mmd-"]').length };
     host.remove(); return result;
   });
   expect(result).toEqual({ calls: 1, pending: false, svg: 0, orphans: 0 });
@@ -163,7 +163,7 @@ test('Mermaid cancelled during fonts cannot write late output', async ({ page })
 test('concurrent Mermaid parse failures remove only their own stages', async ({ page }) => {
   await page.evaluate(() => window.renderHarness.reset('```mermaid\ninvalid first!\n```\n\n```mermaid\ninvalid second!\n```\n\n```mermaid\nflowchart TD\nA-->B\n```\n\nend'));
   await expect(page.locator('[data-slot="1"] .cm-mermaid.mod-error')).toHaveCount(2);
-  await expect(page.locator('[data-slot="1"] .cm-mermaid svg')).toHaveCount(1);
+  await expect(page.locator('[data-slot="1"] .cm-mermaid > div > svg')).toHaveCount(1);
   await expect(page.locator('[data-render-pending]')).toHaveCount(0);
   await expect(page.locator('[id^="dcm-mmd-"]')).toHaveCount(0);
 });

@@ -719,11 +719,21 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .md-html-kbd { font-family: var(--font-mono); background: var(--background-primary-alt); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); padding: 0 3px; }
 .cm-html-break { display: inline; }
 .cm-source-toggle { position: absolute; right: 4px; top: 2px; z-index: 2; font: 12px var(--font-mono); color: var(--text-muted); background: transparent; border: 0; border-radius: 4px; padding: 3px 5px; cursor: pointer; opacity: 0; }
-.cm-source-toggle:hover, .cm-source-toggle:focus-visible { color: var(--text-normal); background: var(--background-modifier-hover); }
-.cm-source-toggle:active { background: var(--bg-modifier-active); }
-.cm-table-frame:hover > .cm-source-toggle, .cm-properties:hover > .cm-source-toggle, .cm-html-block:hover > .cm-source-toggle,
-.cm-html-preview:hover > .cm-source-toggle, .plugin-code-block:hover > .cm-source-toggle, .native-block-effect:hover > .cm-source-toggle,
+.cm-reference-button { display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); background: transparent; border: 0; border-radius: 4px; padding: 3px 5px; cursor: pointer; }
+.cm-reference-button svg { width: 14px; height: 14px; }
+.cm-source-toggle:hover, .cm-source-toggle:focus-visible, .cm-reference-button:hover, .cm-reference-button:focus-visible { color: var(--text-normal); background: var(--background-modifier-hover); }
+.cm-source-toggle:active, .cm-reference-button:active { background: var(--bg-modifier-active); }
+.cm-properties:hover > .cm-source-toggle, .plugin-code-block:hover > .cm-source-toggle, .native-block-effect:hover > .cm-source-toggle,
 .cm-source-toggle:focus-visible { opacity: 1; }
+/* Block corner group: reference buttons and `</>` reveal together with their block's hover. */
+.cm-block-controls { position: absolute; right: 4px; top: 2px; z-index: 2; display: inline-flex; align-items: center; gap: 2px; opacity: 0;
+  border-radius: 4px; background: var(--background-primary); box-shadow: 0 0 0 1px var(--background-modifier-border); }
+.cm-block-controls > .cm-source-toggle { position: static; opacity: 1; }
+.cm-table-frame:hover > .cm-block-controls, .cm-html-block:hover > .cm-block-controls, .cm-html-preview:hover > .cm-block-controls,
+.cm-math-rendered:hover > .cm-block-controls, .cm-mermaid:hover > .cm-block-controls, .md-code:hover .cm-block-controls,
+.cm-block-controls:focus-within { opacity: 1; }
+/* The code language flair shares the first line's corner; the controls replace it while visible. */
+.md-code:hover .cm-line.HyperMD-codeblock-begin:has(> .cm-block-controls)::after { visibility: hidden; }
 .is-reading-mode .cm-source-toggle { display: none; }
 .cm-properties, .cm-html-block, .plugin-code-block { position: relative; }
 .is-reading-mode .cm-props-add,
@@ -780,8 +790,8 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .md-callout-title > .cm-line { padding-right: min(50%, calc(var(--callout-formula-controls, 0) * 30px)); }
 .md-callout-title { margin-bottom: 0; }
 .cm-callout-math-sources { position: absolute; inset-inline-end: 8px; top: 0; height: 1lh; max-width: calc(50% - 8px); display: inline-flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-.cm-callout-math-sources > .cm-source-toggle { position: static; flex: 0 0 28px; padding: 3px 0; }
-.md-callout:hover .cm-callout-math-sources > .cm-source-toggle { opacity: 1; }
+.cm-callout-math-sources > .cm-source-toggle, .cm-callout-math-sources > .cm-reference-button { position: static; flex: 0 0 28px; padding: 3px 0; opacity: 0; }
+.md-callout:hover .cm-callout-math-sources > *, .cm-callout-math-sources > :focus-visible { opacity: 1; }
 .md-callout .md-code, .md-callout .cm-code { background: var(--document-nested-surface); }
 
 .md-code { background: var(--document-surface); border-radius: var(--radius-s); padding: 8px 16px; }
@@ -789,7 +799,6 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .md-code .cm-line.HyperMD-codeblock-begin { padding-top: 0; }
 .md-code .cm-line.HyperMD-codeblock-end { padding-bottom: 0; }
 .cm-math-rendered, .cm-mermaid { position: relative; }
-.cm-math-rendered:hover > .cm-source-toggle, .cm-mermaid:hover > .cm-source-toggle { opacity: 1; }
 .is-reading-mode .cm-properties .prop-key,
 .is-reading-mode .cm-properties .prop-val-input,
 .is-reading-mode .cm-properties .prop-pill-text,

@@ -1,13 +1,15 @@
 import { analyzeMarkdown, markdownComments, type MarkdownModel, type SourceSpan, type SyntaxRange } from './syntax.js';
 import type { SourceChange } from './source.js';
 import { extractMetadata } from './metadata.js';
-import { blockContainers, sourceLinePrefix } from './blocks.js';
+import { blockContainers, sourceLinePrefix, type BlockContainer } from './blocks.js';
 import { equations } from './equations.js';
 import { mathRegions } from './math.js';
+import { tableModels } from './tables.js';
+import { contentTargetPrefix } from './links.js';
 
 export interface ContentTarget extends SourceSpan {
   id: string;
-  kind: 'heading' | 'equation' | 'code' | 'callout' | 'range';
+  kind: 'heading' | 'equation' | 'code' | 'callout' | 'table' | 'html' | 'range';
   focus: SourceSpan;
   label: string;
   anchor?: SourceSpan;
@@ -20,7 +22,18 @@ export interface ContentTargets {
   issues: { id: string; message: string }[];
 }
 const cache = new WeakMap<MarkdownModel, ContentTargets>();
-const validContentTargetId = (id: string) => /^(?:heading|eq|code|callout|range)-[\p{L}\p{N}-]+$/u.test(id);
+const validContentTargetId = (id: string) => contentTargetPrefix.test(id) && /^[a-z]+-[\p{L}\p{N}-]+$/u.test(id);
+
+interface SeparatedBlock extends SourceSpan { kind: 'table' | 'html'; label: string }
+/** Tables and HTML blocks run until a blank line, so their ID line follows one blank line. */
+function separatedBlocks(model: MarkdownModel): SeparatedBlock[] {
+  const lineStart = (at: number) => model.text.lastIndexOf('\n', at - 1) + 1;
+  return [
+    ...tableModels(model).map(table => ({ kind: 'table' as const, from: table.from, to: table.to, label: 'Table' })),
+    ...model.htmlBlocks.filter(block => !(model.frontmatter && block.from < model.frontmatter.to))
+      .map(block => ({ kind: 'html' as const, from: lineStart(block.from), to: block.to, label: 'HTML' })),
+  ];
+}
 
 export function contentTargets(model: MarkdownModel): ContentTargets {
   const cached = cache.get(model); if (cached) return cached;
@@ -32,7 +45,7 @@ export function contentTargets(model: MarkdownModel): ContentTargets {
   const prefix = (at: number) => sourceLinePrefix(text.slice(lineStart(at), lineEnd(at)));
   const counts = new Map<string, number>();
   for (const anchor of meta.blockIds) counts.set(anchor.id, (counts.get(anchor.id) ?? 0) + 1);
-  const typed = meta.blockIds.filter(anchor => /^(?:heading|eq|code|callout|range)-/.test(anchor.id));
+  const typed = meta.blockIds.filter(anchor => contentTargetPrefix.test(anchor.id));
   const used = new Set<number>();
   const add = (target: Omit<ContentTarget, 'protectedSpans'>) => {
     targets.push({ ...target, protectedSpans: [target.anchor, target.startAnchor, target.endAnchor].filter((span): span is SourceSpan => !!span) });
@@ -73,6 +86,13 @@ export function contentTargets(model: MarkdownModel): ContentTargets {
     add({ id: anchor.id, kind: block.kind, from: block.from, to: Math.max(block.to, anchor.to),
       focus: { from: block.from, to: block.to }, label: block.kind === 'code' ? block.language || 'Code' : block.title || block.type, anchor });
   }
+  for (const block of separatedBlocks(model)) {
+    const blank = lineEnd(block.to) + 1;
+    if (blank > text.length || text.slice(blank, lineEnd(blank)).trimEnd() !== prefix(block.from).trimEnd()) continue;
+    const anchor = typed.find(candidate => candidate.id.startsWith(block.kind + '-') && validContentTargetId(candidate.id) &&
+      lineStart(candidate.from) === lineEnd(blank) + 1 && text.slice(lineStart(candidate.from), candidate.from) === prefix(block.from));
+    if (anchor) add({ id: anchor.id, kind: block.kind, from: block.from, to: anchor.to, focus: { from: block.from, to: block.to }, label: block.label, anchor });
+  }
   const forbidden = [...model.literal, ...model.html, ...model.htmlBlocks, ...markdownComments(model), ...mathRegions(model), ...(model.frontmatter ? [model.frontmatter] : [])];
   const markers: { id: string; edge: string; from: number; to: number; node?: SyntaxRange }[] = [];
   for (const match of text.matchAll(/^(?:[\t ]*>[\t ]?)*[\t ]*(\^range-[^\s:]+):([^\s]+)[\t ]*$/gm)) {
@@ -106,7 +126,7 @@ export function contentTargets(model: MarkdownModel): ContentTargets {
   for (const anchor of typed) {
     if (!used.has(anchor.from)) issue(anchor.id, 'Typed anchor does not match a structural target');
   }
-  for (const [id, count] of counts) if (count > 1 && /^(?:heading|eq|code|callout|range)-/.test(id)) issue(id, 'Duplicate content target ID');
+  for (const [id, count] of counts) if (count > 1 && contentTargetPrefix.test(id)) issue(id, 'Duplicate content target ID');
   const result = { targets: targets.filter(target => (counts.get(target.id) ?? 0) <= 1 && !issues.some(item => item.id === target.id)).sort((a, b) => a.from - b.from), issues };
   cache.set(model, result); return result;
 }
@@ -125,9 +145,12 @@ export function createContentTarget(model: MarkdownModel, selection: SourceSpan,
   const meta = extractMetadata(model);
   const heading = meta.headings.find(contains);
   const equation = equations(model).find(contains);
-  const block = blockContainers(model).filter(candidate => candidate.kind !== 'quote' && contains(candidate))
-    .sort((left, right) => left.to - left.from - (right.to - right.from))[0];
-  const inferred = kind ?? (heading ? 'heading' : equation ? 'equation' : block?.kind ?? 'range');
+  const smallest = <T extends SourceSpan>(spans: readonly T[]) => spans.filter(contains)
+    .sort((left, right) => left.to - left.from - (right.to - right.from))[0] as T | undefined;
+  const block = smallest(blockContainers(model).filter((candidate): candidate is BlockContainer & { kind: 'code' | 'callout' } => candidate.kind !== 'quote'));
+  const separated = smallest(separatedBlocks(model));
+  const structure = smallest([...(block ? [block] : []), ...(separated ? [separated] : [])]);
+  const inferred = kind ?? (heading ? 'heading' : equation ? 'equation' : structure?.kind ?? 'range');
   const namespace = inferred === 'equation' ? 'eq' : inferred;
   const name = id ?? `${namespace}-${globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
   if (!name.startsWith(namespace + '-') || !validContentTargetId(name)) throw new Error('Invalid typed content target ID');
@@ -161,6 +184,12 @@ export function createContentTarget(model: MarkdownModel, selection: SourceSpan,
       const prefix = sourceLinePrefix(text.slice(start, block.from) + text.slice(block.from, text.indexOf('\n', block.from) < 0 ? text.length : text.indexOf('\n', block.from)));
       append(block.to, `\n${prefix}^${name}`);
     }
+  } else if (inferred === 'table' || inferred === 'html') {
+    if (!separated || separated.kind !== inferred) throw new Error('Select a complete typed block');
+    owner = separated;
+    const end = text.indexOf('\n', separated.from);
+    const prefix = sourceLinePrefix(text.slice(separated.from, end < 0 ? text.length : end));
+    append(separated.to, `\n${prefix.trimEnd()}\n${prefix}^${name}`);
   } else {
     const lineFrom = text.lastIndexOf('\n', selection.from - 1) + 1;
     if (selection.from === selection.to || selection.from !== lineFrom || (selection.to !== text.length && text[selection.to] !== '\n'))

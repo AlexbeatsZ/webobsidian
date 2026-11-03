@@ -19,9 +19,10 @@ import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
 import { syntaxModel, blockModel, equationsOf, documentMetadata } from './syntaxModel';
 import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered } from './sourceControls';
+import { blockControls, referenceButtons } from './blockControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
-import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, stripQuotePrefix, sourceLinePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
+import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, type SourceSpan, stripQuotePrefix, sourceLinePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
 import { contextOf, renderContext, type RenderMenuItem as LpMenuItem } from './renderContext';
 import { followRenderedLink, revealNavigation } from './fragmentNavigation';
 import { bindRenderedLink } from './linkPreview';
@@ -411,17 +412,37 @@ class CalloutFoldWidget extends WidgetType {
   ignoreEvent() { return true; }
 }
 
-/** The same formula source buttons, hosted in the containing Callout's first line. */
+/** Smallest code block or Callout containing a control's own position, read at click time. */
+function containerAt(view: EditorView, dom: HTMLElement, kind: 'code' | 'callout'): SourceSpan {
+  const at = view.posAtDOM(dom);
+  const owner = view.state.field(blockModel).containers.filter(block => block.kind === kind && block.from <= at && at <= block.to)
+    .sort((a, b) => a.to - a.from - (b.to - b.from))[0];
+  return owner ?? { from: at, to: at };
+}
+
+/** Reference buttons for an editable code block, placed on its first line. */
+class CodeReferenceWidget extends WidgetType {
+  eq() { return true; }
+  toDOM(view: EditorView) {
+    const controls = blockControls(view);
+    controls.append(...referenceButtons(view, { range: () => containerAt(view, controls, 'code'), kind: 'code' }));
+    return controls;
+  }
+  ignoreEvent() { return true; }
+}
+
+/** Formula source buttons and Callout references, hosted in the Callout's first line. */
 class CalloutMathSourcesWidget extends WidgetType {
-  constructor(readonly formulas: readonly MathRegion[]) { super(); }
+  constructor(readonly formulas: readonly MathRegion[], readonly reference: boolean) { super(); }
   eq(other: CalloutMathSourcesWidget) {
-    return other.formulas.length === this.formulas.length && this.formulas.every((formula, i) => {
+    return other.reference === this.reference && other.formulas.length === this.formulas.length && this.formulas.every((formula, i) => {
       const next = other.formulas[i];
       return formula.from === next.from && formula.to === next.to && formula.bodyFrom === next.bodyFrom && formula.bodyTo === next.bodyTo;
     });
   }
   toDOM(view: EditorView) {
     const controls = document.createElement('span'); controls.className = 'cm-callout-math-sources';
+    if (this.reference) controls.append(...referenceButtons(view, { range: () => containerAt(view, controls, 'callout'), kind: 'callout' }));
     this.formulas.forEach((formula, i) => controls.appendChild(sourceButton(view, formula,
       this.formulas.length > 1 ? `公式 ${i + 1}` : '公式', { selection: { from: formula.bodyFrom, to: formula.bodyTo } })));
     return controls;
@@ -493,11 +514,14 @@ class MathWidget extends WidgetType {
         const label = document.createElement('span'); label.className = 'cm-equation-number'; label.textContent = widget.number;
         span.appendChild(label);
       }
-      span.querySelector(':scope > .cm-source-toggle')?.remove();
-      if (widget.display && widget.range && !widget.preview && !widget.sourceInTitle && !view.state.readOnly) {
+      span.querySelector(':scope > .cm-block-controls')?.remove();
+      if (widget.display && widget.range && !widget.preview && !widget.sourceInTitle) {
         const range = widget.range, formula = editorMathRegions(view.state).find(region => region.from === range.from && region.to === range.to);
-        span.appendChild(sourceButton(view, range, '公式', {
-          selection: formula ? { from: formula.bodyFrom, to: formula.bodyTo } : range }));
+        const equation = equationAt(equationsOf(view.state), range.from);
+        span.appendChild(blockControls(view,
+          equation?.referenceable && !equation.ambiguous ? { range: () => widget.range!, kind: 'equation' } : undefined,
+          view.state.readOnly ? undefined : sourceButton(view, range, '公式', {
+            selection: formula ? { from: formula.bodyFrom, to: formula.bodyTo } : range })));
       }
     };
     const mount: MathMount = {
@@ -763,8 +787,9 @@ class MermaidWidget extends WidgetType {
         });
     };
     const present = () => {
-      div.querySelector(':scope > .cm-source-toggle')?.remove();
-      if (widget.range && !view.state.readOnly) div.appendChild(sourceButton(view, widget.range, '图表'));
+      div.querySelector(':scope > .cm-block-controls')?.remove();
+      if (widget.range) div.appendChild(blockControls(view, { range: () => widget.range!, kind: 'code' },
+        view.state.readOnly ? undefined : sourceButton(view, widget.range, '图表')));
     };
     mermaidMounts.set(div, {
       update: next => { const changed = widget.code !== next.code; widget = next; present(); if (changed) render(); },
@@ -864,7 +889,8 @@ class HtmlPreviewWidget extends WidgetType {
     const wrap = document.createElement('div');
     wrap.className = 'cm-html-preview' + (this.rendered ? ' is-rendered' : '');
     if (this.rendered) {
-      if (!view.state.readOnly) wrap.appendChild(sourceButton(view, this.range, 'HTML'));
+      wrap.appendChild(blockControls(view, { range: () => this.range, kind: 'code' },
+        view.state.readOnly ? undefined : sourceButton(view, this.range, 'HTML')));
       const frame = document.createElement('iframe');
       frame.className = 'cm-html-render-frame';
       frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-forms allow-modals');
@@ -1050,7 +1076,7 @@ class TableWidget extends WidgetType {
     const wrap = document.createElement('div'); wrap.className = 'cm-table-wrap'; wrap.dataset.tableFrom = String(b.from);
     const frame = document.createElement('div'); frame.className = 'cm-table-frame'; wrap.appendChild(frame);
     const lifetime = new RenderLifetime(); tableMounts.set(wrap, lifetime);
-    if (!this.ro) frame.appendChild(sourceButton(view, b, '表格'));
+    frame.appendChild(blockControls(view, { range: () => b, kind: 'table' }, this.ro ? undefined : sourceButton(view, b, '表格')));
     const table = document.createElement('table'); table.className = 'cm-table'; frame.appendChild(table);
     const apply = (changes: SourceChange[]) => {
       if (lifetime.signal.aborted || view.state.readOnly || view.state.sliceDoc(b.from, b.to) !== b.key) return;
@@ -1236,11 +1262,12 @@ class BulletWidget extends WidgetType {
 // inline (Obsidian renders embedded HTML, e.g. CKEditor/Trilium tables, the same).
 class HtmlBlockWidget extends WidgetType {
   destroy(dom: HTMLElement) { const lifetime = imageMounts.get(dom); imageMounts.delete(dom); lifetime?.unload(); }
-  constructor(readonly html: string, readonly range?: { from: number; to: number }) {
+  /** `referenceable` marks a real HTML block; whole-line inline HTML has no `html-` identity. */
+  constructor(readonly html: string, readonly range?: { from: number; to: number }, readonly referenceable = false) {
     super();
   }
   eq(o: HtmlBlockWidget) {
-    return o.html === this.html && o.range?.from === this.range?.from && o.range?.to === this.range?.to;
+    return o.html === this.html && o.range?.from === this.range?.from && o.range?.to === this.range?.to && o.referenceable === this.referenceable;
   }
   toDOM(view: EditorView) {
     const div = document.createElement('div');
@@ -1252,7 +1279,10 @@ class HtmlBlockWidget extends WidgetType {
     parsed.content.querySelectorAll('img').forEach(img => imageTargets.push(img.getAttribute('src') ?? ''));
     div.innerHTML = sanitizeHtml(this.html, contextOf(view).rawUrl);
     presentHtmlImages(div, imageTargets, () => view.requestMeasure(), lifetime.signal);
-    if (!view.state.readOnly && this.range) div.appendChild(sourceButton(view, this.range, 'HTML'));
+    const range = this.range;
+    if (range && (this.referenceable || !view.state.readOnly)) div.appendChild(blockControls(view,
+      this.referenceable ? { range: () => range, kind: 'html' } : undefined,
+      view.state.readOnly ? undefined : sourceButton(view, range, 'HTML')));
     div.addEventListener('mousedown', (e) => {
       const a = (e.target as HTMLElement).closest('a');
       if (!a) return;
@@ -1451,6 +1481,8 @@ function buildDecorations(view: EditorView): DecorationSet {
                 attributes: !blockTouched && i === first && lang ? { 'data-lang': lang } : undefined,
               }).range(l.from, l.from),
             );
+            if (i === first && !blockTouched && code?.closed && !contextOf(view).sourceFragment)
+              all.push(Decoration.widget({ widget: new CodeReferenceWidget(), side: 1 }).range(l.to));
             if (readonly && fence) pushReplace(l.from, l.to, hidden);
             else {
               if (!blockTouched && prefixLength) pushReplace(l.from, l.from + prefixLength, hidden);
@@ -1601,9 +1633,10 @@ function buildDecorations(view: EditorView): DecorationSet {
           }).range(line.to));
           const formulas = !readonly && !view.state.readOnly && !folded ? (view.state.field(blockModel).calloutMath.get(header.from) ?? []).filter(formula =>
             !blockEffectOwns(view.state, formula) && !mathSourceVisible(view.state, formula)) : [];
-          if (formulas.length) {
-            all.push(Decoration.line({ attributes: { style: `--callout-formula-controls:${formulas.length}` } }).range(line.from));
-            all.push(Decoration.widget({ widget: new CalloutMathSourcesWidget(formulas), side: 1 }).range(line.to));
+          const reference = !contextOf(view).sourceFragment;
+          if (formulas.length || reference) {
+            all.push(Decoration.line({ attributes: { style: `--callout-formula-controls:${formulas.length + (reference ? 2 : 0)}` } }).range(line.from));
+            all.push(Decoration.widget({ widget: new CalloutMathSourcesWidget(formulas, reference), side: 1 }).range(line.to));
           }
           if (header.title && header.titleFrom < line.to) all.push(Decoration.mark({ class: 'cm-callout-title', inclusiveEnd: true }).range(header.titleFrom, line.to));
           bodyStart = header.titleFrom - line.from;
@@ -2046,7 +2079,7 @@ function buildHtmlBlocks(state: EditorState): DecorationSet {
     if (touched) continue;
     const depth = sourceLinePrefix(state.doc.lineAt(b.from).text).split('>').length - 1;
     const html = state.doc.sliceString(b.from, b.to).split('\n').map(line => stripQuotePrefix(line, depth)).join('\n');
-    ranges.push(sourceBlockReplacement(state, b, new HtmlBlockWidget(html, b)));
+    ranges.push(sourceBlockReplacement(state, b, new HtmlBlockWidget(html, b, true)));
   }
   return Decoration.set(ranges, true);
 }

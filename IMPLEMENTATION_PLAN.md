@@ -4,7 +4,13 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-02 (UX principles: tags multi-select/merge, MCP sidebar)
+Cập nhật lần cuối: 2026-11-02 (block corner reference buttons)
+
+## Block reference buttons (PRD 1.27)
+- [x] markdown-core 内容身份新增 `table-`、`html-`(块后空一行的独立 ID 行),种类列表只保留一处
+- [x] 复制引用改为按源码范围的单一实现,命令面板与角落按钮共用
+- [x] 公式、表格、代码块/Mermaid/HTML 预览、Callout、HTML 块悬停显示 剪贴板/link/`</>` 按钮组
+- [x] 续接会话核验当前源码：类型检查、14 个定向浏览器回归通过；默认全量单元 513/514，Git 备份套件以 30s 超时单独运行 5/5。见 tests/reports/block-reference-buttons-20261102.md。
 
 ## UX principles (PRD 1.26)
 - [x] 标签面板去掉铅笔批量入口;多选开关 + Ctrl/Shift 点选,顶部操作栏合并/删除,右键所选批量菜单
@@ -565,6 +571,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-02 (PRD 1.27): 公式/表格/代码块(含 Mermaid、HTML 预览)/Callout/HTML 块悬停显示 剪贴板(`![[^id]]`)/link(`[[^id]]`)/`</>` 按钮组,与命令面板共用 `copyContentReference`;内容身份新增 `table-`/`html-`(块后空一行),种类名单收敛到 `CONTENT_TARGET_NAMESPACES`。按钮组放在新模块 blockControls.ts,避免 store→fragmentNavigation→sourceControls 导入环。core 123/123、单元 513/514(唯一失败为已知 fileSyncGit 超时)、typecheck、Edge render 新增 5/5,全量 358/363 中 3 个 Mermaid 用例因图标 SVG 被计数而修正选择器后通过,其余 2 个单独与重复运行通过。未打包/安装。
 - 2026-11-02: 紧挨着写的独立公式 `$$a$$$$b$$` 拆成两个公式(与 Obsidian 一致):`$$` 只在第一个未转义的 `$$` 处闭合,刚闭合公式的 `$` 不再阻止下一个公式开始;此前第二个公式不被识别,渲染错位、无法编号或引用。markdown-core 新增粘连用例,单元 509/509、typecheck 通过;未在应用中目视验收。
 - 2026-11-02 (PRD 1.25): sync-server 服务端 Git 备份(第 1 步,未部署):`backup.mjs` 只读快照→提交→LFS→非强制推送,CLI `--backup-once`/`--backup-dry-run`;服务端测试 13/13、打包 2/2;STEM 真实数据 dry-run 对 3b3f1cc 差异 0(6445 文件/5573 LFS)。待办:ROG 部署(第 2 步)、客户端移除 Git(第 3 步)。
 - 2026-11-02 (PRD 1.24): Git 备份不再提交含令牌的 `sync.jsonc`/`git.jsonc`(写入 `.git/info/exclude`、移出旧索引、冲突分支跳过),本地文件与文件同步不变;fileSyncGit 5/5。
