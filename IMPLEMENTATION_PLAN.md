@@ -11,6 +11,7 @@ Cập nhật lần cuối: 2026-11-02 (block corner reference buttons)
 - [x] 复制引用改为按源码范围的单一实现,命令面板与角落按钮共用
 - [x] 公式、表格、代码块/Mermaid/HTML 预览、Callout、HTML 块悬停显示 剪贴板/link/`</>` 按钮组
 - [x] 续接会话核验当前源码：类型检查、14 个定向浏览器回归通过；默认全量单元 513/514，Git 备份套件以 30s 超时单独运行 5/5。见 tests/reports/block-reference-buttons-20261102.md。
+- [x] Windows 0.1.53 已构建并发布到 GitHub Release；包内 bundle 静态检查、隔离生产入口回归通过。未安装，OMEN 当前安装版本仍为 0.1.52。
 
 ## UX principles (PRD 1.26)
 - [x] 标签面板去掉铅笔批量入口;多选开关 + Ctrl/Shift 点选,顶部操作栏合并/删除,右键所选批量菜单

@@ -40,3 +40,24 @@ On a narrow table, the hover group covers the upper-right header area; the top
 edge and right edge remain occupied by column-drag and add-column controls.
 These results verify source/harness behavior. They do not establish installed
 desktop interaction, physical-device behavior or native clipboard acceptance.
+
+## Package and publication
+
+Built the committed archive `5dd940e36f0ec691414797bb7723c3ba7e48507d` in the existing
+isolated `Temp/.agents/meta-obsidian-native-only-build/source` tree. The packaging
+cleanup hook removed its previous release outputs. Production build and desktop
+typecheck passed. The unpacked executable reports 0.1.53.
+
+- Actual packaged standalone server bundle guard: passed.
+- `node tests/packaged-startup.mjs desktop/release/0.1.53/win-unpacked/resources`:
+  passed against disposable data and the actual packaged production entry,
+  including edit/disk save, native snippets, templates, JS/custom blocks, equation
+  references, view modes, search, menus, attachment protection and zero renderer
+  errors.
+- Published stable release `AlexbeatsZ/webobsidian` / `v0.1.53`; remote tag and
+  release target both equal the exact build commit above.
+- Remote uploaded assets verified: setup EXE 129682101 bytes; blockmap 135161 bytes;
+  `latest.yml` 370 bytes. The local installer was moved into the task's outputs.
+- Installed OMEN executable freshly read as 0.1.52. No installation or user
+  application restart was performed. Installed UI/native clipboard acceptance
+  remains pending.
