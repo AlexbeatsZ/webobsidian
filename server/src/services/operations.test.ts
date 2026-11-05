@@ -15,7 +15,9 @@ vi.mock('./operationWorkspace.js', () => ({
   captureWorkspaces: vi.fn(async () => state.captures),
   applyFileInWorkspace: vi.fn(), applyInWorkspace: vi.fn(),
 }));
-import { NativeReview } from './operations.js';
+import { NativeReview, checkContentIds } from './operations.js';
+import { VaultCatalog, catalog, replaceCatalog } from './catalog.js';
+import { parseNote } from './markdown.js';
 import { operationContract } from '../operations/contract.js';
 import { applyFileInWorkspace, applyInWorkspace } from './operationWorkspace.js';
 import * as vault from './vault.js';
@@ -171,4 +173,28 @@ it('keeps the existing text edit and session-save path compatible', async () => 
   await review.decide(p.proposal_id, 'local', 'accepted');
   expect(await read('original.md')).toBe(raw.replace('Original', 'Edited'));
   expect(applyFileInWorkspace).not.toHaveBeenCalled();
+});
+
+it('rejects new duplicate, misplaced or Vault-used typed IDs and warns about unresolved new references', () => {
+  replaceCatalog(new VaultCatalog());
+  catalog.putNote('other.md', parseNote('other.md', '$$\nE = mc^2\n$$ ^eq-mass-energy\n'));
+  const formula = (id: string) => `$$\na^2 + b^2 = c^2\n$$ ^${id}\n`;
+  expect(checkContentIds('note.md', '', formula('eq-pythagoras') + '\n由 [[^eq-pythagoras]] 和 ![[^eq-mass-energy]] 可得\n')).toEqual([]);
+  expect(() => checkContentIds('note.md', '', formula('eq-mass-energy'))).toThrow(/eq-mass-energy 已在 other\.md/);
+  expect(() => checkContentIds('note.md', '', formula('eq-same') + '\n' + formula('eq-same'))).toThrow(/Duplicate content target ID/);
+  expect(() => checkContentIds('note.md', '', 'plain text ^eq-loose\n')).toThrow(/does not match a structural target/);
+  expect(checkContentIds('note.md', '', '见 [[^eq-guess]]\n')).toEqual([expect.stringMatching(/\[\[\^eq-guess\]\] 找不到目标/)]);
+  // Problems already present in the baseline and IDs the note already owns do not block other edits.
+  const broken = 'plain text ^eq-loose\n' + formula('eq-own');
+  catalog.putNote('note.md', parseNote('note.md', broken));
+  expect(checkContentIds('note.md', broken, broken + '\nmore [[^eq-own]]\n')).toEqual([]);
+  replaceCatalog(new VaultCatalog());
+});
+it('returns content ID warnings with a create proposal and stores nothing when IDs are rejected', async () => {
+  replaceCatalog(new VaultCatalog());
+  catalog.putNote('other.md', parseNote('other.md', '$$\nx\n$$ ^eq-taken\n'));
+  await expect(review.propose(create('dup.md', '$$\ny\n$$ ^eq-taken\n'))).rejects.toThrow(/内容引用 ID 无效/);
+  expect(await review.propose(create('ok.md', '[[^eq-unknown]]\n'))).toMatchObject({ status: 'awaiting_user_review', warnings: [expect.stringMatching(/eq-unknown/)] });
+  expect((await review.propose(input({ kind: 'create', path: 'dup.md', content: '$$\ny\n$$ ^eq-free\n' }, 'second'))).warnings).toBeUndefined();
+  replaceCatalog(new VaultCatalog());
 });

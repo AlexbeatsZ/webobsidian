@@ -12,6 +12,8 @@ export interface ContentTarget extends SourceSpan {
   kind: 'heading' | 'equation' | 'code' | 'callout' | 'table' | 'html' | 'range';
   focus: SourceSpan;
   label: string;
+  /** Searchable source summary when the label does not contain it, e.g. a numbered equation's TeX. */
+  detail?: string;
   anchor?: SourceSpan;
   startAnchor?: SourceSpan;
   endAnchor?: SourceSpan;
@@ -22,7 +24,7 @@ export interface ContentTargets {
   issues: { id: string; message: string }[];
 }
 const cache = new WeakMap<MarkdownModel, ContentTargets>();
-const validContentTargetId = (id: string) => contentTargetPrefix.test(id) && /^[a-z]+-[\p{L}\p{N}-]+$/u.test(id);
+export const validContentTargetId = (id: string) => contentTargetPrefix.test(id) && /^[a-z]+-[\p{L}\p{N}-]+$/u.test(id);
 
 interface SeparatedBlock extends SourceSpan { kind: 'table' | 'html'; label: string }
 /** Tables and HTML blocks run until a blank line, so their ID line follows one blank line. */
@@ -66,7 +68,8 @@ export function contentTargets(model: MarkdownModel): ContentTargets {
     if (!equation.referenceable || equation.ambiguous) { issue(equation.id, 'Equation is not a unique referenceable target'); continue; }
     const start = lineStart(equation.from);
     add({ id: equation.id, kind: 'equation', from: /^(?:[\t ]*> ?)*[\t ]*$/.test(text.slice(start, equation.from)) ? start : equation.from, to: equation.anchor.to,
-      focus: { from: equation.from, to: equation.to }, label: equation.number ? `(${equation.number})` : equation.tex.trim(), anchor: equation.anchor });
+      focus: { from: equation.from, to: equation.to }, label: equation.number ? `(${equation.number})` : equation.tex.trim(),
+      ...(equation.number ? { detail: equation.tex.trim().slice(0, 240) } : {}), anchor: equation.anchor });
   }
   for (const block of blockContainers(model)) {
     if (block.kind === 'quote' || (block.kind === 'code' && !block.closed)) continue;

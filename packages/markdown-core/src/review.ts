@@ -94,5 +94,5 @@ export interface ReviewProposal {
   uncertain?: { before: string; diskBefore: string; after: string; kind: 'accept' | 'recover'; hunks: ReviewHunk[] };
 }
 export const operationNames = ['obsidian_get_context', 'obsidian_list_files', 'obsidian_search', 'obsidian_read_file',
-  'obsidian_propose_changes', 'obsidian_get_change_status'] as const;
+  'obsidian_find_targets', 'obsidian_propose_changes', 'obsidian_get_change_status'] as const;
 export type OperationName = typeof operationNames[number];

@@ -41,7 +41,7 @@ try {
   const stdioConfig = JSON.parse(state.clientConfig).mcpServers.webobsidian;
   assert.equal(stdioConfig.command, executable);
   assert.deepEqual(stdioConfig.args, [path.join(resources, 'server', 'dist', 'mcp.cjs')]);
-  const toolNames = ['obsidian_get_change_status', 'obsidian_get_context', 'obsidian_list_files', 'obsidian_propose_changes', 'obsidian_read_file', 'obsidian_search'];
+  const toolNames = ['obsidian_find_targets', 'obsidian_get_change_status', 'obsidian_get_context', 'obsidian_list_files', 'obsidian_propose_changes', 'obsidian_read_file', 'obsidian_search'];
   for (const transport of [
     new StreamableHTTPClientTransport(new URL('/mcp', page.url())),
     new StdioClientTransport({ ...stdioConfig, env: { ...process.env, ...stdioConfig.env, PATH: path.join(fixture, 'no-node-on-path') },

@@ -10,7 +10,7 @@ export interface NoteRecord extends CatalogEntry {
 }
 export const CORE_LIST_PROPS = new Set(['tags', 'aliases', 'cssclasses']);
 /** Metadata normalization is part of persisted cache compatibility. */
-export const CATALOG_SCHEMA_VERSION = 4;
+export const CATALOG_SCHEMA_VERSION = 5;
 function propertyType(key: string, value: unknown): string {
   if (CORE_LIST_PROPS.has(key) || Array.isArray(value)) return 'list';
   if (typeof value === 'number') return 'number';
@@ -121,19 +121,19 @@ export class VaultCatalog {
       scope === 'markdown' ? (p) => /\.(md|markdown)$/i.test(p) : undefined,
     );
   }
-  suggestContentTargets(query = '', limit = 50, sourceFile?: string) {
+  suggestContentTargets(query = '', limit = 50, sourceFile?: string, kind?: ParsedNote['contentTargets']['targets'][number]['kind']) {
     const needle = query.trim().replace(/^\^/, '').toLocaleLowerCase();
     const bound = Number.isFinite(limit) ? Math.min(100, Math.max(1, Math.floor(limit))) : 50;
-    const results: { id: string; kind: ParsedNote['contentTargets']['targets'][number]['kind']; label: string; path: string }[] = [];
+    const results: { id: string; kind: ParsedNote['contentTargets']['targets'][number]['kind']; label: string; detail?: string; path: string }[] = [];
     for (const [path, note] of this.notes) {
       if (sourceFile !== undefined && path !== sourceFile) continue;
       const seen = new Set<string>();
       for (const target of note.contentTargets.targets) {
-        if (seen.has(target.id)) continue;
+        if (seen.has(target.id) || (kind && target.kind !== kind)) continue;
         seen.add(target.id);
-        if (needle && !`${target.id}\n${target.label}\n${path}`.toLocaleLowerCase().includes(needle)) continue;
+        if (needle && !`${target.id}\n${target.label}\n${target.detail ?? ''}\n${path}`.toLocaleLowerCase().includes(needle)) continue;
         if (this.resolve(`^${target.id}`).status !== 'resolved') continue;
-        results.push({ id: target.id, kind: target.kind, label: target.label, path });
+        results.push({ id: target.id, kind: target.kind, label: target.label, ...(target.detail ? { detail: target.detail } : {}), path });
         if (results.length >= bound) return results;
       }
     }

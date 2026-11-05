@@ -7,8 +7,8 @@ does not restore accounts, JWT, API keys, public shares, a model client, or a
 Tunnel. The reference obsidian-context-mcp checkout is read-only provenance;
 its plugin deployments and connection profiles remain independent.
 
-The native contract contains six tools: context, saved file list, native
-search, ranged read, propose, and status. Each proposal contains exactly one
+The native contract contains seven tools: context, saved file list, native
+search, ranged read, reference-target lookup, propose, and status. Each proposal contains exactly one
 Markdown note operation: edit, create, or rename. File/folder deletion, folder
 operations and multiple-operation groups fail schema validation.
 
@@ -122,6 +122,30 @@ not an MCP tool. The local-only application trusts local software; this is not
 an additional sandbox against a malicious process already able to call its
 normal local file endpoints. There is no accept/restore operation in the machine
 tool catalog.
+
+## Reference targets and typed IDs (2026-11-05)
+
+Goal: an AI writing notes can cite formulas and other typed targets by their real
+`^id` (see content-references.md). IDs may be semantic; the user prefers names
+such as `^eq-mass-energy` over generated tokens, so no ID generator is exposed
+and the instructions encourage short semantic names.
+
+- `obsidian_find_targets` reuses `VaultCatalog.suggestContentTargets` (the same
+  index as the `[[^` suggester), with an optional kind filter applied before the
+  limit. Numbered equations carry their TeX as `ContentTarget.detail` (trimmed to
+  240 characters) so a formula can be found by content; this changed the persisted
+  catalog schema (version 5, full rebuild on first start). `id` mode reports
+  `catalog.resolve` status: `missing` means free to define.
+- `checkContentIds` runs on edit and create proposals after save preparation.
+  It rejects issues that `contentTargets` reports for the candidate but not for the
+  baseline (duplicates in the note, typed anchors not attached to a structure,
+  invalid ranges) and new target IDs already defined in another saved note.
+  Problems already in the baseline and IDs the note already owns never block an
+  unrelated edit. New `[[^id]]` references that resolve neither in the candidate
+  nor elsewhere are returned as `warnings` on the propose result only (forward
+  references stay possible). Unsaved drafts of other notes are not indexed.
+- Moving a formula with its ID into a new note is rejected while the old note still
+  defines it; remove it there first, or use rename.
 
 ## New and renamed notes (2026-11-01)
 

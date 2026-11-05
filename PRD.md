@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.27 · Cập nhật: 2026-11-02 · Trạng thái: Draft
+> Phiên bản: 1.28 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Changelog 1.28 (MCP 内容引用): 用户希望 AI 写作时能知道并引用公式等内容的 `^id`。MCP 新增 `obsidian_find_targets`,
+> 按 ID、标签、带编号公式的 TeX 或路径查询全库类型身份,也可检查某个 ID 是否已被占用;提议修改时校验新引入的类型 ID
+> (同笔记重复、挂不到结构、已被其他笔记使用则拒绝),新增的 `[[^id]]` 找不到目标时返回 warnings。鼓励 AI 为新公式起
+> 语义明确的 ID(如 `^eq-mass-energy`),不强制随机 ID;已有公式优先引用或嵌入,而不是复制。
 > Changelog 1.27 (块角落引用按钮): 用户要求在公式、表格等块的右上角直接复制引用。公式、表格、代码块(含 Mermaid、
 > HTML 预览)、Callout 和 HTML 块在悬停时显示 剪贴板(复制显式引用 `![[^id]]`)/ link(复制隐式引用 `[[^id]]`)/
 > `</>` 按钮,与命令面板"复制稳定内容引用"共用同一实现。内容身份新增 `table-`、`html-`:ID 放在块后空一行的独立行。
@@ -382,7 +386,8 @@ webobsidian/
 - 设计见 [原生 MCP](docs/design/native-mcp.md)。不恢复账号、API Key 或对外 REST API。
 - MCP 通过本地 HTTP `/mcp` 和 stdio(`server/src/mcp.ts`)提供,CLI 转发同一份 JSON;
   三者共用 `server/src/operations/contract.ts` 中的 Zod 契约。
-- 六个工具:上下文、已保存文件列表、原生搜索、按范围读取、提议修改、状态查询。
+- 七个工具:上下文、已保存文件列表、原生搜索、按范围读取、内容引用目标查询、提议修改、状态查询。
+- 提议修改校验新引入的类型内容 ID(全库唯一、挂在对应结构上),AI 可使用语义明确的 ID。
 - 每个提议只含一项 Markdown 笔记操作(编辑 / 新建 / 重命名);删除文件/文件夹、文件夹操作和批量操作
   在校验阶段拒绝。提议进入本地审阅收件箱,用户逐项审阅、接受后才写入。
 - 桌面端提供 MCP 启动器,方便外部 AI 客户端连接。

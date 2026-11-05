@@ -23,12 +23,12 @@ async function app() {
   return { url, call };
 }
 describe('built-in Streamable HTTP MCP', () => {
-  it('initializes, discovers the shared six tools and dispatches to this exact instance', async () => {
+  it('initializes, discovers the shared seven tools and dispatches to this exact instance', async () => {
     const { call } = await app();
     const init = await call('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'fixture', version: '1' } });
     expect(init.result.serverInfo.name).toBe('webobsidian-native');
     const tools = await call('tools/list');
-    expect(tools.result.tools).toHaveLength(6);
+    expect(tools.result.tools).toHaveLength(7);
     expect(tools.result.tools.some((tool: any) => /accept|restore/.test(tool.name))).toBe(false);
     const read = await call('tools/call', { name: 'obsidian_read_file', arguments: { path: 'fixture.md' } });
     expect(read.result.structuredContent.fixture).toEqual({ name: 'obsidian_read_file',

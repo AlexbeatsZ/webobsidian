@@ -139,3 +139,12 @@ it('serves global occurrences and bounded unique suggestions using existing reso
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
+
+it('filters by kind before the limit and searches numbered equation TeX', () => {
+  put('physics.md', '# Relativity ^heading-relativity\n\n$$\nE = mc^2\n$$ ^eq-mass-energy\n');
+  expect(catalog.suggestContentTargets('mc^2', 10, undefined, 'equation')).toEqual([
+    { id: 'eq-mass-energy', kind: 'equation', label: '(1-1)', detail: 'E = mc^2', path: 'physics.md' },
+  ]);
+  expect(catalog.suggestContentTargets('', 1, undefined, 'equation').map(target => target.id)).toEqual(['eq-mass-energy']);
+  expect(catalog.suggestContentTargets('mc^2', 10, undefined, 'heading')).toEqual([]);
+});

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { SourceDocument, reviewHunks, materializeReview, rebaseReview, mergeReview,
+import { SourceDocument, reviewHunks, materializeReview, rebaseReview, mergeReview, isGlobalContentTarget, validContentTargetId,
   operationNames, type OperationName, type TextProposalInput, type ReviewProposal, type ReviewHunk } from '@webobsidian/markdown-core';
 import { config } from '../config.js';
 import { operationContract } from '../operations/contract.js';
@@ -9,6 +9,7 @@ import * as vault from './vault.js';
 import { getVaultRoot, resolveInVault, isTextFile, readFileSnapshot, vaultPathKey } from './vaultFile.js';
 import { fileTitleError } from '@webobsidian/search-core';
 import { catalog } from './catalog.js';
+import { parseNote } from './markdown.js';
 import { qmd } from './search.js';
 import { broadcast } from './realtime.js';
 import { applyInWorkspace, applyFileInWorkspace, captureWorkspaces, type WorkspaceCapture } from './operationWorkspace.js';
@@ -53,6 +54,33 @@ async function requireNewNote(file: string) {
     if (error.code === 'ENOENT') return false; throw error;
   });
   if (exists) fail('目标路径已存在，请选择其他名称');
+}
+
+/**
+ * Typed content IDs are Vault-global, so a proposal may not introduce a new structural
+ * issue or reuse an ID that another saved note already defines. Existing problems in the
+ * baseline do not block unrelated edits. New references that do not resolve are warnings.
+ */
+export function checkContentIds(file: string, before: string, after: string): string[] {
+  const prior = parseNote(file, before), next = parseNote(file, after);
+  const issueKey = (issue: { id: string; message: string }) => issue.id + '\n' + issue.message;
+  const known = new Set(prior.contentTargets.issues.map(issueKey));
+  const problems = next.contentTargets.issues.filter(issue => !known.has(issueKey(issue))).map(issue => `^${issue.id}: ${issue.message}`);
+  const own = new Set([...prior.contentTargets.targets, ...prior.contentTargets.issues].map(target => target.id));
+  for (const target of next.contentTargets.targets) {
+    if (own.has(target.id)) continue;
+    const elsewhere = catalog.resolve('^' + target.id).candidates.filter(other => other !== file);
+    if (elsewhere.length) problems.push(`^${target.id} 已在 ${elsewhere.join(', ')} 中定义；请用 [[^${target.id}]] 或 ![[^${target.id}]] 引用，或换一个 ID`);
+  }
+  if (problems.length) fail('内容引用 ID 无效：' + problems.join('；'), 400);
+  const defined = new Set(next.contentTargets.targets.map(target => target.id)), cited = new Set(prior.links);
+  return next.links.filter(link => isGlobalContentTarget(link) && !cited.has(link)).flatMap(link => {
+    const id = link.slice(1);
+    if (defined.has(id)) return [];
+    const resolved = catalog.resolve(link);
+    if (resolved.status === 'resolved' && resolved.path !== file) return [];
+    return [`[[${link}]] ${resolved.status === 'ambiguous' ? '对应多个目标' : '找不到目标'}；请用 obsidian_find_targets 查询实际 ID`];
+  });
 }
 
 async function snapshot(file: string, captures?: WorkspaceCapture[]): Promise<Snapshot> {
@@ -154,10 +182,11 @@ export class NativeReview {
     const prior = [...this.records.values()].find(p => p.request_id === input.request_id);
     if (prior) {
       if (prior.fingerprint !== fingerprint) fail('request_id 已用于不同内容');
-      return this.statusOf(prior);
+      return this.withWarnings(this.statusOf(prior), []);
     }
     if (this.records.size >= 200) fail('本 Vault 已保存 200 个审阅记录；请先归档审阅数据再提交新候选', 413);
     const op = input.operations[0], file = notePath(op.path);
+    let warnings: string[] = [];
     if (op.kind !== 'edit') {
       let baseline = '';
       let operation = { ...op, path: file };
@@ -165,6 +194,7 @@ export class NativeReview {
         await requireNewNote(file);
         const content = await vault.prepareNoteSave(file, op.content);
         if (content.length > MAX_TEXT) fail('候选正文超过上限', 413);
+        warnings = checkContentIds(file, '', content);
         operation = { ...op, path: file, content };
       } else {
         const to = notePath(op.to), error = fileTitleError(to);
@@ -180,7 +210,7 @@ export class NativeReview {
       const p = { id: randomUUID(), request_id: input.request_id, fingerprint, title: input.title ?? '候选修改', root: this.root,
         path: file, createdAt: new Date().toISOString(), baseline, hunks: [], applied: [],
         fileOperation: { ...operation, decision: 'pending' as const } };
-      await this.save(p); this.records.set(p.id, p); return this.statusOf(p);
+      await this.save(p); this.records.set(p.id, p); return this.withWarnings(this.statusOf(p), warnings);
     }
     const root = this.root, before = await snapshot(file);
     if (before.revision !== op.base_revision) fail('文件版本已变化，请重新读取');
@@ -200,11 +230,13 @@ export class NativeReview {
     source.apply(changes);
     const candidate = await vault.prepareNoteSave(file, source.raw);
     if (candidate.length > MAX_TEXT) fail('候选正文超过上限', 413);
+    warnings = checkContentIds(file, before.raw, candidate);
     if (await getVaultRoot() !== root) fail('Vault 已切换');
     const p = { id: randomUUID(), request_id: input.request_id, fingerprint, title: input.title ?? '候选修改', root,
       path: file, createdAt: new Date().toISOString(), baseline: before.raw, hunks: reviewHunks(before.raw, candidate), applied: [] };
-    await this.save(p); this.records.set(p.id, p); return this.statusOf(p);
+    await this.save(p); this.records.set(p.id, p); return this.withWarnings(this.statusOf(p), warnings);
   }); }
+  private withWarnings<T extends object>(status: T, warnings: string[]): T & { warnings?: string[] } { return warnings.length ? { ...status, warnings } : status; }
   private statusOf(p: ReviewProposal) {
     const file = p.fileOperation;
     return { vault: hash(p.root), proposal_id: p.id, path: p.path, title: p.title,
@@ -377,6 +409,18 @@ export async function callOperation(name: OperationName, raw: unknown): Promise<
         nearby_start_line: Math.max(1, line - args.nearby_lines),
         nearby_text: lines.slice(Math.max(0, line - args.nearby_lines - 1), line + args.nearby_lines).join('\n').slice(0, 32768),
         open_notes: active.open, recent_notes: active.recent, linked_notes: catalog.notes.get(file)?.links.slice(0, 30) ?? [] };
+    }
+    case 'obsidian_find_targets': {
+      if (args.id !== undefined) {
+        const id = String(args.id).replace(/^\^/, ''), resolved = catalog.resolve('^' + id);
+        if (!validContentTargetId(id)) fail('ID 需以 heading-/eq-/code-/callout-/table-/html-/range- 开头，后接字母、数字或 -', 400);
+        return { vault: vaultId, scope: 'saved-index', id, status: resolved.status, link: `[[^${id}]]`, embed: `![[^${id}]]`,
+          occurrences: resolved.targetOccurrences ?? [] };
+      }
+      const file = args.path ? visible(args.path) : undefined;
+      const kind = args.kind === 'all' ? undefined : args.kind;
+      return { vault: vaultId, scope: 'saved-index', query: args.query,
+        results: catalog.suggestContentTargets(args.query, args.limit, file, kind).map(target => ({ ...target, link: `[[^${target.id}]]`, embed: `![[^${target.id}]]` })) };
     }
     case 'obsidian_propose_changes': return nativeReview.propose(args);
     case 'obsidian_get_change_status': return nativeReview.status(args.proposal_id);
