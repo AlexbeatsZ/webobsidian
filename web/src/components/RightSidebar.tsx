@@ -17,6 +17,8 @@ import SidebarDock from './SidebarDock';
 import MarkdownMinimap from './MarkdownMinimap';
 import { usePdfSession } from '../lib/pdf/react';
 import PdfOutlinePanel from './PdfOutlinePanel';
+import VirtualOutlinePanel from './VirtualOutlinePanel';
+import { useVirtualReading } from '../lib/virtualReading';
 import PdfThumbnailsPanel from './PdfThumbnailsPanel';
 import McpLauncher from './McpLauncher';
 import {
@@ -194,6 +196,7 @@ function McpPanel() {
 export default function RightSidebar({ open }: { open: boolean; onTheme?: () => void }) {
   const { path, viewId } = useActivePage();
   const pdf = usePdfSession(path, viewId);
+  const virtual = useVirtualReading(path, viewId);
   const rightPanel = useStore((s) => s.rightPanel);
   const setRightPanel = useStore((s) => s.setRightPanel);
   const activeId = useStore(s => s.rightActiveId);
@@ -223,7 +226,7 @@ export default function RightSidebar({ open }: { open: boolean; onTheme?: () => 
           </div>
         </>
       )}
-      {presented && !activeId && rightPanel === 'outline' && (pdf ? <PdfOutlinePanel session={pdf} /> : <OutlinePanel />)}
+      {presented && !activeId && rightPanel === 'outline' && (virtual ? <VirtualOutlinePanel reader={virtual} /> : pdf ? <PdfOutlinePanel session={pdf} /> : <OutlinePanel />)}
       {presented && !activeId && rightPanel === 'minimap' && (pdf ? <PdfThumbnailsPanel session={pdf} />
         : path && MD_RE.test(path) ? <MarkdownMinimap key={viewId + ':' + path} path={path} viewId={viewId} />
         : <div className="panel-empty">打开 Markdown 或 PDF 查看缩略图</div>)}

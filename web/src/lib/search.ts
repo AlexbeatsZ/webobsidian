@@ -13,6 +13,7 @@ import {
   type Hotkey,
 } from '@webobsidian/search-core';
 import { api, request, type NoteMatches } from './api';
+import { projectVirtualCatalog, isVirtualDocument, subscribeVirtualDocuments } from './virtualDocuments';
 export { matchText, matchPath };
 const resultListeners = new Set<() => void>();
 let resultSnapshot: { query: string; matches: ReadonlyMap<string, NoteMatches> } = { query: '', matches: new Map() };
@@ -51,6 +52,7 @@ const changed = () => {
   revision++;
   listeners.forEach((fn) => fn());
 };
+subscribeVirtualDocuments(changed);
 export function useSearch() {
   useSyncExternalStore(subscribeSearch, () => revision);
   return { entries, settings, hotkeys, hotkeyError };
@@ -134,12 +136,13 @@ function rememberNarrowing(text: string, matched: readonly CatalogEntry[]) {
   narrowing.results.set(text, matched);
 }
 export function fileCandidates(query: string, source: readonly CatalogEntry[] = entries, recent: readonly string[] = []) {
+  if (source === entries) source = projectVirtualCatalog(source);
   const filters = parseSearchQuery(query);
   const text = filters.filterText;
   const { filterText: _filterText, text: _text, ...rest } = filters;
   const pool = text ? narrowedSource(source, JSON.stringify(rest), text) : source;
   const found = pool
-    .filter((e) => e.kind === 'file' && (settings.attachments || /\.(md|markdown)$/i.test(e.path)))
+    .filter((e) => e.kind === 'file' && (settings.attachments || isVirtualDocument(e.path) || /\.(md|markdown)$/i.test(e.path)))
     .flatMap((entry) => {
       if (!matchesTagFilters(entry.tags, filters) || filters.fields.includes('body')) return [];
       const names = [

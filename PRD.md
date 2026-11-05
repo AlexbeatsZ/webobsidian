@@ -1,7 +1,8 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.31 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Phiên bản: 1.32 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Changelog 1.32 (虚拟文档): 保留真实章节文件，以文件夹隐藏配置声明连续阅读分组；自动首页索引、统一大纲、按需加载 Markdown/PDF，编辑回到真实源文件。见 docs/design/virtual-documents.md。
 > Changelog 1.31 (源码展开灰色、TeX 定界符): 学 Obsidian,实时预览中光标展开的可渲染语法字符统一用 `^id` 同款灰色
 > (`--text-faint`),内容保持正文色;Callout 标题展开源码时去掉类型色、粗体、竖线与折叠箭头。公式模型识别 AI 输出常用的
 > `\( … \)`(行内)和 `\[ … \]`(展示)并照常渲染(单行 `\[…\]` 需含 TeX 特征以免误判转义方括号);默认开启的格式化规则
@@ -499,6 +500,9 @@ cùng một codebase React.
 - 设计见 [工作区侧栏](docs/design/workspace-sidebars.md)、[文档导航](docs/design/document-navigation.md)。
 - 分屏编辑(左右/上下),命令和导航跟随当前聚焦的页面;左右侧栏支持固定入口和动态标签页。
 - PDF 阅读器(页面缩略图、目录大纲)、Markdown 小地图、链接悬停预览、内容引用与块引用跳转。
+- 虚拟文档用文件夹中的 `.virtual-document.json` 声明有序分组，在文件树和快速切换器中显示为一个文档。
+  自动生成首页目录与跨来源大纲，连续阅读按邻近窗口加载 Markdown/PDF，原始文件保持独立，编辑打开真实来源。
+  源文件名与别名仍能检索；无效配置退回普通文件夹。见 [虚拟文档](docs/design/virtual-documents.md)。
 - 公式、表格、代码块、Callout、HTML 块悬停时右上角显示 剪贴板(复制 `![[^id]]`)和 link(复制 `[[^id]]`)按钮,
   需要时自动创建稳定身份(见 [稳定内容引用](docs/design/content-references.md))。
 - 整篇文档只读打印/导出 PDF(通过本地 iframe 打印)。

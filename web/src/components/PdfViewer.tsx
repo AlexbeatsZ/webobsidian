@@ -6,8 +6,8 @@ import Icon from './Icon';
 import { useStore } from '../lib/store';
 import '../styles/pdf.css';
 
-function PageSlot({ session, page, width, root }: {
-  session: PdfSession; page: number; width: number; root: React.RefObject<HTMLDivElement>;
+export function PageSlot({ session, page, width, root, anchorWithin }: {
+  session: PdfSession; page: number; width: number; root: React.RefObject<HTMLDivElement>; anchorWithin?: React.RefObject<HTMLElement>;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const visible = usePdfVisible(root, host);
@@ -16,8 +16,9 @@ function PageSlot({ session, page, width, root }: {
   useLayoutEffect(() => {
     const height = width * ratio, delta = height - previousHeight.current;
     previousHeight.current = height;
-    if (delta && page < session.getSnapshot().currentPage && root.current) root.current.scrollTop += delta;
-  }, [width, ratio, page, root, session]);
+    const top = root.current?.getBoundingClientRect().top ?? 0, scope = anchorWithin?.current?.getBoundingClientRect();
+    if (delta && page < session.getSnapshot().currentPage && root.current && (!anchorWithin || scope && scope.top <= top && scope.bottom > top)) root.current.scrollTop += delta;
+  }, [width, ratio, page, root, session, anchorWithin]);
   return <div ref={host} className="pdf-page-slot" data-page-number={page} style={{ width, height: width * ratio }}>
     {visible && <PdfPage session={session} page={page} width={width} onSize={setRatio} />}
   </div>;

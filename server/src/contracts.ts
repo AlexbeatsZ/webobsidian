@@ -19,6 +19,8 @@ export interface TreeNode {
   mtime?: number;
   ctime?: number;
   children?: TreeNode[];
+  virtualDocument?: import('./contracts/virtualDocument.js').VirtualDocument;
+  virtualDocumentError?: string;
 }
 
 export interface SearchHit {

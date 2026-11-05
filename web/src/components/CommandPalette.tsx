@@ -9,6 +9,8 @@ import { newFilePath } from '../lib/filePlacement';
 import Icon from './Icon';
 import { sharedApp, pluginRevision, subscribePlugins } from '../lib/plugins';
 import { useStore } from '../lib/store';
+import { virtualMemberFor } from '../lib/virtualDocuments';
+import { queueVirtualReading } from '../lib/virtualReading';
 
 interface Cmd {
   id: string;
@@ -110,7 +112,10 @@ export default function CommandPalette() {
             });
           } else {
             if (rightTabId && /\.(md|markdown)$/i.test(entry.path)) useStore.getState().openRightTab('markdown', { file: entry.path }, rightTabId);
-            else void openFile(entry.path, true, target.viewId);
+            else void openFile(entry.path, true, target.viewId).then(() => {
+              const member = virtualMemberFor(entry.path, label);
+              if (member) queueVirtualReading(entry.path, target.viewId, { path: member });
+            });
           }
         },
       }));

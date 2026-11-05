@@ -112,12 +112,12 @@ export class ApiError extends Error {
 export const api = {
   // files
   tree: () => req<TreeNode>('/api/files/'),
-  read: async (path: string, vault?: string) => {
+  read: async (path: string, vault?: string, signal?: AbortSignal) => {
     if (!TEXT_EXT_RE.test(path)) throw new ApiError('此文件不支持文本编辑，请以附件方式打开', 415);
     const expected = vault ?? await vaultRequestIdentity();
     const file = await req<{ path: string; content: string; revision?: string; vault: string }>(
       `/api/files/content?path=${encodeURIComponent(path)}`,
-      { vault: expected },
+      { vault: expected, signal },
     );
     if (!file || typeof file !== 'object' || typeof file.content !== 'string' || typeof file.vault !== 'string' || !file.vault)
       throw new ApiError('无效的文本文档响应，未创建文档会话', 502);
@@ -132,6 +132,12 @@ export const api = {
     }),
   createFolder: (path: string) =>
     req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
+  enableVirtualDocument: (folder: string) => req<{ ok: true }>('/api/files/virtual-document', {
+    method: 'PUT', body: JSON.stringify({ folder }),
+  }),
+  disableVirtualDocument: (folder: string, revision: string) => req<{ ok: true }>('/api/files/virtual-document', {
+    method: 'DELETE', body: JSON.stringify({ folder, revision }),
+  }),
   createText: (path: string, content: string) => req<{ ok: true; revision: string }>('/api/files/content', {
     method: 'PUT', body: JSON.stringify({ path, content, createOnly: true }),
   }),

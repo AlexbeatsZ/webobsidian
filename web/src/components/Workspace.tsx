@@ -12,8 +12,12 @@ import FolderView from './FolderView';
 import Icon from './Icon';
 import StatusBar from './StatusBar';
 import WorkspaceLauncher from './WorkspaceLauncher';
+import VirtualDocumentView from './VirtualDocumentView';
+import { findNode } from '../lib/tree';
 
 function EditorPane({ path: activePath, navigationId }: { path: string; navigationId: 'main' | 'split' }) {
+  const collection = useStore(state => findNode(state.tree, activePath)?.virtualDocument);
+  if (collection) return <VirtualDocumentView document={collection} viewId={navigationId} />;
   if (isHomepagePath(activePath)) return <div className="empty-state"><WorkspaceLauncher key={activePath} /></div>;
   const isImage = activePath ? /\.(png|jpe?g|gif|svg|webp)$/i.test(activePath) : false;
   const isVideo = activePath ? VIDEO_EXT_RE.test(activePath) : false;
@@ -74,7 +78,7 @@ export default function Workspace() {
   const splitDirection = useStore((s) => s.splitDirection);
   const tree = useStore((s) => s.tree);
   const activeIsHome = isHomepagePath(activePath);
-  const activeIsFolder = !activeIsHome && isFolderPath(tree, activePath);
+  const activeIsFolder = !activeIsHome && isFolderPath(tree, activePath) && !findNode(tree, activePath ?? '')?.virtualDocument;
   const workspace = useRef<HTMLDivElement>(null);
   const [drop, setDrop] = useState<{ view: 'main' | 'split' | 'right' | 'down'; left: number; top: number; width: number; height: number } | null>(null);
 

@@ -38,7 +38,8 @@ export function findNode(root: TreeNode | null, path: string): TreeNode | null {
 
 /** True if the path resolves to a folder node in the tree. */
 export function isFolderPath(root: TreeNode | null, path: string | null): boolean {
-  return !!path && findNode(root, path)?.type === 'folder';
+  const node = path ? findNode(root, path) : undefined;
+  return node?.type === 'folder' && !node.virtualDocument;
 }
 
 /**

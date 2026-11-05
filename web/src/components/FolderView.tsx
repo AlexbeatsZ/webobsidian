@@ -43,6 +43,7 @@ export default function FolderView({ path }: { path: string }) {
         <div className="folder-view-meta">
           {folders.length} folder{folders.length === 1 ? '' : 's'} · {files.length} file{files.length === 1 ? '' : 's'}
         </div>
+        {node?.virtualDocumentError && <p role="alert">{node.virtualDocumentError}</p>}
         {ordered.length === 0 ? (
           <p className="folder-empty">此文件夹为空。</p>
         ) : (

@@ -10,6 +10,8 @@ import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 import { vaultConfigurationIdentity } from '../services/vaultConfiguration.js';
 import { defaultFileFolder, VaultFolderSchema } from '../contracts/filePlacement.js';
+import type { TreeNode } from '../contracts.js';
+import { describeVirtualDocuments, defaultVirtualManifest, saveVirtualManifest, disableVirtualDocument } from '../services/virtualDocuments.js';
 
 export const filesRouter = Router();
 
@@ -23,9 +25,29 @@ const upload = multer(uploadOptions);
 filesRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
-    res.json(await listTree());
+    res.json(await describeVirtualDocuments(await listTree()));
   }),
 );
+
+filesRouter.put('/virtual-document', asyncHandler(async (req, res) => {
+  const { folder, manifest, revision } = req.body ?? {};
+  if (typeof folder !== 'string' || revision !== undefined && typeof revision !== 'string')
+    throw Object.assign(new Error('Invalid continuous document configuration'), { status: 400 });
+  let next = manifest;
+  if (next === undefined) {
+    const root = await listTree(), stack = [root];
+    let target: TreeNode | undefined;
+    while (stack.length) { const node = stack.pop()!; if (node.path === folder) target = node; stack.push(...node.children ?? []); }
+    if (!target || target.type !== 'folder') throw Object.assign(new Error('找不到资料文件夹'), { status: 404 });
+    next = defaultVirtualManifest(target);
+  }
+  res.json({ ok: true, ...await saveVirtualManifest(folder, next, revision) });
+}));
+filesRouter.delete('/virtual-document', asyncHandler(async (req, res) => {
+  const { folder, revision } = req.body ?? {};
+  if (typeof folder !== 'string' || typeof revision !== 'string') throw Object.assign(new Error('Invalid configuration revision'), { status: 400 });
+  res.json({ ok: true, trashed: await disableVirtualDocument(folder, revision) });
+}));
 
 filesRouter.get(
   '/content',

@@ -130,6 +130,10 @@ export function queueFileUpdate(relative: string, event: Event = 'change'): Prom
   noteVaultMutation();
   relative = path.posix.normalize(relative.replace(/\\/g, '/')).replace(/^\/+/, '');
   fileSyncNotifier(relative);
+  if (path.posix.basename(relative) === '.virtual-document.json') {
+    broadcast({ type: 'fs', event: 'change', path: relative });
+    return Promise.resolve({ status: 'skipped', path: relative, reason: 'ignored' });
+  }
   if (
     !enabled ||
     relative === '.' ||

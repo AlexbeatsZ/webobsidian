@@ -4,6 +4,7 @@ import { api, pendingMutations, type TreeNode } from './api';
 import { newFileFolder, newFilePath } from './filePlacement';
 import { findNode, filePaths, patchFileStat, type FileStat } from './tree';
 import { documents } from './documents';
+import { publishVirtualDocuments } from './virtualDocuments';
 import { isGlobalContentTarget, parseLinkTarget } from '@webobsidian/markdown-core';
 import { resolveContentLink } from './contentReferences';
 import { navigateTo, captureLocation, cancelNavigation, type NavigationLocation, type NavigationRequest, type LinkIntent } from './fragmentNavigation';
@@ -472,6 +473,7 @@ export const useStore = create<AppState>()(
           tree = await api.tree();
         } while (generation !== documents.pathVersion || generation % 2 !== 0);
         const paths = filePaths(tree), prior = get().filePaths;
+        publishVirtualDocuments(tree);
         set({ tree, filePaths: paths.length === prior.length && paths.every((path, i) => path === prior[i]) ? prior : paths });
       },
 

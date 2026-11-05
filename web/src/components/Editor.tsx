@@ -14,6 +14,8 @@ import { TEXT_EXT_RE } from '../lib/media';
 import AttachmentView from './AttachmentView';
 import PdfViewer from './PdfViewer';
 import { BacklinksPanel, OutgoingPanel } from './NoteLinks';
+import { findNode } from '../lib/tree';
+import VirtualDocumentView from './VirtualDocumentView';
 
 /** Workspace adapter: rendering itself neither knows the store nor saves files. */
 export default function Editor({ path: suppliedPath, reading = false, embedded = false, fragment, sidebar = false, navigationId, onOpenLink, onReady }: {
@@ -24,6 +26,7 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
 }) {
   const activePath = useStore((s) => suppliedPath ? null : s.activePath);
   const path = suppliedPath ?? activePath;
+  const collection = useStore(state => findNode(state.tree, path ?? '')?.virtualDocument);
   const localMode = sidebar || (!!suppliedPath && navigationId !== 'main');
   const workspaceMode = useStore((s) => localMode ? 'live' : s.viewMode);
   const workspaceSetMode = useStore((s) => s.setViewMode);
@@ -68,6 +71,7 @@ export default function Editor({ path: suppliedPath, reading = false, embedded =
     const from = fragment ? fragmentRange(model, fragment)?.from ?? 0 : 0;
     return { ...context, sourceFragment: !!fragment, equations: equationContext(model, from), mathSource: { model, from } };
   }, [context, session, snapshot.version, fragment]);
+  if (collection) return <VirtualDocumentView document={collection} viewId={navigationId ?? (suppliedPath ? 'split' : 'main')} />;
   if (path && /\.pdf$/i.test(path)) return <PdfViewer key={path} path={path} viewId={navigationId ?? (suppliedPath ? 'split' : 'main')} />;
   if (path && !textPath) return <AttachmentView key={path} path={path} />;
   if (error) return <div className="editor-error" role="alert">{error.message}</div>;

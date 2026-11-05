@@ -11,6 +11,7 @@ export interface ParsedNote {
   /** Wikilink targets (without alias / heading). */
   links: string[];
   headings: string[];
+  outline?: { text: string; level: number }[];
   contentTargets: ReturnType<typeof contentTargets>;
 }
 
@@ -38,7 +39,8 @@ export function parseNote(rel: string, raw: string): ParsedNote {
   const fmTitle = typeof frontmatter.title === 'string' ? frontmatter.title : undefined;
   const title = fmTitle || path.basename(rel).replace(/\.(md|markdown)$/i, '');
 
-  return { title, frontmatter, body, tags: [...tags], links: [...links], headings, contentTargets: contentTargets(model) };
+  return { title, frontmatter, body, tags: [...tags], links: [...links], headings,
+    outline: metadata.headings.map(({ text, level }) => ({ text, level })), contentTargets: contentTargets(model) };
 }
 
 /** Normalize a wikilink target to a comparable key (basename, no ext, lower). */

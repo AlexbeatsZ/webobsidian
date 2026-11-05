@@ -200,7 +200,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     }
     setSelected([node.path]);
     setSelectAnchor(node.path);
-    if (isFolder) toggleFolder(node.path);
+    if (isFolder && !node.virtualDocument) toggleFolder(node.path);
     else openFile(node.path);
   };
 
@@ -293,6 +293,14 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     if (!sel.includes(node.path)) { setSelected([node.path]); setSelectAnchor(node.path); }
     const items: ContextMenuItem[] = isFolder
       ? [
+          { id: 'file:virtual-document', label: node.virtualDocument ? '停用连续文档' : '设为连续文档', onClick: async () => {
+            try {
+              if (node.virtualDocument) await api.disableVirtualDocument(node.path, node.virtualDocument.revision);
+              else await api.enableVirtualDocument(node.path);
+              await loadTree();
+              if (!node.virtualDocument) await openFile(node.path);
+            } catch (error) { notify(String(error)); }
+          } },
           { id: 'file:new-note', label: "新建笔记", onClick: () => newNote(node.path) },
           { id: 'file:new-folder', label: "新建文件夹", onClick: () => newFolder(node.path) },
           { label: '', separator: true },
@@ -344,7 +352,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     await moveItemsTo(readDragPaths(e), targetDir);
   };
 
-  if (isFolder) {
+  if (isFolder && !node.virtualDocument) {
     return (
       <div className="tree-item">
         <div
@@ -379,7 +387,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     );
   }
 
-  const fi = fileIcon(node);
+  const fi = node.virtualDocument ? 'book-open' : fileIcon(node);
   return (
     <div className="tree-item">
       <div
@@ -404,7 +412,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
         {editing ? (
           <RenameInput node={node} onDone={() => setRenamingPath(null)} />
         ) : (
-          <span className="name">{node.name.replace(/\.(md|markdown)$/, '')}</span>
+          <span className="name">{node.virtualDocument?.title ?? node.name.replace(/\.(md|markdown)$/, '')}</span>
         )}
         {bookmarks.includes(node.path) && <Icon name="bookmark" size={12} className="bm-star" />}
       </div>

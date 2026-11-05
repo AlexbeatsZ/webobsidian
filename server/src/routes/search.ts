@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error.js';
+import { resolveVirtualDocument } from '../services/virtualDocuments.js';
 import { qmd } from '../services/search.js';
 import { backlinksFor, graphData, resolveLink } from '../services/links.js';
 import { resolveIndexedTarget } from '../services/fileindex.js';
@@ -104,7 +105,8 @@ searchRouter.get(
   asyncHandler(async (req, res) => {
     const target = String(req.query.target ?? '');
     const sourcePath = String(req.query.sourcePath ?? '');
-    const result = resolveIndexedTarget(target, sourcePath);
+    const physical = resolveIndexedTarget(target, sourcePath);
+    const result = physical.status === 'missing' ? await resolveVirtualDocument(target, sourcePath) ?? physical : physical;
     res.json({
       target,
       path: result.status === 'resolved' ? result.path : null,
@@ -112,7 +114,7 @@ searchRouter.get(
       candidates: result.candidates,
       fragment: result.fragment,
       normalizedTarget: result.path,
-      ...(result.targetOccurrences ? { targetOccurrences: result.targetOccurrences } : {}),
+      ...('targetOccurrences' in result && result.targetOccurrences ? { targetOccurrences: result.targetOccurrences } : {}),
     });
   }),
 );

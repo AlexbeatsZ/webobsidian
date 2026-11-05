@@ -3,6 +3,7 @@ import type { CatalogEntry } from '@webobsidian/search-core';
 import type { ParsedNote } from './markdown.js';
 
 export interface NoteRecord extends CatalogEntry {
+  outline?: { text: string; level: number }[];
   links: string[];
   properties: Record<string, string>;
   snippet: string;
@@ -10,7 +11,7 @@ export interface NoteRecord extends CatalogEntry {
 }
 export const CORE_LIST_PROPS = new Set(['tags', 'aliases', 'cssclasses']);
 /** Metadata normalization is part of persisted cache compatibility. */
-export const CATALOG_SCHEMA_VERSION = 5;
+export const CATALOG_SCHEMA_VERSION = 6;
 function propertyType(key: string, value: unknown): string {
   if (CORE_LIST_PROPS.has(key) || Array.isArray(value)) return 'list';
   if (typeof value === 'number') return 'number';
@@ -75,6 +76,7 @@ export class VaultCatalog {
       aliases,
       tags: note.tags,
       headings: note.headings,
+      outline: note.outline,
       links: note.links,
       contentTargets: note.contentTargets,
       properties: Object.fromEntries(

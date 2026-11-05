@@ -4,7 +4,13 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-05 (source reveal colour, TeX delimiters)
+Cập nhật lần cuối: 2026-11-05 (virtual documents)
+
+## Virtual documents (PRD 1.32)
+- [x] Hidden folder manifest, safe configuration writer and file-tree/picker projection
+- [x] Continuous bounded Markdown/PDF reading, generated contents and combined outline
+- [x] Independent source editing, cancellation, real-material fixtures and regression checks
+- [x] Native release packages and STEM folder configuration; no physical chapter merge
 
 ## Source reveal colour and TeX delimiters (PRD 1.31)
 - [x] 光标展开的可渲染语法(强调、链接、脚注、HTML、列表/任务、转义、callout 标记、公式定界符)统一 `cm-formatting` 灰色
@@ -595,6 +601,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-05 (PRD 1.32): 虚拟文档，桌面 0.1.59。隐藏配置、树/选择器单文档投影，Markdown/PDF 连续阅读、自动目录、统一大纲、邻近窗口与独立编辑。新增单元 9 项通过，全量 532/533(原有 macOS 大小写改名失败)；新增长章节标题/跨章、PDF 书签/页窗口测试连续三轮通过；真实教材副本的原生验收补上可视正文断言，修复异步展开覆盖导航锚点。STEM 配置 24 组/231 来源，无物理合并。
 - 2026-11-05 (PRD 1.31): 源码展开灰色与 TeX 定界符。新增 source-syntax/callout 浏览器用例与 math、format 单元用例均通过;单元 523/524(已知大小写改名用例);elements 4、render.spec 2、theme-render 1、math-transition 1(macOS 上 Control+z 不是撤销)失败，改动前同样失败。桌面 0.1.58。
 - 2026-11-05 (PRD 1.30): MCP 说明笔记。新增 mcpPreferences 服务、`/api/settings/mcp`、`/api/operations/instructions`、设置页 MCP 分区;get_context 返回 `standing_instructions`;stdio 与 HTTP MCP 连接说明列出链接。新增单元 3 个通过,全量 519/520(已知大小写用例),server/web typecheck 与 build 通过。
 - 2026-11-05: 用户选定 callout 样式(conclusion 改为 circle-arrow-right + 8,145,178);桌面 0.1.55 本机构建安装,`/healthz` 200;用 Vault 真实 Theme.css 在渲染页核对 proof/think/tactic/todo 及三种新类型的颜色图标,标题位置不变。
