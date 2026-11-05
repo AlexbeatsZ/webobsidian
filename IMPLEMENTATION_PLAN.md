@@ -572,7 +572,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
-- 2026-11-05: Mac(arm64,Apple Silicon)从 5dd940e 源码本地构建 0.1.53(`electron-builder --mac dir --arm64`,ad-hoc 签名),替换 `/Applications/WebObsidian.app`(原 0.1.37);重启后 `/healthz` 200,首次启动 healthy 12.6s。GitHub Release 的 mac 预构建最新只到 0.1.43。Node 26 下 `extract-zip` 解压 tunnel 时 Promise 不 resolve(只解出部分文件),需按 `bundle-tunnel.mjs` 步骤用系统 `unzip` 补齐;见 AGENTS.md。
+- 2026-11-05: Mac(arm64,Apple Silicon)从 5dd940e 源码本地构建 0.1.53(`electron-builder --mac dir --arm64`,ad-hoc 签名),替换 `/Applications/WebObsidian.app`(原 0.1.37);重启后 `/healthz` 200,首次启动 healthy 12.6s。随后构建 arm64/x64 dmg/zip 与 latest-mac.yml 补传到 v0.1.53 Release。Node 26 下 `extract-zip` 解压 tunnel 时 Promise 不 resolve(只解出部分文件),需按 `bundle-tunnel.mjs` 步骤用系统 `unzip` 补齐;见 AGENTS.md。
 - 2026-11-02 (PRD 1.27): 公式/表格/代码块(含 Mermaid、HTML 预览)/Callout/HTML 块悬停显示 剪贴板(`![[^id]]`)/link(`[[^id]]`)/`</>` 按钮组,与命令面板共用 `copyContentReference`;内容身份新增 `table-`/`html-`(块后空一行),种类名单收敛到 `CONTENT_TARGET_NAMESPACES`。按钮组放在新模块 blockControls.ts,避免 store→fragmentNavigation→sourceControls 导入环。core 123/123、单元 513/514(唯一失败为已知 fileSyncGit 超时)、typecheck、Edge render 新增 5/5,全量 358/363 中 3 个 Mermaid 用例因图标 SVG 被计数而修正选择器后通过,其余 2 个单独与重复运行通过。未打包/安装。
 - 2026-11-02: 紧挨着写的独立公式 `$$a$$$$b$$` 拆成两个公式(与 Obsidian 一致):`$$` 只在第一个未转义的 `$$` 处闭合,刚闭合公式的 `$` 不再阻止下一个公式开始;此前第二个公式不被识别,渲染错位、无法编号或引用。markdown-core 新增粘连用例,单元 509/509、typecheck 通过;未在应用中目视验收。
 - 2026-11-02 (PRD 1.25): sync-server 服务端 Git 备份(第 1 步,未部署):`backup.mjs` 只读快照→提交→LFS→非强制推送,CLI `--backup-once`/`--backup-dry-run`;服务端测试 13/13、打包 2/2;STEM 真实数据 dry-run 对 3b3f1cc 差异 0(6445 文件/5573 LFS)。待办:ROG 部署(第 2 步)、客户端移除 Git(第 3 步)。
