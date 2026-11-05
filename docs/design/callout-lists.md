@@ -100,12 +100,16 @@ headers do not depend on the ordinary paragraph's Q/L hanging-indent measurement
 Revealing the type removes the pair and restores native source layout. No new
 parser, observer, width cache, coordinate correction or mouse/Enter handler exists.
 
-The type-token presentation owns equal horizontal breathing room. The icon has
-.3em padding on both sides; its trailing transparent strut mirrors the source
-separator after the current `>`. Half the existing rule width locates the rule's
-center, so the icon center is halfway between that center and the title text edge.
-The same rule-width variable paints the rule and supplies this geometric relation;
-there are no per-type or per-font offsets. Source bytes are unchanged, including
+The type-token presentation owns equal horizontal breathing room. The visible
+gap from the rule's right edge to the icon equals the gap from the icon to the
+title text (2026-11-05 user request: equal and wider than the former 6.9/8.4px).
+The rule paints over the start of the native separator after `>`, so the icon's
+left padding is `--callout-icon-gap` plus the rule width; the right padding is
+`--callout-icon-gap` and its trailing transparent strut mirrors that separator.
+Both gaps are separator + `--callout-icon-gap` (default .35em, about 10.8px at
+18px MathJax_Main); themes or snippets may override the variable. There are no
+per-type or per-font offsets. The former centering on the rule's center line left
+the left gap one rule width short and is superseded. Source bytes are unchanged, including
 custom separator whitespace: only presentation of `[!type]+/-` and its separator
 changes. Raw `>` boxes, source origins, body prefixes and nested frame rules keep
 their existing owners. Custom and default titles use the same icon widget.

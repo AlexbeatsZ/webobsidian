@@ -689,12 +689,14 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-callout-head { display: inline-flex; align-items: center; min-width: 0; }
 .cm-callout-heading > .cm-callout-head { flex: none; }
 .cm-callout-heading > .cm-callout-title { min-width: 0; }
-.cm-callout-icon { display: inline-flex; align-items: center; flex: none; padding-inline: .3em;
+/* Equal visible gaps: rule's right edge → icon and icon → title text. The rule
+   paints over the start of the native separator after >, so the left padding
+   returns its width; the trailing strut mirrors that separator. Both visible
+   gaps are therefore separator + --callout-icon-gap. */
+.cm-callout-icon { display: inline-flex; align-items: center; flex: none;
+  padding-inline: calc(var(--callout-icon-gap, .35em) + var(--callout-rule-width, 3px)) var(--callout-icon-gap, .35em);
   color: rgb(var(--callout-color, var(--callout-default))); }
-/* Mirror the native separator after > on the text side of the icon. The rule
-   starts at >'s right edge; its center supplies the rectangle's left edge. */
-.cm-callout-icon::after { content: attr(data-quote-gap); white-space: pre;
-  margin-inline-end: calc(var(--callout-rule-width) / -2); }
+.cm-callout-icon::after { content: attr(data-quote-gap); white-space: pre; }
 .cm-callout-icon svg { display: block; width: 16px; height: 16px; }
 
 /* ---- Reading mode = Live Preview readonly: hide editing affordances ---- */

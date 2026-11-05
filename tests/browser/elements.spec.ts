@@ -191,7 +191,7 @@ test('elements: polymer table retains its quote inset across fold, edit and read
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe(source);
 });
 
-test('elements: Callout icons center between the rule and aligned multiline title text', async ({ page }, info) => {
+test('elements: Callout icons keep equal gaps to the rule and aligned multiline title text', async ({ page }, info) => {
   for (const size of [18, 24]) {
     const source = ['info', 'example', 'tip', 'warning', 'proof', 'think', 'tactic'].map((type, i) =>
       `> [!${type}]+ ${i % 2 ? '带格式的长标题 '.repeat(15) : '共聚合反应的意义'}\n> 正文`).join('\n\n') + '\n\nTail';
@@ -215,10 +215,11 @@ test('elements: Callout icons center between the rule and aligned multiline titl
       const lefts = new Map<number, number>();
       for (const rect of text) lefts.set(rect.top, Math.min(lefts.get(rect.top) ?? Infinity, rect.left));
       const rule = getComputedStyle(title, '::before');
-      const ruleCenter = title.getBoundingClientRect().left + parseFloat(rule.width) + parseFloat(rule.borderRightWidth) / 2;
+      // The rule is the ::before's right border; its visible right edge follows it.
+      const ruleEdge = title.getBoundingClientRect().left + parseFloat(rule.width) + parseFloat(rule.borderRightWidth);
       return { type: title.parentElement!.dataset.callout, lines: lefts.size,
         difference: (svg.top + svg.bottom) / 2 - (rect.top + rect.bottom) / 2,
-        horizontal: (svg.left + svg.right) / 2 - (ruleCenter + text[0].left) / 2,
+        horizontal: (svg.left - ruleEdge) - (text[0].left - svg.right),
         wrapError: Math.max(...lefts.values()) - Math.min(...lefts.values()) };
     }));
     await info.attach('icon-centers-' + size, { body: JSON.stringify(rows), contentType: 'application/json' });

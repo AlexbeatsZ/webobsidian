@@ -6,9 +6,9 @@
 个人使用的 WebObsidian 原生桌面/Android 应用(fork 自 xnohat/webobsidian,远程 `AlexbeatsZ/webobsidian`)。
 
 ## Current State
-- 源码:`main`,桌面版本 0.1.56(MCP 说明笔记:设置 › MCP 选择仓库笔记,连接说明给链接、get_context 给全文);0.1.55 为 CSS 声明 callout。
+- 源码:`main`,桌面版本 0.1.57(Callout 标题竖线-图标-文字等距，间距变量 `--callout-icon-gap`)。
 - GitHub Release:v0.1.56(最新)与 v0.1.55 只有 Mac arm64/x64(Mac 本机构建,Windows 未构建);v0.1.54 有 Mac 与 Windows x64 NSIS(OMEN 构建);linux 预构建最新为 v0.1.43。Release 用 `gh release create` 通过 API 建 tag,不会触发 CI 的 release 工作流;本机 `gh` 默认仓库是上游,必须加 `--repo AlexbeatsZ/webobsidian`,`--target` 要用完整 SHA。
-- 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.56(本地构建);OMEN 0.1.53(Windows 安装包)。
+- 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.57(本地构建);OMEN 0.1.53(Windows 安装包)。
 - Mac 用户数据:`~/Library/Application Support/@webobsidian/desktop`,服务日志 `logs/server.log`。
 
 ## Active Work
