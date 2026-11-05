@@ -16,7 +16,7 @@ test('built-in CSS-declared callouts resolve color and Lucide icon', async ({ pa
   for (const [type, icon, color] of [
     ['definition', 'book-open', 'rgb(99, 102, 241)'],
     ['premise', 'layers', 'rgb(202, 138, 4)'],
-    ['conclusion', 'flag', 'rgb(219, 39, 119)'],
+    ['conclusion', 'circle-arrow-right', 'rgb(8, 145, 178)'],
     ['proof', 'check-circle', 'rgb(34, 197, 94)'],
   ]) {
     await expect(title(page, type).locator(`svg[data-lucide="${icon}"]`)).toHaveCount(1);
