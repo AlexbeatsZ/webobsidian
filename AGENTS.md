@@ -12,6 +12,7 @@
 - Mac 用户数据:`~/Library/Application Support/@webobsidian/desktop`,服务日志 `logs/server.log`。
 
 ## Active Work
+- 分支 `feat/custom-callouts`:Callout 颜色/图标改为读 CSS(`--callout-color`/`--callout-icon`),内置 definition/premise/conclusion 的最终图标与颜色待用户审定;未发版。
 - 待做:格式化全文的 MCP 工具(格式化器 `web/src/lib/writing/format.ts` 在渲染器侧，需接通;结果走审阅)。
 - `operations.test.ts` 的大小写改名用例在 macOS(大小写不敏感)上失败，原代码即如此。
 
@@ -26,8 +27,9 @@
 ## Durable Lessons
 - 本机走 Clash 代理(127.0.0.1:7897):`@electron/get` 需要 `ELECTRON_GET_USE_PROXY=1` + `GLOBAL_AGENT_HTTPS_PROXY`;Node 原生 `fetch`(`bundle-tunnel.mjs`)不读代理变量,超时后可先用 curl 把 tunnel zip 和 licenses 放进 `desktop/.gen/tunnel-downloads/`(脚本会校验 SHA-256)。
 - Node 26 下 `extract-zip` 在解压 tunnel zip 时 Promise 永不 resolve,进程以 13(unsettled top-level await)退出,且只解出部分文件。处理:用系统 `unzip` 解到 `desktop/.gen/tunnel/<arch>/`,`chmod 755 tunnel-client`,拷贝 licenses 为 `THIRD-PARTY-LICENSES.txt`,写 `version.txt`(内容为 TUNNEL_VERSION),之后 build/before-pack 会直接跳过。CI 用 Node 20 不受影响。
+- 本机没有 Playwright 自带浏览器;跑浏览器用例时用一个扩展 `playwright.config.ts` 的临时配置,设 `use.channel: 'chrome'` 和 `webServer.cwd` 为仓库根,改用系统 Chrome。elements.spec 中 4 个、theme-render 中 1 个用例在 2026-11-05 基线上本就失败。
 - zsh 默认 noclobber,`>` 覆盖已有日志会失败导致命令未执行;构建链放进 `bash -c` 或用 `>|`。
 
 ## Docs Index
-- `docs/design/`:模块设计文档。
+- `docs/design/`:模块设计文档。Callout 颜色/图标 → `callout-styles.md`;Callout 布局 → `callout-lists.md`。
 - `docs/log/`:按月工作记录。

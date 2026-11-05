@@ -960,6 +960,12 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .callout[data-callout='bug'] { --callout-color: var(--callout-bug); }
 .callout[data-callout='example'] { --callout-color: var(--callout-example); }
 .callout[data-callout='quote'], .callout[data-callout='cite'] { --callout-color: var(--callout-quote); }
+/* New callout types need only this Obsidian contract (calloutStyles.ts): a color
+   (`r, g, b` or any CSS color) and a Lucide name or inline <svg>. Vault snippets
+   use the same rule to add or override types without rebuilding. */
+.callout[data-callout='definition'] { --callout-color: 99, 102, 241; --callout-icon: lucide-book-open; }
+.callout[data-callout='premise'] { --callout-color: 202, 138, 4; --callout-icon: lucide-layers; }
+.callout[data-callout='conclusion'] { --callout-color: 219, 39, 119; --callout-icon: lucide-flag; }
 /* Tag pills + math in reading view */
 .markdown-preview a.tag { background: var(--tag-bg); color: var(--text-accent); font-size: var(--font-smaller);
   border-radius: 2em; padding: 0.25em 0.65em; text-decoration: none; }

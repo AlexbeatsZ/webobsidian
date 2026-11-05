@@ -63,6 +63,12 @@ const CUSTOM_CALLOUT_ICONS: Record<string, { name: string; svg: string }> = {
   tactic: { name: 'file-signature', svg: fileSignature },
 };
 
+/** Pinned assets by Lucide name, so `--callout-icon: lucide-check-circle` keeps the pinned shape. */
+export function pinnedCalloutIcon(name: string): string | undefined {
+  const custom = Object.values(CUSTOM_CALLOUT_ICONS).find(icon => icon.name === name);
+  return custom && custom.svg.replace('<svg', '<svg data-lucide="' + custom.name + '"');
+}
+
 export function calloutIconSvg(slot: string): string {
   const custom = CUSTOM_CALLOUT_ICONS[slot];
   if (custom) return custom.svg.replace('<svg', '<svg data-lucide="' + custom.name + '"');

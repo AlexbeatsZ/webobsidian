@@ -285,7 +285,8 @@ for the private vault; shares and print do not receive it.
 - H1–H6 labels and fold controls share an inline first-line anchor, independent
   of source-marker reveal and heading block padding. The old bottom-anchored line
   pseudo-label is removed; native heading foldService/ranges remain authoritative.
-- Custom proof/think/tactic and attention color/icon slots belong to callouts.ts.
+- Custom proof/think/tactic and attention color/icon slots belong to callouts.ts as
+  fallbacks; CSS `--callout-color`/`--callout-icon` override them (callout-styles.md).
 - Callout headers have a dedicated `callout-title` block wrapper. The 3px rule
   belongs to that container with `top: 0; bottom: 0`; the 8px body gap is measured
   padding on the body wrapper, never a title margin or pseudo-element height adjustment. Icons center on the complete title,

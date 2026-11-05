@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.28 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Phiên bản: 1.29 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Changelog 1.29 (自定义 Callout): 用户要求新增 callout 只需给出名称、颜色和图标,不需要改源码重新构建。原生 Callout 改为按
+> Obsidian 约定读取 `.callout[data-callout="x"]` 上的 `--callout-color`(RGB 三元组或任意 CSS 颜色)和 `--callout-icon`
+> (Lucide 名称或内联 SVG),应用 CSS、Vault 主题和 CSS 片段按正常层叠顺序生效,改动即时重绘;未声明时回落到内置表。
+> 内置新增 `definition`、`premise`、`conclusion`。
 > Changelog 1.28 (MCP 内容引用): 用户希望 AI 写作时能知道并引用公式等内容的 `^id`。MCP 新增 `obsidian_find_targets`,
 > 按 ID、标签、带编号公式的 TeX 或路径查询全库类型身份,也可检查某个 ID 是否已被占用;提议修改时校验新引入的类型 ID
 > (同笔记重复、挂不到结构、已被其他笔记使用则拒绝),新增的 `[[^id]]` 找不到目标时返回 warnings。鼓励 AI 为新公式起
@@ -311,6 +315,8 @@ webobsidian/
 - CodeMirror 6: syntax highlight Markdown, keybindings cơ bản.
 - Live preview / Reading view chuyển đổi.
 - Wikilinks `[[note]]`, embeds `![[file]]`, tags `#tag`, callouts, tasks `- [ ]`.
+- **Callout 自定义**:新类型只需一条 CSS 规则 `.callout[data-callout="x"] { --callout-color: r, g, b; --callout-icon: lucide-name; }`,
+  可写在 Vault 主题/CSS 片段中,无需重新构建(见 docs/design/callout-styles.md)。
 - **Ảnh nhúng — resize & zoom**: kéo handle 2 cạnh (trái/phải) trên ảnh trong Live Preview để đổi rộng,
   ghi lại vào source dạng size param Obsidian `![[img|W]]` / `![alt|W](url)` (giữ tỉ lệ, height auto).
   Size param `|W` / `|WxH` áp dụng cho **cả** `![[…]]` và ảnh markdown `![](…)`, ở Live lẫn Reading.
