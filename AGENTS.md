@@ -7,7 +7,7 @@
 
 ## Current State
 - 源码:`main`,桌面版本 0.1.58(源码展开语法灰色、Callout 标题源码态、`\( \)`/`\[ \]` 公式与格式化转换)。
-- GitHub Release:v0.1.56(最新)与 v0.1.55 只有 Mac arm64/x64(Mac 本机构建,Windows 未构建);v0.1.54 有 Mac 与 Windows x64 NSIS(OMEN 构建);linux 预构建最新为 v0.1.43。Release 用 `gh release create` 通过 API 建 tag,不会触发 CI 的 release 工作流;本机 `gh` 默认仓库是上游,必须加 `--repo AlexbeatsZ/webobsidian`,`--target` 要用完整 SHA。
+- GitHub Release:v0.1.58(最新)、v0.1.57、v0.1.56、v0.1.55 只有 Mac arm64/x64(Mac 本机构建,Windows 未构建);v0.1.54 有 Mac 与 Windows x64 NSIS(OMEN 构建);linux 预构建最新为 v0.1.43。Release 用 `gh release create` 通过 API 建 tag,不会触发 CI 的 release 工作流;本机 `gh` 默认仓库是上游,必须加 `--repo AlexbeatsZ/webobsidian`,`--target` 要用完整 SHA。
 - 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.58(本地构建);OMEN 0.1.53(Windows 安装包)。
 - Mac 用户数据:`~/Library/Application Support/@webobsidian/desktop`,服务日志 `logs/server.log`。
 
