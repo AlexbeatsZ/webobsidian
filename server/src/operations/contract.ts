@@ -8,7 +8,7 @@ const proposalOperation = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('rename'), path: notePath, to: notePath, base_revision: z.string().min(1) }).strict(),
 ]);
 export const operationContract = {
-  obsidian_get_context: { description: 'Read user-queued MCP context first: explicit selections with captured source positions/revisions, or page paths without body text. Successfully delivered unpinned items are removed; pinned items remain. Otherwise read the last local note/selection. Call at the start of each user request and for here/this requests.',
+  obsidian_get_context: { description: 'Read user-queued MCP context first: explicit selections with captured source positions/revisions, or page paths without body text. Successfully delivered unpinned items are removed; pinned items remain. Otherwise read the last local note/selection. Also returns the full text of the notes the user selected as standing instructions (standing_instructions); follow them. Call at the start of each user request and for here/this requests.',
     schema: z.object({ nearby_lines: z.number().int().min(0).max(100).default(12) }) },
   obsidian_list_files: { description: 'List saved visible VaultCatalog file metadata, paginated; no full Vault body scan.',
     schema: z.object({ path: z.string().default(''), type: z.enum(['all', 'text', 'attachment', 'markdown']).default('all'), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(500).default(100) }) },
@@ -20,7 +20,7 @@ export const operationContract = {
     schema: z.object({ query: z.string().trim().max(500).default(''), id: z.string().trim().min(1).max(256).optional(),
       kind: z.enum(['all', 'heading', 'equation', 'code', 'callout', 'table', 'html', 'range']).default('all'),
       path: z.string().default(''), limit: z.number().int().min(1).max(100).default(30) }) },
-  obsidian_propose_changes: { description: 'Submit ONE Markdown note operation for local human review, never direct write: edit with path/base_revision/edits, create with a new path/content, or rename with path/to/base_revision from a fresh read. Create never overwrites; rename preserves content and requires saved source. Same request_id is idempotent only for identical input. Delete, folders and multiple-operation groups are unsupported. Never bypass local approval via another tool; do not poll continuously.',
+  obsidian_propose_changes: { description: 'Submit ONE Markdown note operation for local human review, never direct write: edit with path/base_revision/edits, create with a new path/content, or rename with path/to/base_revision from a fresh read. Create never overwrites; rename preserves content and requires saved source. Same request_id is idempotent only for identical input. Delete, folders and multiple-operation groups are unsupported. Never bypass local approval via another tool; do not poll continuously. Content must follow the standing instruction notes returned by obsidian_get_context.',
     schema: z.object({ request_id: z.string().min(1).max(128), title: z.string().max(200).default('候选修改'), operations: z.array(proposalOperation).length(1) }).strict() },
   obsidian_get_change_status: { description: 'Read persistent proposal decisions, conflict/recovery state and current expected revision after local review. No remote accept/recover tool exists.',
     schema: z.object({ proposal_id: z.string().uuid() }) },

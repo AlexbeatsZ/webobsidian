@@ -11,6 +11,7 @@ import { drainFileUpdates } from '../services/fileupdates.js';
 import { selectVaultWorkspace } from '../services/uistate.js';
 import { z } from 'zod';
 import { readCssSnippets, readCssSnippet, setCssSnippetEnabled } from '../services/cssSnippets.js';
+import { MCP_CONFIGURATION_PATH, readMcpPreferences, saveMcpPreferences } from '../services/mcpPreferences.js';
 import { readHotkeys, patchHotkeys } from '../services/hotkeySettings.js';
 import { DebugLog } from '../services/debugLog.js';
 import { UiSettingsSchema } from '../contracts/uiSettings.js';
@@ -43,6 +44,15 @@ settingsRouter.put('/css-snippets', asyncHandler(async (req, res) => {
 settingsRouter.get('/css-snippets/:name', asyncHandler(async (req, res) => {
   const css = await readCssSnippet(req.params.name, String(req.query.vault ?? ''));
   res.setHeader('Cache-Control', 'no-cache'); res.type('text/css').send(css);
+}));
+
+settingsRouter.get('/mcp', asyncHandler(async (_req, res) => { res.json(await readMcpPreferences()); }));
+settingsRouter.put('/mcp', asyncHandler(async (req, res) => {
+  const input = z.object({ source: z.object({ path: z.literal('mcp.jsonc'), content: z.string().max(1024 * 1024),
+    exists: z.boolean(), revision: z.string().optional(), vault: z.string() }).strict(), preferences: z.unknown() }).strict().parse(req.body);
+  const value = await saveMcpPreferences(input.source, input.preferences);
+  broadcast({ type: 'vault-configuration-changed', path: MCP_CONFIGURATION_PATH, event: 'change' });
+  res.json(value);
 }));
 
 settingsRouter.get('/hotkeys', asyncHandler(async (_req, res) => { res.json(await readHotkeys()); }));

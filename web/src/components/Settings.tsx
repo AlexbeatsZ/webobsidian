@@ -19,6 +19,7 @@ import TagSettings from './TagSettings';
 import AutomationSettings from './AutomationSettings';
 import HotkeySettings from './HotkeySettings';
 import DebugSettings from './DebugSettings';
+import McpSettings from './McpSettings';
 import ConfigurationFile from './ConfigurationFile';
 import { readCssSnippets, setCssSnippetEnabled, type CssSnippets } from '../lib/cssSnippets';
 import { readNativeFeatures, saveNativeFeatures, type NativeFeaturePreferences } from '../lib/nativeFeatures';
@@ -31,7 +32,7 @@ import { documentAppearance, UiSettingsSchema, type UiSettings } from '../../../
 import { FilePlacementSchema, type FilePlacement } from '../../../server/src/contracts/filePlacement';
 
 type Section =
-  'search' | 'hotkeys' | 'automation' | 'writing' | 'formatting' | 'menus' | 'tags' | 'vault' | 'sync' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
+  'search' | 'hotkeys' | 'mcp' | 'automation' | 'writing' | 'formatting' | 'menus' | 'tags' | 'vault' | 'sync' | 'git' | 'plugins' | 'appearance' | 'interface' | 'editor' | 'about' | 'debug';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
@@ -168,6 +169,7 @@ export default function Settings() {
             {section === 'editor' && <EditorSettings />}
             {section === 'about' && <About />}
             {section === 'debug' && <DebugSettings />}
+            {section === 'mcp' && <McpSettings />}
           </div>
           {pluginTab && <PluginSettingsTab id={pluginTab} />}
         </div>
@@ -221,14 +223,15 @@ const labels: Record<Section, string> = {
   editor: '编辑器',
   about: '关于',
   debug: '调试',
+  mcp: 'MCP',
 };
 const sectionIcons: Record<Section, string> = {
   search: 'search', hotkeys: 'key', automation: 'command', writing: 'brackets', formatting: 'align-left', menus: 'list',
-  tags: 'hash', vault: 'folder', sync: 'refresh-cw', git: 'git-branch', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'square-pen', about: 'info', debug: 'code',
+  tags: 'hash', vault: 'folder', sync: 'refresh-cw', git: 'git-branch', plugins: 'puzzle', appearance: 'palette', interface: 'layout-dashboard', editor: 'square-pen', about: 'info', debug: 'code', mcp: 'cpu',
 };
 const NAV_GROUPS: { title: string; sections: Section[] }[] = [
   { title: '选项', sections: ['about', 'appearance', 'interface', 'editor', 'vault', 'hotkeys', 'plugins', 'debug'] },
-  { title: '核心功能', sections: ['search', 'writing', 'formatting', 'tags', 'automation', 'menus', 'sync', 'git'] },
+  { title: '核心功能', sections: ['search', 'writing', 'formatting', 'tags', 'automation', 'menus', 'sync', 'git', 'mcp'] },
 ];
 
 function VaultSettings({ s, reload }: { s: any; reload: () => void }) {

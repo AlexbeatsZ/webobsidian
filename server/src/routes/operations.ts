@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { operationNames, type OperationName } from '@webobsidian/markdown-core';
 import { operationContract } from '../operations/contract.js';
-import { addMcpContext, callOperation, nativeReview } from '../services/operations.js';
+import { addMcpContext, callOperation, mcpInstructionNotes, nativeReview } from '../services/operations.js';
 import { mcpContext, mcpSelectionSchema } from '../services/mcpContext.js';
 import type { McpContextItem } from '../contracts.js';
 
@@ -28,6 +28,7 @@ operationsRouter.post('/call', asyncHandler(async (req, res) => {
   if (input.name === 'obsidian_get_context') await mcpContext.deliver(send);
   else await send();
 }));
+operationsRouter.get('/instructions', asyncHandler(async (_req, res) => res.json({ notes: await mcpInstructionNotes(false) })));
 operationsRouter.get('/context', asyncHandler(async (_req, res) => res.json(await mcpContext.list())));
 operationsRouter.post('/context', asyncHandler(async (req, res) => {
   const input = z.object({ clientId: z.string().uuid(), path: z.string().min(1).max(1024), version: z.number().int().min(0).optional(),

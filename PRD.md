@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.29 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Phiên bản: 1.30 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Changelog 1.30 (MCP 说明笔记): 用户希望把 Vault 里的笔记语法和规范固定交给 AI。设置 › MCP 可从仓库选择最多 20 篇
+> Markdown 笔记作为说明笔记,列表存在 `.obsidian/webobsidian/mcp.jsonc`。MCP 连接时服务器说明列出它们的链接与路径;
+> 每次 `obsidian_get_context` 附上它们当前保存的全文(`standing_instructions`,单篇 32K、合计 64K 字符,超出标记截断);
+> 说明与提议修改工具要求 AI 写入、修改时遵守。
 > Changelog 1.29 (自定义 Callout): 用户要求新增 callout 只需给出名称、颜色和图标,不需要改源码重新构建。原生 Callout 改为按
 > Obsidian 约定读取 `.callout[data-callout="x"]` 上的 `--callout-color`(RGB 三元组或任意 CSS 颜色)和 `--callout-icon`
 > (Lucide 名称或内联 SVG),应用 CSS、Vault 主题和 CSS 片段按正常层叠顺序生效,改动即时重绘;未声明时回落到内置表。

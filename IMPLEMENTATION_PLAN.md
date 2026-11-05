@@ -4,7 +4,12 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-05 (custom callouts)
+Cập nhật lần cuối: 2026-11-05 (MCP instruction notes)
+
+## MCP instruction notes (PRD 1.30)
+- [x] 设置 › MCP 从仓库选择说明笔记,存 `.obsidian/webobsidian/mcp.jsonc`(revision 冲突拒绝,外部修改实时刷新)
+- [x] 服务器说明列出链接;`obsidian_get_context` 附全文(`standing_instructions`);提议修改说明要求遵守
+- [ ] 用真实 MCP 客户端确认说明进入系统提示词、AI 遵守规范
 
 ## Custom callouts (PRD 1.29)
 - [x] 原生 Callout 通过隐藏探针读取 `.callout[data-callout]` 的 `--callout-color`/`--callout-icon`,主题与样式表变化时重绘
@@ -584,6 +589,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-05 (PRD 1.30): MCP 说明笔记。新增 mcpPreferences 服务、`/api/settings/mcp`、`/api/operations/instructions`、设置页 MCP 分区;get_context 返回 `standing_instructions`;stdio 与 HTTP MCP 连接说明列出链接。新增单元 3 个通过,全量 519/520(已知大小写用例),server/web typecheck 与 build 通过。
 - 2026-11-05: 用户选定 callout 样式(conclusion 改为 circle-arrow-right + 8,145,178);桌面 0.1.55 本机构建安装,`/healthz` 200;用 Vault 真实 Theme.css 在渲染页核对 proof/think/tactic/todo 及三种新类型的颜色图标,标题位置不变。
 - 2026-11-05 (PRD 1.29): 自定义 Callout。新增 `calloutStyles.ts`,原生 Callout 按 Obsidian 约定从 CSS 读取颜色和图标,标题不再写死 slot 颜色;引入 lucide 1.69.0(懒加载);内置 definition/premise/conclusion。web typecheck、build 通过;新增 callout-styles 浏览器用例通过;elements/theme-render 中 5 个用例失败,改动前基线同样失败;单元 516/517(同上已知大小写用例)。
 - 2026-11-05 (PRD 1.28): MCP 新增 `obsidian_find_targets`(复用 `suggestContentTargets`,加类型过滤,带编号公式可按 TeX 查找;`id` 模式检查占用),提议修改用 `checkContentIds` 拒绝新增的重复/错位/已被他处使用的类型 ID,新增未解析引用返回 warnings;说明鼓励语义 ID。catalog schema 升至 5。单元 516/517(唯一失败为 macOS 大小写不敏感文件系统上已有的大小写改名用例,原代码同样失败)、server/web typecheck 通过。

@@ -6,12 +6,13 @@
 个人使用的 WebObsidian 原生桌面/Android 应用(fork 自 xnohat/webobsidian,远程 `AlexbeatsZ/webobsidian`)。
 
 ## Current State
-- 源码:`main`,桌面版本 0.1.55(Callout 颜色/图标改由 CSS `--callout-color`/`--callout-icon` 声明,内置 definition/premise/conclusion)。
+- 源码:`main`,桌面版本 0.1.56(MCP 说明笔记:设置 › MCP 选择仓库笔记,连接说明给链接、get_context 给全文);0.1.55 为 CSS 声明 callout。
 - GitHub Release:v0.1.54 有 Mac arm64/x64(Mac 本机构建)和 Windows x64 NSIS(OMEN 构建);v0.1.53 有 Windows 与 Mac 包;linux 预构建最新为 v0.1.43。Release 用 `gh release create` 通过 API 建 tag,不会触发 CI 的 release 工作流。
-- 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.55(本地构建);OMEN 0.1.53(Windows 安装包)。
+- 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.56(本地构建);OMEN 0.1.53(Windows 安装包)。
 - Mac 用户数据:`~/Library/Application Support/@webobsidian/desktop`,服务日志 `logs/server.log`。
 
 ## Active Work
+- MCP 说明笔记已交付源码与本机安装;用户尚未在 设置 › MCP 中选择笔记,真实 MCP 客户端的遵守情况未验收。
 - 待做:格式化全文的 MCP 工具(格式化器 `web/src/lib/writing/format.ts` 在渲染器侧，需接通;结果走审阅)。
 - `operations.test.ts` 的大小写改名用例在 macOS(大小写不敏感)上失败，原代码即如此。
 

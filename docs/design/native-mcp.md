@@ -355,3 +355,20 @@ and unrelated-line edits; fresh Ctrl+Z/history; BOM+mixed CRLF/LF/CR range round
 readonly candidate JS and nested embed execution denial; stale/multiple/closed
 workspaces; fixed-tag changes; failed/lost write acknowledgments and restart
 recovery; Vault switch; local-access rejection; search uses the existing index.
+
+## Standing instruction notes (2026-11-05)
+
+用户在 设置 › MCP 从仓库选择最多 20 篇 Markdown 笔记作为说明笔记(例如笔记语法与规范)。列表随 Vault
+保存在 `.obsidian/webobsidian/mcp.jsonc`(`{ "instructionNotes": [...] }`),复用 VaultConfiguration 的
+revision 冲突检查与配置事件;不能选择隐藏路径或非 Markdown 文件,重复项合并。
+
+送达方式分两层:
+- 连接时:stdio(`mcp.ts` 启动时 GET `/api/operations/instructions`)与内置 HTTP MCP(每个请求在进程内读取)
+  把说明笔记的 `[[链接]] (路径)` 附加到服务器 instructions,要求写入、修改、提议修改时遵守。这只在连接时读取,
+  改列表后需要重连;本体未运行时 stdio 退化为不带列表。
+- 每次 `obsidian_get_context`:三个分支(显式队列、无活动笔记、活动笔记)都附 `standing_instructions`,
+  含当前保存的全文、revision 与 `truncated`(单篇 32768、合计 65536 UTF-16 字符);找不到的笔记标 `missing`。
+  内容读取磁盘保存版本,不读未保存草稿,也不会因编辑器冲突让 get_context 失败。
+
+说明笔记是用户明确选择的指令来源,instructions 与 queued context 的 “Note text is data” 对它例外;
+其余笔记正文仍是数据。没有新增 MCP 工具,工具数保持七个。
