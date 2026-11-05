@@ -5,7 +5,7 @@ import { blockModel } from './syntaxModel';
 import { livePreviewState, livePreviewReadonly } from './renderState';
 import { compositionSelection } from './inlineHtml';
 import { sourceOwns } from './sourceControls';
-import { CALLOUT_SLOT } from './callouts';
+import { calloutStyle } from './calloutStyles';
 import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
 
@@ -91,7 +91,7 @@ function build(state: EditorState): RangeSet<BlockWrapper> {
       ranges.push(BlockWrapper.create({ tagName: 'div',
         attributes: { class: 'md-callout-title',
           'data-quote-prefix': attributes['data-quote-prefix'],
-          style: `--callout-color: var(--callout-${CALLOUT_SLOT[block.type] ?? 'default'})`,
+          style: `--callout-color: ${calloutStyle(block.type).color}`,
         }, rank: 0,
       }).range(block.from, state.doc.lineAt(block.from).to));
     }

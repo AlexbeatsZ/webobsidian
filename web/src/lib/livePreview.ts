@@ -10,7 +10,8 @@ import {
 import { StateField, StateEffect, type EditorState, type Range } from '@codemirror/state';
 import { getIndentUnit, foldedRanges } from '@codemirror/language';
 import { markdownListLine } from './listLayout';
-import { CALLOUT_SLOT, calloutDefaultTitle, calloutIconSvg } from './callouts';
+import { calloutDefaultTitle } from './callouts';
+import { calloutStyle } from './calloutStyles';
 import { iconPaths, setIcon } from './icons';
 import { diagramRenderer } from './diagrams';
 import { openLightbox } from './imageLightbox';
@@ -365,15 +366,15 @@ class MediaWidget extends WidgetType {
 
 /** Presents the type token/separator; custom title text stays native and editable. */
 class CalloutHeadWidget extends WidgetType {
-  constructor(readonly slot: string, readonly defaultTitle: string, readonly quoteGap: string) { super(); }
-  eq(o: CalloutHeadWidget) { return o.slot === this.slot && o.defaultTitle === this.defaultTitle && o.quoteGap === this.quoteGap; }
+  constructor(readonly icon: string, readonly defaultTitle: string, readonly quoteGap: string) { super(); }
+  eq(o: CalloutHeadWidget) { return o.icon === this.icon && o.defaultTitle === this.defaultTitle && o.quoteGap === this.quoteGap; }
   toDOM() {
     const span = document.createElement('span');
     span.className = 'cm-callout-head';
     const icon = document.createElement('span');
     icon.className = 'cm-callout-icon';
     icon.dataset.quoteGap = this.quoteGap;
-    icon.innerHTML = calloutIconSvg(this.slot);
+    icon.innerHTML = this.icon;
     span.appendChild(icon);
     if (this.defaultTitle) {
       const title = document.createElement('span');
@@ -1619,13 +1620,12 @@ function buildDecorations(view: EditorView): DecorationSet {
         all.push(Decoration.mark({ class: 'cm-quote-prefix' +
           (touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
         if (header && !sourceLine) {
-          const slot = CALLOUT_SLOT[header.type] ?? 'default';
           const folded = isCalloutFolded(view.state, header.from, header.fold);
           if (!touches(header.markerFrom, header.titleFrom)) {
             const quoteGap = text.slice(0, header.markerFrom - line.from).split('>').at(-1)!;
             all.push(Decoration.mark({ class: 'cm-callout-heading', inclusive: true }).range(header.markerFrom, line.to));
             pushReplace(header.markerFrom, header.titleFrom, Decoration.replace({
-              widget: new CalloutHeadWidget(slot, header.title ? '' : calloutDefaultTitle(header.type), quoteGap),
+              widget: new CalloutHeadWidget(calloutStyle(header.type).icon, header.title ? '' : calloutDefaultTitle(header.type), quoteGap),
             }));
           }
           all.push(Decoration.widget({

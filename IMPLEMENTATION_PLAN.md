@@ -4,7 +4,13 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-05 (MCP content reference targets)
+Cập nhật lần cuối: 2026-11-05 (custom callouts)
+
+## Custom callouts (PRD 1.29)
+- [x] 原生 Callout 通过隐藏探针读取 `.callout[data-callout]` 的 `--callout-color`/`--callout-icon`,主题与样式表变化时重绘
+- [x] 图标支持 Lucide 名称(含旧别名,完整图标库懒加载)和内联 SVG;固定版本的 proof/think/tactic 图标按名称保留
+- [x] 内置新增 `definition`、`premise`、`conclusion`(纯 CSS 声明)
+- [x] 用户审定三种新类型的最终图标与颜色(definition book-open 靛蓝、premise layers 琥珀、conclusion circle-arrow-right 青蓝)
 
 ## MCP content reference targets (PRD 1.28)
 - [x] `obsidian_find_targets`:按 ID/标签/公式 TeX/路径查全库类型身份，可按类型过滤;`id` 模式检查占用
@@ -578,6 +584,8 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-05: 用户选定 callout 样式(conclusion 改为 circle-arrow-right + 8,145,178);桌面 0.1.55 本机构建安装,`/healthz` 200;用 Vault 真实 Theme.css 在渲染页核对 proof/think/tactic/todo 及三种新类型的颜色图标,标题位置不变。
+- 2026-11-05 (PRD 1.29): 自定义 Callout。新增 `calloutStyles.ts`,原生 Callout 按 Obsidian 约定从 CSS 读取颜色和图标,标题不再写死 slot 颜色;引入 lucide 1.69.0(懒加载);内置 definition/premise/conclusion。web typecheck、build 通过;新增 callout-styles 浏览器用例通过;elements/theme-render 中 5 个用例失败,改动前基线同样失败;单元 516/517(同上已知大小写用例)。
 - 2026-11-05 (PRD 1.28): MCP 新增 `obsidian_find_targets`(复用 `suggestContentTargets`,加类型过滤,带编号公式可按 TeX 查找;`id` 模式检查占用),提议修改用 `checkContentIds` 拒绝新增的重复/错位/已被他处使用的类型 ID,新增未解析引用返回 warnings;说明鼓励语义 ID。catalog schema 升至 5。单元 516/517(唯一失败为 macOS 大小写不敏感文件系统上已有的大小写改名用例,原代码同样失败)、server/web typecheck 通过。
 - 2026-11-05: Mac(arm64,Apple Silicon)从 5dd940e 源码本地构建 0.1.53(`electron-builder --mac dir --arm64`,ad-hoc 签名),替换 `/Applications/WebObsidian.app`(原 0.1.37);重启后 `/healthz` 200,首次启动 healthy 12.6s。随后构建 arm64/x64 dmg/zip 与 latest-mac.yml 补传到 v0.1.53 Release。Node 26 下 `extract-zip` 解压 tunnel 时 Promise 不 resolve(只解出部分文件),需按 `bundle-tunnel.mjs` 步骤用系统 `unzip` 补齐;见 AGENTS.md。
 - 2026-11-02 (PRD 1.27): 公式/表格/代码块(含 Mermaid、HTML 预览)/Callout/HTML 块悬停显示 剪贴板(`![[^id]]`)/link(`[[^id]]`)/`</>` 按钮组,与命令面板共用 `copyContentReference`;内容身份新增 `table-`/`html-`(块后空一行),种类名单收敛到 `CONTENT_TARGET_NAMESPACES`。按钮组放在新模块 blockControls.ts,避免 store→fragmentNavigation→sourceControls 导入环。core 123/123、单元 513/514(唯一失败为已知 fileSyncGit 超时)、typecheck、Edge render 新增 5/5,全量 358/363 中 3 个 Mermaid 用例因图标 SVG 被计数而修正选择器后通过,其余 2 个单独与重复运行通过。未打包/安装。
