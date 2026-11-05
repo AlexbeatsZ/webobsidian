@@ -76,16 +76,30 @@ class FootnoteBody extends WidgetType {
   }
   ignoreEvent() { return true; }
 }
-type SemanticItem = { span: SourceSpan; decoration: Decoration };
+type SemanticItem = { span: SourceSpan; decoration: Decoration; source?: SourceSpan[] };
+/** Renderable syntax shown as source (caret on it) uses the faint ^id colour, like Obsidian. */
+const sourceSyntax = (kind: string) => Decoration.mark({ class: 'cm-formatting cm-formatting-' + kind });
+/** Parts of `[label](target)` / `[label][ref]` / `<url>` that disappear once rendered. */
+function linkSyntax(text: string, link: SourceSpan & { label: string }): SourceSpan[] {
+  const raw = text.slice(link.from, link.to);
+  if (raw.startsWith('<') && raw.endsWith('>')) return [{ from: link.from, to: link.from + 1 }, { from: link.to - 1, to: link.to }];
+  if (!raw.startsWith('[')) return [];
+  const labelTo = link.from + 1 + link.label.length;
+  if (link.label && raw.slice(1, 1 + link.label.length) === link.label && labelTo < link.to)
+    return [{ from: link.from, to: link.from + 1 }, { from: labelTo, to: link.to }];
+  return [{ from: link.from, to: link.to }];
+}
 const cache = new WeakMap<MarkdownModel, SemanticItem[]>();
 const footnoteContexts = new WeakMap<MarkdownModel, string>();
 function items(model: MarkdownModel): SemanticItem[] {
   const cached = cache.get(model); if (cached) return cached;
   const meta = extractMetadata(model), result: SemanticItem[] = [];
   for (const range of [...meta.comments, ...meta.blockIds, ...meta.linkDefinitions])
-    result.push({ span: range, decoration: Decoration.replace({ block: model.text.slice(range.from, range.to).includes('\n') }) });
+    result.push({ span: range, decoration: Decoration.replace({ block: model.text.slice(range.from, range.to).includes('\n') }),
+      source: (meta.linkDefinitions as SourceSpan[]).includes(range) ? [range] : undefined });
   for (const link of meta.linkOccurrences) if (link.kind !== 'wiki' && !link.embed)
-    result.push({ span: link, decoration: Decoration.replace({ widget: new ReferenceLink(link.label || link.target, link.target) }) });
+    result.push({ span: link, decoration: Decoration.replace({ widget: new ReferenceLink(link.label || link.target, link.target) }),
+      source: linkSyntax(model.text, link) });
   cache.set(model, result); return result;
 }
 function build(state: EditorState): DecorationSet {
@@ -95,12 +109,24 @@ function build(state: EditorState): DecorationSet {
   const selections = state.field(compositionSelection).selection.ranges, decorations: Range<Decoration>[] = [];
   const visible = (span: SourceSpan) => !blockEffectOwns(state, span) && !sourceIsOpen(state, span)
     && (forceRendered(state, span) || !caretTouches(span, selections, readonly));
-  for (const { span, decoration } of items(local)) if (visible(span)) decorations.push(decoration.range(span.from, span.to));
+  // Revealed by the caret only (not an explicitly opened source region).
+  const revealed = (span: SourceSpan) => !blockEffectOwns(state, span) && !sourceIsOpen(state, span) && !visible(span);
+  const faint = (kind: string, spans: SourceSpan[]) => {
+    for (const part of spans) if (part.to > part.from) decorations.push(sourceSyntax(kind).range(part.from, part.to));
+  };
+  for (const { span, decoration, source } of items(local)) {
+    if (visible(span)) decorations.push(decoration.range(span.from, span.to));
+    else if (source && revealed(span)) faint('link', source);
+  }
   const notes = footnotes(full), target = navigationHighlight(state);
   for (const note of notes.notes) {
     for (const reference of note.references) {
       const span = { from: reference.from - offset, to: reference.to - offset };
-      if (span.from < 0 || span.to > local.text.length || !visible(span)) continue;
+      if (span.from < 0 || span.to > local.text.length) continue;
+      if (!visible(span)) {
+        if (revealed(span)) faint('footnote', [{ from: span.from, to: span.from + 2 }, { from: span.to - 1, to: span.to }]);
+        continue;
+      }
       decorations.push(Decoration.replace({ widget: new ReferenceLink(String(note.number), '#' + footnoteFragment(note), note.status !== 'resolved', true,
         !!target && target.from === span.from && target.to === span.to) }).range(span.from, span.to));
     }
@@ -111,6 +137,7 @@ function build(state: EditorState): DecorationSet {
       if (readonly && !context.footnoteBody) decorations.push(Decoration.replace({ block: true }).range(from, to));
       else if (readonly || visible({ from, to })) decorations.push(Decoration.replace({ widget: !readonly && note.references.length
         ? new ReferenceLink(String(note.number), '#' + footnoteReferenceFragment(note, 0), false, 'definition') : undefined }).range(from, markerTo));
+      else if (revealed({ from, to })) faint('footnote', [{ from, to: markerTo }]);
     }
   }
   if (readonly && !context.footnoteBody && !context.embedTrail?.length && !offset) {

@@ -17,7 +17,7 @@ function highlight(view: EditorView): DecorationSet {
   for (const region of editorMathRegions(view.state)) {
     if (!mathSourceVisible(view.state, region) || !view.visibleRanges.some(v => v.from < region.to && v.to > region.from)) continue;
     if (region.kind === 'dollar') {
-      add(region.bodyFrom - (region.display ? 2 : 1), region.bodyFrom, 'delimiter');
+      add(region.openFrom, region.bodyFrom, 'delimiter');
       if (region.closed) add(region.bodyTo, region.to, 'delimiter');
     }
     const tree = formulaTree(view.state, region.bodyFrom, region.bodyTo);

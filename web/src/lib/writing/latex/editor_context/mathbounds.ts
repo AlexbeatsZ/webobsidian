@@ -45,7 +45,7 @@ export class MathBoundsPlugin {
     const r = formulaAt(this.regions, pos);
     if (r) return this.makeBound(r);
     // An empty $$ pair is also the insertion point of an inline snippet.
-    const empty = this.regions.find((r) => r.kind === 'dollar' && pos === r.bodyFrom - 1 && r.display);
+    const empty = this.regions.find((r) => r.kind === 'dollar' && !r.delimiter && pos === r.bodyFrom - 1 && r.display);
     return empty
       ? {
           outer_start: pos - 1,
@@ -61,7 +61,7 @@ export class MathBoundsPlugin {
   private makeBound(r: MathRegion): MathBounds {
     const state = this.state;
     return {
-      outer_start: r.kind === 'dollar' ? r.bodyFrom - (r.display ? 2 : 1) : r.from,
+      outer_start: r.kind === 'dollar' ? r.openFrom : r.from,
       outer_end: r.to,
       inner_start: r.bodyFrom,
       inner_end: r.bodyTo,

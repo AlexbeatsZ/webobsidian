@@ -224,3 +224,21 @@ an external editor; missing files are created only by an explicit save/create
 button. Source/revision handling, package dependencies/conflicts and MathJax's
 single queue/cache/profile lifecycle stay in their existing owners. No runtime,
 types, build or test validation was performed for this settings change.
+
+## TeX 风格定界符 `\( \)` / `\[ \]`(2026-11-05)
+
+为方便粘贴 AI 输出，公式模型(markdown-core `mathRegions`)把 `\( … \)` 识别为行内公式、
+`\[ … \]` 识别为展示公式，`kind` 仍为 `'dollar'`,渲染、编号、LaTeX Suite、源码切换全部
+复用 `$`/`$$` 路径;`delimiter: 'paren' | 'bracket'` 标出来源,`openFrom` 是开定界符起点
+(LaTeX Suite 的 outer_start 和定界符高亮改用它，不再按 `$` 宽度推算)。
+
+- 只有闭合的一对才是公式;行内 `\(` 不跨行,`\[` 遇空行即停。
+- `\[x\]` 同时是 Markdown 的转义方括号(Vault 中有 `\[吕九\]`、`\[1\]` 这类导出文本),
+  所以单行 `\[…\]` 必须含 TeX 特征字符(`\ ^ _ { } =`);`\[` 与 `\]` 各占一行的独立块总算。
+- 链接目标里的 `\(`(`[a](file\(x\).md)`)、代码、注释、HTML 块中的不算。
+- 增量模型复用：在反斜杠后输入/删除括号时放弃复用并重新扫描。
+
+格式化规则 `convert-tex-math-delimiters`(默认开启，可在格式化设置中关闭)在“数学块标记
+独占一行”之前运行，把 `\(…\)` 转为 `$…$`(去掉首尾空格;闭合后紧跟数字时保留原样，
+否则 `$` 不能闭合)、`\[…\]` 转为 `$$…$$`。它用同一个公式模型定位，因此不会改动转义方括号
+和代码。粘贴不转换(粘贴后照常渲染)。

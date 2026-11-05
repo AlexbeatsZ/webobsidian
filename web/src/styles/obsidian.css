@@ -570,6 +570,10 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-s-obsidian .cm-strong { font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
 .cm-s-obsidian .cm-formatting-header { color: var(--text-faint); }
 .cm-s-obsidian .cm-formatting { color: var(--text-faint); }
+/* Revealed renderable syntax uses the ^id colour throughout, including syntax-
+   highlighted tokens nested inside it (HTML tags, task boxes). */
+.cm-s-obsidian .cm-formatting * { color: inherit; }
+.cm-s-obsidian .cm-line .cm-tex-delimiter { color: var(--text-faint); }
 .cm-s-obsidian .cm-highlight { background: var(--text-highlight-bg); }
 .cm-s-obsidian .cm-comment { color: var(--text-faint); }
 /* Raw TeX uses the surrounding font metrics; italic MathJax_Main has a
@@ -698,6 +702,11 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
   color: rgb(var(--callout-color, var(--callout-default))); }
 .cm-callout-icon::after { content: attr(data-quote-gap); white-space: pre; }
 .cm-callout-icon svg { display: block; width: 16px; height: 16px; }
+/* Caret on the type token: the header reads as plain source. Colour, weight,
+   rule and fold control are presentation only; widths of > are unchanged. */
+.md-callout-title:has(> .cm-line.cm-callout-source) { color: var(--text-normal); font-weight: var(--font-weight); }
+.md-callout-title:has(> .cm-line.cm-callout-source)::before { border-right-color: transparent; }
+.cm-line.cm-callout-source .cm-callout-fold { display: none; }
 
 /* ---- Reading mode = Live Preview readonly: hide editing affordances ---- */
 .is-reading-mode .cm-content { caret-color: transparent; }

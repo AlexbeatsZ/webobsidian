@@ -529,6 +529,11 @@ export default {
       'name': '脚注移至文档底部',
       'description': '将所有脚注移动到文档底部',
     },
+    // convert-tex-math-delimiters.ts
+    'convert-tex-math-delimiters': {
+      'name': '转换 TeX 公式定界符',
+      'description': '把 <code>\\( … \\)</code> 转为 <code>$…$</code>,<code>\\[ … \\]</code> 转为 <code>$$ … $$</code>(常见于 AI 输出)。转义的字面方括号和代码不受影响。',
+    },
     // move-math-block-indicators-to-their-own-line.ts
     'move-math-block-indicators-to-their-own-line': {
       'name': '格式化 Latex 块标记',

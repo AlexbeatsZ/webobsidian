@@ -6,9 +6,9 @@
 个人使用的 WebObsidian 原生桌面/Android 应用(fork 自 xnohat/webobsidian,远程 `AlexbeatsZ/webobsidian`)。
 
 ## Current State
-- 源码:`main`,桌面版本 0.1.57(Callout 标题竖线-图标-文字等距，间距变量 `--callout-icon-gap`)。
+- 源码:`main`,桌面版本 0.1.58(源码展开语法灰色、Callout 标题源码态、`\( \)`/`\[ \]` 公式与格式化转换)。
 - GitHub Release:v0.1.56(最新)与 v0.1.55 只有 Mac arm64/x64(Mac 本机构建,Windows 未构建);v0.1.54 有 Mac 与 Windows x64 NSIS(OMEN 构建);linux 预构建最新为 v0.1.43。Release 用 `gh release create` 通过 API 建 tag,不会触发 CI 的 release 工作流;本机 `gh` 默认仓库是上游,必须加 `--repo AlexbeatsZ/webobsidian`,`--target` 要用完整 SHA。
-- 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.57(本地构建);OMEN 0.1.53(Windows 安装包)。
+- 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.58(本地构建);OMEN 0.1.53(Windows 安装包)。
 - Mac 用户数据:`~/Library/Application Support/@webobsidian/desktop`,服务日志 `logs/server.log`。
 
 ## Active Work
@@ -28,10 +28,10 @@
 - 本机走 Clash 代理(127.0.0.1:7897):`@electron/get` 需要 `ELECTRON_GET_USE_PROXY=1` + `GLOBAL_AGENT_HTTPS_PROXY`;Node 原生 `fetch`(`bundle-tunnel.mjs`)不读代理变量,超时后可先用 curl 把 tunnel zip 和 licenses 放进 `desktop/.gen/tunnel-downloads/`(脚本会校验 SHA-256)。
 - Node 26 下 `extract-zip` 在解压 tunnel zip 时 Promise 永不 resolve,进程以 13(unsettled top-level await)退出,且只解出部分文件。处理:用系统 `unzip` 解到 `desktop/.gen/tunnel/<arch>/`,`chmod 755 tunnel-client`,拷贝 licenses 为 `THIRD-PARTY-LICENSES.txt`,写 `version.txt`(内容为 TUNNEL_VERSION),之后 build/before-pack 会直接跳过。CI 用 Node 20 不受影响。
 - OMEN Windows 构建：常规仓库 `C:\Users\Meta\Project\Workspaces\meta-obsidian` 常有未提交改动，只 `git fetch`,用 `git archive <commit>` 导出到 `%TEMP%\.agents\webobsidian-build-<ver>` 隔离构建(`npm ci`→`npm run build`→`desktop: node scripts/build.mjs`→`electron-builder --win nsis --x64 --publish never`)。OMEN 上 `npm ci` 的 Electron 下载会无限挂起：设 `ELECTRON_SKIP_BINARY_DOWNLOAD=1`,electron-builder 会用 `%LOCALAPPDATA%\electron\Cache` 里已有的 zip;tunnel 下载会超时：把常规仓库 `desktop/.gen/tunnel-downloads/tunnel-client-v0.0.19-windows-amd64*` 复制进隔离目录同一路径。PowerShell 5.1 脚本不要用 `$ErrorActionPreference='Stop'`(git 的 stderr 进度会被当成错误),改看 `$LASTEXITCODE`。
-- 本机没有 Playwright 自带浏览器;跑浏览器用例时用一个扩展 `playwright.config.ts` 的临时配置,设 `use.channel: 'chrome'` 和 `webServer.cwd` 为仓库根,改用系统 Chrome。elements.spec 中 4 个、theme-render 中 1 个用例在 2026-11-05 基线上本就失败。
+- 本机没有 Playwright 自带浏览器;跑浏览器用例时用一个扩展 `playwright.config.ts` 的临时配置,设 `use.channel: 'chrome'` 和 `webServer.cwd` 为仓库根,改用系统 Chrome。elements.spec 中 4 个、theme-render 中 1 个、render.spec 中 2 个(复制跨渲染换行、列表换行对齐)、math-transition 中 1 个(用 Control+z 撤销，macOS 上不是撤销键)用例在 2026-11-05 基线上本就失败。临时撤下改动跑基线后要 `npm run build:core` 再测，否则 web 会用到基线的 markdown-core dist。
 - 发版时上传大文件常遇 GitHub HTTP 500/502,`gh release create` 带文件失败会删掉整个草稿。做法:先 `--draft` 建空 Release,逐个 `gh release upload --clobber` 并重试,用 API 按 release id 核对大小(草稿按 tag 查不到),再 `gh release edit --draft=false --latest`。主检出有其他任务改动时，用 `git worktree add --detach /tmp/.agents/webobsidian-release-<ver> <sha>` 隔离构建，复制主检出 `desktop/.gen/tunnel/{arm64,x64}` 跳过 tunnel 下载。
 - zsh 默认 noclobber,`>` 覆盖已有日志会失败导致命令未执行;构建链放进 `bash -c` 或用 `>|`。
 
 ## Docs Index
-- `docs/design/`:模块设计文档。Callout 颜色/图标 → `callout-styles.md`;Callout 布局 → `callout-lists.md`。
+- `docs/design/`:模块设计文档。Callout 颜色/图标 → `callout-styles.md`;Callout 布局 → `callout-lists.md`;源码展开语法灰色 → `source-reveal.md`;`\\( \\)`/`\\[ \\]` 公式 → `native-math.md`。
 - `docs/log/`:按月工作记录。

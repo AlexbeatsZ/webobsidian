@@ -7,6 +7,7 @@ import './rules/compact-yaml';
 import './rules/consecutive-blank-lines';
 import './rules/convert-bullet-list-markers';
 import './rules/convert-spaces-to-tabs';
+import './rules/convert-tex-math-delimiters';
 import './rules/dedupe-yaml-array-values';
 import './rules/default-language-for-code-fences';
 import './rules/emphasis-style';

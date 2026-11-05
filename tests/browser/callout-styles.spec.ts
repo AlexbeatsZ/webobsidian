@@ -48,3 +48,26 @@ test('a stylesheet added at runtime defines a new callout without rebuilding', a
   await expect(title(page, 'mine')).toHaveCSS('color', 'rgb(8, 109, 221)');
   await expect(title(page, 'mine').locator('svg[data-lucide="anchor"]')).toHaveCount(0);
 });
+
+test('caret on the type token shows the header as plain source', async ({ page }) => {
+  const source = '> [!tip] 标题\n> body\n\nend';
+  await reset(page, source);
+  const head = title(page, 'tip');
+  await expect(head).toHaveCSS('color', 'rgb(0, 191, 188)');
+  await expect(head.locator('.cm-callout-fold')).toBeVisible();
+  // Caret inside `[!tip]`.
+  await page.evaluate(() => window.renderHarness.cursor(0, 5));
+  await expect(head.locator('.cm-line.cm-callout-source')).toHaveCount(1);
+  await expect(head.locator('.cm-line')).toContainText('[!tip]');
+  await expect(head).toHaveCSS('font-weight', '400');
+  expect(await head.evaluate(el => getComputedStyle(el).color)).not.toBe('rgb(0, 191, 188)');
+  expect(await head.evaluate(el => getComputedStyle(el, '::before').borderRightColor)).toBe('rgba(0, 0, 0, 0)');
+  await expect(head.locator('.cm-callout-fold')).toBeHidden();
+  await expect(head.locator('.cm-quote-prefix')).toHaveClass(/is-revealed/);
+  await expect(head.locator('.cm-formatting-callout')).toHaveText('[!tip] ');
+  // Caret leaves: presentation returns.
+  await page.evaluate(length => window.renderHarness.cursor(0, length), source.length);
+  await expect(head.locator('.cm-callout-source')).toHaveCount(0);
+  await expect(head).toHaveCSS('color', 'rgb(0, 191, 188)');
+  await expect(head.locator('svg[data-lucide], .cm-callout-icon svg')).not.toHaveCount(0);
+});

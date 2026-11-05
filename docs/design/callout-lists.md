@@ -97,7 +97,9 @@ Thus every title row starts at the first text row's left edge, and align-items:c
 centers the icon against the complete title, including two or more text rows.
 The line's native quote prefix is a separate, nonshrinking flex item; rendered
 headers do not depend on the ordinary paragraph's Q/L hanging-indent measurement.
-Revealing the type removes the pair and restores native source layout. No new
+Revealing the type removes the pair and restores native source layout. The revealed header also drops its title
+presentation (type colour, weight, rule, fold control) and shows its `>`; see
+source-reveal.md. No new
 parser, observer, width cache, coordinate correction or mouse/Enter handler exists.
 
 The type-token presentation owns equal horizontal breathing room. The visible

@@ -6,12 +6,25 @@ const native = migrateLinterReplacements(legacy);
 const now = Date.UTC(2026, 9, 22, 12, 0);
 describe('native formatting compatibility', () => {
   it('retains the installed rule inventory and ordered custom replacements', () => {
-    expect(formatRules).toHaveLength(65);
+    expect(formatRules).toHaveLength(66);
     expect(Object.values(legacy.ruleConfigs).filter((r) => r.enabled)).toHaveLength(29);
     const settings = compileFormattingSettings(native);
     expect(settings.customRegexes).toHaveLength(46);
     expect(ignoresFormatting('09插件/rules.md', settings)).toBe(true);
     expect(ignoresFormatting('notes/example.md', settings)).toBe(false);
+  });
+  it('converts AI-style TeX delimiters to dollar math by default', () => {
+    const settings = compileFormattingSettings(native);
+    expect(settings.ruleConfigs['convert-tex-math-delimiters'].enabled).toBe(true);
+    const source = '# Example\n\n设 \\( \\alpha > 0 \\) 则\n\n\\[\nE = mc^2\n\\]\n\n引用 \\[吕九\\] 与 `\\(x\\)`\n';
+    const formatted = formatText(source, 'notes/example.md', {}, settings, now);
+    expect(formatted).toContain('$\\alpha > 0$');
+    expect(formatted).toContain('$$\nE = mc^2\n$$');
+    expect(formatted).toContain('\\[吕九\\]');
+    expect(formatted).toContain('`\\(x\\)`');
+    expect(formatText(formatted, 'notes/example.md', {}, settings, now)).toBe(formatted);
+    const off = compileFormattingSettings({ ...native, ruleConfigs: { ...native.ruleConfigs, 'convert-tex-math-delimiters': { enabled: false } } });
+    expect(formatText(source, 'notes/example.md', {}, off, now)).toContain('\\( \\alpha > 0 \\)');
   });
   it('is stable at a fixed time and preserves legal mhchem math', () => {
     const settings = compileFormattingSettings(native);

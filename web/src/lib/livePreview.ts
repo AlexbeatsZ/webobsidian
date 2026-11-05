@@ -1337,6 +1337,8 @@ const EMPHASIS_CLASS: Record<string, string> = {
 };
 
 const hidden = Decoration.replace({});
+/** Renderable syntax shown as source (caret on it) uses the faint ^id colour, like Obsidian. */
+const sourceSyntax = (kind: string) => Decoration.mark({ class: 'cm-formatting cm-formatting-' + kind });
 
 function attachmentUrl(target: string, view: EditorView): string {
   return contextOf(view).rawUrl(target);
@@ -1553,6 +1555,9 @@ function buildDecorations(view: EditorView): DecorationSet {
             (child.from !== node.from || child.to !== node.to) && touches(child.from, child.to));
           if (!ownsCaret) {
             for (const mark of marks) pushReplace(mark.from, mark.to, hidden);
+          } else {
+            const kind = name === 'InlineCode' ? 'code' : name === 'Strikethrough' ? 'strikethrough' : 'em';
+            for (const mark of marks) if (mark.to > mark.from) all.push(sourceSyntax(kind).range(mark.from, mark.to));
           }
           return;
         }
@@ -1617,11 +1622,18 @@ function buildDecorations(view: EditorView): DecorationSet {
         // Every structural quote prefix, including a Callout title, retains its
         // own native width and reveal policy independently of the type marker.
         all.push(Decoration.line({ attributes: { 'data-prefix-layout': String(line.from) } }).range(line.from));
+        // A revealed type token shows the whole header as source: its `>` too.
+        const headerSource = !!header && !sourceLine && touches(header.markerFrom, header.titleFrom);
         all.push(Decoration.mark({ class: 'cm-quote-prefix' +
-          (touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
+          (headerSource || touches(line.from, line.from + bodyStart) ? ' is-revealed' : '') }).range(line.from, line.from + bodyStart));
         if (header && !sourceLine) {
           const folded = isCalloutFolded(view.state, header.from, header.fold);
-          if (!touches(header.markerFrom, header.titleFrom)) {
+          // Source-revealed headers drop the title presentation (CSS keys off this class).
+          if (headerSource) {
+            all.push(Decoration.line({ class: 'cm-callout-source' }).range(line.from));
+            if (header.titleFrom > header.markerFrom) all.push(sourceSyntax('callout').range(header.markerFrom, header.titleFrom));
+          }
+          if (!headerSource) {
             const quoteGap = text.slice(0, header.markerFrom - line.from).split('>').at(-1)!;
             all.push(Decoration.mark({ class: 'cm-callout-heading', inclusive: true }).range(header.markerFrom, line.to));
             pushReplace(header.markerFrom, header.titleFrom, Decoration.replace({
@@ -1692,7 +1704,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         const boxPos = bodyFrom + task[0].length - 3;
         if (!touches(line.from, boxPos + 2)) {
           pushReplace(bodyFrom + task[1].length, boxPos + 2, Decoration.replace({ widget: new CheckboxWidget(task[3] !== ' ', boxPos) }));
-        }
+        } else all.push(sourceSyntax('task').range(bodyFrom + task[1].length, boxPos + 2));
       } else {
         const bullet = prefix ? body.match(/^([ \t]*)([-*+])([ \t]+)/) : null;
         if (bullet) {
@@ -1702,7 +1714,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           const markerEnd = start + 1;
           if (!touches(start, markerEnd)) {
             pushReplace(start, markerEnd, Decoration.replace({ widget: new BulletWidget() }));
-          }
+          } else all.push(sourceSyntax('list').range(start, markerEnd));
         }
       }
 
@@ -1773,7 +1785,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       while ((m = wikiRe.exec(text))) {
         const s = line.from + m.index;
         const e = s + m[0].length;
-        if (touches(s, e) || inCode(s, e)) continue;
+        if (inCode(s, e)) continue;
         let low = 0, high = links.length;
         while (low < high) { const middle = (low + high) >>> 1; if (links[middle].from < s) low = middle + 1; else high = middle; }
         const semantic = links[low];
@@ -1782,6 +1794,13 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (inner.includes('[[')) continue;
         const isEmbed = m[1] === '!';
         const pi = inner.indexOf('|');
+        if (touches(s, e)) {
+          // Brackets and an aliased target are not shown once rendered.
+          const open = s + m[1].length + 2;
+          all.push(sourceSyntax('link').range(s, pi > 0 ? open + pi + 1 : open));
+          all.push(sourceSyntax('link').range(e - 2, e));
+          continue;
+        }
         const href = semantic.target
           .replace(/\\$/, '')
           .replace(/ /g, ' ')
@@ -1845,7 +1864,13 @@ function buildDecorations(view: EditorView): DecorationSet {
         // The old match remains a fallback for Vault filenames containing spaces.
         imgRe.lastIndex = e - line.from;
         imageSpans.push({ from: m.index, to: e - line.from });
-        if (touches(s, e) || inCode(s, e)) continue;
+        if (inCode(s, e)) continue;
+        if (touches(s, e)) {
+          const altEnd = s + 2 + m[1].length;
+          all.push(sourceSyntax('image').range(s, s + 2));
+          if (doc.sliceString(altEnd, altEnd + 2) === '](' && altEnd < e) all.push(sourceSyntax('image').range(altEnd, e));
+          continue;
+        }
         // size param lives in the alt text: `![alt|300](url)` / `![|300x200](url)`
         let alt = parsed?.alt ?? m[1];
         let w: number | undefined;
@@ -1881,13 +1906,15 @@ function buildDecorations(view: EditorView): DecorationSet {
       // (e.g. Trilium/turndown exports escape `2\.` to avoid list parsing).
       // MUST run LAST: pushReplace's overlap guard would otherwise block math/
       // link widgets whose range contains an escape (e.g. `\,` inside $$…$$).
-      if (!lineActive(line.from)) {
+      {
+        const active = lineActive(line.from);
         const escRe = /\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~])/g;
         let em: RegExpExecArray | null;
         while ((em = escRe.exec(text))) {
           const s = line.from + em.index;
           if (inCode(s, s + 2)) continue;
-          pushReplace(s, s + 1, hidden);
+          if (active) all.push(sourceSyntax('escape').range(s, s + 1));
+          else pushReplace(s, s + 1, hidden);
         }
       }
     }

@@ -27,6 +27,7 @@ import BlockquoteStyle from './rules/blockquote-style';
 import {IgnoreTypes, ignoreListOfTypes} from './utils/ignore-types';
 import {protectFormulaDollars} from '../analysis';
 import MoveMathBlockIndicatorsToOwnLine from './rules/move-math-block-indicators-to-own-line';
+import ConvertTexMathDelimiters from './rules/convert-tex-math-delimiters';
 import {LinterSettings} from './settings-data';
 import TrailingSpaces from './rules/trailing-spaces';
 type CustomAutoCorrectContent = any;
@@ -135,6 +136,9 @@ export class RulesRunner {
     [newText] = EscapeYamlSpecialCharacters.applyIfEnabled(newText, runOptions.settings, this.disabledRules, {
       defaultEscapeCharacter: runOptions.settings.commonStyles.escapeCharacter,
     });
+
+    // Before block-indicator layout so converted `$$` blocks get the same treatment.
+    [newText] = ConvertTexMathDelimiters.applyIfEnabled(newText, runOptions.settings, this.disabledRules);
 
     [newText] = MoveMathBlockIndicatorsToOwnLine.applyIfEnabled(newText, runOptions.settings, this.disabledRules, {
       minimumNumberOfDollarSignsToBeAMathBlock: runOptions.settings.commonStyles.minimumNumberOfDollarSignsToBeAMathBlock,

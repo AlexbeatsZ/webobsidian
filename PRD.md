@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.30 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Phiên bản: 1.31 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Changelog 1.31 (源码展开灰色、TeX 定界符): 学 Obsidian,实时预览中光标展开的可渲染语法字符统一用 `^id` 同款灰色
+> (`--text-faint`),内容保持正文色;Callout 标题展开源码时去掉类型色、粗体、竖线与折叠箭头。公式模型识别 AI 输出常用的
+> `\( … \)`(行内)和 `\[ … \]`(展示)并照常渲染(单行 `\[…\]` 需含 TeX 特征以免误判转义方括号);默认开启的格式化规则
+> 把它们转为 `$…$`/`$$…$$`。见 docs/design/source-reveal.md、native-math.md。
 > Changelog 1.30 (MCP 说明笔记): 用户希望把 Vault 里的笔记语法和规范固定交给 AI。设置 › MCP 可从仓库选择最多 20 篇
 > Markdown 笔记作为说明笔记,列表存在 `.obsidian/webobsidian/mcp.jsonc`。MCP 连接时服务器说明列出它们的链接与路径;
 > 每次 `obsidian_get_context` 附上它们当前保存的全文(`standing_instructions`,单篇 32K、合计 64K 字符,超出标记截断);

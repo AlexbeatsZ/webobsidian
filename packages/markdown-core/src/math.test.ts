@@ -116,3 +116,29 @@ describe('shared formula source and history', () => {
     expect(doc.snapshot.text).toBe('\\left(x\\right)');
   });
 });
+
+describe('TeX-style delimiters pasted from AI output', () => {
+  const regions = (text: string) => mathRegions(analyzeMarkdown(text)).map(r => ({
+    tex: r.tex, display: r.display, block: r.block, delimiter: r.delimiter, open: text.slice(r.openFrom, r.bodyFrom),
+  }));
+  it('recognizes inline \\( \\) and standalone \\[ \\] as dollar-equivalent math', () => {
+    expect(regions('a \\(\\beta + 1\\) b')).toEqual([{ tex: '\\beta + 1', display: false, block: false, delimiter: 'paren', open: '\\(' }]);
+    expect(regions('text\n\\[\nE = mc^2\n\\]\nafter')).toEqual([{ tex: '\nE = mc^2\n', display: true, block: true, delimiter: 'bracket', open: '\\[' }]);
+    expect(regions('> \\[\n> x\n> \\]')[0]).toMatchObject({ block: true, delimiter: 'bracket', tex: '\nx\n' });
+    expect(regions('see \\[a^2 + b^2\\] here')).toEqual([{ tex: 'a^2 + b^2', display: true, block: false, delimiter: 'bracket', open: '\\[' }]);
+  });
+  it('keeps escaped literal brackets, link destinations, code and unclosed openers as text', () => {
+    expect(regions('引用 \\[吕九\\] 与 \\[1\\]')).toEqual([]);
+    expect(regions('[nested](file\\(x\\).md)')).toEqual([]);
+    expect(regions('`\\(x\\)` and \\\\(y\\)')).toEqual([]);
+    expect(regions('open \\( never closed\nnext \\)')).toEqual([]);
+    expect(regions('\\[\nx\n\nstill text \\]')).toEqual([]);
+  });
+  it('coexists with dollar math and invalidates incremental reuse when a delimiter is typed', () => {
+    expect(regions('$a$ and \\(b\\) and $$c$$').map(r => r.open)).toEqual(['$', '\\(', '$$']);
+    const before = analyzeMarkdown('x \\(y) z');
+    expect(mathRegions(before)).toEqual([]);
+    const after = updateMarkdown(before, 'x \\(y\\) z', [{ fromA: 5, toA: 5, fromB: 5, toB: 6 }]);
+    expect(mathRegions(after).map(r => r.tex)).toEqual(['y']);
+  });
+});

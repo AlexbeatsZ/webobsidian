@@ -8,6 +8,10 @@ export interface MathRegion extends SourceSpan {
   closed: boolean;
   kind: 'dollar' | 'code' | 'html';
   block: boolean;
+  /** Start of the opening delimiter (`$`, `$$`, `\(`, `\[`); `from` for code/html. */
+  openFrom: number;
+  /** TeX-style `\( \)` / `\[ \]` delimiters; otherwise `$`/`$$` (kind 'dollar'). */
+  delimiter?: 'paren' | 'bracket';
   tex: string;
   /** Source segments exclude quote prefixes without losing source coordinates. */
   segments: SourceSpan[];
@@ -35,11 +39,15 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
   if (predecessor && previous && old && old.every((r) => r.closed)) {
     const changes = predecessor.changes;
     const boundary = /[$\\\r\n`~<>%#{}]/;
+    // `\(` `\[` `\)` `\]` delimiters: a bracket typed right after a backslash.
+    const bracket = /[()[\]]/;
     const protectedRanges = [...old, ...previous.literal, ...previous.htmlBlocks, ...previous.html];
     const harmless = changes.every(
       (c) =>
         !boundary.test(previous.text.slice(c.fromA, c.toA)) &&
         !boundary.test(model.text.slice(c.fromB, c.toB)) &&
+        !((bracket.test(previous.text.slice(c.fromA, c.toA)) || bracket.test(model.text.slice(c.fromB, c.toB))) &&
+          (previous.text[c.fromA - 1] === '\\' || model.text[c.fromB - 1] === '\\')) &&
         !protectedRanges.some((r) => c.fromA <= r.to + 1 && c.toA >= r.from - 1),
     );
     const map = (pos: number) => {
@@ -63,6 +71,7 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
         ...r,
         from: map(r.from),
         to: map(r.to),
+        openFrom: map(r.openFrom),
         bodyFrom: map(r.bodyFrom),
         bodyTo: map(r.bodyTo),
         segments: r.segments.map((s) => ({ from: map(s.from), to: map(s.to) })),
@@ -88,6 +97,8 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
     closed: boolean,
     kind: MathRegion['kind'],
     block = false,
+    openFrom = from,
+    delimiter?: MathRegion['delimiter'],
   ) => {
     bodyTo = Math.max(bodyFrom, bodyTo);
     const segments: SourceSpan[] = [];
@@ -116,6 +127,8 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
       closed,
       kind,
       block,
+      openFrom,
+      ...(delimiter ? { delimiter } : {}),
       segments,
       tex: segments.map((s) => text.slice(s.from, s.to)).join('\n'),
     });
@@ -189,10 +202,44 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
   excluded.sort((a, b) => a.from - b.from);
 
   let blocked = 0, closedAt = -1;
+  /**
+   * `\( … \)` (inline) and `\[ … \]` (display), as pasted from AI output. Only a
+   * closed pair is math. `\[x\]` is also Markdown's escaped literal bracket, so a
+   * one-line bracket pair needs TeX-looking content; standalone lines always count.
+   */
+  // Link destinations escape parentheses (`[a](file\(x\).md)`): never TeX delimiters.
+  const urls = model.nodes.filter((node) => node.name === 'URL' || node.name === 'LinkLabel');
+  const texDelimited = (from: number): number | undefined => {
+    if (urls.some((url) => from >= url.from && from < url.to)) return;
+    const display = text[from + 1] === '[', closer = display ? '\\]' : '\\)';
+    const bodyFrom = from + 2;
+    let end = bodyFrom;
+    for (; end < text.length; end++) {
+      if (text[end] === '\n' && (!display || /^\n(?: {0,3}> ?)*[ \t]*(?:\n|$)/.test(text.slice(end)))) return;
+      if (text.startsWith(closer, end) && !isEscaped(text, end)) break;
+    }
+    if (end >= text.length) return;
+    const body = text.slice(bodyFrom, end);
+    if (!body.trim()) return;
+    const to = end + 2, lineFrom = text.lastIndexOf('\n', from - 1) + 1;
+    const lineEnd = text.indexOf('\n', to);
+    const standalone = display && /^(?: {0,3}> ?)*\s*$/.test(text.slice(lineFrom, from)) &&
+      /^[ \t]*\n/.test(text.slice(bodyFrom)) && body.includes('\n') &&
+      /^[ \t]*(?:\^[\p{L}\p{N}-]+[ \t]*)?$/u.test(text.slice(to, lineEnd < 0 ? text.length : lineEnd));
+    if (display && !standalone && !/[\\^_{}=]/.test(body)) return;
+    add(standalone ? lineFrom : from, to, bodyFrom, end, display, true, 'dollar', standalone, from, display ? 'bracket' : 'paren');
+    closedAt = to;
+    return to;
+  };
   for (let p = 0; p < text.length; ) {
     while (blocked < excluded.length && excluded[blocked].to <= p) blocked++;
     if (blocked < excluded.length && excluded[blocked].from <= p) {
       p = excluded[blocked].to;
+      continue;
+    }
+    if (text[p] === '\\' && (text[p + 1] === '(' || text[p + 1] === '[') && !isEscaped(text, p)) {
+      const end = texDelimited(p);
+      p = end ?? p + 2;
       continue;
     }
     if (text[p] !== '$' || isEscaped(text, p)) {
@@ -266,7 +313,7 @@ export function mathRegions(model: MarkdownModel, languages: readonly string[] =
       /^(?: {0,3}> ?)*\s*$/.test(text.slice(lineFrom, from)) &&
       /^\s*(?:\n|$)/.test(text.slice(bodyFrom)) &&
       text.slice(bodyFrom, end).includes('\n');
-    add(standalone ? lineFrom : from, to, bodyFrom, end, display, closed, 'dollar', standalone);
+    add(standalone ? lineFrom : from, to, bodyFrom, end, display, closed, 'dollar', standalone, from);
     if (closed) closedAt = to;
     p = Math.max(to, bodyFrom);
   }

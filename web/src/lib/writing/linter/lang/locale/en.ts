@@ -545,6 +545,11 @@ export default {
         'description': 'Includes a blank line between footnotes when enabled.',
       },
     },
+    // convert-tex-math-delimiters.ts
+    'convert-tex-math-delimiters': {
+      'name': 'Convert TeX Math Delimiters',
+      'description': 'Convert <code>\\( … \\)</code> to <code>$…$</code> and <code>\\[ … \\]</code> to <code>$$ … $$</code> (common in AI output). Escaped literal brackets and code are left alone.',
+    },
     // move-math-block-indicators-to-their-own-line.ts
     'move-math-block-indicators-to-their-own-line': {
       'name': 'Move Math Block Indicators to Their Own Line',
