@@ -15,6 +15,7 @@ const desktopApi = {
     connect: () => ipcRenderer.invoke('desktop:mcp-connect'),
   },
   openVaultPath: (path: string): Promise<void> => ipcRenderer.invoke('desktop:open-vault-path', path),
+  revealVaultPath: (path: string): Promise<void> => ipcRenderer.invoke('desktop:reveal-vault-path', path),
   onBeforeClose: (listener: () => Promise<void>) => {
     const handler = (_event: unknown, token: string) => {
       void Promise.resolve().then(listener).then(

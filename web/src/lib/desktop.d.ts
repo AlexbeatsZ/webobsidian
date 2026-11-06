@@ -14,6 +14,7 @@ declare global {
       };
       vaultPath?: string;
       openVaultPath(path: string): Promise<void>;
+      revealVaultPath?(path: string): Promise<void>;
       onBeforeClose(listener: () => Promise<void>): () => void;
     };
   }

@@ -245,6 +245,7 @@ export function bindTimestampUpdates(session: DocumentSession, report: (error: s
 }
 const inFlight = new Map<string, { promise: Promise<void>; requested: boolean }>();
 export function manualSave(path: string) {
+  if (!/\.(md|markdown)$/i.test(path)) return documents.open(path).then(session => session.save());
   const existing = inFlight.get(path);
   if (existing) {
     existing.requested = true;

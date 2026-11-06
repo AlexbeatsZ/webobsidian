@@ -1,23 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useStore } from '../lib/store';
 import { useActivePage } from '../lib/useActivePage';
-import { useDocumentSession } from '../lib/useDocumentSession';
+import { useDocumentSession, useExistingDocumentSnapshot } from '../lib/useDocumentSession';
+import { useVirtualReading } from '../lib/virtualReading';
 import { api } from '../lib/api';
 import Icon from './Icon';
 import PluginElements from './PluginElements';
 import ViewModeMenu from './ViewModeMenu';
+import VirtualGroupMenu from './VirtualGroupMenu';
 import { pluginStatusItems } from '../lib/plugins';
 
 // CJK characters count individually, as Obsidian does; other scripts count by whitespace runs.
 const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/gu;
+const noSubscribe = () => () => {};
 function countWords(text: string): number {
   const cjk = text.match(CJK)?.length ?? 0;
   return cjk + text.replace(CJK, ' ').split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length;
 }
 
 export default function StatusBar() {
-  const { path: activePath } = useActivePage();
-  const { snapshot } = useDocumentSession(activePath && /\.(md|markdown|txt)$/i.test(activePath) ? activePath : null);
+  const { path: activePath, viewId } = useActivePage();
+  const reader = useVirtualReading(activePath, viewId);
+  const reading = useSyncExternalStore(reader?.subscribe ?? noSubscribe, () => reader?.getSnapshot());
+  const sourcePath = reading?.configuration ? activePath + '/.virtual-document.json' : reading?.activeSource;
+  const ordinary = useDocumentSession(activePath && /\.(md|markdown|txt)$/i.test(activePath) ? activePath : null);
+  const virtual = useExistingDocumentSnapshot(sourcePath ?? null);
+  const snapshot = reader ? virtual : ordinary.snapshot;
   const content = snapshot.raw;
   const dirty = snapshot.dirty;
   const loadTree = useStore((s) => s.loadTree);
@@ -48,7 +56,8 @@ export default function StatusBar() {
     }
   };
 
-  const isText = activePath && /\.(md|markdown|txt)$/i.test(activePath);
+  const currentPath = reader ? sourcePath : activePath;
+  const isText = currentPath && /\.(md|markdown|txt)$/i.test(currentPath);
   const words = isText ? countWords(content) : 0;
 
   const gitLabel = !git?.isRepo
@@ -60,6 +69,7 @@ export default function StatusBar() {
   return (
     <div className="status-bar">
       <PluginElements items={pluginStatusItems} />
+      <VirtualGroupMenu />
       <ViewModeMenu />
       {dirty && <span>保存中…</span>}
       {isText && <span>{words} 词</span>}

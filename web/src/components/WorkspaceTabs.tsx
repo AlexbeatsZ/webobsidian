@@ -13,6 +13,8 @@ import { menuModifiers } from '../lib/configuredMenus/transform';
 import { useIsMobile } from '../lib/useIsMobile';
 import { useMainPdfSession } from '../lib/pdf/react';
 import Icon from './Icon';
+import { fileManagerMenuItems } from '../lib/revealInFileManager';
+import { findNode } from '../lib/tree';
 
 type Pane = 'main' | 'split';
 type Tab = { path: string; title: string };
@@ -236,6 +238,7 @@ export default function WorkspaceTabs() {
         },
       ];
     }
+    items.push(...fileManagerMenuItems(path, findNode(useStore.getState().tree, path)?.type === 'folder', notify));
     if (isMd) items.push(...nativeBatchTagMenuItems({ kind: 'files', paths: [path] }));
     openContextMenu({ x: e.clientX || Math.round(rect.left), y: e.clientY || Math.round(rect.bottom),
       items: extendFileMenu(items, [path], { kind: 'tab', source: 'workspace-tabs', paths: [path],

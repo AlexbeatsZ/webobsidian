@@ -20,6 +20,7 @@ import { documents } from '../lib/documents';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { search, searchKeymap } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { json } from '@codemirror/lang-json';
 import { languages } from '@codemirror/language-data';
 import { indentUnit, syntaxHighlighting } from '@codemirror/language';
 import { analyzeMarkdown, bodyHeadingSyntax, changesBetween, type DocumentSession, type DocumentSnapshot, type SourceChange, type MarkdownModel, type EditHistoryState } from '@webobsidian/markdown-core';
@@ -39,6 +40,7 @@ import { renderContext, type FragmentOptions, type RenderContext } from '../lib/
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import { attachMenuContext } from '../lib/configuredMenus/transform';
 import type { RenderMenuItem } from '../lib/renderContext';
+import { fileManagerMenuItems } from '../lib/revealInFileManager';
 import { captureMcpContextTarget, queueMcpContext } from '../lib/review/client';
 import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField,
   tableField, htmlBlockField, mermaidField, htmlRenderedState, htmlPreviewField,
@@ -181,6 +183,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       { id: 'link:side', label: '在分栏打开', onClick: () => followRenderedLink(v, link, { disposition: 'side' }) },
       { id: 'link:copy', label: '复制链接', onClick: () => { void navigator.clipboard.writeText(link); } },
     ] : [];
+    const locationItems = fileManagerMenuItems(context.sourcePath, false, message => context.reportError?.(message));
     const mcpTarget = captureMcpContextTarget(v, context.sourcePath);
     const mcpItem: RenderMenuItem = {
       id: 'editor:add-mcp-context',
@@ -194,6 +197,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         { id: 'editor:copy', label: "复制", onClick: copy }, { id: 'editor:select-all', label: "全选", onClick: selectAll },
         { label: '', separator: true },
         mcpItem,
+        ...locationItems,
       ] });
       return;
     }
@@ -243,6 +247,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         { id: 'editor:select-all', label: "全选", onClick: selectAll },
         { label: '', separator: true },
         mcpItem,
+        ...locationItems,
         ...(sel
           ? [
               { label: '', separator: true },
@@ -292,7 +297,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         ])),
         search({ top: true }),
         keymap.of([...defaultKeymap, ...searchKeymap, ...markdownListKeymap, indentWithTab]),
-        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax, blockEffectSyntax, footnoteSyntax] }),
+        /\.jsonc?$/i.test(p.snapshot.id) ? json() : markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax, blockEffectSyntax, footnoteSyntax] }),
         suggesterPlugin,
         mathEditingExtensions,
         ...(p.context.allowPlugins ? [nativeWritingExtensions()] : []),

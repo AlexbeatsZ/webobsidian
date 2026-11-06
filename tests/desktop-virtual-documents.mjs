@@ -87,6 +87,10 @@ try {
   await bookRow.click();
   await expect(page.getByRole('navigation',{name:'文档索引'})).toBeVisible();
   const firstOpenMs=Date.now()-opened;
+  await expect(page.locator('.virtual-document-toolbar')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'切换分组：MD',exact:true})).toBeVisible();
+  const mode=page.getByRole('button',{name:/— 切换视图/});
+  await mode.click();await page.getByRole('menuitemcheckbox',{name:'实时预览',exact:true}).click();
   await page.getByRole('button',{name:'大纲',exact:true}).click();
   const index=page.getByRole('navigation',{name:'文档索引'});
   const chapter= index.getByRole('button').filter({hasText:'第18章'});
@@ -106,17 +110,71 @@ try {
   const markdownMounted=await page.locator('[data-mounted="true"]').count();assert(markdownMounted<=6);
   await page.screenshot({path:path.join(output,'native-markdown.png')});
   const mdReadCount=reads.size;
+  // Real keyboard edits persist only to their independent source in the copied Vault.
+  const editedPath=await selectedSource.getAttribute('data-virtual-source');
+  const editable=selectedSource.locator('.cm-content[contenteditable="true"]');
+  await editable.click();await editable.press('ControlOrMeta+End');
+  await page.keyboard.insertText('\n\nNative independent edit acceptance\n');
+  await expect.poll(async()=>await fs.readFile(path.join(vault,editedPath),'utf8')).toContain('Native independent edit acceptance');
+  for(const [file,bytes] of original)if(file!==editedPath)assert((await fs.readFile(path.join(vault,file))).equals(bytes),'Unrelated source changed: '+file);
+  await editable.press('ControlOrMeta+z');
+  await expect.poll(async()=>await fs.readFile(path.join(vault,editedPath),'utf8')).not.toContain('Native independent edit acceptance');
+  await page.screenshot({path:path.join(output,'native-inline-editing.png')});
+  // Configuration is a JSON editor in the same bottom-right group menu.
+  await page.getByRole('button',{name:'切换分组：MD',exact:true}).click();
+  await page.getByRole('menuitemcheckbox',{name:'配置',exact:true}).click();
+  const configPath=path.join(vault,book,'.virtual-document.json');
+  const originalConfig=await fs.readFile(configPath,'utf8');
+  await expect(page.locator('.virtual-group-trigger > span')).toBeInViewport();
+  assert.equal(await page.locator('.virtual-group-trigger').evaluate(element=>getComputedStyle(element).display),'flex');
+  const configEditor=page.locator('.virtual-configuration-editor .cm-content[contenteditable="true"]');
+  await expect(configEditor).toContainText('"version"');
+  const highlightColors=await configEditor.locator('.cm-line span').evaluateAll(spans=>[...new Set(spans.map(span=>getComputedStyle(span).color))]);
+  assert(highlightColors.length>1);
+  await configEditor.click();await configEditor.press('ControlOrMeta+Home');
+  await page.getByRole('button',{name:'切换分组：配置',exact:true}).click();
+  await page.screenshot({path:path.join(output,'native-json-configuration.png')});
+  await page.keyboard.press('Escape');
+
+  const config=JSON.parse(originalConfig);config.streams[0].title='MD native acceptance';
+  const nextConfig=JSON.stringify(config,null,2)+'\n';
+  await configEditor.click();await configEditor.press('ControlOrMeta+a');await page.keyboard.insertText(nextConfig);
+  await expect.poll(()=>fs.readFile(configPath,'utf8')).toBe(nextConfig);
+  await expect(page.getByRole('button',{name:'切换分组：配置',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'切换分组：配置',exact:true}).click();
+  await expect(page.getByRole('menuitemcheckbox',{name:'MD native acceptance',exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  // A malformed draft must remain editable without replacing the last valid file.
+  await configEditor.click();await configEditor.press('ControlOrMeta+a');
+  const rejection=page.waitForResponse(response=>response.url().includes('/api/files/content')&&response.request().method()==='PUT'&&response.status()===400);
+  await page.keyboard.insertText('{');await rejection;
+  assert.equal(await fs.readFile(configPath,'utf8'),nextConfig);
+  await expect(configEditor).toHaveText('{');
+  await configEditor.click();await configEditor.press('ControlOrMeta+a');await page.keyboard.insertText(originalConfig);
+  await expect.poll(()=>fs.readFile(configPath,'utf8')).toBe(originalConfig);
+  await app.evaluate(({shell})=>{
+    globalThis.nativeReveals=[];
+    const open=shell.openPath.bind(shell),show=shell.showItemInFolder.bind(shell);
+    shell.openPath=async target=>{const result=await open(target);globalThis.nativeReveals.push({kind:'folder',target,result});return result;};
+    shell.showItemInFolder=target=>{show(target);globalThis.nativeReveals.push({kind:'file',target});};
+  });
+  await configEditor.click({button:'right'});await page.getByRole('menuitem',{name:'在 Finder 中显示',exact:true}).click();
+  await expect.poll(()=>app.evaluate(()=>globalThis.nativeReveals.length)).toBe(1);
+  await bookRow.click({button:'right'});await page.getByRole('menuitem',{name:'在 Finder 中打开',exact:true}).click();
+  await expect.poll(()=>app.evaluate(()=>globalThis.nativeReveals.length)).toBe(2);
+  const nativeReveals=await app.evaluate(()=>globalThis.nativeReveals);
+  assert.equal(nativeReveals[0].target,await fs.realpath(configPath));assert.equal(nativeReveals[1].target,await fs.realpath(path.join(vault,book)));assert.equal(nativeReveals[1].result,'');
   await page.locator(`[data-path="${slides}"]`).first().click();
   await expect(page.getByRole('navigation',{name:'文档索引'})).toBeVisible();
   const pdfStart=Date.now();await page.getByRole('navigation',{name:'文档索引'}).getByRole('button').nth(1).click();
   await expect(page.locator('.virtual-document-scroll .pdf-page-surface.is-ready').first()).toBeVisible({timeout:60000});
   const pdfOpenMs=Date.now()-pdfStart,canvases=await page.locator('.virtual-document-scroll canvas').count();assert(canvases<15);
   await page.screenshot({path:path.join(output,'native-pdf.png')});
-  for(const [file,bytes] of original)assert((await fs.readFile(path.join(vault,file))).equals(bytes),'Source changed: '+file);
+  for(const [file,bytes] of original)if(file!==editedPath)assert((await fs.readFile(path.join(vault,file))).equals(bytes),'Source changed: '+file);
   assert.deepEqual(errors,[]);
   const metrics=await app.evaluate(({app})=>app.getAppMetrics().map(({type,memory})=>({type,memory})));
   const result={executable,fixture,realMaterials:!!process.env.VIRTUAL_REAL_VAULT,sourceMarkdown:original.size,sourceMarkdownBytes:[...original.values()].reduce((sum,bytes)=>sum+bytes.length,0),
-    firstOpenMs,chapterJumpMs,pdfOpenMs,markdownReadCount:mdReadCount,markdownMounted,pdfCanvases:canvases,sourceBytesUnchanged:true,rendererErrors:errors,processMetrics:metrics};
+    firstOpenMs,chapterJumpMs,pdfOpenMs,markdownReadCount:mdReadCount,markdownMounted,pdfCanvases:canvases,unrelatedSourceBytesUnchanged:true,independentEditAndUndo:true,configurationValidSave:true,invalidConfigurationPreserved:true,jsonHighlightColors:highlightColors,nativeReveals,rendererErrors:errors,processMetrics:metrics};
   await fs.writeFile(path.join(output,'native-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 } catch(error) {
   const page=await app.firstWindow();await page.screenshot({path:path.join(output,'native-failure.png')}).catch(()=>{});

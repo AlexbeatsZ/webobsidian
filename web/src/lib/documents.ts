@@ -15,6 +15,8 @@ export class DocumentRegistry {
   private pathQueue: Promise<unknown> = Promise.resolve();
   pathVersion = 0;
   private changing: { from: string; to?: string; done: Promise<unknown> } | undefined;
+  private pinned = new WeakSet<DocumentSession>();
+  private leases = new Map<DocumentSession, number>();
   onError: (error: unknown) => void = console.error;
   isOpen: (path: string) => boolean = () => false;
   canRefresh: (path: string) => boolean = () => true;
@@ -27,7 +29,36 @@ export class DocumentRegistry {
     return () => { this.listeners.delete(listener); };
   }
 
+  pin(session: DocumentSession) { this.pinned.add(session); }
+
   async open(path: string): Promise<DocumentSession> {
+    const session = await this.openSession(path);
+    this.pin(session);
+    return session;
+  }
+
+  /** Virtual chapters share real sessions, without retaining every unread file. */
+  async acquire(path: string) {
+    const session = await this.openSession(path);
+    this.leases.set(session, (this.leases.get(session) ?? 0) + 1);
+    let released = false;
+    return { session, release: () => {
+      if (released) return;
+      released = true;
+      const remaining = (this.leases.get(session) ?? 1) - 1;
+      if (remaining) this.leases.set(session, remaining); else this.leases.delete(session);
+      // Passive React cleanup can run before another view's lease is attached.
+      setTimeout(() => {
+        const state = session.snapshot;
+        if (this.leases.has(session) || this.pinned.has(session) || session.userEditVersion || this.isOpen(session.id)
+          || state.dirty || state.saving || state.conflict || state.locked || this.sessions.get(session.id) !== session) return;
+        this.cancelSave(session); this.stops.get(session)?.(); this.stops.delete(session); this.sessions.delete(session.id);
+        for (const listener of this.listeners) listener(state);
+      }, 0);
+    } };
+  }
+
+  private async openSession(path: string): Promise<DocumentSession> {
     await this.waitForPath(path);
     const existing = this.sessions.get(path);
     if (existing?.snapshot.dirty) return existing;
@@ -53,6 +84,7 @@ export class DocumentRegistry {
         locked = !!snapshot.locked;
         for (const listener of this.listeners) listener(snapshot);
       }));
+      for (const listener of this.listeners) listener(session.snapshot);
       return session;
     }).finally(() => this.pending.delete(path));
     this.pending.set(path, loading);

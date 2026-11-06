@@ -6,6 +6,8 @@ import { useActivePage } from '../lib/useActivePage';
 import { getActiveEditor, setActiveEditorMode } from '../lib/activeEditor';
 import { livePreviewState, livePreviewReadonly } from '../lib/renderState';
 import { subscribeNavigationViews } from '../lib/fragmentNavigation';
+import { useVirtualReading } from '../lib/virtualReading';
+const noSubscribe = () => () => {};
 
 const subscribeMode = (listener: () => void) => subscribeNavigationViews(() => listener());
 const currentMode = (): ViewMode => {
@@ -20,13 +22,17 @@ const modes: { mode: ViewMode; label: string; icon: string }[] = [
 ];
 
 export default function ViewModeMenu() {
-  const { path: activePath } = useActivePage();
-  const viewMode = useSyncExternalStore(subscribeMode, currentMode);
+  const { path: activePath, viewId } = useActivePage();
+  const reader = useVirtualReading(activePath, viewId);
+  const reading = useSyncExternalStore(reader?.subscribe ?? noSubscribe, () => reader?.getSnapshot());
+  const normalMode = useSyncExternalStore(subscribeMode, currentMode);
+  const viewMode = reading?.mode ?? normalMode;
   const [open, setOpen] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
-  const isMarkdown = !!activePath && /\.(md|markdown)$/i.test(activePath);
+  const isMarkdown = reading ? !reading.configuration && !!reader?.document.streams.find(stream => stream.id === reading.stream)?.files.some(file => file.kind === 'markdown')
+    : !!activePath && /\.(md|markdown)$/i.test(activePath);
   const current = modes.find((item) => item.mode === viewMode)!;
 
   useEffect(() => { setOpen(false); }, [activePath]);
@@ -68,7 +74,7 @@ export default function ViewModeMenu() {
       {open && (
         <div id={menuId} className="view-mode-menu" role="menu" aria-label="切换视图" onKeyDown={onKeyDown}>
           <MenuList items={modes.map(item => ({ label: item.label, icon: item.icon, checked: item.mode === viewMode,
-            onClick: () => { setActiveEditorMode(item.mode); } }))} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
+            onClick: () => { if (reader) reader.setMode(item.mode); else setActiveEditorMode(item.mode); } }))} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
         </div>
       )}
     </div>

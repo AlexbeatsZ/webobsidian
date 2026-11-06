@@ -22,3 +22,16 @@ export async function openExistingPath(target: string): Promise<void> {
   const error = await shell.openPath(target);
   if (error) throw new Error(error);
 }
+
+/** File-manager reveal is scoped to the effective Vault, including symlinks. */
+export async function revealVaultItem(dataDir: string, requested: string, fallback?: string): Promise<void> {
+  if (typeof requested !== 'string' || requested.length > 32768 || requested.includes('\0') || path.isAbsolute(requested)) throw new Error('文件路径无效');
+  const root = await fs.realpath(await effectiveVaultPath(dataDir, fallback));
+  const target = await fs.realpath(path.resolve(root, requested.replace(/\\/g, '/')));
+  const relative = path.relative(root, target);
+  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new Error('路径必须位于当前笔记库内');
+  const entry = await fs.stat(target);
+  if (entry.isDirectory()) await openExistingPath(target);
+  else if (entry.isFile()) shell.showItemInFolder(target);
+  else throw new Error('只能打开文件或目录');
+}

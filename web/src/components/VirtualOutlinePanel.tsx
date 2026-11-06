@@ -16,6 +16,7 @@ export default function VirtualOutlinePanel({ reader }: { reader: VirtualReading
   useEffect(() => documents.subscribe(snapshot => {
     if (stream.files.some(file => file.path === snapshot.id)) refresh(value => value + 1);
   }), [stream]);
+  if (state.configuration) return null;
   return <nav className="virtual-outline sidebar-body" aria-label="连续文档大纲">
     {stream.files.map(source => <section key={source.path}>
       <button className="virtual-outline-file" onClick={() => reader.go({ path: source.path })}>{source.title}</button>

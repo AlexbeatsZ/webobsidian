@@ -7,7 +7,7 @@ vi.mock('./settings.js', () => ({ getSettings:async () => ({vault:{path:state.ro
 vi.mock('./git.js', () => ({scheduleAutoCommitOnSave:vi.fn()}));
 vi.mock('./fileupdates.js', () => ({queueFileUpdate:vi.fn(() => Promise.resolve())}));
 import { virtualManifestSchema } from '../contracts/virtualDocument.js';
-import { describeVirtualDocuments, defaultVirtualManifest, saveVirtualManifest, readVirtualManifest, disableVirtualDocument, resolveVirtualDocument } from './virtualDocuments.js';
+import { describeVirtualDocuments, defaultVirtualManifest, saveVirtualManifest, readVirtualManifest, disableVirtualDocument, resolveVirtualDocument, validateVirtualManifestText } from './virtualDocuments.js';
 import { listTree, clearVaultStats } from './vaultFile.js';
 import { catalog, replaceCatalog, VaultCatalog } from './catalog.js';
 const base=path.join(os.tmpdir(),'.agents');
@@ -55,4 +55,13 @@ it('resolves a virtual document as a link target without replacing member file i
   expect(await resolveVirtualDocument('Book','note.md')).toMatchObject({status:'resolved',path:'Book'});
   expect(await resolveVirtualDocument('^eq-original','note.md')).toBeUndefined();
   expect(await resolveVirtualDocument('../outside','note.md')).toBeUndefined();
+});
+it('validates JSON editor drafts without overwriting the last valid descriptor', async () => {
+  const manifest=defaultVirtualManifest((await listTree()).children![0]);expect(manifest.streams[0].title).toBe('MD');
+  await saveVirtualManifest('Book',manifest);const current=(await readVirtualManifest('Book'))!;
+  for (const raw of ['{', '{"version":1,"streams":[]}', JSON.stringify({...manifest,streams:[{id:'bad',title:'MD',files:['../outside.md']}]})])
+    await expect(validateVirtualManifestText('Book',raw)).rejects.toThrow();
+  expect((await readVirtualManifest('Book'))!.revision).toBe(current.revision);
+  const valid='// Keep this comment\n'+JSON.stringify(manifest,null,2);
+  expect(await validateVirtualManifestText('Book',valid)).toEqual(manifest);
 });

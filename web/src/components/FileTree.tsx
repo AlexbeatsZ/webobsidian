@@ -6,6 +6,7 @@ import { findNode, pruneDescendants } from '../lib/tree';
 import { nativeBatchTagMenuItems, openTagOperation } from '../lib/tags/actions';
 import { menuModifiers } from '../lib/configuredMenus/transform';
 import Icon from './Icon';
+import { fileManagerMenuItems } from '../lib/revealInFileManager';
 import SelectionBar from './SelectionBar';
 
 /** Inline rename box shown in place of a tree row's name (Obsidian-style). */
@@ -330,6 +331,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           { label: '', separator: true },
           { id: 'file:delete', label: "删除", danger: true, onClick: doDelete },
         ];
+    items.push(...fileManagerMenuItems(node.path, isFolder, notify));
     items.push(...nativeBatchTagMenuItems(isFolder ? { kind: 'folder', path: node.path } : { kind: 'files', paths: [node.path] }));
     openContextMenu({ x: e.clientX, y: e.clientY, items: extendFileMenu(items,[node.path], menuContext([node.path])) });
   };

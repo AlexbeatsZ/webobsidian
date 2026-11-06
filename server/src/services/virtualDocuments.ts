@@ -76,7 +76,7 @@ export function defaultVirtualManifest(folder: TreeNode): VirtualManifest {
     node.children?.forEach(visit);
   };
   visit(folder); files.sort(compare.compare);
-  const streams = ([['text', '正文', /\.(md|markdown)$/i], ['pdf', 'PDF', /\.pdf$/i]] as const)
+  const streams = ([['text', 'MD', /\.(md|markdown)$/i], ['pdf', 'PDF', /\.pdf$/i]] as const)
     .map(([id, title, extension]) => ({ id, title, files: files.filter(file => extension.test(file)) })).filter(stream => stream.files.length);
   if (!streams.length) throw failure('此文件夹没有 Markdown 或 PDF 来源');
   return { version: 1, title: folder.name, streams };
@@ -94,6 +94,18 @@ export async function saveVirtualManifest(folder: string, raw: unknown, revision
     if (!sourceStat.isFile()) throw failure('来源不是文件：' + source);
   }
   return writeFileText(relative, JSON.stringify(manifest, null, 2) + '\n', revision, { createOnly: !current });
+}
+
+/** Validate an editor draft before writing; preserve its original JSON text. */
+export async function validateVirtualManifestText(folder: string, content: string) {
+  configPath(folder);
+  if (Buffer.byteLength(content, 'utf8') > 1024 * 1024) throw failure('连续文档配置最多 1 MiB');
+  const manifest = virtualManifestSchema.parse(parseConfiguration(content));
+  for (const stream of manifest.streams) for (const source of stream.files) {
+    const stat = await fs.stat(await resolveInVault(folder + '/' + source));
+    if (!stat.isFile()) throw failure('来源不是文件：' + source);
+  }
+  return manifest;
 }
 
 export async function disableVirtualDocument(folder: string, revision: string) {

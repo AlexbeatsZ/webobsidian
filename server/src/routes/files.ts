@@ -11,7 +11,7 @@ import { sendFileWithRange } from '../services/httpfile.js';
 import { vaultConfigurationIdentity } from '../services/vaultConfiguration.js';
 import { defaultFileFolder, VaultFolderSchema } from '../contracts/filePlacement.js';
 import type { TreeNode } from '../contracts.js';
-import { describeVirtualDocuments, defaultVirtualManifest, saveVirtualManifest, disableVirtualDocument } from '../services/virtualDocuments.js';
+import { describeVirtualDocuments, defaultVirtualManifest, saveVirtualManifest, disableVirtualDocument, validateVirtualManifestText } from '../services/virtualDocuments.js';
 
 export const filesRouter = Router();
 
@@ -88,6 +88,7 @@ filesRouter.put(
     if (createOnly !== undefined && (typeof createOnly !== 'boolean' || (createOnly && baseRevision !== undefined))) {
       res.status(400).json({ error: 'createOnly must be a boolean without baseRevision' }); return;
     }
+    if (path.posix.basename(rel) === '.virtual-document.json') await validateVirtualManifestText(path.posix.dirname(rel), content);
     const snapshot = await vault.writeFileText(rel, content, baseRevision, { createOnly: createOnly === true });
     res.json({ ok: true, path: rel, ...snapshot });
   }),

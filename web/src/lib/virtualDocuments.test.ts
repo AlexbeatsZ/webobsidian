@@ -37,3 +37,9 @@ it('prefetches neighbours and retains independent progress for each stream', () 
   expect(session.getSnapshot()).toMatchObject({stream:'pdf',target:{path:'Book/original.pdf',page:4}});
   session.releaseTarget(); expect(session.getSnapshot().target).toBeUndefined();
 });
+it('keeps configuration editing and mode through a saved manifest refresh', () => {
+  const session=new VirtualReadingSession(document,'configuration-test');session.selectConfiguration();session.setMode('source');
+  session.replaceDocument({...document,revision:'v2',streams:document.streams.map(stream=>({...stream,title:stream.id==='text'?'MD':stream.title}))});
+  expect(session.getSnapshot()).toMatchObject({configuration:true,mode:'source'});
+  session.selectStream('text');expect(session.getSnapshot().configuration).toBe(false);
+});

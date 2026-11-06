@@ -5,7 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { effectiveVaultPath, openExistingPath } from './paths';
+import { effectiveVaultPath, openExistingPath, revealVaultItem } from './paths';
 import { McpLauncher } from './mcpLauncher';
 
 // ---------------------------------------------------------------------------
@@ -534,6 +534,11 @@ function registerDesktopRequests(): void {
       if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new Error('相对路径必须位于当前笔记库内');
     }
     await openExistingPath(target);
+  });
+  ipcMain.handle('desktop:reveal-vault-path', async (event, requested: unknown) => {
+    if (!desktopWindow(event)) throw new Error('Local application frame required');
+    if (typeof requested !== 'string') throw new Error('文件路径无效');
+    await revealVaultItem(DATA_DIR(), requested, desktopConfig?.vaultPath);
   });
   ipcMain.handle('desktop:plugin-request', async (event, options) => {
     if (!desktopWindow(event) || !desktopConfig?.trustedPlugins) throw new Error('Native plugins are disabled');

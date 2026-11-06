@@ -6,6 +6,7 @@ import { planFolderTags } from '@webobsidian/markdown-core';
 export class WorkspaceDocumentSession extends DocumentSession {
   private rejectedVersion = -1;
   override async save(expectedRaw?: string): Promise<void> {
+    if (!/\.(md|markdown)$/i.test(this.id)) return super.save(expectedRaw);
     // A session registry must be constructible before the workspace store.
     const { assertTagVaultCurrent } = await import('./api');
     const { useStore } = await import('../store');

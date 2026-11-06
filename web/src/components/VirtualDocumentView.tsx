@@ -1,8 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
-import { DocumentSession, fragmentRange } from '@webobsidian/markdown-core';
+import { fragmentRange } from '@webobsidian/markdown-core';
 import { EditorView } from '@codemirror/view';
-import { api } from '../lib/api';
-import { documents } from '../lib/documents';
 import { useStore } from '../lib/store';
 import { createVaultRenderContext } from '../lib/vaultRenderContext';
 import { readingWindow, type VirtualDocument, type VirtualSource } from '../lib/virtualDocuments';
@@ -11,45 +9,51 @@ import { PdfSession } from '../lib/pdf/session';
 import { usePdfSnapshot } from '../lib/pdf/react';
 import { PageSlot } from './PdfViewer';
 import MarkdownView from './MarkdownView';
-import FolderView from './FolderView';
-import Icon from './Icon';
+import { useDocumentSession } from '../lib/useDocumentSession';
+import { registerEditor } from '../lib/activeEditor';
+import { bindPluginEditor } from '../lib/plugins';
+import { bindTimestampUpdates, manualSave } from '../lib/writing/format';
+import type { ViewMode } from '../lib/store';
 import '../styles/virtual-document.css';
 
-const noSubscribe = () => () => {};
-function MarkdownChapter({ source, target, viewId, layoutVersion }: { source: VirtualSource; target?: ReadingTarget; viewId: string; layoutVersion: number }) {
-  const existing = documents.get(source.path);
-  const snapshot = useSyncExternalStore(existing?.subscribe ?? noSubscribe, () => existing?.snapshot ?? null);
-  const [loaded, setLoaded] = useState<DocumentSession>();
-  const [error, setError] = useState('');
-  const fileChange = useStore(state => state.lastFileChange);
-  const refresh = fileChange?.path === source.path ? fileChange.stat.mtime : 0;
-  useEffect(() => {
-    if (existing) return;
-    const abort = new AbortController();
-    void api.read(source.path, undefined, abort.signal).then(file => {
-      if (!abort.signal.aborted) setLoaded(new DocumentSession(source.path, file.content, file.revision,
-        async () => { throw new Error('连续阅读请打开源文件编辑'); }));
-    }, cause => { if (!abort.signal.aborted) setError(String(cause)); });
-    return () => { abort.abort(); };
-  }, [source.path, existing, refresh]);
-  const session = existing ?? loaded;
-  const current = snapshot ?? session?.snapshot;
-  const editor = useRef<EditorView | null>(null);
-  const context = useMemo(() => ({ ...createVaultRenderContext(source.path, {
+function VirtualTextEditor({ path, reader, mode, target, layoutVersion = 0, configuration = false }: {
+  path: string; reader: VirtualReadingSession; mode: ViewMode; target?: ReadingTarget; layoutVersion?: number; configuration?: boolean;
+}) {
+  const { session, snapshot, error } = useDocumentSession(path, !configuration);
+  const [editor, setEditor] = useState<EditorView | null>(null);
+  const context = useMemo(() => ({ ...createVaultRenderContext(path, {
+    bindEditor: registerEditor,
     files: () => useStore.getState().filePaths, openMenu: menu => useStore.getState().openContextMenu(menu),
     reportError: message => useStore.getState().notify(message),
-    openLink: (link, path, intent) => { void useStore.getState().openWikilink(link, path, intent); },
-  }), navigationId: 'virtual:' + viewId + ':' + source.path }), [source.path, viewId]);
-  const seek = () => {
-    if (!target?.fragment || !session || !editor.current) return;
+    openLink: (link, source, intent) => { void useStore.getState().openWikilink(link, source, intent); },
+  }), navigationId: reader.viewId }), [path, reader]);
+  useEffect(() => {
+    if (!editor || !session) return;
+    const stop = registerEditor(editor, { undo: () => session.undo(), redo: () => session.redo() });
+    const stopPlugins = configuration ? undefined : bindPluginEditor(editor, path);
+    return () => { stopPlugins?.(); stop(); };
+  }, [editor, session, path, configuration]);
+  useEffect(() => session && !configuration && mode !== 'reading' ? bindTimestampUpdates(session, message => useStore.getState().notify(message)) : undefined,
+    [session, configuration, mode]);
+  useEffect(() => {
+    if (!reader.getSnapshot().activeSource && !configuration && session) reader.activateSource(path);
+  }, [reader, path, session, configuration]);
+  useEffect(() => {
+    if (!target?.fragment || !session || !editor) return;
     const range = fragmentRange(session.analysis, target.fragment);
-    if (range) editor.current.dispatch({ selection: { anchor: range.from }, effects: EditorView.scrollIntoView(range.from, { y: 'start' }) });
-  };
-  useEffect(seek, [target, session, current?.version, layoutVersion]);
-  if (error) return <p role="alert">{error}</p>;
-  if (!session || !current) return <p role="status">正在载入章节…</p>;
-  return <MarkdownView snapshot={current} analysis={session.analysis} mode="reading" layout="embedded" showTitle={false} context={context}
-    onReady={view => { editor.current = view; requestAnimationFrame(seek); }} />;
+    if (range) editor.dispatch({ selection: { anchor: range.from }, effects: EditorView.scrollIntoView(range.from, { y: 'start' }) });
+  }, [target, session, editor, snapshot.version, layoutVersion]);
+  if (error) return <p role="alert">{error.message}</p>;
+  if (!session) return <p role="status">正在载入…</p>;
+  return <div className={configuration ? 'virtual-configuration-editor' : 'virtual-text-source'} onFocusCapture={() => reader.activateSource(path)} onPointerDownCapture={() => reader.activateSource(path)}>
+    {snapshot.conflict && <p role="alert">此文件存在外部修改冲突，请处理后保存。</p>}
+    <MarkdownView snapshot={snapshot} documentSession={session} analysis={session.analysis} mode={mode}
+      layout={configuration ? 'page' : 'embedded'} showTitle={false} context={context}
+      onChange={(changes, version, origin, model, history) => { session.edit(version, changes, origin, history); session.acceptAnalysis(model); return session.snapshot; }}
+      onUndo={() => { session.undo(); return session.snapshot; }} onRedo={() => { session.redo(); return session.snapshot; }}
+      onSave={() => { void (configuration ? session.save() : manualSave(path)).catch(cause => useStore.getState().notify(String(cause))); }}
+      onModeChange={configuration ? undefined : reader.setMode} onReady={setEditor} />
+  </div>;
 }
 
 function PdfChapter({ source, reader, root, width, target, layoutVersion }: { source: VirtualSource; reader: VirtualReadingSession;
@@ -93,9 +97,9 @@ function PdfChapter({ source, reader, root, width, target, layoutVersion }: { so
   </div>;
 }
 
-function SourceSlot({ source, mounted, estimate, onMeasure, reader, root, width, target, layoutVersion }: {
+function SourceSlot({ source, mounted, estimate, onMeasure, reader, root, width, target, layoutVersion, mode }: {
   source: VirtualSource; mounted: boolean; estimate: number; onMeasure: (height: number) => void;
-  reader: VirtualReadingSession; root: RefObject<HTMLDivElement>; width: number; target?: ReadingTarget; layoutVersion: number;
+  reader: VirtualReadingSession; root: RefObject<HTMLDivElement>; width: number; target?: ReadingTarget; layoutVersion: number; mode: ViewMode;
 }) {
   const body = useRef<HTMLDivElement>(null), measure = useRef(onMeasure); measure.current = onMeasure;
   useLayoutEffect(() => {
@@ -109,10 +113,9 @@ function SourceSlot({ source, mounted, estimate, onMeasure, reader, root, width,
   }, [mounted]);
   return <section className="virtual-source" data-virtual-source={source.path} data-mounted={mounted} style={mounted ? { minHeight: estimate } : { height: estimate }}>
     {mounted && <div ref={body} className="virtual-source-body">
-      <header className="virtual-source-header"><h2>{source.title}</h2><button className="tool-btn" aria-label={'打开源文件 ' + source.title}
-        onClick={() => void useStore.getState().openFile(source.path, true, reader.viewId)} title={source.kind === 'markdown' ? '打开源文件编辑' : '单独打开 PDF'}><Icon name="external-link" size={16} /></button></header>
+      <header className="virtual-source-header"><h2>{source.title}</h2></header>
       {source.missing ? <p role="alert">来源文件已不存在：{source.path}</p> : source.kind === 'markdown'
-        ? <MarkdownChapter source={source} target={target} viewId={reader.viewId} layoutVersion={layoutVersion} />
+        ? <VirtualTextEditor path={source.path} reader={reader} mode={mode} target={target} layoutVersion={layoutVersion} />
         : <PdfChapter source={source} reader={reader} root={root} width={width} target={target} layoutVersion={layoutVersion} />}
     </div>}
   </section>;
@@ -161,7 +164,6 @@ function ContinuousReader({ reader }: { reader: VirtualReadingSession }) {
       releaseFrame.current = requestAnimationFrame(() => { correcting.current = false; updateWindow(); });
     });
   };
-  useEffect(() => registerVirtualReading(reader), [reader]);
   useLayoutEffect(() => {
     const element = root.current;
     if (!element) return;
@@ -208,23 +210,21 @@ function ContinuousReader({ reader }: { reader: VirtualReadingSession }) {
     </article>
     {stream.files.map((source, index) => <SourceSlot key={source.path} source={source} mounted={index >= window.first && index <= window.last}
       estimate={heights[index]} onMeasure={height => measured(index, height)} reader={reader} root={root} width={width}
-      layoutVersion={layoutVersion.current}
+      layoutVersion={layoutVersion.current} mode={state.mode}
       target={state.target?.path === source.path ? state.target : undefined} />)}
   </div>;
 }
 
 export default function VirtualDocumentView({ document, viewId = 'main' }: { document: VirtualDocument; viewId?: string }) {
-  const metadataIdentity = JSON.stringify(document);
-  const reader = useMemo(() => new VirtualReadingSession(document, viewId), [metadataIdentity, viewId]);
+  const reader = useMemo(() => new VirtualReadingSession(document, viewId, useStore.getState().viewMode), [document.path, viewId]);
+  useLayoutEffect(() => reader.replaceDocument(document), [reader, document]);
+  useEffect(() => registerVirtualReading(reader), [reader]);
   const snapshot = useSyncExternalStore(reader.subscribe, reader.getSnapshot);
-  const [sources, setSources] = useState(false);
+  const stream = reader.document.streams.find(stream => stream.id === snapshot.stream)!;
+  const sourceIdentity = stream.files.map(file => file.path).join('\0');
   return <section className="virtual-document-view" data-virtual-document={document.path}>
-    <header className="virtual-document-toolbar"><Icon name="book-open" size={17} /><span>{document.title}</span>
-      <div className="virtual-streams" role="tablist" aria-label="阅读分组">{document.streams.map(stream => <button key={stream.id} role="tab" aria-selected={snapshot.stream === stream.id}
-        onClick={() => { setSources(false); reader.selectStream(stream.id); }}>{stream.title}</button>)}</div>
-      <button className="tool-btn" title={sources ? '返回连续阅读' : '查看源文件'} aria-label="查看源文件" aria-pressed={sources} onClick={() => setSources(value => !value)}><Icon name={sources ? 'book-open' : 'folder'} size={17} /></button>
-      <button className="tool-btn" title="配置连续文档" aria-label="配置连续文档" onClick={() => void useStore.getState().openFile(document.path + '/.virtual-document.json', true, viewId)}><Icon name="settings" size={17} /></button>
-    </header>
-    {sources ? <FolderView path={document.path} /> : <ContinuousReader key={snapshot.stream} reader={reader} />}
+    {snapshot.configuration
+      ? <VirtualTextEditor path={document.path + '/.virtual-document.json'} reader={reader} mode="source" configuration />
+      : <ContinuousReader key={snapshot.stream + sourceIdentity} reader={reader} />}
   </section>;
 }
