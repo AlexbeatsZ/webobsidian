@@ -105,6 +105,7 @@ export async function rebuildVaultIndex(restore: boolean | Promise<SearchCache |
     }
   }
   await walk(root);
+  if (process.env.WEBOBSIDIAN_PLATFORM === 'android') console.log(`[vault index] scanned ${next.entries.size} paths`);
   const saved = await cache;
   let engine: QmdEngine | undefined,
     changed = true;
@@ -117,11 +118,14 @@ export async function rebuildVaultIndex(restore: boolean | Promise<SearchCache |
     }
   if (!engine) {
     engine = new QmdEngine(next);
+    let indexedNotes = 0;
     for (const [rel, entry] of next.entries) {
       if (entry.kind !== 'file' || !MARKDOWN.test(rel)) continue;
       try {
         const snapshot = await readFileSnapshot(rel);
         engine.upsertNote(rel, parseNote(rel, snapshot.content));
+        if (++indexedNotes % 50 === 0 && process.env.WEBOBSIDIAN_PLATFORM === 'android')
+          console.log(`[vault index] parsed ${indexedNotes} notes`);
       } catch (error) {
         console.warn('[vault index] unreadable note', rel, error);
       }

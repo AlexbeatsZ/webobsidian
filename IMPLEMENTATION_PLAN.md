@@ -8,7 +8,8 @@ Cập nhật lần cuối: 2026-11-06 (Android 0.1.63 delivery)
 
 ## Android 0.1.63 delivery
 - [x] Build the current shared renderer/server for Android with the tablet's existing package identity and signer
-- [ ] Verify the APK, update Xiaomi Pad 6 Pro in place and check installed startup
+- [x] Verify the APK and update Xiaomi Pad 6 Pro in place
+- [ ] Finish installed startup/UI acceptance after the tablet is unlocked and kept foreground
 - [x] Keep large STEM indexing inside the Android heap; avoid full desktop-cache serialization
 
 ## Cross-platform shortcuts and known test failures (PRD 1.37)

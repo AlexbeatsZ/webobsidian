@@ -161,6 +161,7 @@ async function main() {
   const searchCache = loadSearchCache();
   await rebuildFileIndexes(async () => {
     await setupWatcher();
+    console.log(`[boot] watcher ready after ${Date.now() - indexStarted}ms`);
     await initSearch(searchCache);
   });
   await drainFileUpdates();
