@@ -11,7 +11,7 @@ Cập nhật lần cuối: 2026-11-05 (virtual document editing)
 - [x] Independent inline chapter sessions, autosave/undo and bounded unedited models
 - [x] Native file-manager context menus and MD/PDF display labels
 - [x] Regression, packaged acceptance and local deployment
-- [~] Publish Mac arm64/x64 release assets
+- [x] Publish Mac arm64/x64 release assets
 
 ## Virtual documents (PRD 1.32)
 - [x] Hidden folder manifest, safe configuration writer and file-tree/picker projection
@@ -608,7 +608,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
-- 2026-11-05 (PRD 1.33): 桌面 0.1.60：右下角分组/配置、JSON 高亮及保存前校验，连续 MD 分章直接编辑与独立保存/撤销，原生文件管理器右键。新增 7 项单元通过；全量 539/540(原有 macOS 大小写改名失败)，44 项浏览器回归通过。真实教材副本的打包应用验证独立编辑、撤销、非法 JSON 保留有效文件、实际 Finder 定位，最终原生包截图确认布局；本机原位安装后 24 文档/231 来源、缺失 0，原 30 标签与配置恢复。
+- 2026-11-05 (PRD 1.33): 桌面 0.1.60：右下角分组/配置、JSON 高亮及保存前校验，连续 MD 分章直接编辑与独立保存/撤销，原生文件管理器右键。新增 7 项单元通过；全量 539/540(原有 macOS 大小写改名失败)，44 项浏览器回归通过。真实教材副本的打包应用验证独立编辑、撤销、非法 JSON 保留有效文件、实际 Finder 定位，最终原生包截图确认布局；本机原位安装后 24 文档/231 来源、缺失 0，原 30 标签与配置恢复。v0.1.60 已发布为 Latest，7 个远端资产大小及 tag 目标核对通过。
 - 2026-11-05 (PRD 1.32): 虚拟文档，桌面 0.1.59。隐藏配置、树/选择器单文档投影，Markdown/PDF 连续阅读、自动目录、统一大纲、邻近窗口与独立编辑。新增单元 9 项通过，全量 532/533(原有 macOS 大小写改名失败)；新增长章节标题/跨章、PDF 书签/页窗口测试连续三轮通过；真实教材副本的原生验收补上可视正文断言，修复异步展开覆盖导航锚点。STEM 配置 24 组/231 来源，无物理合并。
 - 2026-11-05 (PRD 1.31): 源码展开灰色与 TeX 定界符。新增 source-syntax/callout 浏览器用例与 math、format 单元用例均通过;单元 523/524(已知大小写改名用例);elements 4、render.spec 2、theme-render 1、math-transition 1(macOS 上 Control+z 不是撤销)失败，改动前同样失败。桌面 0.1.58。
 - 2026-11-05 (PRD 1.30): MCP 说明笔记。新增 mcpPreferences 服务、`/api/settings/mcp`、`/api/operations/instructions`、设置页 MCP 分区;get_context 返回 `standing_instructions`;stdio 与 HTTP MCP 连接说明列出链接。新增单元 3 个通过,全量 519/520(已知大小写用例),server/web typecheck 与 build 通过。
