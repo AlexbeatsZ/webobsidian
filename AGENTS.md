@@ -6,9 +6,9 @@
 个人使用的 WebObsidian 原生桌面/Android 应用(fork 自 xnohat/webobsidian,远程 `AlexbeatsZ/webobsidian`)。
 
 ## Current State
-- 源码:`main`,桌面版本 0.1.60(虚拟文档:右下角分组/JSON 配置、MD 分章直接编辑与独立保存/撤销、原生文件管理器右键)。
-- GitHub Release:v0.1.60(最新)、v0.1.59、v0.1.58、v0.1.57、v0.1.56、v0.1.55 只有 Mac arm64/x64(Mac 本机构建,Windows 未构建);v0.1.54 有 Mac 与 Windows x64 NSIS(OMEN 构建);linux 预构建最新为 v0.1.43。Release 用 `gh release create` 通过 API 建 tag,不会触发 CI 的 release 工作流;本机 `gh` 默认仓库是上游,必须加 `--repo AlexbeatsZ/webobsidian`,`--target` 要用完整 SHA。
-- 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.60(本地构建，真实 STEM 验收通过，30 标签/设置保留);OMEN 0.1.53(Windows 安装包)。
+- 源码:`main`,桌面版本 0.1.61(嵌入左上铅笔编辑内容、失焦/Esc 退出，右上 `</>`;0.1.60 起含虚拟文档分组/配置与分章编辑)。
+- GitHub Release:v0.1.61(最新)、v0.1.60、v0.1.59、v0.1.58、v0.1.57、v0.1.56、v0.1.55 只有 Mac arm64/x64(Mac 本机构建,Windows 未构建);v0.1.54 有 Mac 与 Windows x64 NSIS(OMEN 构建);linux 预构建最新为 v0.1.43。Release 用 `gh release create` 通过 API 建 tag,不会触发 CI 的 release 工作流;本机 `gh` 默认仓库是上游,必须加 `--repo AlexbeatsZ/webobsidian`,`--target` 要用完整 SHA。
+- 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.61(本地构建，/healthz ok;嵌入控件未在安装版目视确认);OMEN 0.1.53(Windows 安装包)。
 - Mac 用户数据:`~/Library/Application Support/@webobsidian/desktop`,服务日志 `logs/server.log`。
 
 ## Active Work
