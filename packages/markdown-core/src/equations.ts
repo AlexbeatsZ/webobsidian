@@ -14,16 +14,25 @@ export interface Equation extends MathRegion {
   tag?: string;
   heading: string;
   referenceable: boolean;
+  /** Advances the automatic counter (tagged formulas do, exempt and table formulas do not). */
+  counted: boolean;
 }
 /**
- * A displayed instance of a formula: the original (`embed: false`) or one `![[^eq-ID]]`
- * embed. Each instance takes its own number from its position in the containing note.
+ * A displayed instance of a formula: the original (`embed: false`) or a formula shown through
+ * an embed. Each instance takes its own number from its position in the containing note.
  */
 export interface EquationOccurrence extends SourceSpan {
-  id: string;
+  /** Absent for unidentified formulas inside an embedded section; they still take a number. */
+  id?: string;
   number: string | null;
   embed: boolean;
+  /** Absolute position of the shown formula in the embedded source note, once resolved. */
+  source?: number;
 }
+/** A formula an embed shows, as resolved from its source note (`source` = its position there). */
+export interface EmbeddedFormula { source?: number; id?: string; counted: boolean }
+/** Resolved embed contents keyed by `wikiDestination` of the embed target. */
+export type EmbeddedFormulas = ReadonlyMap<string, readonly EmbeddedFormula[]>;
 /** Source coordinates stay absolute; fragments never restart the counter. */
 export interface EquationContext {
   equations: readonly Equation[];
@@ -32,27 +41,46 @@ export interface EquationContext {
   from: number;
   revision: string;
 }
-const cache = new WeakMap<MarkdownModel, { equations: Equation[]; occurrences: EquationOccurrence[] }>();
+interface Analysis { equations: Equation[]; occurrences: EquationOccurrence[]; embedKeys: string[] }
+const cache = new WeakMap<MarkdownModel, Analysis>();
+const resolvedCache = new WeakMap<MarkdownModel, { embedded: EmbeddedFormulas; value: Analysis }>();
+const embeddedSerials = new WeakMap<EmbeddedFormulas, number>();
+let embeddedSerial = 0;
 const targetCache = new WeakMap<readonly Equation[], Map<string, Equation[]>>();
 
-export function equations(model: MarkdownModel): Equation[] {
-  return analyze(model).equations;
+export function equations(model: MarkdownModel, embedded?: EmbeddedFormulas): Equation[] {
+  return analyze(model, embedded).equations;
 }
-export function equationOccurrences(model: MarkdownModel): EquationOccurrence[] {
-  return analyze(model).occurrences;
+export function equationOccurrences(model: MarkdownModel, embedded?: EmbeddedFormulas): EquationOccurrence[] {
+  return analyze(model, embedded).occurrences;
 }
-function analyze(model: MarkdownModel): { equations: Equation[]; occurrences: EquationOccurrence[] } {
+/** Resolved embeds only matter when this note embeds one of them. */
+function relevant(model: MarkdownModel, embedded: EmbeddedFormulas | undefined): embedded is EmbeddedFormulas {
+  return !!embedded?.size && analyze(model).embedKeys.some(key => embedded.has(key));
+}
+function analyze(model: MarkdownModel, embedded?: EmbeddedFormulas): Analysis {
+  if (relevant(model, embedded)) {
+    const hit = resolvedCache.get(model);
+    if (hit?.embedded === embedded) return hit.value;
+    const value = compute(model, embedded); resolvedCache.set(model, { embedded, value }); return value;
+  }
   const cached = cache.get(model); if (cached) return cached;
+  const value = compute(model); cache.set(model, value); return value;
+}
+function compute(model: MarkdownModel, embedded?: EmbeddedFormulas): Analysis {
   const meta = extractMetadata(model), tables = tableModels(model);
   const headings = meta.headings.filter(h => h.level === 1);
   const ids = new Map<string, number>();
   for (const block of meta.blockIds) ids.set(block.id, (ids.get(block.id) ?? 0) + 1);
-  // A formula embed is a real formula instance of this note: it shares the counter.
-  const embeds: { from: number; to: number; id: string }[] = [];
+  // Every formula an embed shows is a real formula instance of this note: it shares the counter.
+  // Until its content resolves, a formula embed stands for one numbered formula, any other embed for none.
+  const embeds: { from: number; to: number; items: readonly EmbeddedFormula[] }[] = [], embedKeys: string[] = [];
   for (const link of meta.linkOccurrences) {
     if (link.kind !== 'wiki' || !link.embed) continue;
+    embedKeys.push(link.target);
     const name = equationReferenceName(parseLinkTarget(link.target).fragment);
-    if (name !== undefined) embeds.push({ from: link.from, to: link.to, id: 'eq-' + name });
+    const items = embedded?.get(link.target) ?? (name !== undefined ? [{ id: 'eq-' + name, counted: true }] : []);
+    if (items.length) embeds.push({ from: link.from, to: link.to, items });
   }
   let section = -1, activeSection = 0, counter = 0, table = 0, block = 0, embed = 0;
   const result: Equation[] = [], occurrences: EquationOccurrence[] = [];
@@ -70,8 +98,10 @@ function analyze(model: MarkdownModel): { equations: Equation[]; occurrences: Eq
   };
   const embedsBefore = (position: number) => {
     for (; embed < embeds.length && embeds[embed].from < position; embed++) {
-      const item = embeds[embed];
-      if (!enter(item.from, item.to)) occurrences.push({ ...item, number: next(), embed: true });
+      const { from, to, items } = embeds[embed];
+      if (enter(from, to)) continue;
+      for (const item of items) occurrences.push({ from, to, ...(item.id ? { id: item.id } : {}),
+        ...(item.source !== undefined ? { source: item.source } : {}), number: item.counted ? next() : null, embed: true });
     }
   };
   for (const region of mathRegions(model)) {
@@ -94,13 +124,12 @@ function analyze(model: MarkdownModel): { equations: Equation[]; occurrences: Eq
     const number = tag ?? automatic;
     const end = model.text.indexOf('\n', region.to);
     const referenceable = !inTable && (anchor !== undefined || !model.text.slice(region.to, end < 0 ? model.text.length : end).trim());
-    result.push({ ...region, number, tag, referenceable, heading: headings[section]?.text ?? '',
+    result.push({ ...region, number, tag, referenceable, counted: eligible, heading: headings[section]?.text ?? '',
       ...(anchor ? { id: anchor.id, anchor: { from: anchor.from, to: anchor.to }, ambiguous: ids.get(anchor.id)! > 1 } : {}) });
     if (anchor) occurrences.push({ from: region.from, to: region.to, id: anchor.id, number, embed: false });
   }
   embedsBefore(Infinity);
-  const value = { equations: result, occurrences };
-  cache.set(model, value); return value;
+  return { equations: result, occurrences, embedKeys };
 }
 
 /** Small balanced TeX argument reader, scoped to one known formula. */
@@ -120,9 +149,55 @@ function explicitTag(tex: string): string | undefined {
   return undefined;
 }
 
-export function equationContext(model: MarkdownModel, from = 0): EquationContext {
-  const { equations, occurrences } = analyze(model);
-  return { equations, occurrences, from, revision: `${model.id}:${model.version}` };
+export function equationContext(model: MarkdownModel, from = 0, embedded?: EmbeddedFormulas): EquationContext {
+  const { equations, occurrences } = analyze(model, embedded);
+  let revision = `${model.id}:${model.version}`;
+  if (relevant(model, embedded)) {
+    let serial = embeddedSerials.get(embedded);
+    if (serial === undefined) embeddedSerials.set(embedded, serial = ++embeddedSerial);
+    revision += `+${serial}`;
+  }
+  return { equations, occurrences, from, revision };
+}
+/** What an embed of `[from, to)` in this source context shows, reported back to the embedding note. */
+export function embeddedFormulas(context: EquationContext, from: number, to: number): EmbeddedFormula[] {
+  const items: EmbeddedFormula[] = [];
+  for (const equation of context.equations) {
+    if (equation.from < from || equation.to > to || (!equation.counted && !equation.id)) continue;
+    items.push({ source: equation.from, ...(equation.id && !equation.ambiguous ? { id: equation.id } : {}), counted: equation.counted });
+  }
+  // Formula embeds nested in the section are instances too; deeper section embeds keep their own note's numbers.
+  for (const occurrence of context.occurrences) {
+    if (!occurrence.embed || occurrence.source !== undefined || occurrence.from < from || occurrence.to > to) continue;
+    items.push({ source: occurrence.from, ...(occurrence.id ? { id: occurrence.id } : {}), counted: occurrence.number !== null });
+  }
+  return items.sort((a, b) => a.source! - b.source!);
+}
+/**
+ * Projects an embedded source context onto the host: each formula the embed shows takes the
+ * number of its host instance, so the fragment renders and resolves with host numbers.
+ */
+export function embedEquationContext(context: EquationContext, instances: readonly EquationOccurrence[], fragment = ''): EquationContext {
+  if (!instances.length) return context;
+  const target = () => equationTarget(context, fragment)?.from;
+  const byPosition = new Map<number, EquationOccurrence>();
+  for (const instance of instances) {
+    const position = instance.source ?? target();
+    if (position !== undefined) byPosition.set(position, instance);
+  }
+  if (!byPosition.size) return context;
+  const numbers = new Map<number, string | null>();
+  const equations = context.equations.map(equation => {
+    const instance = byPosition.get(equation.from);
+    if (!instance) return equation;
+    const number = equationInstanceNumber(equation, instance); numbers.set(equation.from, number);
+    return number === equation.number ? equation : { ...equation, number };
+  });
+  const occurrences = context.occurrences.map(occurrence => {
+    const number = occurrence.embed ? byPosition.get(occurrence.from)?.number : numbers.get(occurrence.from);
+    return number === undefined || number === occurrence.number ? occurrence : { ...occurrence, number };
+  });
+  return { ...context, equations, occurrences, revision: `${context.revision}#${instances.map(instance => `${instance.number}@${instance.source ?? ''}`).join(',')}` };
 }
 export function equationLabel(equation: Equation): string | null {
   return equation.number === null ? null : `(${equation.number})`;
@@ -143,6 +218,7 @@ export function equationOccurrenceBefore(context: EquationContext, id: string, a
   if (!byId) {
     byId = new Map();
     for (const occurrence of context.occurrences) {
+      if (!occurrence.id) continue;
       const list = byId.get(occurrence.id) ?? []; list.push(occurrence); byId.set(occurrence.id, list);
     }
     occurrenceCache.set(context.occurrences, byId);
@@ -154,7 +230,7 @@ export function equationOccurrenceBefore(context: EquationContext, id: string, a
 }
 /** Number an embedded instance shows: the source's own tag or exemption wins over the host counter. */
 export function equationInstanceNumber(equation: Equation, occurrence: EquationOccurrence | undefined): string | null {
-  return equation.tag !== undefined || equation.number === null || !occurrence ? equation.number : occurrence.number;
+  return equation.tag !== undefined || !equation.counted || !occurrence ? equation.number : occurrence.number;
 }
 /**
  * `[[^eq-ID]]` display. An alias wins; otherwise the nearest preceding explicit instance in the

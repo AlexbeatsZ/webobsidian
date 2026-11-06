@@ -14,6 +14,12 @@ export function isGlobalContentTarget(raw: string): boolean {
   return destination.startsWith('^') && contentTargetPrefix.test(destination.slice(1));
 }
 
+/** Normalized link destination without alias, as stored in metadata link occurrences. */
+export function wikiDestination(raw: string): string {
+  const target = parseLinkTarget(raw);
+  return isGlobalContentTarget(raw) ? target.fragment : target.path + (target.fragment ? '#' + target.fragment : '');
+}
+
 export function parseLinkTarget(raw: string): LinkTarget {
   const aliasAt = raw.search(/(?<!\\)\|/);
   const destination = (aliasAt < 0 ? raw : raw.slice(0, aliasAt)).trim();

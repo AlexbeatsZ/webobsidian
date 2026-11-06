@@ -1,7 +1,8 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.35 · Cập nhật: 2026-11-06 · Trạng thái: Draft
+> Phiên bản: 1.36 · Cập nhật: 2026-11-06 · Trạng thái: Draft
+> Changelog 1.36 (章节嵌入编号): 标题、范围、Callout 等整段嵌入里的公式也是宿主笔记的显式实例，按嵌入位置依次占用宿主编号，`\notag`/`{{}}` 不占号；嵌入内容加载后向宿主报告其中公式，宿主重新编号；嵌入编辑时保持宿主编号。更深一层嵌套的章节嵌入仍用其所在笔记编号。见 docs/design/native-equations.md。
 > Changelog 1.35 (公式实例编号): 原始公式与每个 `![[^eq-ID]]` 嵌入都是所在笔记中的独立显示实例，按位置共用一个编号计数；隐式引用 `[[^eq-ID]]` 不占编号，取当前笔记中引用位置之前最近的显式实例编号，没有则回退原始公式编号(跨笔记显示“笔记名 (1-1)”)，`|` 别名优先。嵌入右上角控件组合并铅笔、复制显式/隐式引用(复制原始对象 ID)、打开链接和 `</>`。见 docs/design/native-equations.md、content-references.md。
 > Changelog 1.34 (嵌入控件): 笔记嵌入去掉“编辑嵌入/完成”文字按钮，改为悬停左上角铅笔进入内容编辑，焦点离开或 Esc 自动退出；右上角“打开链接”旁增加 `</>` 编辑 `![[…]]` 源码。见 docs/design/content-references.md。
 > Changelog 1.33: 虚拟文档移除额外顶部栏，右下角状态栏选择 MD/PDF/配置；MD 章节在连续页面中独立编辑、保存与撤销，JSON 配置有语法高亮及保存校验。文件、文件夹和文档右键可在系统文件管理器中定位。

@@ -74,7 +74,7 @@ export function mountMarkdownFragment(host: HTMLElement, source: string, options
       const model = projection ? session.analysis : undefined;
       if (from !== undefined) host.dataset.sourceFrom = String(from);
       return { ...options.context, sourceFragment: true,
-        equations: model && from !== undefined ? equationContext(model, from) : options.equations,
+        equations: model && from !== undefined ? (options.projectEquations ?? (context => context))(equationContext(model, from)) : options.equations,
         mathSource: model && from !== undefined ? { model, from } : options.mathSource };
     }, [snapshot.version]);
     if (projection && !projection.range) return <span role="alert">找不到嵌入的章节或块</span>;

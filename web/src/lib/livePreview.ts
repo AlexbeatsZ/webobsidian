@@ -17,7 +17,7 @@ import { diagramRenderer } from './diagrams';
 import { openLightbox } from './imageLightbox';
 import { applyImagePresentation, presentHtmlImages, markdownImageAt } from './imagePresentation';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
-import { syntaxModel, blockModel, equationsOf, documentMetadata } from './syntaxModel';
+import { syntaxModel, blockModel, equationsOf, documentMetadata, embeddedFormulasField, setEmbeddedFormulas } from './syntaxModel';
 import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered } from './sourceControls';
 import { blockControls, knownReferenceButtons, referenceButtons } from './blockControls';
@@ -33,7 +33,7 @@ import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
 import { sourceBlockReplacement, sourceBlockPresentation } from './blockLayout';
 import { RenderLifetime } from './obsidian/renderLifetime';
-import { equationLabel, equationReferenceText, equationReferenceName, equationTarget, equationAt, equationOccurrenceBefore, equationInstanceNumber, parseLinkTarget, isGlobalContentTarget, contentTargets, type Equation, type EquationContext, type EquationOccurrence, type MarkdownModel } from '@webobsidian/markdown-core';
+import { equationLabel, equationReferenceText, equationReferenceName, equationTarget, equationAt, equationOccurrenceBefore, embeddedFormulas, embedEquationContext, wikiDestination, parseLinkTarget, isGlobalContentTarget, contentTargets, type Equation, type EquationContext, type EquationOccurrence, type MarkdownModel } from '@webobsidian/markdown-core';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -614,34 +614,27 @@ function embedNotFound(el: HTMLElement, target: string) {
 /** Note name shown before a formula number that belongs to another note. */
 const noteName = (path: string) => path.split('/').pop()!.replace(/\.(?:md|markdown)$/i, '');
 
-/** Gives the embedded formula the number of this embed instance in the host note. */
-function instanceEquations(context: EquationContext | undefined, fragment: string, instance: EquationOccurrence | undefined): EquationContext | undefined {
-  const target = context && instance ? equationTarget(context, fragment) : undefined;
-  if (!context || !target) return context;
-  const number = equationInstanceNumber(target, instance);
-  if (number === target.number) return context;
-  return { ...context, equations: context.equations.map(equation => equation === target ? { ...equation, number } : equation),
-    revision: `${context.revision}#${number}` };
-}
+const sameInstances = (a: readonly EquationOccurrence[], b: readonly EquationOccurrence[]) =>
+  a.length === b.length && a.every((instance, index) => instance.number === b[index].number && instance.source === b[index].source && instance.id === b[index].id);
 
-interface NoteEmbedMount { lifetime: RenderLifetime; setInstance: (instance: EquationOccurrence | undefined) => void }
+interface NoteEmbedMount { lifetime: RenderLifetime; setInstances: (instances: readonly EquationOccurrence[]) => void }
 const noteEmbedMounts = new WeakMap<HTMLElement, NoteEmbedMount>();
 class NoteEmbedWidget extends WidgetType {
   destroy(dom: HTMLElement) {
     const mount = noteEmbedMounts.get(dom); noteEmbedMounts.delete(dom); mount?.lifetime.unload();
   }
-  /** `instance` = this embed's own formula occurrence; its number follows the host note's counter. */
-  constructor(readonly target: string, readonly length: number, readonly instance?: EquationOccurrence) {
+  /** `instances` = the formulas this embed shows, numbered as instances of the host note. */
+  constructor(readonly target: string, readonly length: number, readonly instances: readonly EquationOccurrence[] = []) {
     super();
   }
   eq(o: NoteEmbedWidget) {
-    return o.target === this.target && o.length === this.length && o.instance?.number === this.instance?.number;
+    return o.target === this.target && o.length === this.length && sameInstances(o.instances, this.instances);
   }
   /** Renumbering keeps the mounted fragment (and any active edit); only the label changes. */
   updateDOM(dom: HTMLElement, _view: EditorView, from: WidgetType) {
     const mount = noteEmbedMounts.get(dom);
     if (!mount || !(from instanceof NoteEmbedWidget) || from.target !== this.target || from.length !== this.length) return false;
-    mount.setInstance(this.instance); return true;
+    mount.setInstances(this.instances); return true;
   }
   ignoreEvent() {
     return true;
@@ -674,8 +667,16 @@ class NoteEmbedWidget extends WidgetType {
     content.textContent = '…';
     box.append(controls, content);
     const lifetime = new RenderLifetime(); void lifetime.load();
-    let instance = this.instance, applyInstance = () => {};
-    noteEmbedMounts.set(box, { lifetime, setInstance: next => { instance = next; applyInstance(); } });
+    let instances = this.instances, applyInstances = () => {};
+    noteEmbedMounts.set(box, { lifetime, setInstances: next => { instances = next; applyInstances(); } });
+    // Tell the host which formulas this embed shows; the host numbers them and hands the numbers back.
+    const reportKey = wikiDestination(this.target);
+    const report = (items: ReturnType<typeof embeddedFormulas>) => queueMicrotask(() => {
+      if (lifetime.signal.aborted || !box.isConnected) return;
+      const current = view.state.field(embeddedFormulasField, false);
+      if (!current || JSON.stringify(current.get(reportKey) ?? null) === JSON.stringify(items)) return;
+      view.dispatch({ effects: setEmbeddedFormulas.of({ key: reportKey, items }) });
+    });
     const context = contextOf(view);
     const embedKey = (path: string, fragment: string) => {
       try { fragment = decodeURIComponent(fragment); } catch {}
@@ -740,6 +741,7 @@ class NoteEmbedWidget extends WidgetType {
         const key = embedKey(res.path, destination.fragment);
         const cyclic = !!res.path && trail.includes(key);
         const fragment = cyclic ? null : res.read();
+        report(fragment?.equations ? embeddedFormulas(fragment.equations, fragment.from, fragment.from + fragment.source.length) : []);
         if (res.edit && fragment) { if (edit.parentNode !== controls) controls.prepend(edit); } else edit.remove();
         if (!fragment) {
           editing = false; box.dataset.embedEditing = 'false';
@@ -749,7 +751,7 @@ class NoteEmbedWidget extends WidgetType {
           missing.textContent = cyclic ? '循环嵌入：' + res.path : '找不到嵌入的章节或块'; content.replaceChildren(missing); view.requestMeasure(); return;
         }
         if (editing && active && box.dataset.embedEditing === 'true' && previous !== undefined) return;
-        const equations = instanceEquations(fragment.equations, destination.fragment, instance);
+        const equations = fragment.equations && embedEquationContext(fragment.equations, instances, destination.fragment);
         if (fragment.source === previous && equations?.revision === revision) return;
         previous = fragment.source; revision = equations?.revision; pending?.unload();
         const render = new RenderLifetime(); void render.load(); pending = render;
@@ -769,7 +771,8 @@ class NoteEmbedWidget extends WidgetType {
           else { content.querySelector(':scope > [role="alert"]')?.remove(); content.appendChild(status); }
           context.reportError?.(String(error)); view.requestMeasure();
         };
-        const options = { id: res.path, sourceFrom: fragment.from, equations, mathSource: fragment.mathSource,
+        const options = { id: res.path, sourceFrom: fragment.from, equations,
+          projectEquations: (context: EquationContext) => embedEquationContext(context, instances, destination.fragment), mathSource: fragment.mathSource,
           mode: editing ? 'live' as const : 'reading' as const, edit: editing ? res.edit : undefined, autoFocus: editing,
           context: { ...res.context, embedTrail: [...trail, key] },
           onError: failed,
@@ -787,7 +790,7 @@ class NoteEmbedWidget extends WidgetType {
           render.register(stop);
         } catch (error) { failed(error); }
       };
-      applyInstance = refresh;
+      applyInstances = refresh;
       lifetime.register(res.subscribe(refresh)); refresh();
     }).catch(error => {
       if (!lifetime.signal.aborted) { content.textContent = '无法加载嵌入内容'; context.reportError?.(String(error)); view.requestMeasure(); }
@@ -1901,9 +1904,9 @@ function buildDecorations(view: EditorView): DecorationSet {
           pushReplace(s, e, Decoration.replace({ widget: new MediaWidget(attachmentUrl(href, view), href, kind, w) }));
         } else if (isEmbed && (/\.(?:md|markdown)$/i.test(href.split('#')[0]) || !/\.[a-z0-9]{1,5}$/i.test(href.split('#')[0]))) {
           // `![[note]]` (no binary extension) → real transclusion like Obsidian.
-          const formulas = equationReferenceName(parseLinkTarget(href).fragment) !== undefined ? equationsOf(view.state) : undefined;
-          const instance = formulas?.occurrences.find(occurrence => occurrence.embed && occurrence.from === formulas.from + s);
-          pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href, e - s, instance) }));
+          const formulas = equationsOf(view.state);
+          const instances = formulas.occurrences.filter(occurrence => occurrence.embed && occurrence.from === formulas.from + s);
+          pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href, e - s, instances) }));
         } else {
           // LP shows the raw target text (`Note#Head`); the `Note > Head` display
           // form is reading-view behaviour and goes into aria-label like Obsidian.

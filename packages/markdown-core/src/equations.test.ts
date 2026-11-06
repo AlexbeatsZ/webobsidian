@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeMarkdown } from './syntax.js';
-import { equations, equationAnchor, equationAt, equationContext, equationTarget, equationReferenceName, equationReferenceLabel, equationOccurrenceBefore, equationReferenceText, equationInstanceNumber } from './equations.js';
+import { equations, equationAnchor, equationAt, equationContext, equationTarget, equationReferenceName, equationReferenceLabel, equationOccurrenceBefore, equationReferenceText, equationInstanceNumber, embeddedFormulas, embedEquationContext } from './equations.js';
 import { fragmentRange } from './fragments.js';
 import { DocumentSession } from './session.js';
 
@@ -96,7 +96,28 @@ describe('native equations (prepared; execution deferred by user)', () => {
     // The source's explicit tag or exemption is kept by every instance.
     const embed = context.occurrences[1];
     expect(equationInstanceNumber({ ...a, tag: 'A', number: 'A' }, embed)).toBe('A');
-    expect(equationInstanceNumber({ ...a, number: null }, embed)).toBeNull();
+    expect(equationInstanceNumber({ ...a, number: null, counted: false }, embed)).toBeNull();
     expect(equationInstanceNumber(a, embed)).toBe('1-2');
+  });
+  it('numbers formulas inside embedded sections once the embed reports them', () => {
+    const sourceNote = analyzeMarkdown('# 热力学 ^heading-thermo\n\n$$x$$ ^eq-x\n\n$$y \\notag$$\n\n$$z$$\n\n![[^eq-w]]\n');
+    const sourceContext = equationContext(sourceNote);
+    const items = embeddedFormulas(sourceContext, 0, sourceNote.text.length);
+    expect(items.map(item => [item.id, item.counted])).toEqual([['eq-x', true], [undefined, true], ['eq-w', true]]);
+    const host = analyzeMarkdown('# H\n\n$$a$$\n\n![[^heading-thermo]]\n\nR [[^eq-x]]\n\n$$b$$ ^eq-b\n');
+    // Before the embed reports, a section embed takes no numbers.
+    expect(equationTarget(equationContext(host), '^eq-b')?.number).toBe('1-2');
+    const embedded = new Map([['^heading-thermo', items]]);
+    const context = equationContext(host, 0, embedded);
+    expect(context.revision).not.toBe(equationContext(host).revision);
+    expect(equationTarget(context, '^eq-b')?.number).toBe('1-5');
+    const instances = context.occurrences.filter(o => o.embed);
+    expect(instances.map(o => o.number)).toEqual(['1-2', '1-3', '1-4']);
+    const x = equationTarget(sourceContext, '^eq-x')!;
+    expect(equationReferenceText(x, null, equationOccurrenceBefore(context, 'eq-x', host.text.indexOf('R [[')), '物化')).toBe('(1-2)');
+    // The fragment renders with host numbers; the exempt formula stays unnumbered.
+    const projected = embedEquationContext(sourceContext, instances);
+    expect(projected.equations.map(e => e.number)).toEqual(['1-2', null, '1-3']);
+    expect(projected.occurrences.find(o => o.embed)?.number).toBe('1-4');
   });
 });

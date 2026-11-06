@@ -27,7 +27,7 @@ import { analyzeMarkdown, bodyHeadingSyntax, changesBetween, type DocumentSessio
 import { obsidianHighlightStyle } from '../lib/highlight';
 import { obsidianKeymap, markdownListKeymap, toggleInline, toggleLineStyle, toggleChecklist, surroundSelection } from '../lib/editorCommands';
 import { suggesterPlugin } from '../lib/suggest';
-import { syntaxModel, adoptSyntaxModel, documentMetadata, blockModel, sourceOf } from '../lib/syntaxModel';
+import { syntaxModel, adoptSyntaxModel, documentMetadata, embeddedFormulasField, blockModel, sourceOf } from '../lib/syntaxModel';
 import { inlineHtml } from '../lib/inlineHtml';
 import { sourceControls } from '../lib/sourceControls';
 import { semanticDecorations } from '../lib/semanticDecorations';
@@ -278,7 +278,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
       selection: { anchor: initPos },
       extensions: [
         indentUnit.of('    '), EditorState.tabSize.of(4), editorPhrases, navigationExtensions, linkPreview,
-        editorSelection, editorDebugging, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, blockModel,
+        editorSelection, editorDebugging, syntaxModel.init(() => p.analysis ?? analyzeMarkdown(p.snapshot.text, p.context.sourcePath, p.snapshot.version)), documentMetadata, embeddedFormulasField, blockModel,
         contextComp.of(renderContext.of(scopedContext)),
         clipboard.extension,
         extraComp.of(p.extensions ?? []),

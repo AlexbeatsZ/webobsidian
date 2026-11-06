@@ -17,6 +17,8 @@ export interface FragmentOptions {
   onReady?: () => void;
   onError?: (error: Error) => void;
   equations?: EquationContext;
+  /** Re-applies host instance numbers to contexts the fragment recomputes while editing. */
+  projectEquations?: (context: EquationContext) => EquationContext;
   mathSource?: { model: MarkdownModel; from: number };
 }
 export interface FragmentEditBinding {

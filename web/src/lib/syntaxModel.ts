@@ -1,14 +1,34 @@
 import { StateEffect, StateField } from '@codemirror/state';
-import { analyzeMarkdown, updateMarkdown, extractMetadata, blockContainers, mathRegions, tableModels, equationContext, type MarkdownModel, type Metadata, type MathRegion, type MathBlock } from '@webobsidian/markdown-core';
+import { analyzeMarkdown, updateMarkdown, extractMetadata, blockContainers, mathRegions, tableModels, equationContext, type EmbeddedFormula, type EmbeddedFormulas, type MarkdownModel, type Metadata, type MathRegion, type MathBlock } from '@webobsidian/markdown-core';
 import type { EditorState, Text } from '@codemirror/state';
 import { renderContext } from './renderContext';
+
+/** Formulas shown by this note's embeds, reported by each embed once its content resolves. */
+export const setEmbeddedFormulas = StateEffect.define<{ key: string; items: readonly EmbeddedFormula[] }>();
+export const embeddedFormulasField = StateField.define<EmbeddedFormulas>({
+  create: () => new Map(),
+  update(value, transaction) {
+    let next: Map<string, readonly EmbeddedFormula[]> | undefined;
+    for (const effect of transaction.effects) {
+      if (!effect.is(setEmbeddedFormulas)) continue;
+      const { key, items } = effect.value, current = (next ?? value).get(key);
+      if (current && JSON.stringify(current) === JSON.stringify(items)) continue;
+      (next ??= new Map(value)).set(key, items);
+    }
+    return next ?? value;
+  },
+});
 
 export const equationsOf = (state: EditorState) => {
   const context = state.facet(renderContext), model = state.field(syntaxModel);
   // Local transactions precede the React snapshot update. A fragment retains
   // its original-note context; a full editor can already use its newest model.
-  return context.equations && (context.sourceFragment || context.equations.from !== 0 || context.mathSource?.model.text === model.text)
-    ? context.equations : equationContext(model);
+  if (context.equations && (context.sourceFragment || context.equations.from !== 0)) return context.equations;
+  // Embedded sections number their formulas as instances of this note.
+  const embedded = state.field(embeddedFormulasField, false);
+  const current = context.equations && context.mathSource?.model.text === model.text ? context.mathSource.model : undefined;
+  if (current && !embedded?.size) return context.equations!;
+  return equationContext(current ?? model, 0, embedded);
 };
 export function sourceOf(state: EditorState): { model: MarkdownModel; from: number } {
   const context = state.facet(renderContext);

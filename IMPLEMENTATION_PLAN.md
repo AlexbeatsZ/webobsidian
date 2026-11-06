@@ -6,6 +6,9 @@
 
 Cập nhật lần cuối: 2026-11-06 (formula instances)
 
+## Section embed numbering (PRD 1.36)
+- [x] Heading/range/Callout embeds report their formulas; host numbers them as instances, also while editing
+
 ## Formula instances and embed controls (PRD 1.35)
 - [x] Formula embeds take host-position numbers sharing the formula counter
 - [x] `[[^eq-ID]]` shows the nearest preceding explicit instance, else original (with note name across notes); alias wins
@@ -617,6 +620,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-06 (PRD 1.36): 标题/范围等整段嵌入中的公式按宿主位置编号(嵌入加载后报告内容，宿主重算)，编辑嵌入时保持宿主编号。新增单元与浏览器用例通过；单元 542 中仅已知大小写改名用例失败，渲染回归失败用例均为已知基线问题。
 - 2026-11-06 (PRD 1.35): 公式嵌入按宿主位置独立编号，隐式引用取前方最近显式实例(否则原始编号，跨笔记带笔记名)，别名优先；嵌入铅笔并入右上控件组并增加复制原始引用。新增单元与浏览器用例通过；单元 541 中仅已知大小写改名用例失败，渲染回归其余失败用例改动前同样失败。
 - 2026-11-05 (PRD 1.34): 嵌入控件改为左上角铅笔编辑内容(失焦/Esc 自动退出，无“完成”按钮)，右上角增加 `</>`。新增浏览器用例通过；embed-edit 其余 2 个失败用例改动前同样失败(macOS 上 Control+End 不到文末、range 用例定位器歧义)；单元 539/540(已知大小写改名用例)。桌面 0.1.61 已安装到本机(/healthz ok)并发布 v0.1.61 为 Latest(Mac arm64/x64)。
 - 2026-11-05 (PRD 1.33): 桌面 0.1.60：右下角分组/配置、JSON 高亮及保存前校验，连续 MD 分章直接编辑与独立保存/撤销，原生文件管理器右键。新增 7 项单元通过；全量 539/540(原有 macOS 大小写改名失败)，44 项浏览器回归通过。真实教材副本的打包应用验证独立编辑、撤销、非法 JSON 保留有效文件、实际 Finder 定位，最终原生包截图确认布局；本机原位安装后 24 文档/231 来源、缺失 0，原 30 标签与配置恢复。v0.1.60 已发布为 Latest，7 个远端资产大小及 tag 目标核对通过。

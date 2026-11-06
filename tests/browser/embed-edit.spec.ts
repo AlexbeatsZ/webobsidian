@@ -227,3 +227,32 @@ test('formula embeds are numbered as host instances; references follow the neare
   await group.getByRole('button', { name: '复制隐式引用' }).click();
   expect(await page.evaluate(() => (window as unknown as { copied: string[] }).copied)).toEqual(['![[^eq-energy]]', '[[^eq-energy]]']);
 });
+
+test('formulas inside heading and range embeds are numbered as host instances', async ({ page }) => {
+  const phys = [
+    '# 热力学 ^heading-thermo', '', '$$x=1$$ ^eq-x', '', '$$y=2 \\notag$$', '', '$$z=3$$', '',
+    '# 其他', '', '^range-pair:start', '', '$$u=4$$', '', '$$v=5$$ ^eq-v', '', '^range-pair:end', '',
+  ].join('\n');
+  const host = ['# Host', '', '$$a=1$$', '', 'R0 [[^eq-x]]', '', '![[^heading-thermo]]', '', 'R1 [[^eq-x]]', '',
+    '![[^range-pair]]', '', 'R2 [[^eq-v]]', '', '$$b=2$$', '', 'sentinel'].join('\n');
+  await page.evaluate(([phys, host]) => { window.renderHarness.notes({ 'phys.md': phys }); window.renderHarness.reset(host); }, [phys, host]);
+  const pane = page.locator('[data-slot="1"]');
+  await expect(pane.locator('[data-render-pending]')).toHaveCount(0);
+  // a, x, z (y is \notag), u, v, b — one counter in host order.
+  await expect(pane.locator('.cm-equation-number')).toHaveText(['(1-1)', '(1-2)', '(1-3)', '(1-4)', '(1-5)', '(1-6)']);
+  const reference = (text: string) => pane.locator('.cm-line', { hasText: text }).locator('.cm-wikilink');
+  await expect(reference('R0')).toHaveText('phys (1-1)');
+  await expect(reference('R1')).toHaveText('(1-2)');
+  await expect(reference('R2')).toHaveText('(1-5)');
+  // A new formula in the embedded source renumbers the host after it.
+  await page.evaluate(phys => window.renderHarness.changeNote('phys.md', phys.replace('$$z=3$$', () => '$$z=3$$\n\n$$w=6$$')), phys);
+  await expect(pane.locator('.cm-equation-number')).toHaveText(['(1-1)', '(1-2)', '(1-3)', '(1-4)', '(1-5)', '(1-6)', '(1-7)']);
+  await expect(reference('R2')).toHaveText('(1-6)');
+  // Editing the embedded section keeps the host numbers.
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  const embed = page.locator('[data-slot="0"] .cm-note-embed').first();
+  await embed.hover();
+  await embed.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
+  await expect(embed.locator('.cm-content[contenteditable="true"]')).toBeFocused();
+  await expect(embed.locator('.cm-equation-number')).toHaveText(['(1-2)', '(1-3)', '(1-4)']);
+});

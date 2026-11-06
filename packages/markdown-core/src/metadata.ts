@@ -1,5 +1,5 @@
 import { analyzeMarkdown, markdownComments, type MarkdownModel, type SourceSpan } from './syntax.js';
-import { isGlobalContentTarget, parseLinkTarget } from './links.js';
+import { parseLinkTarget, wikiDestination } from './links.js';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts } from './bodyHeadings.js';
 import { mathRegions } from './math.js';
 import { decodeHtmlEntity } from './html.js';
@@ -30,7 +30,7 @@ export function extractMetadata(source: string | MarkdownModel): Metadata {
   for (const match of text.matchAll(/!?\[\[([^\]\n]+?)\]\]/g)) {
     if (intersects(match.index!, match.index! + match[0].length) || escaped(match.index!) || match[1].includes('[[')) continue;
     const target = parseLinkTarget(match[1]);
-    const destination = isGlobalContentTarget(match[1]) ? target.fragment : target.path + (target.fragment ? '#' + target.fragment : '');
+    const destination = wikiDestination(match[1]);
     linkOccurrences.push({ from: match.index!, to: match.index! + match[0].length, target: destination,
       label: target.alias ?? destination, kind: 'wiki', embed: match[0].startsWith('!') });
     links.add(destination);

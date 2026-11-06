@@ -4,6 +4,7 @@ import { livePreviewState, livePreviewReadonly } from './renderState';
 import { sourceRegion, forcedRenderedRegion } from './sourceControls';
 import { refreshBlockEffects } from './blocks/model';
 import { renderContext, type RenderContext } from './renderContext';
+import { setEmbeddedFormulas } from './syntaxModel';
 import { getLatexSuiteConfig } from './writing/latex/snippets/codemirror/config';
 
 type DecorationDependencies = {
@@ -31,7 +32,7 @@ function contextChanged(before: RenderContext, after: RenderContext, keys?: read
 }
 
 export function decorationInputsChanged(tr: Transaction, inputs: boolean | DecorationDependencies = true): boolean {
-  if (tr.effects.some(e => e.is(refreshBlockEffects))) return true;
+  if (tr.effects.some(e => e.is(refreshBlockEffects) || e.is(setEmbeddedFormulas))) return true;
   if (tr.docChanged) return true;
   const before = tr.startState, after = tr.state;
   const options = typeof inputs === 'boolean' ? undefined : inputs;
