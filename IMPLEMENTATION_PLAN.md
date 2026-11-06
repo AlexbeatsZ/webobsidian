@@ -4,7 +4,12 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-06 (cross-platform test fixes)
+Cập nhật lần cuối: 2026-11-06 (Android 0.1.63 delivery)
+
+## Android 0.1.63 delivery
+- [x] Build the current shared renderer/server for Android with the tablet's existing package identity and signer
+- [ ] Verify the APK, update Xiaomi Pad 6 Pro in place and check installed startup
+- [x] Keep large STEM indexing inside the Android heap; avoid full desktop-cache serialization
 
 ## Cross-platform shortcuts and known test failures (PRD 1.37)
 - [x] Make Ctrl → Control and Alt → Option work in editor keyboard input on macOS
@@ -625,6 +630,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-06 (Android 0.1.63): 共享0.1.62渲染器/服务的安卓构建；Node堆上限改为1024MiB，Android跳过全文索引JSON缓存的读写，避免大型STEM库冷建/序列化内存不足。22项索引/搜索/目录回归、生产构建、APK/lint/签名/16KB对齐通过；平板原包名/签名覆盖安装，实际启动检查进行中。
 - 2026-11-06 (PRD 1.37): 修复 16 个已复现失败，Ctrl→Control、Alt→Option；修复短笔记异步公式行高与字体完成后的列表前缀测量，处理 Mac Control 主键链接点击及 APFS 大小写改名恢复。160 个浏览器/集成、546 个单元全部通过；类型、构建、打包入口与 Mac 双架构签名通过。见 tests/reports/macos-test-fixes-20261106.md。
 - 2026-11-06 (PRD 1.36): 标题/范围等整段嵌入中的公式按宿主位置编号(嵌入加载后报告内容，宿主重算)，编辑嵌入时保持宿主编号。新增单元与浏览器用例通过；单元 542 中仅已知大小写改名用例失败，渲染回归失败用例均为已知基线问题。
 - 2026-11-06 (PRD 1.35): 公式嵌入按宿主位置独立编号，隐式引用取前方最近显式实例(否则原始编号，跨笔记带笔记名)，别名优先；嵌入铅笔并入右上控件组并增加复制原始引用。新增单元与浏览器用例通过；单元 541 中仅已知大小写改名用例失败，渲染回归其余失败用例改动前同样失败。

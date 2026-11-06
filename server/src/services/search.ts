@@ -20,6 +20,9 @@ import type { SearchHit, MatchContext, NoteMatches } from '../contracts.js';
 import type { SearchCache } from './vaultindex.js';
 export type { SearchHit, MatchContext, NoteMatches } from '../contracts.js';
 
+/** MiniSearch's full JSON export duplicates the index beyond Android's heap budget. */
+export const supportsSearchCache = () => process.env.WEBOBSIDIAN_PLATFORM !== 'android';
+
 /**
  * QMD — the WebObsidian search engine.
  * A thin, opinionated layer over MiniSearch giving fielded, fuzzy, prefix and
@@ -382,6 +385,7 @@ export class QmdEngine {
 
   /** `root` is the Vault this engine was built from, not the current setting. */
   async save(root: string): Promise<void> {
+    if (!supportsSearchCache()) return;
     try {
       await this.loaded();
       if (!this.ready) return;

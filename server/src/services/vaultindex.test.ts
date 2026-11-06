@@ -34,8 +34,30 @@ beforeEach(async () => {
   state.parsed = [];
 });
 afterEach(async () => {
+  vi.unstubAllEnvs();
   if (path.dirname(state.root) !== base) throw new Error('Refusing fixture cleanup outside .agents');
   await fs.rm(state.root, { recursive: true, force: true });
+});
+
+it('rebuilds searchable Android notes without loading or overwriting the desktop index cache', async () => {
+  await write('a.md', 'alpha body');
+  await rebuildVaultIndex(false);
+  await qmd.save(state.root);
+  const cacheFile = path.join(state.root, '.cache', 'qmd-index.json');
+  const previous = await fs.readFile(cacheFile, 'utf8');
+
+  vi.stubEnv('WEBOBSIDIAN_PLATFORM', 'android');
+  await write('a.md', 'delta body');
+  state.parsed = [];
+  expect(await loadSearchCache()).toBeUndefined();
+  await rebuildVaultIndex(true);
+  const serialize = vi.spyOn(qmd['mini'], 'toJSON');
+  await qmd.save(state.root);
+  expect(serialize).not.toHaveBeenCalled();
+  expect(await fs.readFile(cacheFile, 'utf8')).toBe(previous);
+  expect(state.parsed).toEqual(['a.md']);
+  expect(hits('delta')).toEqual(['a.md']);
+  expect(hits('alpha')).toEqual([]);
 });
 
 it('restores a stale cache by re-reading only changed notes', async () => {

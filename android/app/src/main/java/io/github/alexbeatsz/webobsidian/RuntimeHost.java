@@ -52,7 +52,7 @@ final class RuntimeHost {
                     "DATA_DIR=" + data, "VAULT_PATH=" + vault, "ALLOWED_ROOTS=" + roots,
                     "WEBOBSIDIAN_INITIAL_VAULT=" + (initialVault == null ? "" : initialVault),
                     "HOME=" + files, "TMPDIR=" + app.getCacheDir(),
-                    "NODE_OPTIONS=--max-old-space-size=384", "WEBOBSIDIAN_PLATFORM=android"
+                    "NODE_OPTIONS=--max-old-space-size=1024", "WEBOBSIDIAN_PLATFORM=android"
                 };
                 int codeResult = startNode(new String[] { "node", new File(code, "server/dist/index.mjs").getAbsolutePath() },
                     env, files.getAbsolutePath(), new File(logs, "server.log").getAbsolutePath());

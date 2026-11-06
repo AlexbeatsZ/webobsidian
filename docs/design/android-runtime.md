@@ -22,6 +22,12 @@ Node starts only after explicit Vault selection, once per app process, and survi
 window/backgrounding does not attempt to restart Node in-process. Android may
 kill a background app; the next process starts the same persistent Vault and
 indexes. No background foreground-service or permanent wake lock is added.
+The embedded Node heap is bounded at1024MiB. A real STEM cold index exceeds the
+old384MiB limit. Android rebuilds its derived full-text index on process start
+instead of loading or serializing MiniSearch's disposable desktop JSON cache:
+exporting that entire index duplicates it and can exceed even1536MiB. Saved
+notes, catalog semantics, search behavior and desktop caching remain unchanged.
+Cold Android startup therefore waits for the ordinary complete index build.
 Versioned immutable bundled assets are copied under `files/runtime-<code>` only
 until their completion marker exists. User Vault/configuration are never part
 of the asset extraction. Native stdout/stderr go to `files/logs/server.log`.
@@ -128,8 +134,12 @@ Release key/properties remain in ignored `android/.signing` and must be retained
 for future updates. `io.github.alexbeatsz.webobsidian` is the signed personal
 release; `.debug` is a distinct application identity and data directory for
 acceptance. Neither build command installs, starts, uninstalls or clears an app.
-Android version.properties owns Android0.1.18/versionCode18 independently;
-the accepted Mac packages remain0.1.17 and are not rebuilt for this correction.
+Android version.properties owns Android0.1.63/versionCode63 independently. This
+Android delivery bundles the current shared renderer and server from desktop
+0.1.62, plus the Android heap/cache correction above. The existing tablet uses
+the `.debug` identity and its original Windows
+debug signing key; preserve that identity and signer for in-place updates.
+Desktop packages are not rebuilt for this Android delivery.
 
 Runtime is pinned to [fogtape/nodejs-mobile v24.22.1-0](https://github.com/fogtape/nodejs-mobile/releases/tag/v24.22.1-0),
 full ICU, based on Node24 LTS, distributed as a **prerelease** by that project.

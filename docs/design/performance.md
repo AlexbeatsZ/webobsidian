@@ -106,6 +106,13 @@ Grammar reuse does not make the complete derived-node traversal incremental.
 
 ## Startup index cache (2026-11-02)
 
+Android exception (2026-11-06): `WEBOBSIDIAN_PLATFORM=android` skips this
+disposable cache on both read and write. The complete current STEM index builds
+inside768MiB in an isolated check, while MiniSearch.toJSON() exceeds1536MiB.
+The Android host uses a1024MiB bound for the live index and indexing work, and
+cold process starts rebuild through the existing catalog/index owner. No notes
+are excluded and desktop cache behavior is unchanged.
+
 The HTTP listener opens only after boot indexing, so `qmd-index.json` restore is
 the desktop startup path. The cache used to be written only at boot and accepted
 only when every walked stamp matched; any note edited during the previous session

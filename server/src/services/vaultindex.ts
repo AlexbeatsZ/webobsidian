@@ -4,7 +4,7 @@ import { getVaultRoot, readFileSnapshot } from './vaultFile.js';
 import { INDEX_FILE } from '../config.js';
 import { SEARCH_VERSION } from '@webobsidian/search-core';
 import { VaultCatalog, replaceCatalog, CATALOG_SCHEMA_VERSION } from './catalog.js';
-import { QmdEngine, qmd, replaceSearch } from './search.js';
+import { QmdEngine, qmd, replaceSearch, supportsSearchCache } from './search.js';
 import { parseNote } from './markdown.js';
 import { rebuildGraphFromCatalog } from './links.js';
 
@@ -26,6 +26,7 @@ export interface SearchCache {
  * index load earlier starves the walk's per-entry awaits until the load ends.
  */
 export async function loadSearchCache(): Promise<SearchCache | undefined> {
+  if (!supportsSearchCache()) return undefined;
   try {
     const [root, raw] = await Promise.all([getVaultRoot(), fs.readFile(INDEX_FILE, 'utf8')]);
     const saved = JSON.parse(raw);
