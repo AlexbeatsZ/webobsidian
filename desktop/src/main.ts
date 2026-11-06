@@ -381,9 +381,9 @@ function buildMenu(): void {
     {
       label: "文件",
       submenu: [
-        { label: '新建笔记', accelerator: 'CommandOrControl+N', click: command('new') },
-        { label: '打开笔记…', accelerator: 'CommandOrControl+O', click: command('files') },
-        { label: '保存', accelerator: 'CommandOrControl+S', click: command('save') },
+        { label: '新建笔记', accelerator: 'Control+N', click: command('new') },
+        { label: '打开笔记…', accelerator: 'Control+O', click: command('files') },
+        { label: '保存', accelerator: 'Control+S', click: command('save') },
         { type: 'separator' },
         { label: "信任原生插件 (下次启动生效)", type: 'checkbox', checked: !!desktopConfig?.trustedPlugins,
           click: async (item) => { const cfg = await readConfig(); cfg.trustedPlugins = item.checked; await writeConfig(cfg); } },

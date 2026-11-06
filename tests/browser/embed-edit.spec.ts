@@ -114,7 +114,7 @@ test('range editors remap source deltas and reject boundary merges and out-of-ra
   await expect(embed.locator('.cm-content[contenteditable="true"]')).toHaveCount(0);
   await page.evaluate(() => window.renderHarness.reset('^range-section:start\n\nbody\n\n^range-section:end\n\nsentinel'));
   const reading = page.locator('[data-slot="1"]');
-  await expect(reading.locator('.cm-content')).not.toContainText('^range-section');
+  await expect(reading.locator('> .cm-host > .cm-editor > .cm-scroller > .cm-content')).not.toContainText('^range-section');
 });
 
 test('normal edits cannot alter target IDs and concurrent composition fails closed', async ({ page }) => {

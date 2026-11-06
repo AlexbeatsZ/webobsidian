@@ -27,9 +27,9 @@ const original = {
   'parity-rich.md': richParitySource,
   'parity-blank.md': '',
 };
-const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
-const documentStart = process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home';
-const documentEnd = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End';
+const mod = 'Control';
+const documentStart = 'Control+Home';
+const documentEnd = 'Control+End';
 type Pane = 'main' | 'split';
 type Exit = 'close' | 'replace';
 interface Backend { vault: string; data: string; url: string }

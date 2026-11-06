@@ -7,7 +7,7 @@ import { footnotes } from '@webobsidian/markdown-core';
 import { syntaxModel } from './syntaxModel';
 
 const edit = (id: string, title: string, run: (view: EditorView) => unknown, key?: string): NativeCommand => ({
-  id, title, hotkeyScope: 'editor', hotkeys: key ? [{ modifiers: ['Mod'], key }] : [],
+  id, title, hotkeyScope: 'editor', hotkeys: key ? [{ modifiers: ['Ctrl'], key }] : [],
   available: context => !!context.view && !context.view.state.readOnly,
   run: () => { const view = getActiveEditor(); if (view && !view.state.readOnly) return run(view); return false; },
 });
@@ -37,7 +37,7 @@ export const nativeEditorCommands: NativeCommand[] = [
   }),
   edit('editor:indent-list', '增加缩进', fmtIndent), edit('editor:unindent-list', '减少缩进', fmtOutdent),
   edit('editor:undo', '撤销', fmtUndo, 'Z'),
-  { ...edit('editor:redo', '重做', fmtRedo), hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'Z' }, { modifiers: ['Mod'], key: 'Y' }] },
-  { id: 'editor:open-search', title: '查找当前文档', hotkeyScope: 'editor', hotkeys: [{ modifiers: ['Mod'], key: 'F' }], available: context => !!context.view, run: editorFind },
-  { id: 'editor:open-search-replace', title: '查找与替换', hotkeyScope: 'editor', hotkeys: [{ modifiers: ['Mod'], key: 'H' }], available: context => !!context.view, run: editorFind },
+  { ...edit('editor:redo', '重做', fmtRedo), hotkeys: [{ modifiers: ['Ctrl', 'Shift'], key: 'Z' }, { modifiers: ['Ctrl'], key: 'Y' }] },
+  { id: 'editor:open-search', title: '查找当前文档', hotkeyScope: 'editor', hotkeys: [{ modifiers: ['Ctrl'], key: 'F' }], available: context => !!context.view, run: editorFind },
+  { id: 'editor:open-search-replace', title: '查找与替换', hotkeyScope: 'editor', hotkeys: [{ modifiers: ['Ctrl'], key: 'H' }], available: context => !!context.view, run: editorFind },
 ];

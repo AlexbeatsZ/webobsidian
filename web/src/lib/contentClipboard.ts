@@ -1,5 +1,5 @@
 import { EditorSelection, Prec, type Extension } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import { analyzeMarkdown, contentTargets, extractMetadata, isGlobalContentTarget, parseLinkTarget, type MarkdownModel, type SourceSpan } from '@webobsidian/markdown-core';
 import { syntaxModel } from './syntaxModel';
 import { writingOperation } from './writing/editing';
@@ -187,7 +187,7 @@ export function contentClipboard(options: ClipboardOptions) {
       return true;
     },
   }));
-  return { extension,
+  const clipboard = { extension,
     async copy(view: EditorView, cut = false) {
       if (cut && !writable(view)) return;
       const before = view.state, content = capture(view, cut);
@@ -221,4 +221,10 @@ export function contentClipboard(options: ClipboardOptions) {
       } catch (error) { options.reportError(error); }
     },
   };
+  clipboard.extension = [extension, keymap.of([
+    { mac: 'Ctrl-c', run: view => { void clipboard.copy(view); return true; } },
+    { mac: 'Ctrl-x', run: view => { void clipboard.copy(view, true); return true; } },
+    { mac: 'Ctrl-v', run: view => { void clipboard.paste(view); return true; } },
+  ])];
+  return clipboard;
 }

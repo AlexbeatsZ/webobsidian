@@ -54,6 +54,23 @@ export async function resolveInVault(relPath: string): Promise<string> {
   return resolveVaultPath(root, relPath);
 }
 
+/** A case-only destination may alias its source on the current filesystem. */
+export async function sameVaultFile(from: string, to: string): Promise<boolean> {
+  if (from === to) return true;
+  if (from.toLowerCase() !== to.toLowerCase()) return false;
+  const [a, b] = await Promise.all([resolveInVault(from), resolveInVault(to)]);
+  try {
+    // Distinct entries (including hard links) are still collisions on a
+    // case-sensitive filesystem even when they happen to share an inode.
+    if ((await fs.readdir(path.dirname(b))).includes(path.basename(b))) return false;
+    const [source, target] = await Promise.all([fs.lstat(a), fs.lstat(b)]);
+    return source.dev === target.dev && source.ino === target.ino;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 export async function resolveVaultPath(root: string, relPath: string, rejectLinks = false): Promise<string> {
   const clean = relPath.replace(/^[/\\]+/, '');
   const abs = path.resolve(root, clean);

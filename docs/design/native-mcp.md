@@ -165,6 +165,15 @@ an existing file or directory. Rename requires a saved source and fresh read
 revision, keeps the exact raw bytes, and supports case-only filename changes.
 It has the same link-update semantics as the native file-tree rename.
 
+On case-insensitive APFS as well as Windows, a target spelling can alias the
+source. `sameVaultFile` checks matching physical identity only for case variants
+and rejects a distinct exact target directory entry, including hard links on a
+case-sensitive volume. Proposal and acceptance reuse this filesystem check;
+`vault.rename` keeps its physical writer locks and fresh revision guard.
+Reconciliation reads exact filename spelling, so the old alias does not look
+like an unchanged source after a completed case-only rename. Vault identity
+keys retain their existing platform rules; macOS paths are not globally folded.
+
 File proposals use the existing persisted inbox/idempotency/serialized decisions.
 `fileOperation` is absent on older text proposals, preserving their existing
 per-hunk behavior. The local review dialog shows complete create content as

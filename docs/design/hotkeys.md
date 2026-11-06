@@ -1,5 +1,14 @@
 # 快捷键
 
+## Physical modifier mapping (2026-11-06, PRD 1.37)
+
+- Native application/editor defaults use literal `Ctrl`: Control on macOS and Ctrl on Windows/Linux. `Alt` is Option on macOS. The native file-menu accelerators use the same Control bindings.
+- Stored/imported bindings are not rewritten. An explicitly configured `Meta`/Command remains separate; legacy `Mod` retains its platform meaning for compatibility.
+- MarkdownView prioritizes literal Control/Alt variants of CodeMirror's existing default/search keymaps, then keeps the native platform bindings. Shared DocumentSession history owns Control+Z/Y/Shift+Z in full notes and editable fragments.
+- Control+C/X/V on macOS calls the existing ContentClipboard policy, including typed-ID metadata, readonly checks and stale-selection guards. Windows/Linux continue through native clipboard events.
+- Option can produce a symbol or dead key (`Ω`, `÷`, `Dead`). Hotkey capture/matching uses the base `KeyboardEvent.code` for Alt-modified letters, digits and punctuation, while ordinary character input keeps layout characters. AltGraph/composition filtering remains in CommandManager.
+- Settings display literal bindings as Control/Option on Mac. Tests send actual `Control`/`Alt` events; they do not substitute Command to make a failing shortcut pass.
+
 ## Vault identity follow-up (2026-10-23)
 
 Hotkeys uses Vault.vaultPathKey with native features/configuration/workspace.

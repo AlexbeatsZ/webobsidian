@@ -124,14 +124,14 @@ try {
   checkpoint('tag queries and filename validation with scoped file writes');
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('.workspace-launcher').waitFor();
-  await page.keyboard.press('ControlOrMeta+o');
+  await page.keyboard.press('Control+o');
   await page.locator('.palette-input').fill('acceptance');
   await page.keyboard.press('Enter');
   await page.locator('.cm-content').first().waitFor();
   await page.locator('.cm-content').first().click();
-  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.press('Control+End');
   await page.keyboard.type(' Saved through production UI.');
-  await page.keyboard.press('ControlOrMeta+s');
+  await page.keyboard.press('Control+s');
   await page.waitForTimeout(1000);
   assert.match(await fs.readFile(path.join(vault, 'acceptance.md'), 'utf8'), /Saved through production UI\./);
   await page.keyboard.press('Enter');
@@ -139,15 +139,15 @@ try {
   await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent.includes('SNIPPET-OK'));
   checkpoint('real editor input, disk save and explicitly configured native snippet');
   const runCommand = async name => {
-    await page.keyboard.press('ControlOrMeta+p');
+    await page.keyboard.press('Control+p');
     await page.locator('.palette-input').fill(name);
     await page.getByText(name, { exact: true }).click();
   };
   await runCommand('Acceptance template');
   await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent.includes('TEMPLATE-OK COMMAND-OK'));
-  await page.keyboard.press('ControlOrMeta+s');
+  await page.keyboard.press('Control+s');
   checkpoint('command-backed template');
-  await page.keyboard.press('ControlOrMeta+o');
+  await page.keyboard.press('Control+o');
   await page.locator('.palette-input').fill('features');
   await page.keyboard.press('Enter');
   await page.locator('.cm-body-heading').waitFor();
@@ -158,8 +158,8 @@ try {
   checkpoint('body title, executable widget, native block and equation reference');
   await page.locator('.cm-mermaid svg.pele').waitFor();
   await page.locator('.main-pane .cm-content').click();
-  await page.keyboard.press('ControlOrMeta+End');
-  await page.keyboard.press('ControlOrMeta+Shift+m');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Control+Shift+m');
   await page.getByRole('button', { name: 'MCP', exact: true }).click();
   await page.locator('.mcp-context-item').waitFor();
   const context = await (await api.get('/api/operations/context')).json();
@@ -209,7 +209,7 @@ try {
   assert.equal(await page.getByRole('button', { name: /Daily note/i }).count(), 0);
   assert.deepEqual(errors, [], 'No renderer errors during production load/edit/save');
   checkpoint('right Homepage tab, fixed ribbon and zero renderer errors');
-  await page.keyboard.press('ControlOrMeta+o');
+  await page.keyboard.press('Control+o');
   await page.locator('.palette-input').fill('surface-table');
   await page.keyboard.press('Enter');
   for (const mode of ['实时预览', '阅读视图']) {
@@ -217,7 +217,7 @@ try {
     await page.getByRole('menuitemcheckbox', { name: mode, exact: true }).click();
     if (mode === '实时预览') {
       await page.locator('.main-pane .cm-content').first().focus();
-      await page.keyboard.press('ControlOrMeta+End');
+      await page.keyboard.press('Control+End');
     }
     const table = page.locator('.main-pane .native-block-effect .cm-table');
     await table.waitFor();

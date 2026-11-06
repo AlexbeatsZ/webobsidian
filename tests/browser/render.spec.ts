@@ -22,9 +22,10 @@ async function wrappedBodyOffset(page: Page, slot: number) {
     let node: Node | null;
     while ((node = walker.nextNode())) {
       if (node.parentElement?.closest('.cm-list-prefix,.cm-list-fold-anchor') || !node.textContent?.trim()) continue;
-      const first = document.createRange(); first.setStart(node, 0); first.setEnd(node, 1);
+      const start = node.textContent.search(/\S/);
+      const first = document.createRange(); first.setStart(node, start); first.setEnd(node, start + 1);
       const origin = first.getBoundingClientRect();
-      for (let i = 1; i < node.textContent.length; i++) {
+      for (let i = start + 1; i < node.textContent.length; i++) {
         if (/\s/.test(node.textContent[i])) continue;
         const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 1);
         const rect = range.getBoundingClientRect();
@@ -107,7 +108,7 @@ test('copy across a rendered break returns source and composition freezes reveal
   });
   await expect(content.locator('.cm-html-break')).toHaveCount(1);
   await page.keyboard.press('Control+c');
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('甲<br>乙');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('甲<br>乙');
 });
 
 test('unfocused live syntax has the same pixels as reading', async ({ page }) => {
@@ -254,8 +255,7 @@ test('wrapped list text aligns with the list body', async ({ page }) => {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('.cm-line[data-prefix-layout]')]
     .every(line => line.style.getPropertyValue('--cm-list-prefix-width') !== ''));
-  const offset = await wrappedBodyOffset(page, 0);
-  expect(Math.abs(offset)).toBeLessThan(2);
+  await expect.poll(() => wrappedBodyOffset(page, 0)).toBeLessThan(2);
 });
 
 test('nested callouts own their math and code and fold independently', async ({ page }) => {

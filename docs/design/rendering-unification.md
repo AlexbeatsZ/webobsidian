@@ -344,6 +344,24 @@ References: [MathJax components](https://docs.mathjax.org/en/latest/web/componen
 [promise conversion and local SVG caches](https://docs.mathjax.org/en/latest/web/convert.html),
 [safe extension](https://docs.mathjax.org/en/latest/options/safe.html).
 
+## Async geometry correction (2026-11-06)
+
+The known quoted-formula native-click regression was reproduced: the DOM placed
+the clicked text below a newly rendered SVG, while CM's cached height map still
+described the compact pending formula and selected the following blank line.
+Short notes exposed this because the default content min-height kept the outer
+content height unchanged. Native content now uses its natural height, as the
+existing note-footer layout already did. The editor/scroll viewport retains its
+full height and the existing bottom padding; no pointer coordinate correction or
+second selection owner is added. Math completion clears its pending marker only
+after the scheduled CM measurement.
+
+ListLayout also listens for document font completion and reruns its existing
+prefix measurement; the old cached bullet/space advance could differ by 3.9px
+after fonts loaded without a viewport resize. Subscriptions are released on
+destroy, and late font promises check the existing destroyed flag. Layout
+assertions wait for the resulting measured geometry without relaxing tolerance.
+
 ## Editor corrections after user acceptance (2026-10-19)
 
 The user reported an invisible dark-mode caret, slow formulas, callout clicks

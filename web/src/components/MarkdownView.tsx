@@ -4,7 +4,7 @@ import '../styles/equations.css';
 import { codeBlocks, pluginPostProcessing } from '../lib/obsidian/markdown';
 import { mountMarkdownFragment } from './MarkdownFragment';
 import { Annotation, Compartment, EditorState, Prec } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
 import { editorSelection } from '../lib/editorSelection';
 import { editorDebugging } from '../lib/editorDebug';
 import { bindEditorMode } from '../lib/activeEditor';
@@ -48,6 +48,11 @@ import { livePreviewPlugin, livePreviewState, livePreviewTheme, frontmatterField
   livePreviewReadonly, setLivePreviewReadonly, setLivePreviewEnabled, setNoteTitle } from '../lib/livePreview';
 
 export type MarkdownMode = 'live' | 'reading' | 'source';
+// Keep Windows/Linux key names literal on Mac: Ctrl is Control, Alt is Option.
+// Retain the platform keymap afterwards for its additional native bindings.
+const physicalKeymap = (bindings: readonly KeyBinding[]) => bindings.flatMap(({ key, mac: _mac, win: _win, linux: _linux, ...binding }) =>
+  key ? [{ ...binding, key: key.replace(/\bMod-/g, 'Ctrl-') }] : []);
+
 export interface MarkdownViewProps {
   snapshot: DocumentSnapshot;
   documentSession?: DocumentSession;
@@ -286,6 +291,9 @@ export default function MarkdownView(props: MarkdownViewProps) {
         EditorState.transactionFilter.of((tr) =>
           tr.docChanged && (tr.startState.readOnly || latest.current.documentSession?.snapshot.locked) && !tr.annotation(externalUpdate) ? [] : tr),
         Prec.high(keymap.of([
+          { key: 'Ctrl-z', run: () => historyAction(false) },
+          { key: 'Ctrl-Shift-z', run: () => historyAction(true) },
+          { key: 'Ctrl-y', run: () => historyAction(true) },
           { key: 'Mod-z', run: () => historyAction(false) },
           { key: 'Mod-Shift-z', run: () => historyAction(true) },
           { key: 'Mod-y', run: () => historyAction(true) },
@@ -296,7 +304,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
           }),
         ])),
         search({ top: true }),
-        keymap.of([...defaultKeymap, ...searchKeymap, ...markdownListKeymap, indentWithTab]),
+        keymap.of([...physicalKeymap([...defaultKeymap, ...searchKeymap]), ...defaultKeymap, ...searchKeymap, ...markdownListKeymap, indentWithTab]),
         /\.jsonc?$/i.test(p.snapshot.id) ? json() : markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [bodyHeadingSyntax, blockEffectSyntax, footnoteSyntax] }),
         suggesterPlugin,
         mathEditingExtensions,

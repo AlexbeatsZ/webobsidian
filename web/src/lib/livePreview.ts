@@ -578,7 +578,14 @@ class MathWidget extends WidgetType {
           status.setAttribute('role', 'alert'); status.removeAttribute('aria-label');
           status.replaceChildren('公式渲染失败 ', retry); body.appendChild(status);
         })
-        .finally(() => { if (!controller.signal.aborted) { delete span.dataset.renderPending; span.removeAttribute('aria-busy'); view.requestMeasure(); } });
+        .finally(() => {
+          if (controller.signal.aborted) return;
+          // The SVG changes line heights. Ready means CM has measured those
+          // heights too, so the next native pointer event uses current geometry.
+          view.requestMeasure({ read: () => undefined, write: () => {
+            if (!controller.signal.aborted) { delete span.dataset.renderPending; span.removeAttribute('aria-busy'); }
+          } });
+        });
       },
     };
     mathMounts.set(span, mount);

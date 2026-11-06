@@ -95,6 +95,28 @@ it('supports case-only note renames and confirms actual filename spelling', asyn
   expect(await fs.readdir(state.root)).not.toContain('original.md');
   expect(await read('Original.md')).toBe(raw);
 });
+it.each(['renamed.md', 'Original.md'])('recovers a completed rename to %s after a lost acknowledgement and restart', async to => {
+  vi.mocked(applyFileInWorkspace).mockImplementationOnce(async (_id, op) => {
+    if (op.kind !== 'rename') throw new Error('fixture');
+    await vault.rename(op.path, op.to, op.base_revision);
+    throw new Error('lost acknowledgement');
+  });
+  const p = await review.propose(await rename(to));
+  expect(await review.decide(p.proposal_id, 'local', 'accepted')).toMatchObject({ status: 'completed', operation: { status: 'accepted' } });
+  expect(await new NativeReview().status(p.proposal_id)).toMatchObject({ status: 'completed', applied_steps: 1 });
+  const files = await fs.readdir(state.root);
+  expect(files).toContain(to); expect(files).not.toContain('original.md');
+  expect(await read(to)).toBe(raw);
+});
+it('keeps an unchanged case-only rename retryable after interruption', async () => {
+  vi.mocked(applyFileInWorkspace).mockRejectedValueOnce(new Error('disconnected'));
+  const p = await review.propose(await rename('Original.md'));
+  await expect(review.decide(p.proposal_id, 'local', 'accepted')).rejects.toThrow('disconnected');
+  const restarted = new NativeReview();
+  expect(await restarted.status(p.proposal_id)).toMatchObject({ operation: { status: 'pending' } });
+  expect(await restarted.decide(p.proposal_id, 'local', 'accepted')).toMatchObject({ operation: { status: 'accepted' } });
+  expect(await read('Original.md')).toBe(raw);
+});
 it('blocks existing create/rename targets and non-note/hidden/traversal paths', async () => {
   await expect(review.propose(create('original.md'))).rejects.toThrow(/已存在/);
   await expect(review.propose(await rename('original.md'))).rejects.toThrow(/相同/);

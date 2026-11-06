@@ -68,13 +68,16 @@ export function hotkeySignature(binding: Hotkey, mac = false): string {
 }
 /** Layout characters first; shifted number/punctuation keys retain their base key. */
 export function eventHotkey(event: { key: string; code: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }): Hotkey | null {
-  if (['Control', 'Meta', 'Alt', 'Shift', 'Dead', 'Process', 'Unidentified'].includes(event.key)) return null;
   const punctuation: Record<string, string> = { Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/' };
-  const key = event.shiftKey ? (/^Digit[0-9]$/.test(event.code) ? event.code.slice(5) : punctuation[event.code] ?? event.key) : event.key;
+  // Option on Mac can report Ω, ÷ or Dead instead of the shortcut's base key.
+  const key = event.altKey && /^Key[A-Z]$/.test(event.code) ? event.code.slice(3)
+    : event.shiftKey || event.altKey ? (/^Digit[0-9]$/.test(event.code) ? event.code.slice(5) : punctuation[event.code] ?? event.key) : event.key;
+  if (['Control', 'Meta', 'Alt', 'Shift', 'Dead', 'Process', 'Unidentified'].includes(key)) return null;
   return normalizeHotkey({ modifiers: [event.ctrlKey && 'Ctrl', event.metaKey && 'Meta', event.altKey && 'Alt', event.shiftKey && 'Shift'].filter(Boolean), key });
 }
 export function hotkeyLabel(binding: Hotkey, mac = false): string {
-  return [...binding.modifiers.map(mod => mod === 'Mod' ? (mac ? '⌘' : 'Ctrl') : mod === 'Meta' && mac ? '⌘' : mod), binding.key].join(' + ');
+  return [...binding.modifiers.map(mod => mod === 'Mod' ? (mac ? '⌘' : 'Ctrl') : mod === 'Meta' && mac ? '⌘'
+    : mac && mod === 'Ctrl' ? 'Control' : mac && mod === 'Alt' ? 'Option' : mod), binding.key].join(' + ');
 }
 export function mergeHotkeys(target: Hotkey[], source: readonly Hotkey[]): Hotkey[] {
   const known = new Set(target.map(key => JSON.stringify(key)));

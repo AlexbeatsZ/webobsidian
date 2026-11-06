@@ -99,6 +99,7 @@ class ListLayout {
   private selector = '.cm-line[data-prefix-layout]';
   private observer: MutationObserver;
   private destroyed = false;
+  private fontsChanged = () => { if (!this.destroyed) this.schedule(); };
   constructor(private view: EditorView) {
     this.observer = new MutationObserver(records => {
       if (records.some(record => {
@@ -115,10 +116,13 @@ class ListLayout {
     });
     this.observer.observe(view.contentDOM, { childList: true, characterData: true, subtree: true,
       attributes: true, attributeFilter: ['data-prefix-layout'] });
+    view.dom.ownerDocument.fonts.addEventListener('loadingdone', this.fontsChanged);
+    void view.dom.ownerDocument.fonts.ready.then(this.fontsChanged);
     this.schedule();
   }
   destroy() {
     this.observer.disconnect();
+    this.view.dom.ownerDocument.fonts.removeEventListener('loadingdone', this.fontsChanged);
     this.destroyed = true;
   }
   update(update: ViewUpdate) {

@@ -1,7 +1,8 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.36 · Cập nhật: 2026-11-06 · Trạng thái: Draft
+> Phiên bản: 1.37 · Cập nhật: 2026-11-06 · Trạng thái: Draft
+> Changelog 1.37 (跨平台快捷键与测试修复): macOS 的 Ctrl 快捷键使用 Control，Alt 使用 Option。编辑器中的撤销/重做、搜索、全文首尾与剪贴板操作须按此映射可用，测试保留真实 Control/Alt 输入。修复脚注导航、嵌入编辑与大小写改名的已知回归，隔离测试不触碰真实 Vault。
 > Changelog 1.36 (章节嵌入编号): 标题、范围、Callout 等整段嵌入里的公式也是宿主笔记的显式实例，按嵌入位置依次占用宿主编号，`\notag`/`{{}}` 不占号；嵌入内容加载后向宿主报告其中公式，宿主重新编号；嵌入编辑时保持宿主编号。更深一层嵌套的章节嵌入仍用其所在笔记编号。见 docs/design/native-equations.md。
 > Changelog 1.35 (公式实例编号): 原始公式与每个 `![[^eq-ID]]` 嵌入都是所在笔记中的独立显示实例，按位置共用一个编号计数；隐式引用 `[[^eq-ID]]` 不占编号，取当前笔记中引用位置之前最近的显式实例编号，没有则回退原始公式编号(跨笔记显示“笔记名 (1-1)”)，`|` 别名优先。嵌入右上角控件组合并铅笔、复制显式/隐式引用(复制原始对象 ID)、打开链接和 `</>`。见 docs/design/native-equations.md、content-references.md。
 > Changelog 1.34 (嵌入控件): 笔记嵌入去掉“编辑嵌入/完成”文字按钮，改为悬停左上角铅笔进入内容编辑，焦点离开或 Esc 自动退出；右上角“打开链接”旁增加 `</>` 编辑 `![[…]]` 源码。见 docs/design/content-references.md。

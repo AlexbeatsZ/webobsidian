@@ -496,7 +496,9 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-editor.cm-focused { outline: none !important; }
 .cm-editor .cm-content, .cm-editor .cm-inline-title { font-family: var(--font-text);
   box-sizing: border-box; min-width: 0; margin: 0 auto; padding: 28px var(--file-margins) 40vh; }
-.cm-editor .cm-content { font-size: var(--font-text-size); line-height: var(--line-height-normal); caret-color: var(--text-normal); }
+/* Natural content height lets CM detect asynchronous widget height changes,
+   including short notes that fit inside the editor's scroll viewport. */
+.cm-editor .cm-content { min-height: 0; font-size: var(--font-text-size); line-height: var(--line-height-normal); caret-color: var(--text-normal); }
 .cm-editor .cm-note-title-row { font-size: var(--font-text-size); }
 .cm-editor .cm-inline-title { width: 100%; padding-bottom: .5em; }
 .cm-inline-title[contenteditable="plaintext-only"] { cursor: text; outline: none; border-radius: var(--radius-s); }

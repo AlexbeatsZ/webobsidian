@@ -4,7 +4,12 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-06 (formula instances)
+Cập nhật lần cuối: 2026-11-06 (cross-platform test fixes)
+
+## Cross-platform shortcuts and known test failures (PRD 1.37)
+- [x] Make Ctrl → Control and Alt → Option work in editor keyboard input on macOS
+- [x] Resolve known rendering/navigation/embed/integration and case-only rename failures
+- [x] Verify affected suites, typecheck and build; prepare Mac arm64/x64 0.1.62 release artifacts
 
 ## Section embed numbering (PRD 1.36)
 - [x] Heading/range/Callout embeds report their formulas; host numbers them as instances, also while editing
@@ -620,6 +625,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-06 (PRD 1.37): 修复 16 个已复现失败，Ctrl→Control、Alt→Option；修复短笔记异步公式行高与字体完成后的列表前缀测量，处理 Mac Control 主键链接点击及 APFS 大小写改名恢复。160 个浏览器/集成、546 个单元全部通过；类型、构建、打包入口与 Mac 双架构签名通过。见 tests/reports/macos-test-fixes-20261106.md。
 - 2026-11-06 (PRD 1.36): 标题/范围等整段嵌入中的公式按宿主位置编号(嵌入加载后报告内容，宿主重算)，编辑嵌入时保持宿主编号。新增单元与浏览器用例通过；单元 542 中仅已知大小写改名用例失败，渲染回归失败用例均为已知基线问题。
 - 2026-11-06 (PRD 1.35): 公式嵌入按宿主位置独立编号，隐式引用取前方最近显式实例(否则原始编号，跨笔记带笔记名)，别名优先；嵌入铅笔并入右上控件组并增加复制原始引用。新增单元与浏览器用例通过；单元 541 中仅已知大小写改名用例失败，渲染回归其余失败用例改动前同样失败。
 - 2026-11-05 (PRD 1.34): 嵌入控件改为左上角铅笔编辑内容(失焦/Esc 自动退出，无“完成”按钮)，右上角增加 `</>`。新增浏览器用例通过；embed-edit 其余 2 个失败用例改动前同样失败(macOS 上 Control+End 不到文末、range 用例定位器歧义)；单元 539/540(已知大小写改名用例)。桌面 0.1.61 已安装到本机(/healthz ok)并发布 v0.1.61 为 Latest(Mac arm64/x64)。

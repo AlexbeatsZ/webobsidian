@@ -35,8 +35,8 @@ export const nativeCommands: NativeCommand[] = [
   ...attachmentCleanupCommands,
   ...tagCommands,
   ...headingLevelCommands,
-  { id: 'files', title: '打开文件', hotkeys: [{ modifiers: ['Mod'], key: 'O' }], run: () => useStore.getState().setPalette(true, 'files') },
-  { id: 'commands', title: '执行命令', hotkeys: [{ modifiers: ['Mod'], key: 'P' }, { modifiers: ['Mod', 'Shift'], key: 'P' }], run: () => useStore.getState().setPalette(true, 'commands') },
+  { id: 'files', title: '打开文件', hotkeys: [{ modifiers: ['Ctrl'], key: 'O' }], run: () => useStore.getState().setPalette(true, 'files') },
+  { id: 'commands', title: '执行命令', hotkeys: [{ modifiers: ['Ctrl'], key: 'P' }, { modifiers: ['Ctrl', 'Shift'], key: 'P' }], run: () => useStore.getState().setPalette(true, 'commands') },
   { id: 'headings', title: '搜索当前文档标题', run: () => useStore.getState().setPalette(true, 'headings') },
   { id: 'templates', title: '插入模板', run: () => useStore.getState().setPalette(true, 'templates') },
   {
@@ -47,8 +47,8 @@ export const nativeCommands: NativeCommand[] = [
       const path = s.currentPath(); if (path) s.setMovePath(path);
     },
   },
-  { id: 'new', title: '新建笔记', hotkeys: [{ modifiers: ['Mod'], key: 'N' }], run: () => useStore.getState().newNote() },
-  { id: 'save', title: '保存当前文件', hotkeys: [{ modifiers: ['Mod'], key: 'S' }], run: () => useStore.getState().save() },
+  { id: 'new', title: '新建笔记', hotkeys: [{ modifiers: ['Ctrl'], key: 'N' }], run: () => useStore.getState().newNote() },
+  { id: 'save', title: '保存当前文件', hotkeys: [{ modifiers: ['Ctrl'], key: 'S' }], run: () => useStore.getState().save() },
   {
     id: 'bookmark',
     title: '收藏当前文件',
@@ -62,7 +62,7 @@ export const nativeCommands: NativeCommand[] = [
     title: '向右分屏',
     run: () => { void useStore.getState().splitWithHomepage(null, 'right'); },
   },
-  { id: 'search', title: '搜索整个仓库', hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'F' }], run: () => useStore.getState().setLeftPanel('search') },
+  { id: 'search', title: '搜索整个仓库', hotkeys: [{ modifiers: ['Ctrl', 'Shift'], key: 'F' }], run: () => useStore.getState().setLeftPanel('search') },
   {
     id: 'bookmarks',
     title: '打开收藏与最近文件',
@@ -78,7 +78,7 @@ export const nativeCommands: NativeCommand[] = [
   { id: 'reading', title: '切换到阅读模式', run: () => setMode('reading') },
   { id: 'live', title: '切换到实时预览', run: () => setMode('live') },
   { id: 'source', title: '切换到源码模式', run: () => setMode('source') },
-  { id: 'toggle-preview', title: '切换阅读与编辑模式', hotkeys: [{ modifiers: ['Mod'], key: 'E' }], run: () => setMode('toggle-preview') },
+  { id: 'toggle-preview', title: '切换阅读与编辑模式', hotkeys: [{ modifiers: ['Ctrl'], key: 'E' }], run: () => setMode('toggle-preview') },
   { id: 'toggle-source', title: '切换源码与实时预览', run: () => setMode('toggle-source') },
   {
     id: 'reindex',

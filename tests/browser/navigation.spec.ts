@@ -45,7 +45,7 @@ test('rich footnotes collect at the end and return to each occurrence', async ({
   await reading.locator('.cm-footnote-reference').first().click();
   await expect(reading.locator('.cm-footnote-entry').first()).toHaveClass(/cm-navigation-target/);
   await reading.locator('.cm-footnote-returns').first().getByRole('link', { name: '返回第 2 处引用' }).click();
-  expect(await page.evaluate(() => window.renderHarness.location(1)?.anchor)).toBe(raw.indexOf('[^a]', raw.indexOf('[^a]') + 1));
+  await expect.poll(() => page.evaluate(() => window.renderHarness.location(1)?.anchor)).toBe(raw.indexOf('[^a]', raw.indexOf('[^a]') + 1));
   expect(await page.evaluate(() => window.renderHarness.source(1))).toBe(raw);
   await page.screenshot({ path: info.outputPath('footnotes.png') });
 });
@@ -59,7 +59,7 @@ for (const slot of [0, 1]) test(`footnote definition number returns to a highlig
   await expect(editor.locator(slot ? '.cm-footnote-entry.cm-navigation-target' : '.cm-navigation-target')).toContainText('这和前面的假设等价');
   if (slot) await expect(editor.locator('.cm-footnote-body .cm-editor')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await editor.locator(slot ? '.cm-footnote-number' : '.cm-footnote-definition').click();
-  expect(await page.evaluate(slot => window.renderHarness.location(slot)?.anchor, slot)).toBe(raw.indexOf('[^1]'));
+  await expect.poll(() => page.evaluate(slot => window.renderHarness.location(slot)?.anchor, slot)).toBe(raw.indexOf('[^1]'));
   await expect(editor.locator('.cm-footnote-reference.cm-navigation-target')).toBeVisible();
   expect(await page.evaluate(slot => window.renderHarness.source(slot), slot)).toBe(raw);
   await page.screenshot({ path: info.outputPath(`footnote-number-${slot}.png`) });
@@ -158,6 +158,12 @@ test('nested Markdown destinations and escaped wiki syntax use the shared metada
   await expect(page.locator('[data-slot="0"] [data-preview-link]')).toHaveCount(1);
   await page.locator('[data-slot="0"] [data-preview-link]').click();
   expect(await page.evaluate(() => window.renderHarness.links)).toEqual(['0:folder/a(b).md#章节']);
+});
+
+test('secondary-button link clicks retain the context menu without navigating', async ({ page }) => {
+  await page.evaluate(() => window.renderHarness.reset('# Source\n\n[[Target]]\n\nend'));
+  await page.locator('[data-slot="1"] [data-preview-link]').click({ button: 'right' });
+  expect(await page.evaluate(() => window.renderHarness.links)).toEqual([]);
 });
 
 test('source mode stays in source mode when navigating to a formula', async ({ page }) => {

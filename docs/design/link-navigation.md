@@ -7,6 +7,12 @@
 
 ## 当前实现
 
+2026-11-06: macOS Chromium turns Control+primary-click into `contextmenu` with
+`button === 0`, without a subsequent `click`. `bindRenderedLink` routes that
+specific event through the existing opening intent. Secondary-button context
+menus remain available. Navigation completes asynchronously; browser assertions
+wait for the requested location rather than reading the previous selection.
+
 - `markdown-core` 的既有 Lezer parser 配置加入脚注语法，`footnotes.ts` 按不可变模型缓存完整定义、
   首次引用编号及逐处引用。多行定义沿用 Markdown 容器解析；不在前端另建脚注 parser。
   metadata 保留 wiki、Markdown、引用式及裸 URL 的出现范围；`fragments.ts` 提供预览范围和独立落点，

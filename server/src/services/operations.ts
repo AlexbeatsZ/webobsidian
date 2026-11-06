@@ -6,7 +6,7 @@ import { SourceDocument, reviewHunks, materializeReview, rebaseReview, mergeRevi
 import { config } from '../config.js';
 import { operationContract } from '../operations/contract.js';
 import * as vault from './vault.js';
-import { getVaultRoot, resolveInVault, isTextFile, readFileSnapshot, vaultPathKey } from './vaultFile.js';
+import { getVaultRoot, resolveInVault, isTextFile, readFileSnapshot, sameVaultFile } from './vaultFile.js';
 import { fileTitleError } from '@webobsidian/search-core';
 import { catalog } from './catalog.js';
 import { parseNote } from './markdown.js';
@@ -138,10 +138,9 @@ export class NativeReview {
   private async settle(p: ReviewProposal & { fingerprint: string }) {
     if (p.fileOperation?.applying) {
       const op = p.fileOperation;
-      // Case-only renames need the actual directory entry, not Windows' alias.
-      const sameKey = op.kind === 'rename' && vaultPathKey(p.path) === vaultPathKey(op.to);
-      const source = await fileImage(p.path, sameKey);
-      const target = op.kind === 'rename' ? await fileImage(op.to, sameKey) : source;
+      // Exact spelling distinguishes aliases on Windows and case-insensitive APFS.
+      const source = await fileImage(p.path, true);
+      const target = op.kind === 'rename' ? await fileImage(op.to, true) : source;
       const complete = op.kind === 'create' ? target?.content === op.content : source === null && target?.content === p.baseline;
       const unchanged = op.kind === 'create' ? target === null : source?.content === p.baseline && target === null;
       if (complete) { op.decision = 'accepted'; delete op.applying; delete p.error; }
@@ -201,7 +200,7 @@ export class NativeReview {
         const to = notePath(op.to), error = fileTitleError(to);
         if (error) fail(error, 400);
         if (file === to) fail('新名称与原路径相同', 400);
-        const sameKey = vaultPathKey(file) === vaultPathKey(to);
+        const sameKey = await sameVaultFile(file, to);
         if (!sameKey) await requireNewNote(to);
         const captures = await captureWorkspaces(file), before = await snapshot(file, captures);
         if (captures.some(c => c.document?.path === file && c.document.dirty)) fail('请先保存源笔记再提交重命名');
@@ -274,7 +273,7 @@ export class NativeReview {
             if (current.disk.revision !== op.base_revision || current.raw !== p.baseline) fail('源笔记已改变，请重新读取并提交重命名');
             if (captures.some(c => c.document?.path === p.path && (c.document.dirty || c.document.saving || c.document.conflict)))
               fail('源笔记有未保存草稿或冲突，请先处理');
-            if (vaultPathKey(p.path) !== vaultPathKey(op.to)) await requireNewNote(op.to);
+            if (!await sameVaultFile(p.path, op.to)) await requireNewNote(op.to);
           }
           op.applying = true; delete p.error; await this.save(p);
           await applyFileInWorkspace(clientId, op);

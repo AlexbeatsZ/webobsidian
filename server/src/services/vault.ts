@@ -4,7 +4,7 @@ import { queueFileUpdate, type FileUpdateResult } from './fileupdates.js';
 import { indexedFilesUnder } from './fileindex.js';
 import { getSettings } from './settings.js';
 import { readTextFile, withFileWrite, writeBinaryFile, writeTextFile } from './textFile.js';
-import { getVaultRoot, resolveInVault, vaultPathKey, toRel, exists, ignoredVaultNames } from './vaultFile.js';
+import { getVaultRoot, resolveInVault, sameVaultFile, vaultPathKey, toRel, exists, ignoredVaultNames } from './vaultFile.js';
 import { planFolderTags } from '@webobsidian/markdown-core';
 import { fileTitleError } from '@webobsidian/search-core';
 import { scheduleAutoCommitOnSave } from './git.js';
@@ -91,7 +91,7 @@ export async function rename(from: string, to: string, baseRevision?: string): P
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
   await withPathWrites([absFrom, absTo], async () => {
-    if (vaultPathKey(absFrom) !== vaultPathKey(absTo) && await pathExists(absTo))
+    if (await pathExists(absTo) && !await sameVaultFile(from, to))
       throw Object.assign(new Error('目标路径已存在，请选择其他名称'), { status: 409 });
     if ((await fs.stat(absFrom)).isFile() && path.basename(from) !== path.basename(to)) assertFileTitle(to);
     if (baseRevision !== undefined && (await readTextFile(absFrom)).revision !== baseRevision)
