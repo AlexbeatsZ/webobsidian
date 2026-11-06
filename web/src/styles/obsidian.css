@@ -646,13 +646,19 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .cm-html-block, .cm-mermaid { white-space: normal; }
 .cm-note-embed .markdown-embed-content { padding: 0; max-height: none; overflow: visible; }
 .cm-note-fragment:not(.cm-typed-heading-fragment) > div > .markdown-embedded-view > .cm-editor > .cm-scroller > .cm-content > .cm-leading-heading { display: none; }
-.cm-note-embed > .cm-embed-edit { border: 0; border-radius: var(--radius-s); padding: 3px 7px; margin: 0 0 4px;
-  background: transparent; color: var(--text-muted); font: 12px var(--font-ui); cursor: pointer; }
+/* Embed corners mirror other rendered blocks: pencil (edit content) top-left, link + `</>` top-right, hover only. */
+.cm-note-embed > .cm-embed-edit { position: absolute; left: 4px; top: 2px; z-index: 2; display: inline-flex; align-items: center;
+  border: 0; border-radius: var(--radius-s); padding: 3px 5px; background: transparent; color: var(--text-muted); cursor: pointer; opacity: 0; }
+.cm-note-embed > .cm-embed-edit svg { width: 14px; height: 14px; }
+.cm-note-embed:hover > .cm-embed-edit, .cm-note-embed > .cm-embed-edit:focus-visible { opacity: 1; }
 .cm-note-embed > .cm-embed-edit:hover, .cm-note-embed > .cm-embed-edit:focus-visible { color: var(--text-normal); background: var(--background-modifier-hover); }
-.cm-note-embed .markdown-embed-link { position: absolute; top: 6px; right: 8px; width: 16px; height: 16px;
-  color: var(--text-faint); cursor: pointer; opacity: 0; transition: opacity var(--transition); z-index: 1; }
-.cm-note-embed:hover > .markdown-embed-link { opacity: 1; }
-.cm-note-embed .markdown-embed-link svg { width: 16px; height: 16px; }
+.cm-note-embed[data-embed-editing="true"] > .cm-embed-edit { display: none; }
+.cm-note-embed:hover > .cm-block-controls { opacity: 1; }
+.cm-content[contenteditable="false"] .cm-note-embed > .cm-block-controls > .cm-source-toggle { display: none; }
+.cm-note-embed > .cm-block-controls > .markdown-embed-link { display: inline-flex; align-items: center; border-radius: var(--radius-s); padding: 3px 5px;
+  color: var(--text-muted); cursor: pointer; }
+.cm-note-embed > .cm-block-controls > .markdown-embed-link:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.cm-note-embed .markdown-embed-link svg { width: 14px; height: 14px; }
 /* Missing attachment / unresolved embed */
 .cm-embed-missing { display: inline-block; width: 100%; text-align: center; color: var(--text-muted);
   background: var(--background-secondary); border-radius: var(--radius-s); padding: 12px; font-style: italic; }

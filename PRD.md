@@ -1,7 +1,8 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.33 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Phiên bản: 1.34 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Changelog 1.34 (嵌入控件): 笔记嵌入去掉“编辑嵌入/完成”文字按钮，改为悬停左上角铅笔进入内容编辑，焦点离开或 Esc 自动退出；右上角“打开链接”旁增加 `</>` 编辑 `![[…]]` 源码。见 docs/design/content-references.md。
 > Changelog 1.33: 虚拟文档移除额外顶部栏，右下角状态栏选择 MD/PDF/配置；MD 章节在连续页面中独立编辑、保存与撤销，JSON 配置有语法高亮及保存校验。文件、文件夹和文档右键可在系统文件管理器中定位。
 > Changelog 1.32 (虚拟文档): 保留真实章节文件，以文件夹隐藏配置声明连续阅读分组；自动首页索引、统一大纲、按需加载 Markdown/PDF，编辑回到真实源文件。见 docs/design/virtual-documents.md。
 > Changelog 1.31 (源码展开灰色、TeX 定界符): 学 Obsidian,实时预览中光标展开的可渲染语法字符统一用 `^id` 同款灰色

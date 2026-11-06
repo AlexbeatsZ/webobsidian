@@ -613,11 +613,11 @@ class NoteEmbedWidget extends WidgetType {
   destroy(dom: HTMLElement) {
     const lifetime = noteEmbedMounts.get(dom); noteEmbedMounts.delete(dom); lifetime?.unload();
   }
-  constructor(readonly target: string) {
+  constructor(readonly target: string, readonly length: number) {
     super();
   }
   eq(o: NoteEmbedWidget) {
-    return o.target === this.target;
+    return o.target === this.target && o.length === this.length;
   }
   ignoreEvent() {
     return true;
@@ -635,10 +635,17 @@ class NoteEmbedWidget extends WidgetType {
       e.preventDefault();
       contextOf(view).openLink(this.target);
     });
+    // `</>` reveals the `![[…]]` link itself; the pencil edits the embedded content.
+    const length = this.length;
+    // The widget DOM survives read-only toggles, so the button always exists; CSS hides it in read-only content.
+    const controls = blockControls(view, undefined, sourceButton(view, () => {
+      const from = view.posAtDOM(box); return { from, to: from + length };
+    }, '嵌入链接'));
+    controls.prepend(open);
     const content = document.createElement('div');
     content.className = 'markdown-embed-content';
     content.textContent = '…';
-    box.append(open, content);
+    box.append(controls, content);
     const lifetime = new RenderLifetime(); void lifetime.load(); noteEmbedMounts.set(box, lifetime);
     const context = contextOf(view);
     const embedKey = (path: string, fragment: string) => {
@@ -657,16 +664,42 @@ class NoteEmbedWidget extends WidgetType {
       let previous: string | undefined, revision: string | undefined, editing = false, composing = false, sourcePath = res.path;
       let sourceSession = res.edit?.session;
       const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'cm-embed-edit';
-      edit.textContent = '编辑嵌入'; edit.setAttribute('aria-label', '编辑嵌入');
+      edit.title = '编辑嵌入内容'; edit.setAttribute('aria-label', edit.title);
+      edit.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>';
+      // Like `</>`: no "done" control; leaving the embed (focus elsewhere or Escape) returns to the rendered view.
+      const setEditing = (next: boolean) => {
+        if (next === editing || composing || lifetime.signal.aborted) return;
+        editing = next; box.dataset.embedEditing = String(editing); previous = undefined; refresh();
+      };
       box.addEventListener('compositionstart', () => { composing = true; }, { signal: lifetime.signal });
-      box.addEventListener('compositionend', () => { composing = false; queueMicrotask(refresh); }, { signal: lifetime.signal });
-      edit.addEventListener('mousedown', event => event.preventDefault());
+      box.addEventListener('compositionend', () => {
+        composing = false;
+        queueMicrotask(() => { refresh(); if (editing) leave(); });
+      }, { signal: lifetime.signal });
+      // A press elsewhere moves focus on pointerdown, but CodeMirror resolves the click position again on
+      // mouseup; swapping the embed's editor before release would shift the layout under that click.
+      const ownerDocument = box.ownerDocument;
+      let pressed = false;
+      ownerDocument.addEventListener('pointerdown', () => { pressed = true; }, { capture: true, signal: lifetime.signal });
+      const released = () => {
+        if (!pressed) return; pressed = false;
+        if (editing) setTimeout(leave);
+      };
+      ownerDocument.addEventListener('pointerup', released, { capture: true, signal: lifetime.signal });
+      ownerDocument.addEventListener('pointercancel', released, { capture: true, signal: lifetime.signal });
+      // Window switches keep activeElement inside the embed; only a real focus move ends editing.
+      const leave = () => { if (!pressed && box.isConnected && !box.contains(ownerDocument.activeElement)) setEditing(false); };
+      box.addEventListener('focusout', event => {
+        if (!editing || (event.relatedTarget instanceof Node && box.contains(event.relatedTarget))) return;
+        queueMicrotask(leave);
+      }, { signal: lifetime.signal });
+      box.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || !editing || event.defaultPrevented || composing) return;
+        event.preventDefault(); event.stopPropagation(); setEditing(false);
+      }, { signal: lifetime.signal });
+      edit.addEventListener('mousedown', event => { event.preventDefault(); event.stopPropagation(); });
       edit.addEventListener('click', event => {
-        event.preventDefault(); event.stopPropagation();
-        if (composing || lifetime.signal.aborted) return;
-        editing = !editing; box.dataset.embedEditing = String(editing);
-        edit.textContent = editing ? '完成' : '编辑嵌入'; edit.setAttribute('aria-label', edit.textContent);
-        previous = undefined; refresh();
+        event.preventDefault(); event.stopPropagation(); setEditing(true);
       });
       const refresh = () => {
         if (lifetime.signal.aborted) return;
@@ -674,14 +707,14 @@ class NoteEmbedWidget extends WidgetType {
         if (sourcePath !== res.path || sourceSession !== res.edit?.session) {
           sourceSession = res.edit?.session;
           sourcePath = res.path; editing = false; previous = undefined;
-          box.dataset.embedEditing = 'false'; edit.textContent = '编辑嵌入'; edit.setAttribute('aria-label', edit.textContent);
+          box.dataset.embedEditing = 'false';
         }
         const key = embedKey(res.path, destination.fragment);
         const cyclic = !!res.path && trail.includes(key);
         const fragment = cyclic ? null : res.read();
         if (res.edit && fragment) box.insertBefore(edit, content); else edit.remove();
         if (!fragment) {
-          editing = false; box.dataset.embedEditing = 'false'; edit.textContent = '编辑嵌入'; edit.setAttribute('aria-label', edit.textContent);
+          editing = false; box.dataset.embedEditing = 'false';
           pending?.unload(); pending = undefined; active?.unload(); active = undefined;
           previous = undefined; revision = undefined; delete box.dataset.renderPending;
           const missing = document.createElement('span'); missing.setAttribute('role', 'alert');
@@ -714,7 +747,8 @@ class NoteEmbedWidget extends WidgetType {
           onReady: () => {
             if (render.signal.aborted || lifetime.signal.aborted || pending !== render) return;
             active?.unload(); active = render; pending = undefined;
-            host.removeAttribute('style'); content.replaceChildren(host);
+            // Keep `host` attached: detaching it would blur an auto-focused editor and end editing.
+            host.removeAttribute('style'); for (const node of [...content.childNodes]) if (node !== host) node.remove();
             delete box.dataset.renderPending; view.requestMeasure();
           },
         };
@@ -1837,7 +1871,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           pushReplace(s, e, Decoration.replace({ widget: new MediaWidget(attachmentUrl(href, view), href, kind, w) }));
         } else if (isEmbed && (/\.(?:md|markdown)$/i.test(href.split('#')[0]) || !/\.[a-z0-9]{1,5}$/i.test(href.split('#')[0]))) {
           // `![[note]]` (no binary extension) → real transclusion like Obsidian.
-          pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href) }));
+          pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href, e - s) }));
         } else {
           // LP shows the raw target text (`Note#Head`); the `Note > Head` display
           // form is reading-view behaviour and goes into aria-label like Obsidian.

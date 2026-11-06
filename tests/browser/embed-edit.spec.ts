@@ -15,11 +15,11 @@ test('explicit edit shares source history, preserves raw boundaries and updates 
   await page.evaluate(() => window.renderHarness.mode(0, 'reading'));
   const left = page.locator('[data-slot="0"] .cm-note-embed');
   const right = page.locator('[data-slot="1"] .cm-note-embed');
-  await expect(left.getByRole('button', { name: '编辑嵌入' })).toBeVisible();
+  await expect(left.getByRole('button', { name: '编辑嵌入内容', exact: true })).toBeVisible();
   await expect(left.locator('.cm-typed-heading-fragment .cm-leading-heading')).toBeVisible();
   await expect(left.locator('.cm-typed-heading-fragment .cm-leading-heading')).toContainText('Part');
   await expect(left.locator('.cm-content[contenteditable="true"]')).toHaveCount(0);
-  await left.getByRole('button', { name: '编辑嵌入' }).click();
+  await left.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
   const editor = left.locator('.cm-content[contenteditable="true"]');
   await expect(editor).toBeVisible();
   await editor.press('Control+End');
@@ -36,15 +36,42 @@ test('explicit edit shares source history, preserves raw boundaries and updates 
   await expect.poll(() => page.evaluate(() => window.renderHarness.noteSource('note.md'))).toBe(note);
   await editor.press('Control+Shift+Z');
   await expect.poll(() => page.evaluate(() => window.renderHarness.noteSource('note.md'))).toBe(edited);
-  await left.getByRole('button', { name: '完成', exact: true }).click();
+  await editor.press('Escape');
   await expect(left.locator('.cm-content[contenteditable="true"]')).toHaveCount(0);
+  expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('![[note#^heading-part]]\n\nsentinel');
+});
+
+test('pencil editing ends when focus leaves the embed, and </> reveals the embed link', async ({ page }) => {
+  await page.evaluate(note => { window.renderHarness.notes({ 'note.md': note }); window.renderHarness.reset('![[note#^heading-part]]\n\nsentinel'); }, note);
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  const pane = page.locator('[data-slot="0"]'), embed = pane.locator('.cm-note-embed');
+  await expect(embed.getByRole('button', { name: '编辑嵌入内容', exact: true })).toHaveCount(1);
+  await expect(embed.getByRole('button', { name: '完成' })).toHaveCount(0);
+  await expect(page.locator('[data-slot="1"] .cm-note-embed').getByRole('button', { name: '编辑嵌入链接源码' })).toBeHidden();
+  await embed.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
+  const editor = embed.locator('.cm-content[contenteditable="true"]');
+  await expect(editor).toBeFocused();
+  await expect(embed.getByRole('button', { name: '编辑嵌入内容', exact: true })).toBeHidden();
+  await pane.locator('.cm-line', { hasText: 'sentinel' }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(embed.getByRole('button', { name: '编辑嵌入内容', exact: true })).toHaveCount(1);
+  await embed.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
+  await expect(editor).toBeFocused();
+  await editor.press('Escape');
+  await expect(editor).toHaveCount(0);
+  await embed.hover();
+  await embed.getByRole('button', { name: '编辑嵌入链接源码', exact: true }).click();
+  await expect(pane.locator('.cm-note-embed')).toHaveCount(0);
+  await expect(pane.locator('.cm-content').first()).toContainText('![[note#^heading-part]]');
+  await page.keyboard.press('Escape');
+  await expect(pane.locator('.cm-note-embed')).toHaveCount(1);
   expect(await page.evaluate(() => window.renderHarness.source(0))).toBe('![[note#^heading-part]]\n\nsentinel');
 });
 
 test('source removal fails closed, and print cannot expose edit controls', async ({ page }) => {
   await page.evaluate(note => { window.renderHarness.notes({ 'note.md': note }); window.renderHarness.reset('![[note#^heading-part]]\n\nsentinel'); }, note);
   const embed = page.locator('[data-slot="1"] .cm-note-embed');
-  await embed.getByRole('button', { name: '编辑嵌入' }).click();
+  await embed.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
   await expect(embed.locator('.cm-content[contenteditable="true"]')).toBeVisible();
   await page.evaluate(() => window.renderHarness.changeNote('note.md', 'deleted'));
   await expect(embed.getByRole('alert')).toContainText('找不到');
@@ -74,7 +101,7 @@ test('range editors remap source deltas and reject boundary merges and out-of-ra
     window.renderHarness.reset('![[^range-section]]\n\nsentinel');
   }, raw);
   const embed = page.locator('[data-slot="1"] .cm-note-embed');
-  await embed.getByRole('button', { name: '编辑嵌入' }).click();
+  await embed.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
   await expect(embed.locator('.cm-content[contenteditable="true"]')).toBeVisible();
   const text = await page.evaluate(() => window.renderHarness.embedText(1));
   expect(text).toBe('\nfirst\n\nsecond\n\n');
@@ -83,7 +110,8 @@ test('range editors remap source deltas and reject boundary merges and out-of-ra
   await page.evaluate(raw => window.renderHarness.changeNote('range.md', 'prefix\n' + raw), raw);
   await page.evaluate(() => window.renderHarness.editEmbed(1, [{ from: 1, to: 6, insert: 'changed' }]));
   await expect.poll(() => page.evaluate(() => window.renderHarness.noteSource('range.md'))).toBe(('prefix\n' + raw).replace('first', 'changed'));
-  await embed.getByRole('button', { name: '完成', exact: true }).click();
+  await embed.locator('.cm-content[contenteditable="true"]').press('Escape');
+  await expect(embed.locator('.cm-content[contenteditable="true"]')).toHaveCount(0);
   await page.evaluate(() => window.renderHarness.reset('^range-section:start\n\nbody\n\n^range-section:end\n\nsentinel'));
   const reading = page.locator('[data-slot="1"]');
   await expect(reading.locator('.cm-content')).not.toContainText('^range-section');
@@ -92,7 +120,7 @@ test('range editors remap source deltas and reject boundary merges and out-of-ra
 test('normal edits cannot alter target IDs and concurrent composition fails closed', async ({ page }) => {
   await page.evaluate(note => { window.renderHarness.notes({ 'note.md': note }); window.renderHarness.reset('![[note#^heading-part]]\n\nsentinel'); }, note);
   const embed = page.locator('[data-slot="1"] .cm-note-embed');
-  await embed.getByRole('button', { name: '编辑嵌入' }).click();
+  await embed.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
   const editor = embed.locator('.cm-content[contenteditable="true"]');
   await expect(editor).toBeVisible();
   await page.evaluate(() => {
@@ -131,7 +159,7 @@ for (const initial of ['missing', 'ambiguous'] as const) test(`initially ${initi
   }, initial);
   const pane = page.locator('[data-slot="1"]'), embed = pane.locator('.cm-note-embed');
   await expect(embed.getByRole('alert')).toContainText('找不到');
-  await expect(embed.getByRole('button', { name: '编辑嵌入' })).toHaveCount(0);
+  await expect(embed.getByRole('button', { name: '编辑嵌入内容', exact: true })).toHaveCount(0);
   await expect(pane.locator('.cm-wikilink')).toHaveClass(/is-unresolved/);
   await page.evaluate(() => {
     window.renderHarness.changeNote('first.md', 'removed');
@@ -139,7 +167,7 @@ for (const initial of ['missing', 'ambiguous'] as const) test(`initially ${initi
   });
   await expect(pane.locator('.cm-wikilink')).toHaveText('Available');
   await expect(embed).toContainText('new body');
-  await embed.getByRole('button', { name: '编辑嵌入' }).click();
+  await embed.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
   await expect(embed.locator('.cm-content[contenteditable="true"]')).toBeVisible();
 });
 

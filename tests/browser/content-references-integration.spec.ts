@@ -153,7 +153,7 @@ test('same-name saved headings retain distinct identities and duplicates and mal
 
 test('editing an embedded heading saves the actual target file and leaves the host bytes unchanged', async ({ page, backend }, info) => {
   const embed = page.locator('.workspace .cm-note-embed');
-  await embed.getByRole('button', { name: '编辑嵌入', exact: true }).click();
+  await embed.getByRole('button', { name: '编辑嵌入内容', exact: true }).click();
   const editor = embed.locator('.cm-note-fragment .cm-content');
   await expect(editor).toBeEditable();
   await editor.click();
@@ -162,7 +162,8 @@ test('editing an embedded heading saves the actual target file and leaves the ho
   await expect(editor).toContainText('Embedded disk edit');
   await expect.poll(() => fs.readFile(path.join(backend.vault, 'targets', 'first.md'), 'utf8'), { timeout: 15000 })
     .toBe(target + 'Embedded disk edit');
-  await embed.getByRole('button', { name: '完成', exact: true }).click();
+  await editor.press('Escape');
+  await expect(embed.locator('.cm-note-fragment .cm-content[contenteditable="true"]')).toHaveCount(0);
   await expect(embed).toContainText('Embedded disk edit');
   await expect(embed.locator('.cm-leading-heading')).toBeVisible();
   await expect(embed.locator('.cm-leading-heading')).toContainText('Same');
