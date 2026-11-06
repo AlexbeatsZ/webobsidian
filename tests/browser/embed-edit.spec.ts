@@ -188,3 +188,42 @@ test('scoped and global links to the same recursive fragment share one cycle ide
   await expect(page.locator('[data-slot="1"] .cm-note-embed [role="alert"]')).toContainText('循环嵌入');
   await expect(page.locator('[data-slot="1"] .cm-note-embed')).toHaveCount(2);
 });
+
+test('formula embeds are numbered as host instances; references follow the nearest preceding instance', async ({ page }) => {
+  await page.evaluate(() => {
+    (window as unknown as { copied: string[] }).copied = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (value: string) => { (window as unknown as { copied: string[] }).copied.push(value); } } });
+  });
+  const host = [
+    '# Host', '', '$$a=1$$ ^eq-local', '', 'R1 [[^eq-energy]]', '', '![[^eq-energy]]', '',
+    'R2 [[^eq-energy]]', '', 'R3 [[^eq-energy|别名]]', '', 'R4 [[#^eq-local]]', '', '![[phys#^eq-energy]]', '', 'R5 [[^eq-energy]]', '', 'sentinel',
+  ].join('\n');
+  await page.evaluate(host => {
+    window.renderHarness.notes({ 'phys.md': '# 热力学\n\n$$E=mc^2$$ ^eq-energy\n' });
+    window.renderHarness.reset(host);
+  }, host);
+  const pane = page.locator('[data-slot="1"]');
+  await expect(pane.locator('[data-render-pending]')).toHaveCount(0);
+  await expect(pane.locator('.cm-equation-number')).toHaveText(['(1-1)', '(1-2)', '(1-3)']);
+  const reference = (text: string) => pane.locator('.cm-line', { hasText: text }).locator('.cm-wikilink');
+  await expect(reference('R1')).toHaveText('phys (1-1)');
+  await expect(reference('R2')).toHaveText('(1-2)');
+  await expect(reference('R3')).toHaveText('别名');
+  await expect(reference('R4')).toHaveText('(1-1)');
+  await expect(reference('R5')).toHaveText('(1-3)');
+  // Inserting a formula before the embeds renumbers them in place.
+  await page.evaluate(() => window.renderHarness.edit(0, [{ from: 7, to: 7, insert: '\n$$b=2$$\n' }]));
+  await expect(pane.locator('.cm-equation-number')).toHaveText(['(1-1)', '(1-2)', '(1-3)', '(1-4)']);
+  await expect(reference('R2')).toHaveText('(1-3)');
+  // Pencil, copy explicit/implicit, open link and `</>` share one corner group; copying yields the original.
+  const embed = page.locator('[data-slot="0"] .cm-note-embed').first();
+  await page.evaluate(() => window.renderHarness.cursor(0, window.renderHarness.source(0).length));
+  await embed.hover();
+  const group = embed.locator('.cm-block-controls');
+  await expect(group.locator(':scope > *')).toHaveCount(5);
+  await expect(group.locator(':scope > .cm-embed-edit')).toHaveCount(1);
+  await group.getByRole('button', { name: '复制显式引用' }).click();
+  await group.getByRole('button', { name: '复制隐式引用' }).click();
+  expect(await page.evaluate(() => (window as unknown as { copied: string[] }).copied)).toEqual(['![[^eq-energy]]', '[[^eq-energy]]']);
+});

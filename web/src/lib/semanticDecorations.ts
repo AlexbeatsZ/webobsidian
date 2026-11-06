@@ -37,7 +37,7 @@ class FootnoteBody extends WidgetType {
   constructor(readonly note: Footnote, readonly model: MarkdownModel, readonly highlighted: boolean, readonly noteContext: string) {
     super(); const definition = note.definitions[0];
     this.content = definition ? model.text.slice(definition.from, definition.to) : '';
-    this.dependencies = JSON.stringify([mathDefinitionContext(model, definition?.to ?? 0), equationContext(model).equations.map(e => [e.id, e.number, e.ambiguous])]);
+    this.dependencies = JSON.stringify([mathDefinitionContext(model, definition?.to ?? 0), equationContext(model).equations.map(e => [e.id, e.number, e.ambiguous]), equationContext(model).occurrences.map(o => [o.id, o.number, o.embed])]);
   }
   eq(other: FootnoteBody) {
     return this.content === other.content && this.note.id === other.note.id && this.note.number === other.note.number && this.noteContext === other.noteContext

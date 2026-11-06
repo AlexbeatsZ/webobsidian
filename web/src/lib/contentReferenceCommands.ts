@@ -20,6 +20,14 @@ export async function copyContentReference(view: EditorView, range: SourceSpan, 
   } catch (error) { useStore.getState().notify('创建内容引用失败：' + (error instanceof Error ? error.message : String(error))); }
 }
 
+/** Copies references to an existing identity without touching any note. */
+export async function copyKnownReference(id: string, embed: boolean) {
+  try {
+    await navigator.clipboard.writeText(`${embed ? '!' : ''}[[^${id}]]`);
+    useStore.getState().notify(embed ? '已复制显式引用' : '已复制隐式引用');
+  } catch (error) { useStore.getState().notify('复制内容引用失败：' + (error instanceof Error ? error.message : String(error))); }
+}
+
 function copySelection(embed: boolean, kind?: ContentTarget['kind']) {
   const view = getActiveEditor();
   if (!view || view.state.readOnly) return;

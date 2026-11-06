@@ -6,7 +6,7 @@
 个人使用的 WebObsidian 原生桌面/Android 应用(fork 自 xnohat/webobsidian,远程 `AlexbeatsZ/webobsidian`)。
 
 ## Current State
-- 源码:`main`,桌面版本 0.1.61(嵌入左上铅笔编辑内容、失焦/Esc 退出，右上 `</>`;0.1.60 起含虚拟文档分组/配置与分章编辑)。
+- 源码:`main`,桌面版本 0.1.61;其后未发版改动:公式嵌入按宿主位置独立编号、隐式引用取前方最近实例编号(PRD 1.35),嵌入铅笔并入右上控件组并可复制原始引用。0.1.61 含嵌入铅笔编辑/`</>`,0.1.60 起含虚拟文档分组/配置与分章编辑。
 - GitHub Release:v0.1.61(最新)、v0.1.60、v0.1.59、v0.1.58、v0.1.57、v0.1.56、v0.1.55 只有 Mac arm64/x64(Mac 本机构建,Windows 未构建);v0.1.54 有 Mac 与 Windows x64 NSIS(OMEN 构建);linux 预构建最新为 v0.1.43。Release 用 `gh release create` 通过 API 建 tag,不会触发 CI 的 release 工作流;本机 `gh` 默认仓库是上游,必须加 `--repo AlexbeatsZ/webobsidian`,`--target` 要用完整 SHA。
 - 安装情况(2026-11-05):Mac(arm64)`/Applications/WebObsidian.app` 0.1.61(本地构建，/healthz ok;嵌入控件未在安装版目视确认);OMEN 0.1.53(Windows 安装包)。
 - Mac 用户数据:`~/Library/Application Support/@webobsidian/desktop`,服务日志 `logs/server.log`。
@@ -31,10 +31,10 @@
 - OMEN Windows 构建：常规仓库 `C:\Users\Meta\Project\Workspaces\meta-obsidian` 常有未提交改动，只 `git fetch`,用 `git archive <commit>` 导出到 `%TEMP%\.agents\webobsidian-build-<ver>` 隔离构建(`npm ci`→`npm run build`→`desktop: node scripts/build.mjs`→`electron-builder --win nsis --x64 --publish never`)。OMEN 上 `npm ci` 的 Electron 下载会无限挂起：设 `ELECTRON_SKIP_BINARY_DOWNLOAD=1`,electron-builder 会用 `%LOCALAPPDATA%\electron\Cache` 里已有的 zip;tunnel 下载会超时：把常规仓库 `desktop/.gen/tunnel-downloads/tunnel-client-v0.0.19-windows-amd64*` 复制进隔离目录同一路径。PowerShell 5.1 脚本不要用 `$ErrorActionPreference='Stop'`(git 的 stderr 进度会被当成错误),改看 `$LASTEXITCODE`。
 - 本机没有 Playwright 自带浏览器;跑浏览器用例时用一个扩展 `playwright.config.ts` 的临时配置,设 `use.channel: 'chrome'` 和 `webServer.cwd` 为仓库根,改用系统 Chrome。elements.spec 中 4 个、theme-render 中 1 个、render.spec 中 2 个(复制跨渲染换行、列表换行对齐)、math-transition 中 1 个(用 Control+z 撤销，macOS 上不是撤销键)用例在 2026-11-05 基线上本就失败。临时撤下改动跑基线后要 `npm run build:core` 再测，否则 web 会用到基线的 markdown-core dist。
 - 发版时上传大文件常遇 GitHub HTTP 500/502,`gh release create` 带文件失败会删掉整个草稿。做法:先 `--draft` 建空 Release,逐个 `gh release upload --clobber` 并重试,用 API 按 release id 核对大小(草稿按 tag 查不到),再 `gh release edit --draft=false --latest`。主检出有其他任务改动时，用 `git worktree add --detach /tmp/.agents/webobsidian-release-<ver> <sha>` 隔离构建，复制主检出 `desktop/.gen/tunnel/{arm64,x64}` 跳过 tunnel 下载。
-- 渲染 harness(`/__render-test`):slot 0 为实时预览、slot 1 为阅读视图;`reset` 后 slot 0 光标在 0,首行嵌入/块会处于源码态，测控件前先 `renderHarness.cursor(0, source(0).length)`。macOS 上测试里的 `Control+End`/`Control+z` 不生效，相关用例本就失败。
+- 渲染 harness(`/__render-test`):slot 0 为实时预览、slot 1 为阅读视图;`reset` 后 slot 0 光标在 0,首行嵌入/块会处于源码态，测控件前先 `renderHarness.cursor(0, source(0).length)`。macOS 上测试里的 `Control+End`/`Control+z` 不生效，相关用例本就失败。navigation.spec 的 3 个脚注返回用例和“modifier opens a separate sidebar view”在 2026-11-06 基线上同样失败。
 - zsh 默认 noclobber,`>` 覆盖已有日志会失败导致命令未执行;构建链放进 `bash -c` 或用 `>|`。
 
 ## Docs Index
-- `docs/design/`:模块设计文档。Callout 颜色/图标 → `callout-styles.md`;Callout 布局 → `callout-lists.md`;源码展开语法灰色 → `source-reveal.md`;`\\( \\)`/`\\[ \\]` 公式 → `native-math.md`;内容引用与嵌入控件 → `content-references.md`。
+- `docs/design/`:模块设计文档。Callout 颜色/图标 → `callout-styles.md`;Callout 布局 → `callout-lists.md`;源码展开语法灰色 → `source-reveal.md`;`\\( \\)`/`\\[ \\]` 公式 → `native-math.md`;内容引用与嵌入控件 → `content-references.md`;公式编号、嵌入实例与引用编号解析 → `native-equations.md`。
 - `docs/log/`:按月工作记录。
 - 虚拟文档 → `docs/design/virtual-documents.md`；真实资料原生验收 → `tests/desktop-virtual-documents.mjs`。

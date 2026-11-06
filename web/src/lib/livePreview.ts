@@ -20,7 +20,7 @@ import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
 import { syntaxModel, blockModel, equationsOf, documentMetadata } from './syntaxModel';
 import { compositionSelection } from './inlineHtml';
 import { sourceButton, sourceIsOpen, sourceOwns, forceRendered } from './sourceControls';
-import { blockControls, referenceButtons } from './blockControls';
+import { blockControls, knownReferenceButtons, referenceButtons } from './blockControls';
 import { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 export { livePreviewState, livePreviewReadonly, setLivePreviewEnabled, setLivePreviewReadonly } from './renderState';
 import { BODY_HEADING_NODE, BODY_HEADING_LEVEL, bodyHeadingParts, changeTable, editTableCell, type SourceChange, type TableModel, type TableOperation, type MathRegion, type SourceSpan, stripQuotePrefix, sourceLinePrefix, caretTouches, sanitizeHtmlFragment as sanitizeHtml } from '@webobsidian/markdown-core';
@@ -33,7 +33,7 @@ import { decorationInputsChanged } from './decorationDependencies';
 import { blockEffectOwns } from './blocks/model';
 import { sourceBlockReplacement, sourceBlockPresentation } from './blockLayout';
 import { RenderLifetime } from './obsidian/renderLifetime';
-import { equationLabel, equationReferenceLabel, equationReferenceName, equationTarget, equationAt, parseLinkTarget, isGlobalContentTarget, contentTargets, type Equation, type MarkdownModel } from '@webobsidian/markdown-core';
+import { equationLabel, equationReferenceText, equationReferenceName, equationTarget, equationAt, equationOccurrenceBefore, equationInstanceNumber, parseLinkTarget, isGlobalContentTarget, contentTargets, type Equation, type EquationContext, type EquationOccurrence, type MarkdownModel } from '@webobsidian/markdown-core';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -85,12 +85,14 @@ class WikilinkWidget extends WidgetType {
     const mount = equationLinkMounts.get(dom); equationLinkMounts.delete(dom);
     mount?.controller.abort(); mount?.stop?.();
   }
-  /** `aria` = default display text, set when an alias overrides it (like Obsidian). */
-  constructor(readonly target: string, readonly label: string, readonly embed: boolean, readonly aria: string | undefined, readonly alias: string | null, readonly sourceLength: number, readonly sourcePath?: string) {
+  /** `aria` = default display text, set when an alias overrides it (like Obsidian).
+   * `local` = nearest preceding explicit formula instance in this note; it decides the shown number. */
+  constructor(readonly target: string, readonly label: string, readonly embed: boolean, readonly aria: string | undefined, readonly alias: string | null, readonly sourceLength: number, readonly sourcePath?: string, readonly local?: EquationOccurrence) {
     super();
   }
   eq(o: WikilinkWidget) {
-    return o.target === this.target && o.label === this.label && o.embed === this.embed && o.aria === this.aria && o.alias === this.alias && o.sourceLength === this.sourceLength && o.sourcePath === this.sourcePath;
+    return o.target === this.target && o.label === this.label && o.embed === this.embed && o.aria === this.aria && o.alias === this.alias && o.sourceLength === this.sourceLength && o.sourcePath === this.sourcePath
+      && !o.local === !this.local && o.local?.number === this.local?.number;
   }
   toDOM(view: EditorView) {
     const a = document.createElement('a');
@@ -105,7 +107,8 @@ class WikilinkWidget extends WidgetType {
       const paint = () => {
         if (controller.signal.aborted) return;
         const preview = mount.read();
-        a.textContent = preview ? equationReferenceLabel(preview.equation, this.alias) : this.label;
+        a.textContent = preview ? equationReferenceText(preview.equation, this.alias, this.local,
+          preview.path === contextOf(view).sourcePath ? undefined : noteName(preview.path)) : this.label;
         a.classList.toggle('is-unresolved', !preview);
       };
       if (!destination.path && !isGlobalContentTarget(this.target)) {
@@ -608,16 +611,37 @@ function embedNotFound(el: HTMLElement, target: string) {
   el.textContent = `"${target}" could not be found.`;
 }
 
-const noteEmbedMounts = new WeakMap<HTMLElement, RenderLifetime>();
+/** Note name shown before a formula number that belongs to another note. */
+const noteName = (path: string) => path.split('/').pop()!.replace(/\.(?:md|markdown)$/i, '');
+
+/** Gives the embedded formula the number of this embed instance in the host note. */
+function instanceEquations(context: EquationContext | undefined, fragment: string, instance: EquationOccurrence | undefined): EquationContext | undefined {
+  const target = context && instance ? equationTarget(context, fragment) : undefined;
+  if (!context || !target) return context;
+  const number = equationInstanceNumber(target, instance);
+  if (number === target.number) return context;
+  return { ...context, equations: context.equations.map(equation => equation === target ? { ...equation, number } : equation),
+    revision: `${context.revision}#${number}` };
+}
+
+interface NoteEmbedMount { lifetime: RenderLifetime; setInstance: (instance: EquationOccurrence | undefined) => void }
+const noteEmbedMounts = new WeakMap<HTMLElement, NoteEmbedMount>();
 class NoteEmbedWidget extends WidgetType {
   destroy(dom: HTMLElement) {
-    const lifetime = noteEmbedMounts.get(dom); noteEmbedMounts.delete(dom); lifetime?.unload();
+    const mount = noteEmbedMounts.get(dom); noteEmbedMounts.delete(dom); mount?.lifetime.unload();
   }
-  constructor(readonly target: string, readonly length: number) {
+  /** `instance` = this embed's own formula occurrence; its number follows the host note's counter. */
+  constructor(readonly target: string, readonly length: number, readonly instance?: EquationOccurrence) {
     super();
   }
   eq(o: NoteEmbedWidget) {
-    return o.target === this.target && o.length === this.length;
+    return o.target === this.target && o.length === this.length && o.instance?.number === this.instance?.number;
+  }
+  /** Renumbering keeps the mounted fragment (and any active edit); only the label changes. */
+  updateDOM(dom: HTMLElement, _view: EditorView, from: WidgetType) {
+    const mount = noteEmbedMounts.get(dom);
+    if (!mount || !(from instanceof NoteEmbedWidget) || from.target !== this.target || from.length !== this.length) return false;
+    mount.setInstance(this.instance); return true;
   }
   ignoreEvent() {
     return true;
@@ -642,17 +666,21 @@ class NoteEmbedWidget extends WidgetType {
       const from = view.posAtDOM(box); return { from, to: from + length };
     }, '嵌入链接'));
     controls.prepend(open);
+    // Copying an embedded typed target yields the original object's references, never this embed's position.
+    const destination = parseLinkTarget(this.target);
+    if (isGlobalContentTarget(destination.fragment)) controls.prepend(...knownReferenceButtons(destination.fragment.slice(1)));
     const content = document.createElement('div');
     content.className = 'markdown-embed-content';
     content.textContent = '…';
     box.append(controls, content);
-    const lifetime = new RenderLifetime(); void lifetime.load(); noteEmbedMounts.set(box, lifetime);
+    const lifetime = new RenderLifetime(); void lifetime.load();
+    let instance = this.instance, applyInstance = () => {};
+    noteEmbedMounts.set(box, { lifetime, setInstance: next => { instance = next; applyInstance(); } });
     const context = contextOf(view);
     const embedKey = (path: string, fragment: string) => {
       try { fragment = decodeURIComponent(fragment); } catch {}
       return JSON.stringify([path, fragment]);
     };
-    const destination = parseLinkTarget(this.target);
     const trail = context.embedTrail ?? [embedKey(context.sourcePath, '')];
     let active: RenderLifetime | undefined, pending: RenderLifetime | undefined;
     lifetime.register(() => { pending?.unload(); active?.unload(); delete box.dataset.renderPending; });
@@ -663,7 +691,7 @@ class NoteEmbedWidget extends WidgetType {
       if (!res) { embedNotFound(content, this.target); return; }
       let previous: string | undefined, revision: string | undefined, editing = false, composing = false, sourcePath = res.path;
       let sourceSession = res.edit?.session;
-      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'cm-embed-edit';
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'cm-reference-button cm-embed-edit';
       edit.title = '编辑嵌入内容'; edit.setAttribute('aria-label', edit.title);
       edit.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>';
       // Like `</>`: no "done" control; leaving the embed (focus elsewhere or Escape) returns to the rendered view.
@@ -712,7 +740,7 @@ class NoteEmbedWidget extends WidgetType {
         const key = embedKey(res.path, destination.fragment);
         const cyclic = !!res.path && trail.includes(key);
         const fragment = cyclic ? null : res.read();
-        if (res.edit && fragment) box.insertBefore(edit, content); else edit.remove();
+        if (res.edit && fragment) { if (edit.parentNode !== controls) controls.prepend(edit); } else edit.remove();
         if (!fragment) {
           editing = false; box.dataset.embedEditing = 'false';
           pending?.unload(); pending = undefined; active?.unload(); active = undefined;
@@ -721,8 +749,9 @@ class NoteEmbedWidget extends WidgetType {
           missing.textContent = cyclic ? '循环嵌入：' + res.path : '找不到嵌入的章节或块'; content.replaceChildren(missing); view.requestMeasure(); return;
         }
         if (editing && active && box.dataset.embedEditing === 'true' && previous !== undefined) return;
-        if (fragment.source === previous && fragment.equations?.revision === revision) return;
-        previous = fragment.source; revision = fragment.equations?.revision; pending?.unload();
+        const equations = instanceEquations(fragment.equations, destination.fragment, instance);
+        if (fragment.source === previous && equations?.revision === revision) return;
+        previous = fragment.source; revision = equations?.revision; pending?.unload();
         const render = new RenderLifetime(); void render.load(); pending = render;
         box.dataset.renderPending = 'true';
         const host = document.createElement('div'); host.className = 'cm-note-fragment';
@@ -740,7 +769,7 @@ class NoteEmbedWidget extends WidgetType {
           else { content.querySelector(':scope > [role="alert"]')?.remove(); content.appendChild(status); }
           context.reportError?.(String(error)); view.requestMeasure();
         };
-        const options = { id: res.path, sourceFrom: fragment.from, equations: fragment.equations, mathSource: fragment.mathSource,
+        const options = { id: res.path, sourceFrom: fragment.from, equations, mathSource: fragment.mathSource,
           mode: editing ? 'live' as const : 'reading' as const, edit: editing ? res.edit : undefined, autoFocus: editing,
           context: { ...res.context, embedTrail: [...trail, key] },
           onError: failed,
@@ -758,6 +787,7 @@ class NoteEmbedWidget extends WidgetType {
           render.register(stop);
         } catch (error) { failed(error); }
       };
+      applyInstance = refresh;
       lifetime.register(res.subscribe(refresh)); refresh();
     }).catch(error => {
       if (!lifetime.signal.aborted) { content.textContent = '无法加载嵌入内容'; context.reportError?.(String(error)); view.requestMeasure(); }
@@ -1871,17 +1901,21 @@ function buildDecorations(view: EditorView): DecorationSet {
           pushReplace(s, e, Decoration.replace({ widget: new MediaWidget(attachmentUrl(href, view), href, kind, w) }));
         } else if (isEmbed && (/\.(?:md|markdown)$/i.test(href.split('#')[0]) || !/\.[a-z0-9]{1,5}$/i.test(href.split('#')[0]))) {
           // `![[note]]` (no binary extension) → real transclusion like Obsidian.
-          pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href, e - s) }));
+          const formulas = equationReferenceName(parseLinkTarget(href).fragment) !== undefined ? equationsOf(view.state) : undefined;
+          const instance = formulas?.occurrences.find(occurrence => occurrence.embed && occurrence.from === formulas.from + s);
+          pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href, e - s, instance) }));
         } else {
           // LP shows the raw target text (`Note#Head`); the `Note > Head` display
           // form is reading-view behaviour and goes into aria-label like Obsidian.
           const destination = parseLinkTarget(href), referenceName = equationReferenceName(destination.fragment);
           const equation = referenceName !== undefined && !destination.path && !isGlobalContentTarget(href) ? equationTarget(equationsOf(view.state), destination.fragment) : undefined;
-          const label = equation ? equationReferenceLabel(equation, alias) : alias || (alias === '' && referenceName !== undefined ? referenceName : href);
+          const formulas = referenceName !== undefined ? equationsOf(view.state) : undefined;
+          const local = formulas && equationOccurrenceBefore(formulas, 'eq-' + referenceName, formulas.from + s);
+          const label = equation ? equationReferenceText(equation, alias, local) : alias || (alias === '' && referenceName !== undefined ? referenceName : href);
           pushReplace(
             s,
             e,
-            Decoration.replace({ widget: new WikilinkWidget(href, label, isEmbed, defaultDisplay !== label ? defaultDisplay : undefined, alias, e - s, referenceName !== undefined ? contextOf(view).sourcePath : undefined) }),
+            Decoration.replace({ widget: new WikilinkWidget(href, label, isEmbed, defaultDisplay !== label ? defaultDisplay : undefined, alias, e - s, referenceName !== undefined ? contextOf(view).sourcePath : undefined, local) }),
           );
         }
       }
@@ -2097,7 +2131,7 @@ function buildTables(state: EditorState): DecorationSet {
   // Source version alone changes on every keystroke. Cells depend on prior
   // definitions and reference presentation, not unrelated paragraph edits.
   const referenceKey = tables.some(t => t.key.includes('[[')) ? JSON.stringify(
-    equations.equations.map(e => [e.id, e.number, e.ambiguous, e.tex])) : '';
+    [equations.equations.map(e => [e.id, e.number, e.ambiguous, e.tex]), equations.occurrences.map(o => [o.id, o.number, o.embed])]) : '';
   // Like Obsidian, tables are ALWAYS shown as the interactive widget (never as raw
   // pipes) — editing happens in-cell, so the selection no longer reveals raw.
   const ranges: Range<Decoration>[] = tables.map((t) =>

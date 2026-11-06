@@ -110,8 +110,36 @@ EquationContext carries absolute source positions, source revision and computed
 numbers. Editor, MarkdownFragment, note embeds, Canvas and print use the same
 widget. A fragment receives the original note's complete semantic context rather
 than counting from one. Embed invalidation includes the context revision even
-when the selected source slice is unchanged. Labels use original source numbers;
-there is no unused embed-ordinal prefix option.
+when the selected source slice is unchanged.
+
+### Instances and references (PRD 1.35)
+
+Three concepts are separate:
+
+1. Canonical object: the formula with its `^eq-ID`, the global identity.
+2. Explicit instance (`EquationOccurrence`): the original formula and every
+   `![[^eq-ID]]` / `![[note#^eq-ID]]` embed. Each instance takes a number from
+   its own position in the containing note; formulas and formula embeds share one
+   counter (same H1 rules, embeds in tables or code take none). An embed is
+   numbered like a real formula of the host, never with the original's number.
+3. Implicit reference `[[^eq-ID]]`: owns no number. Display order: `|` alias;
+   else the nearest explicit instance of that ID that starts before the reference
+   in the same note; else the original's number, `(1-1)` in the same note and
+   `笔记名 (1-1)` when the original lives in another note.
+
+`equations.ts` computes formulas and occurrences in one cached pass
+(`equationOccurrences`, `EquationContext.occurrences`); `equationOccurrenceBefore`
+binary-searches per ID, `equationReferenceText` owns the display rule and
+`equationInstanceNumber` the label an embedded instance shows. The source's explicit
+`\tag` or exemption (`\notag`, `{{}}`) wins in every instance, because only the
+rendered target knows it; the host counter still advances for that embed (the
+host numbering stays synchronous and never waits for another note).
+
+`NoteEmbedWidget` carries its occurrence; renumbering goes through `updateDOM` and
+re-renders only the label's fragment, so the mounted fragment and an active edit
+are not torn down. Wikilink widgets compare the resolved local number, not its
+position, so typing above does not recreate every reference. Heading/range embeds
+that contain formulas keep the source numbering; only formula embeds are instances.
 
 Every canonical formula link, including links with empty/custom aliases, exposes
 a rendered hover preview. The existing CodeMirror hoverTooltip owns positioning

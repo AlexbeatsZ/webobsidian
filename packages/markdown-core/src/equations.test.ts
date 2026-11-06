@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeMarkdown } from './syntax.js';
-import { equations, equationAnchor, equationAt, equationContext, equationTarget, equationReferenceName, equationReferenceLabel } from './equations.js';
+import { equations, equationAnchor, equationAt, equationContext, equationTarget, equationReferenceName, equationReferenceLabel, equationOccurrenceBefore, equationReferenceText, equationInstanceNumber } from './equations.js';
 import { fragmentRange } from './fragments.js';
 import { DocumentSession } from './session.js';
 
@@ -68,5 +68,35 @@ describe('native equations (prepared; execution deferred by user)', () => {
     session.edit(session.snapshot.version, [change!], 'equation-anchor');
     expect(session.snapshot.raw).toBe(source.replace('$$x$$', () => '$$x$$ ^eq-test'));
     session.undo(); expect(session.snapshot.raw).toBe(source);
+  });
+  it('numbers every formula embed as its own instance and resolves references to the nearest preceding one', () => {
+    const source = [
+      '# A', '[[^eq-far]] 前', '$$a$$ ^eq-a', '[[#^eq-a]] 一', '![[^eq-a]]', '[[^eq-a]] 二', '[[^eq-a|甲]]',
+      '![[其他#^eq-far]]', '`![[^eq-x]]`', '| ![[^eq-a]] |', '| --- |', '', '$$c$$ ^eq-c', '[[^eq-far]] 后',
+    ].join('\n');
+    const model = analyzeMarkdown(source), context = equationContext(model);
+    // Formulas and formula embeds share one counter; code and tables do not take numbers.
+    expect(context.occurrences.map(o => [o.id, o.number, o.embed])).toEqual([
+      ['eq-a', '1-1', false], ['eq-a', '1-2', true], ['eq-far', '1-3', true], ['eq-c', '1-4', false],
+    ]);
+    expect(equationTarget(context, '^eq-c')?.number).toBe('1-4');
+    const a = equationTarget(context, '^eq-a')!;
+    const at = (text: string) => source.indexOf(text);
+    const ref = (text: string, alias: string | null = null, sourceName?: string) =>
+      equationReferenceText(a, alias, equationOccurrenceBefore(context, 'eq-a', at(text)), sourceName);
+    expect(ref('[[#^eq-a]] 一')).toBe('(1-1)');
+    expect(ref('[[^eq-a]] 二')).toBe('(1-2)');
+    expect(ref('[[^eq-a|甲]]', '甲')).toBe('甲');
+    expect(ref('[[^eq-a|甲]]', ' ')).toBe('a');
+    // No instance before the reference: the original's own number, prefixed when it lives in another note.
+    const far = { ...a, id: 'eq-far', number: '2-5' };
+    expect(equationReferenceText(far, null, equationOccurrenceBefore(context, 'eq-far', at('[[^eq-far]] 前')), '其他')).toBe('其他 (2-5)');
+    expect(equationReferenceText(far, null, equationOccurrenceBefore(context, 'eq-far', at('[[^eq-far]] 后')), '其他')).toBe('(1-3)');
+    expect(equationReferenceText(a, null, undefined)).toBe('(1-1)');
+    // The source's explicit tag or exemption is kept by every instance.
+    const embed = context.occurrences[1];
+    expect(equationInstanceNumber({ ...a, tag: 'A', number: 'A' }, embed)).toBe('A');
+    expect(equationInstanceNumber({ ...a, number: null }, embed)).toBeNull();
+    expect(equationInstanceNumber(a, embed)).toBe('1-2');
   });
 });
