@@ -35,9 +35,12 @@
 - 普通 Markdown minimap 9 项、普通 PDF 身份/分页导航 8 项、PDF 工具栏 6 项、文件标题/附件基础行为 4 项通过。工具栏有一条旧断言遗漏 `await`，补齐后 6/6 通过。
 - 聚合 Markdown 反向滚动、共享排版、独立编辑、配置、PDF 跨文件/书签/远页导航、大纲折叠与 MD/PDF 缩略图 4 项：导航锁修复后连续 3 轮 12/12；最终 CodeMirror 协调补丁后再跑 2 轮 8/8。
 - 真实教材副本原生验收最终通过；所有编辑仅发生在隔离副本中。
+- 最终发布资产的 arm64 应用再次独立验收通过，证据 `/tmp/.agents/webobsidian-virtual-native-final-asset/native-result.json`；上滑位置 `0.273, 240.273, 480.273, 720.273, 960.273px`，标题/JSON/保存撤销/MD与PDF缩略图均通过，0 渲染器异常。Mac 双架构 DMG/ZIP 构建与应用签名检查通过。
 
 测试环境最初有一批 Chrome 以 Rosetta x86_64 运行，初始化和断言严重变慢；使用临时 `arch -arm64` 包装现有 universal Chrome 后恢复正常。未更改系统配置或安装程序。早期超时不作为功能通过证据。
 
 ## 范围
 
 本次构建/发布 Mac arm64 与 x64；x64 只验证包和签名，未做实际运行验收。未构建 Windows/Linux/Android，也未替换已安装应用。
+
+Release `v0.1.64` 已发布为 Latest，源码 tag 为 `a38ae6a2afd1d5ae64710fdd1a69cfd4363ee9da`；7 个发布资产大小与本地一致。API 发布时间 `2026-11-07T03:05:06Z`，对应用户时区 America/Cuiaba 的 2026-11-06 23:05:06。

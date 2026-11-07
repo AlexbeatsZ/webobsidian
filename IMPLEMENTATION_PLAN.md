@@ -12,7 +12,7 @@ Cập nhật lần cuối: 2026-11-06 (continuous document navigation and titles
 - [x] Add the cover index to the outline and allow file/heading subtrees to collapse
 - [x] Adapt thumbnails to the collection and leave unsupported rendered blocks blank
 - [x] Verify regressions and native real-material behavior
-- [~] Build and publish Mac arm64/x64 0.1.64 release artifacts
+- [x] Build and publish Mac arm64/x64 0.1.64 release artifacts
 
 ## Android 0.1.63 delivery
 - [x] Build the current shared renderer/server for Android with the tablet's existing package identity and signer
@@ -639,6 +639,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-06 (PRD 1.38): 连续文档0.1.64已发布Latest；统一原生文件标题/H1/正文，标题改名同步JSON；目录大纲入口/逐文件与标题折叠、共享MD/PDF缩略图及不可绘制块留白。修复公式status误判、空编辑器高度污染、导航换窗/程序位移及CM/PDF双补偿。553项单元、三端类型/构建、聚合浏览器多轮与真实25章原生副本验收通过，Mac双架构签名和7资产大小/tag源一致。安装版未替换。
 - 2026-11-06 (Android 0.1.63): 共享0.1.62渲染器/服务的安卓构建；Node堆上限改为1024MiB，Android跳过全文索引JSON缓存的读写，避免大型STEM库冷建/序列化内存不足。22项索引/搜索/目录回归、生产构建、APK/lint/签名/16KB对齐通过；平板原包名/签名覆盖安装，实际启动检查进行中。
 - 2026-11-06 (PRD 1.37): 修复 16 个已复现失败，Ctrl→Control、Alt→Option；修复短笔记异步公式行高与字体完成后的列表前缀测量，处理 Mac Control 主键链接点击及 APFS 大小写改名恢复。160 个浏览器/集成、546 个单元全部通过；类型、构建、打包入口与 Mac 双架构签名通过。见 tests/reports/macos-test-fixes-20261106.md。
 - 2026-11-06 (PRD 1.36): 标题/范围等整段嵌入中的公式按宿主位置编号(嵌入加载后报告内容，宿主重算)，编辑嵌入时保持宿主编号。新增单元与浏览器用例通过；单元 542 中仅已知大小写改名用例失败，渲染回归失败用例均为已知基线问题。
