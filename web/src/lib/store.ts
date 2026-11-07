@@ -244,7 +244,7 @@ interface AppState {
   openHomepage: (viewId?: string) => Promise<void>;
   openWikilink: (target: string, sourcePath?: string, intent?: LinkIntent) => Promise<void>;
   closeTab: (path: string) => Promise<void>;
-  renamePath: (from: string, to: string, expectedRevision?: string) => Promise<void>;
+  renamePath: (from: string, to: string, expectedRevision?: string, virtualDocument?: { path: string; revision: string }) => Promise<void>;
   removePath: (path: string) => ReturnType<typeof api.remove>;
   setContent: (c: string) => void;
   save: (cause?: 'manual' | 'background') => Promise<void>;
@@ -953,7 +953,7 @@ export const useStore = create<AppState>()(
         if (next.activePath && next.parkedSplit && [next.parkedSplit.main, next.parkedSplit.side].includes(next.activePath)) await get().showTab(next.activePath);
       },
 
-      renamePath: async (from, requested, expectedRevision) => {
+      renamePath: async (from, requested, expectedRevision, virtualDocument) => {
         const to = requested.replace(/\\/g, '/');
         if (from === to) return;
         if (!to || to.split('/').some(part => !part || part === '.' || part === '..')) throw new Error('请输入有效的仓库相对路径');
@@ -964,7 +964,7 @@ export const useStore = create<AppState>()(
           if (snapshot && (snapshot.dirty || snapshot.saving || snapshot.conflict || snapshot.revision !== expectedRevision))
             throw new Error('源笔记已改变，请重新提交重命名候选');
         };
-        await documents.changePath(from, to, () => api.rename(from, to, expectedRevision), () => {
+        await documents.changePath(from, to, () => api.rename(from, to, expectedRevision, virtualDocument), () => {
           window.dispatchEvent(new CustomEvent('file-path-changed', { detail: { from, to } }));
           set(state => remapWorkspacePaths(state, from, to));
         }, validate);

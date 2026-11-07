@@ -26,13 +26,8 @@ export function paintMarkdownMinimap(image: HTMLCanvasElement, host: HTMLElement
   const fontPx = Math.max(1, Math.min((parseFloat(columnStyle.fontSize) || 18) * scale, rowPitch * 0.85));
   const textRows: MinimapRow[] = [];
   for (const row of rows) {
-    const top = (row.line - 1) / view.state.doc.lines * height;
-    const rowHeight = Math.max(1, (row.endLine - row.line + 1) / view.state.doc.lines * height - 1);
     if (['image', 'math', 'table', 'code'].includes(row.kind)) {
-      const barWidth = row.kind === 'math' ? Math.max(1, textWidth * 0.6) : textWidth;
-      context.fillStyle = colors.accent;
-      context.globalAlpha = 0.55;
-      context.fillRect(textLeft + (textWidth - barWidth) / 2, top, barWidth, Math.min(5, rowHeight));
+      // Preserve the source-space gap without pretending an opaque block was rendered.
       continue;
     }
     textRows.push(row);

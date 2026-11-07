@@ -1,6 +1,6 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.62",
+  "version": "0.1.64",
   "private": true,
   "description": "WebObsidian native desktop application",
   "author": "xnohat <xnohat@gmail.com>",

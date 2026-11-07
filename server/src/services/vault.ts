@@ -87,7 +87,7 @@ async function withPathWrites<T>(paths: string[], work: () => Promise<T>): Promi
   return result;
 }
 
-export async function rename(from: string, to: string, baseRevision?: string): Promise<void> {
+export async function rename(from: string, to: string, baseRevision?: string, afterMove?: () => Promise<void>): Promise<void> {
   const absFrom = await resolveInVault(from);
   const absTo = await resolveInVault(to);
   await withPathWrites([absFrom, absTo], async () => {
@@ -99,6 +99,14 @@ export async function rename(from: string, to: string, baseRevision?: string): P
     await fs.mkdir(path.dirname(absTo), { recursive: true });
     const children = indexedFilesUnder(from);
     await fs.rename(absFrom, absTo);
+    try { await afterMove?.(); }
+    catch (error) {
+      // Keep path locks until the configuration commits or the source is restored.
+      if (await pathExists(absFrom) && !await sameVaultFile(to, from))
+        throw Object.assign(new Error('配置保存失败且原路径被占用，文件保留在：' + to, { cause: error }), { status: 409 });
+      await fs.rename(absTo, absFrom);
+      throw error;
+    }
     for (const child of new Set([from, ...children])) {
       void queueFileUpdate(child, 'unlink');
       void queueFileUpdate(to + child.slice(from.length), 'add');

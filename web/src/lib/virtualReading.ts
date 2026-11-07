@@ -3,7 +3,7 @@ import type { VirtualDocument } from './virtualDocuments';
 import type { PdfOutlineEntry } from './pdf/types';
 import type { ViewMode } from './store';
 
-export interface ReadingTarget { path: string; fragment?: string; page?: number }
+export interface ReadingTarget { path: string; fragment?: string; page?: number; line?: number }
 export interface VirtualReadingSnapshot {
   stream: string; serial: number; target?: ReadingTarget;
   configuration: boolean; mode: ViewMode; activeSource?: string;
@@ -42,7 +42,7 @@ export class VirtualReadingSession {
   }
   selectConfiguration() { this.update({ configuration: true, target: undefined }); }
   setMode = (mode: ViewMode) => { if (mode !== this.state.mode) this.update({ mode }); };
-  activateSource(path: string) { if (path !== this.state.activeSource) this.update({ activeSource: path }); }
+  activateSource(path: string | undefined) { if (path !== this.state.activeSource) this.update({ activeSource: path }); }
   replaceDocument(document: VirtualDocument) {
     if (JSON.stringify(document) === JSON.stringify(this.document)) return;
     for (const stream of document.streams) {
@@ -55,6 +55,10 @@ export class VirtualReadingSession {
     this.update({ stream });
   }
   go = (target: ReadingTarget) => {
+    if (target.path === this.document.path) {
+      this.update({ configuration: false, activeSource: undefined, target, serial: this.state.serial + 1 });
+      return;
+    }
     const stream = this.document.streams.find(stream => stream.id === this.state.stream && stream.files.some(file => file.path === target.path))
       ?? this.document.streams.find(stream => stream.files.some(file => file.path === target.path));
     if (stream) this.update({ stream: stream.id, configuration: false, activeSource: target.path, target, serial: this.state.serial + 1 });

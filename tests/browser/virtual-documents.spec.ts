@@ -1,12 +1,16 @@
 import { test, expect } from './test';
 import { makePdfFixture } from './fixtures/pdf';
 
+test.setTimeout(120_000);
+
 test('virtual Markdown chapters stay bounded, jump through one outline and edit only the real source', async ({ page }, testInfo) => {
   const folder = '化学/物理化学/物理化学 第三版';
   const files = Array.from({ length: 30 }, (_, index) => ({ path: `${folder}/正文/物理化学 第三版 第${String(index + 1).padStart(2,'0')}章.md`,
     title: `章节 ${index + 1}`, kind: 'markdown', size: 100000, headings: [{ text: `定义 ${index + 1}`, level: 1 }, { text: `应用 ${index + 1}`, level: 2 }] }));
   const collection = { path: folder, title: '物理化学 第三版', revision: 'fixture-v1', streams: [{ id:'text',title:'MD',files }] };
   const reads: string[] = [], writes: {path:string;content:string}[] = [];
+  let releasePredecessor!: () => void;
+  const predecessor = new Promise<void>(resolve => { releasePredecessor = resolve; });
   await page.route('**/api/**', async route => {
     const request=route.request(),url=new URL(request.url());
     if (url.pathname==='/api/vault-identity'||url.pathname==='/api/writing') return route.fallback();
@@ -14,6 +18,7 @@ test('virtual Markdown chapters stay bounded, jump through one outline and edit 
       if(request.method()==='PUT') { writes.push(request.postDataJSON()); return route.fulfill({json:{ok:true,revision:'saved'}}); }
       const path=url.searchParams.get('path')!; reads.push(path);
       const index=files.findIndex(file=>file.path===path)+1;
+      if (index === 17) await predecessor;
       return route.fulfill({json:{path,content:`---\ntags: [fixture]\n---\n\n# 定义 ${index}\n\n$$x^2$$ ^eq-fixture-${index}\n\n`+('正文与公式的独立章节内容。\n\n'.repeat(600))+`## 应用 ${index}\n\n章节结尾。\n`,revision:'original',vault:'browser-fixture'}});
     }
     if(url.pathname.replace(/\/$/,'')==='/api/uistate') return route.fulfill({json:{}});
@@ -39,8 +44,18 @@ test('virtual Markdown chapters stay bounded, jump through one outline and edit 
   },{folder,files,collection});
   const host=page.locator('#virtual-fixture');
   await expect(host.getByRole('navigation',{name:'文档索引'})).toBeVisible();
-  await expect(host.locator('[data-mounted="true"] .cm-content').first()).toContainText('定义 1');
+  await expect(host.locator('[data-mounted="true"] .cm-content').first()).toContainText('定义 1', { timeout: 30_000 });
   await expect(host.locator('[data-mounted="true"] .cm-properties').first()).toBeHidden();
+  const typography=await host.evaluate(element=>{
+    const title=element.querySelector('.virtual-document-cover .cm-inline-title')!;
+    const fileTitle=element.querySelector('.virtual-source .cm-inline-title')!;
+    const heading=element.querySelector('.virtual-document-cover .HyperMD-header-1')!;
+    const fileHeading=element.querySelector('.virtual-source .HyperMD-header-1')!;
+    const styles=(node:Element)=>{const style=getComputedStyle(node);return {font:style.fontFamily,size:style.fontSize,weight:style.fontWeight,lineHeight:style.lineHeight};};
+    return {title:styles(title),fileTitle:styles(fileTitle),heading:styles(heading),fileHeading:styles(fileHeading)};
+  });
+  expect(typography.title).toEqual(typography.fileTitle);
+  expect(typography.heading).toEqual(typography.fileHeading);
   await expect.poll(()=>reads.length).toBeLessThanOrEqual(6);
   expect(await page.evaluate(()=> (window as any).virtualFixture.documents.snapshots().length)).toBeLessThanOrEqual(6);
   await expect(host.locator('.virtual-document-toolbar')).toHaveCount(0);
@@ -48,13 +63,30 @@ test('virtual Markdown chapters stay bounded, jump through one outline and edit 
   await expect(host.locator('.virtual-group-trigger > span')).toBeInViewport();
   expect(await host.locator('.virtual-group-trigger').evaluate(element=>getComputedStyle(element).display)).toBe('flex');
   const outline=host.getByRole('navigation',{name:'连续文档大纲'});
+  await outline.getByRole('button',{name:'章节 18',exact:true}).click();
+  const chapterStart=host.locator('[data-virtual-source]').nth(17);
+  await expect(chapterStart.locator('.cm-content')).toContainText('定义 18');
+  await expect(chapterStart.locator('.cm-inline-title')).toBeInViewport();
+  const relativeTop=()=>chapterStart.evaluate(element=>element.getBoundingClientRect().top-element.closest('.virtual-document-scroll')!.getBoundingClientRect().top);
+  const beforeReverse=await relativeTop();
+  await host.locator('.virtual-document-scroll').hover({position:{x:200,y:200}});
+  await page.mouse.wheel(0,-320);
+  await expect.poll(relativeTop).toBeGreaterThan(beforeReverse+200);
+  releasePredecessor();
+  await expect(host.locator('[data-virtual-source]').nth(16).locator('.cm-content')).toBeAttached();
+  await expect.poll(relativeTop).toBeLessThan(beforeReverse+500);
+  await page.waitForTimeout(500);
+  expect(await relativeTop()).toBeGreaterThan(beforeReverse+200);
+  expect(await relativeTop()).toBeLessThan(beforeReverse+500);
+  await outline.getByRole('button',{name:'目录',exact:true}).click();
+  await expect(host.getByRole('navigation',{name:'文档索引'}).getByRole('link').first()).toBeInViewport();
   await outline.getByRole('button',{name:'应用 29',exact:true}).click();
   await expect(host.locator('[data-virtual-source]').nth(28).locator('.cm-content')).toContainText('应用 29');
   await expect.poll(()=>host.locator('[data-mounted="true"]').count()).toBeLessThanOrEqual(6);
   await expect(host.locator('[data-virtual-source]').nth(28)).toHaveAttribute('data-mounted','true');
   await expect(host.locator('[data-virtual-source]').nth(28).locator('.cm-content')).toBeInViewport();
   await expect(host.locator('[data-virtual-source]').nth(28).locator('.cm-line').filter({hasText:'应用 29'})).toBeInViewport();
-  await page.waitForFunction(() => [...document.querySelectorAll('[data-virtual-source]')].slice(27).every(node=>!node.querySelector('[role="status"]')));
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-virtual-source]')].slice(27).every(node=>!node.querySelector('[data-virtual-loading]')));
   await expect(host.locator('[data-virtual-source]').nth(28).locator('.cm-content')).toBeInViewport();
   await expect(host.locator('[data-virtual-source]').nth(29).locator('mjx-container')).toBeAttached();
   await testInfo.attach('markdown-window.json',{body:JSON.stringify({reads:reads.length,mounted:await host.locator('[data-mounted="true"]').count(),chapterSessions:await page.evaluate(()=>(window as any).virtualFixture.documents.snapshots().length)}),contentType:'application/json'});
@@ -130,7 +162,7 @@ test('status groups include highlighted JSON configuration, retain edits through
   await expect(host.getByRole('button',{name:'切换分组：配置'})).toBeVisible();await expect(editor).toContainText('MD 新分组');
   await host.getByRole('button',{name:'切换分组：配置'}).click();await host.getByRole('menuitemcheckbox',{name:'PDF',exact:true}).click();
   await expect(host.getByRole('button',{name:'切换分组：PDF'})).toBeVisible();
-  await host.getByRole('navigation',{name:'文档索引'}).getByRole('button').first().click();await expect(host.locator('canvas').first()).toBeVisible();
+  await host.getByRole('navigation',{name:'文档索引'}).getByRole('link').first().click();await expect(host.locator('canvas').first()).toBeVisible();
   await host.getByRole('tab',{name:'Book 关闭 Book'}).click({button:'right'});
   await host.getByRole('menuitem',{name:'在 Finder 中打开',exact:true}).click();
   expect(await page.evaluate(()=>(window as any).nativeReveals)).toEqual([configPath,folder]);
@@ -161,7 +193,7 @@ test('multiple PDFs share a continuous scroll, generated index, bookmarks and a 
   },{folder,collection});
   const host=page.locator('#virtual-pdf-fixture');
   await expect(host.getByRole('navigation',{name:'文档索引'})).toBeVisible();
-  await host.getByRole('navigation',{name:'文档索引'}).getByRole('button',{name:'课件 7',exact:true}).click();
+  await host.getByRole('navigation',{name:'文档索引'}).getByRole('link',{name:'课件 7',exact:true}).click();
   const source=host.locator('[data-virtual-source]').nth(6);
   await expect(source.locator('canvas').first()).toBeVisible();
   await expect.poll(()=>host.locator('canvas').count()).toBeLessThan(15);

@@ -68,6 +68,7 @@ export interface MarkdownViewProps {
   onReady?: (view: EditorView | null) => void;
   autoFocus?: boolean;
   showTitle?: boolean;
+  title?: string;
   layout?: 'page' | 'embedded';
   extensions?: import('@codemirror/state').Extension;
   footer?: ReactNode;
@@ -313,7 +314,7 @@ export default function MarkdownView(props: MarkdownViewProps) {
         EditorView.lineWrapping,
         livePreviewState.init(() => isMd && p.mode !== 'source'),
         livePreviewReadonly.init(() => p.mode === 'reading'),
-        noteTitleField.init(() => p.showTitle === false ? '' : titleOf(p.snapshot.id)),
+        noteTitleField.init(() => p.showTitle === false ? '' : p.title ?? titleOf(p.snapshot.id)),
         sourceControls, blockEffects, inlineTitle, frontmatterField, tableField, htmlBlockField, mermaidField,
         codeBlocks,
         ...(p.context.allowPlugins ? [pluginPostProcessing] : []),
@@ -372,10 +373,10 @@ export default function MarkdownView(props: MarkdownViewProps) {
       setLivePreviewEnabled.of(isMd && mode !== 'source'),
       setLivePreviewReadonly.of(mode === 'reading'),
       readonlyComp.reconfigure(readonlyExt(mode === 'reading' || !!snapshot.locked)),
-      setNoteTitle.of(showTitle ? titleOf(snapshot.id) : ''),
+      setNoteTitle.of(showTitle ? props.title ?? titleOf(snapshot.id) : ''),
       ...(props.analysis && view.current?.state.field(syntaxModel).id !== props.analysis.id ? [adoptSyntaxModel.of(props.analysis)] : []),
     ] });
-  }, [mode, context, showTitle, snapshot.id, snapshot.locked]);
+  }, [mode, context, showTitle, props.title, snapshot.id, snapshot.locked]);
 
   const cls = ['cm-host markdown-source-view cm-s-obsidian mod-cm6',
     layout === 'page' ? 'is-readable-line-width' : 'markdown-embedded-view',

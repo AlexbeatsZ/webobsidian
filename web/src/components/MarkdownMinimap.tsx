@@ -9,14 +9,16 @@ import { observeMinimapLayout } from '../lib/markdownMinimapLayout';
 import { getSearchResultHighlights, subscribeSearchResultHighlights } from '../lib/search';
 import '../styles/minimap.css';
 
-export default function MarkdownMinimap({ path, viewId = 'main' }: { path: string; viewId?: string }) {
-  const { session, snapshot, error } = useDocumentSession(path);
+export default function MarkdownMinimap({ path, viewId = 'main', transient = false, showHeader = true, onNavigate }: {
+  path: string; viewId?: string; transient?: boolean; showHeader?: boolean; onNavigate?: (line: number) => void;
+}) {
+  const { session, snapshot, error } = useDocumentSession(path, transient);
   const host = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const invalidate = useRef<() => void>();
-  const latest = useRef({ session, snapshot });
-  latest.current = { session, snapshot };
+  const latest = useRef({ session, snapshot, onNavigate });
+  latest.current = { session, snapshot, onNavigate };
 
   useEffect(() => {
     const element = host.current, image = canvas.current, box = viewport.current;
@@ -27,6 +29,7 @@ export default function MarkdownMinimap({ path, viewId = 'main' }: { path: strin
     let drag: { pointer: number; offset: number } | undefined;
     let jumpFrame = 0, jumpLine = 0;
     let layout: ReturnType<typeof observeMinimapLayout> | undefined;
+    let outerScroll: HTMLElement | null = null;
     const schedule = (redraw = false) => {
       paint ||= redraw;
       if (!frame) frame = requestAnimationFrame(update);
@@ -36,11 +39,21 @@ export default function MarkdownMinimap({ path, viewId = 'main' }: { path: strin
       const next = navigationView(path, viewId);
       if (view === next) return;
       layout?.dispose();
+      outerScroll?.removeEventListener('scroll', scroll);
       view = next;
       query = undefined;
       paint = true;
       mode = view?.dom.closest('[data-mode]')?.getAttribute('data-mode') ?? null;
       layout = view ? observeMinimapLayout(view, scroll) : undefined;
+      outerScroll = view?.dom.closest<HTMLElement>('.virtual-document-scroll') ?? null;
+      outerScroll?.addEventListener('scroll', scroll, { passive: true });
+    };
+    const visibleRange = () => {
+      if (!view) return { from: 0, to: 0 };
+      if (!outerScroll) return navigationViewport(view);
+      const bounds = outerScroll.getBoundingClientRect(), content = view.contentDOM.getBoundingClientRect();
+      const top = Math.max(0, bounds.top - content.top), bottom = Math.max(top, bounds.bottom - content.top);
+      return { from: view.lineBlockAtHeight(top).from, to: view.lineBlockAtHeight(bottom).to };
     };
     const draw = () => {
       if (!view || !layout) return;
@@ -61,7 +74,7 @@ export default function MarkdownMinimap({ path, viewId = 'main' }: { path: strin
       if (!view) return;
       if (layout?.measure()) paint = true;
       if (paint) { paint = false; draw(); }
-      const range = minimapViewport(view.state.doc, navigationViewport(view));
+      const range = minimapViewport(view.state.doc, visibleRange());
       const height = Math.max(8, range.height * element.clientHeight);
       const top = Math.min(element.clientHeight - height, range.top * element.clientHeight);
       box.style.height = `${height}px`;
@@ -89,7 +102,8 @@ export default function MarkdownMinimap({ path, viewId = 'main' }: { path: strin
       jumpLine = Math.max(0, Math.min((view?.state.doc.lines ?? 1) - 1, Math.round(line)));
       if (!jumpFrame) jumpFrame = requestAnimationFrame(() => {
         jumpFrame = 0;
-        if (view) void navigateTo(path, { line: jumpLine, viewId, focus: false, history: false, scrollOnly: true }, view);
+        if (latest.current.onNavigate) latest.current.onNavigate(jumpLine);
+        else if (view) void navigateTo(path, { line: jumpLine, viewId, focus: false, history: false, scrollOnly: true }, view);
       });
     };
     const point = (event: PointerEvent) => {
@@ -103,7 +117,7 @@ export default function MarkdownMinimap({ path, viewId = 'main' }: { path: strin
       event.preventDefault();
       const onBox = box.contains(event.target as Node);
       const rect = element.getBoundingClientRect();
-      const range = minimapViewport(view.state.doc, navigationViewport(view));
+      const range = minimapViewport(view.state.doc, visibleRange());
       drag = { pointer: event.pointerId, offset: onBox ? event.clientY - rect.top - (range.top + range.height / 2) * rect.height : 0 };
       element.setPointerCapture(event.pointerId);
       if (!onBox) point(event);
@@ -117,7 +131,7 @@ export default function MarkdownMinimap({ path, viewId = 'main' }: { path: strin
     const key = (event: KeyboardEvent) => {
       if (!view || !['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-      const range = minimapViewport(view.state.doc, navigationViewport(view));
+      const range = minimapViewport(view.state.doc, visibleRange());
       const center = (range.top + range.height / 2) * view.state.doc.lines;
       const delta = event.key.startsWith('Page') ? Math.max(1, range.height * view.state.doc.lines) : 1;
       jump(event.key === 'Home' ? 0 : event.key === 'End' ? view.state.doc.lines - 1
@@ -136,6 +150,7 @@ export default function MarkdownMinimap({ path, viewId = 'main' }: { path: strin
     return () => {
       if (invalidate.current === redraw) invalidate.current = undefined;
       stopViews(); stopSearch(); resize.disconnect(); layout?.dispose();
+      outerScroll?.removeEventListener('scroll', scroll);
       theme.disconnect(); events.abort();
       cancelAnimationFrame(frame); cancelAnimationFrame(jumpFrame);
       if (drag && element.hasPointerCapture(drag.pointer)) element.releasePointerCapture(drag.pointer);
@@ -144,7 +159,7 @@ export default function MarkdownMinimap({ path, viewId = 'main' }: { path: strin
   useEffect(() => { invalidate.current?.(); }, [snapshot.version]);
 
   return <section className="markdown-minimap-panel" aria-label="Markdown 缩略图" aria-busy={!session && !error}>
-    <div className="nav-header"><span className="nav-title">缩略图</span></div>
+    {showHeader && <div className="nav-header"><span className="nav-title">缩略图</span></div>}
     {error && <div role="alert">{error.message}</div>}
     <div ref={host} className="markdown-minimap" role="slider" tabIndex={0} aria-label="文档缩略图位置"
       aria-orientation="vertical" aria-valuemin={1} aria-valuenow={1} aria-valuemax={1}>

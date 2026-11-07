@@ -18,6 +18,7 @@ import MarkdownMinimap from './MarkdownMinimap';
 import { usePdfSession } from '../lib/pdf/react';
 import PdfOutlinePanel from './PdfOutlinePanel';
 import VirtualOutlinePanel from './VirtualOutlinePanel';
+import VirtualThumbnailsPanel from './VirtualThumbnailsPanel';
 import { useVirtualReading } from '../lib/virtualReading';
 import PdfThumbnailsPanel from './PdfThumbnailsPanel';
 import McpLauncher from './McpLauncher';
@@ -227,7 +228,7 @@ export default function RightSidebar({ open }: { open: boolean; onTheme?: () => 
         </>
       )}
       {presented && !activeId && rightPanel === 'outline' && (virtual ? <VirtualOutlinePanel reader={virtual} /> : pdf ? <PdfOutlinePanel session={pdf} /> : <OutlinePanel />)}
-      {presented && !activeId && rightPanel === 'minimap' && (pdf ? <PdfThumbnailsPanel session={pdf} />
+      {presented && !activeId && rightPanel === 'minimap' && (virtual ? <VirtualThumbnailsPanel reader={virtual} /> : pdf ? <PdfThumbnailsPanel session={pdf} />
         : path && MD_RE.test(path) ? <MarkdownMinimap key={viewId + ':' + path} path={path} viewId={viewId} />
         : <div className="panel-empty">打开 Markdown 或 PDF 查看缩略图</div>)}
       {presented && !activeId && rightPanel === 'mcp' && <McpPanel />}

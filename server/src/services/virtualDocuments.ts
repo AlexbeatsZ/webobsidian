@@ -7,6 +7,7 @@ import { parseConfiguration } from './vaultConfiguration.js';
 import { readFileSnapshot, resolveInVault } from './vaultFile.js';
 import { writeFileText, trash } from './vault.js';
 import { parseLinkTarget, isGlobalContentTarget } from '@webobsidian/markdown-core';
+import { applyEdits, modify } from 'jsonc-parser';
 
 const failure = (message: string, status = 400) => Object.assign(new Error(message), { status });
 const compare = new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' });
@@ -113,4 +114,25 @@ export async function disableVirtualDocument(folder: string, revision: string) {
   if (!current || current.revision !== revision) throw failure('连续文档配置已变化，请重新打开', 409);
   // Only its descriptor is trashed; all member files remain untouched.
   return trash(configPath(folder));
+}
+
+/** Prepare before moving; the revision-checked write runs inside the source path locks. */
+export async function prepareVirtualSourceRename(folder: string, revision: string, from: string, to: string) {
+  const current = await readVirtualManifest(folder);
+  if (!current || current.revision !== revision) throw failure('连续文档配置已变化，请重新打开', 409);
+  if (!from.startsWith(folder + '/') || path.posix.dirname(from) !== path.posix.dirname(to))
+    throw failure('请在原文件夹内修改来源标题');
+  if (path.posix.extname(from).toLowerCase() !== path.posix.extname(to).toLowerCase())
+    throw failure('修改来源标题时不能更改文件类型');
+  const before = from.slice(folder.length + 1), after = to.slice(folder.length + 1);
+  const bom = current.content.startsWith('\uFEFF') ? '\uFEFF' : '';
+  let content = current.content.slice(bom.length), found = false;
+  current.manifest.streams.forEach((stream, streamIndex) => stream.files.forEach((file, fileIndex) => {
+    if (file !== before) return;
+    found = true;
+    content = applyEdits(content, modify(content, ['streams', streamIndex, 'files', fileIndex], after, {}));
+  }));
+  if (!found) throw failure('此来源不属于当前连续文档');
+  virtualManifestSchema.parse(parseConfiguration(content));
+  return async () => { await writeFileText(configPath(folder), bom + content, revision); };
 }

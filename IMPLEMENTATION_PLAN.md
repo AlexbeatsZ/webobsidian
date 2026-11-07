@@ -4,7 +4,15 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-06 (Android 0.1.63 delivery)
+Cập nhật lần cuối: 2026-11-06 (continuous document navigation and titles)
+
+## Continuous document navigation and titles (PRD 1.38)
+- [x] Keep chapter-start navigation stable when scrolling upward through asynchronous predecessor layouts
+- [x] Reuse ordinary file title/H1/body presentation; edit boundary filenames and synchronize JSON source paths
+- [x] Add the cover index to the outline and allow file/heading subtrees to collapse
+- [x] Adapt thumbnails to the collection and leave unsupported rendered blocks blank
+- [x] Verify regressions and native real-material behavior
+- [~] Build and publish Mac arm64/x64 0.1.64 release artifacts
 
 ## Android 0.1.63 delivery
 - [x] Build the current shared renderer/server for Android with the tablet's existing package identity and signer

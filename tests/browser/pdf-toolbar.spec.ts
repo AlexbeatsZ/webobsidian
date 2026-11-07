@@ -85,7 +85,7 @@ test('button sits immediately left of the sidebar toggle and the toolbar default
   expect(pdfBox).not.toBeNull();
   expect(sidebarBox).not.toBeNull();
   expect(pdfBox!.x + pdfBox!.width).toBeLessThanOrEqual(sidebarBox!.x + 1);
-  expect(rightToggle(page)).toHaveAttribute('aria-expanded', 'false');
+  await expect(rightToggle(page)).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('toggle is an overlay below the titlebar and preserves layout, scroll, pages, search, page and zoom', async ({ page }) => {

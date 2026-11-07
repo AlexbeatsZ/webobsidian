@@ -93,12 +93,12 @@ try {
   await mode.click();await page.getByRole('menuitemcheckbox',{name:'实时预览',exact:true}).click();
   await page.getByRole('button',{name:'大纲',exact:true}).click();
   const index=page.getByRole('navigation',{name:'文档索引'});
-  const chapter= index.getByRole('button').filter({hasText:'第18章'});
+  const chapter= index.getByRole('link').filter({hasText:'第18章'});
   const jump=Date.now();
-  const selectedChapter = await chapter.count() ? chapter.first() : index.getByRole('button').nth(17);
+  const selectedChapter = await chapter.count() ? chapter.first() : index.getByRole('link').nth(17);
   const selectedTitle = await selectedChapter.textContent();
   await selectedChapter.click();
-  const selectedSource = page.locator('[data-virtual-source]').filter({has:page.getByRole('heading',{name:selectedTitle,exact:true})});
+  const selectedSource = page.locator('[data-virtual-source]').filter({has:page.locator('.cm-inline-title').filter({hasText:selectedTitle})});
   await expect(selectedSource.locator('.cm-content')).toBeAttached({timeout:60000});
   await expect(selectedSource.locator('.cm-properties')).toBeHidden();
   await expect.poll(() => selectedSource.locator('.cm-line').evaluateAll(lines => {
@@ -109,6 +109,40 @@ try {
   const chapterJumpMs=Date.now()-jump;
   const markdownMounted=await page.locator('[data-mounted="true"]').count();assert(markdownMounted<=6);
   await page.screenshot({path:path.join(output,'native-markdown.png')});
+  // Jump to a chapter start, then reverse the scroll direction across its boundary.
+  const outline=page.getByRole('navigation',{name:'连续文档大纲'});
+  await outline.getByRole('button',{name:selectedTitle,exact:true}).click();
+  await expect(selectedSource.locator('.cm-inline-title')).toBeInViewport();
+  const relativeTop=()=>selectedSource.evaluate(element=>element.getBoundingClientRect().top-element.closest('.virtual-document-scroll').getBoundingClientRect().top);
+  const reversePositions=[await relativeTop()];
+  await selectedSource.locator('.cm-inline-title').hover();
+  for(let step=0;step<4;step++) {
+    await page.mouse.wheel(0,-240);
+    await expect.poll(relativeTop).toBeGreaterThan(reversePositions.at(-1)+120);
+    await page.waitForTimeout(150);
+    reversePositions.push(await relativeTop());
+    assert(reversePositions.at(-1)-reversePositions.at(-2)<360,'Reverse scroll unexpectedly moved to another position');
+  }
+  await outline.getByRole('button',{name:'目录',exact:true}).click();
+  await expect(index.getByRole('link').first()).toBeInViewport();
+  await page.screenshot({path:path.join(output,'native-cover.png')});
+  await selectedChapter.click();
+  const beforeTitlePath=await selectedSource.getAttribute('data-virtual-source');
+  const beforeTitleConfig=await fs.readFile(path.join(vault,book,'.virtual-document.json'),'utf8');
+  const filenameTitle=await selectedSource.locator('.cm-inline-title').textContent();
+  const renamedTitle=filenameTitle+' 标题验收';
+  const renamedPath=path.posix.join(path.posix.dirname(beforeTitlePath),renamedTitle+path.posix.extname(beforeTitlePath));
+  await selectedSource.locator('.cm-inline-title').fill(renamedTitle);
+  await selectedSource.locator('.cm-inline-title').press('Enter');
+  const renamedSource=page.locator(`[data-virtual-source="${renamedPath}"]`);
+  await expect(renamedSource.locator('.cm-inline-title')).toHaveText(renamedTitle);
+  await expect.poll(async()=>JSON.parse(await fs.readFile(path.join(vault,book,'.virtual-document.json'),'utf8')).streams[0].files)
+    .toContain(renamedPath.slice(book.length+1));
+  assert((await fs.readFile(path.join(vault,renamedPath))).equals(original.get(beforeTitlePath)),'Renaming changed source bytes');
+  await renamedSource.locator('.cm-inline-title').fill(filenameTitle);
+  await renamedSource.locator('.cm-inline-title').press('Enter');
+  await expect(selectedSource.locator('.cm-inline-title')).toHaveText(filenameTitle);
+  await expect.poll(()=>fs.readFile(path.join(vault,book,'.virtual-document.json'),'utf8')).toBe(beforeTitleConfig);
   const mdReadCount=reads.size;
   // Real keyboard edits persist only to their independent source in the copied Vault.
   const editedPath=await selectedSource.getAttribute('data-virtual-source');
@@ -120,6 +154,11 @@ try {
   await editable.press('ControlOrMeta+z');
   await expect.poll(async()=>await fs.readFile(path.join(vault,editedPath),'utf8')).not.toContain('Native independent edit acceptance');
   await page.screenshot({path:path.join(output,'native-inline-editing.png')});
+  await page.getByRole('button',{name:'缩略图',exact:true}).click();
+  await expect(page.locator('.virtual-thumbnails-panel .markdown-minimap')).toHaveAttribute('data-ready','true');
+  await expect(page.locator('.virtual-thumbnails-panel canvas')).toHaveAttribute('data-paint-count',/[1-9]/);
+  await page.screenshot({path:path.join(output,'native-markdown-thumbnails.png')});
+  await page.getByRole('button',{name:'大纲',exact:true}).click();
   // Configuration is a JSON editor in the same bottom-right group menu.
   await page.getByRole('button',{name:'切换分组：MD',exact:true}).click();
   await page.getByRole('menuitemcheckbox',{name:'配置',exact:true}).click();
@@ -166,15 +205,20 @@ try {
   assert.equal(nativeReveals[0].target,await fs.realpath(configPath));assert.equal(nativeReveals[1].target,await fs.realpath(path.join(vault,book)));assert.equal(nativeReveals[1].result,'');
   await page.locator(`[data-path="${slides}"]`).first().click();
   await expect(page.getByRole('navigation',{name:'文档索引'})).toBeVisible();
-  const pdfStart=Date.now();await page.getByRole('navigation',{name:'文档索引'}).getByRole('button').nth(1).click();
+  const pdfStart=Date.now();await page.getByRole('navigation',{name:'文档索引'}).getByRole('link').nth(1).click();
   await expect(page.locator('.virtual-document-scroll .pdf-page-surface.is-ready').first()).toBeVisible({timeout:60000});
   const pdfOpenMs=Date.now()-pdfStart,canvases=await page.locator('.virtual-document-scroll canvas').count();assert(canvases<15);
   await page.screenshot({path:path.join(output,'native-pdf.png')});
+  await page.getByRole('button',{name:'缩略图',exact:true}).click();
+  await expect(page.locator('.virtual-thumbnails-panel [data-thumbnail-page="2"]')).toBeVisible();
+  await page.locator('.virtual-thumbnails-panel [data-thumbnail-page="2"]').click();
+  await expect(page.locator('.virtual-document-scroll [data-page-number="2"] .pdf-page-surface').filter({visible:true})).toBeInViewport();
+  await page.screenshot({path:path.join(output,'native-pdf-thumbnails.png')});
   for(const [file,bytes] of original)if(file!==editedPath)assert((await fs.readFile(path.join(vault,file))).equals(bytes),'Source changed: '+file);
   assert.deepEqual(errors,[]);
   const metrics=await app.evaluate(({app})=>app.getAppMetrics().map(({type,memory})=>({type,memory})));
   const result={executable,fixture,realMaterials:!!process.env.VIRTUAL_REAL_VAULT,sourceMarkdown:original.size,sourceMarkdownBytes:[...original.values()].reduce((sum,bytes)=>sum+bytes.length,0),
-    firstOpenMs,chapterJumpMs,pdfOpenMs,markdownReadCount:mdReadCount,markdownMounted,pdfCanvases:canvases,unrelatedSourceBytesUnchanged:true,independentEditAndUndo:true,configurationValidSave:true,invalidConfigurationPreserved:true,jsonHighlightColors:highlightColors,nativeReveals,rendererErrors:errors,processMetrics:metrics};
+    firstOpenMs,chapterJumpMs,pdfOpenMs,reversePositions,sourceTitleRenameAndManifest:true,markdownThumbnails:true,pdfThumbnailNavigation:true,markdownReadCount:mdReadCount,markdownMounted,pdfCanvases:canvases,unrelatedSourceBytesUnchanged:true,independentEditAndUndo:true,configurationValidSave:true,invalidConfigurationPreserved:true,jsonHighlightColors:highlightColors,nativeReveals,rendererErrors:errors,processMetrics:metrics};
   await fs.writeFile(path.join(output,'native-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 } catch(error) {
   const page=await app.firstWindow();await page.screenshot({path:path.join(output,'native-failure.png')}).catch(()=>{});

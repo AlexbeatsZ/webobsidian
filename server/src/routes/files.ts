@@ -11,7 +11,7 @@ import { sendFileWithRange } from '../services/httpfile.js';
 import { vaultConfigurationIdentity } from '../services/vaultConfiguration.js';
 import { defaultFileFolder, VaultFolderSchema } from '../contracts/filePlacement.js';
 import type { TreeNode } from '../contracts.js';
-import { describeVirtualDocuments, defaultVirtualManifest, saveVirtualManifest, disableVirtualDocument, validateVirtualManifestText } from '../services/virtualDocuments.js';
+import { describeVirtualDocuments, defaultVirtualManifest, saveVirtualManifest, disableVirtualDocument, validateVirtualManifestText, prepareVirtualSourceRename } from '../services/virtualDocuments.js';
 
 export const filesRouter = Router();
 
@@ -132,7 +132,7 @@ filesRouter.post(
 filesRouter.patch(
   '/rename',
   asyncHandler(async (req, res) => {
-    const { from, to, baseRevision } = req.body ?? {};
+    const { from, to, baseRevision, virtualDocument } = req.body ?? {};
     if (typeof from !== 'string' || typeof to !== 'string') {
       res.status(400).json({ error: 'from and to required' });
       return;
@@ -140,7 +140,10 @@ filesRouter.patch(
     if (baseRevision !== undefined && typeof baseRevision !== 'string') {
       res.status(400).json({ error: 'baseRevision must be a string' }); return;
     }
-    await vault.rename(from, to, baseRevision);
+    if (virtualDocument !== undefined && (typeof virtualDocument?.path !== 'string' || typeof virtualDocument?.revision !== 'string'))
+      throw Object.assign(new Error('Invalid continuous document identity'), { status: 400 });
+    const updateManifest = virtualDocument ? await prepareVirtualSourceRename(virtualDocument.path, virtualDocument.revision, from, to) : undefined;
+    await vault.rename(from, to, baseRevision, updateManifest);
     res.json({ ok: true, from, to });
   }),
 );
