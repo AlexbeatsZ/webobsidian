@@ -8,9 +8,9 @@ Cập nhật lần cuối: 2026-11-08 (daily builds without debugging)
 
 ## Daily builds without debugging (PRD 1.40)
 - [x] Add a non-debuggable tablet release variant preserving the installed package/certificate
-- [~] Build Android 0.1.66 and replace both installed Android deliveries in place
-- [ ] Verify application/BuildConfig/WebView debugging is off and desktop launch has no debugging arguments
-- [ ] Publish exact non-debuggable APKs and update delivery/acceptance documentation
+- [x] Build Android 0.1.66 and replace both installed Android deliveries in place
+- [x] Verify application/BuildConfig/WebView debugging is off and desktop launch has no debugging arguments
+- [x] Publish exact non-debuggable APKs and update delivery/acceptance documentation
 
 ## Device deployment and build retention (PRD 1.39)
 - [x] Restrict future local/CI Mac packages to Apple Silicon arm64 and document cleanup boundaries
@@ -652,6 +652,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-08 (PRD 1.40): Android66已原位部署，tabletRelease保留旧.debug身份但manifest/BuildConfig/JNI/WebView调试均关闭；两机无DEBUGGABLE、run-as拒绝，原签名/UID/首次安装/权限保留。Mac/OMEN/ROG65均正常启动无调试参数。Android66两APK大小/标签源核对通过，旧65发布说明标记替代；详见tests/reports/android-release-20261108.md。
 - 2026-11-08 (PRD 1.39): 0.1.65已部署Mac/OMEN/ROG/平板/RedmiK70，Mac/OMEN真实STEM健康，ROG保留原生选库流程，Android保留原签名/UID/首次安装时间但锁屏UI验收待解锁。Mac后续仅arm64；桌面Latest 7资产与Android独立预发布2APK的大小/tag源一致。旧Mac Intel输入、Android旧APK与临时源码/密钥、Windows旧release及临时构建已清理；详见tests/reports/device-deployment-20261108.md。
 - 2026-11-06 (PRD 1.38): 连续文档0.1.64已发布Latest；统一原生文件标题/H1/正文，标题改名同步JSON；目录大纲入口/逐文件与标题折叠、共享MD/PDF缩略图及不可绘制块留白。修复公式status误判、空编辑器高度污染、导航换窗/程序位移及CM/PDF双补偿。553项单元、三端类型/构建、聚合浏览器多轮与真实25章原生副本验收通过，Mac双架构签名和7资产大小/tag源一致。安装版未替换。
 - 2026-11-06 (Android 0.1.63): 共享0.1.62渲染器/服务的安卓构建；Node堆上限改为1024MiB，Android跳过全文索引JSON缓存的读写，避免大型STEM库冷建/序列化内存不足。22项索引/搜索/目录回归、生产构建、APK/lint/签名/16KB对齐通过；平板原包名/签名覆盖安装，实际启动检查进行中。
