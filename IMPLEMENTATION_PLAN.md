@@ -8,9 +8,10 @@ Cập nhật lần cuối: 2026-11-08 (device deployment and Apple Silicon deliv
 
 ## Device deployment and build retention (PRD 1.39)
 - [x] Restrict future local/CI Mac packages to Apple Silicon arm64 and document cleanup boundaries
-- [~] Build 0.1.65 desktop and Android deliveries from the current shared source
-- [~] Upgrade every reachable Mac, Windows and Android device in place, preserving identity and data
-- [ ] Verify installed versions/startup, publish exact artifacts and remove obsolete local build outputs
+- [x] Build 0.1.65 desktop and Android deliveries from the current shared source
+- [x] Upgrade Mac, OMEN, ROG, Xiaomi Pad 6 Pro and Redmi K70 in place, preserving identity and data
+- [x] Verify installed identities/available startup, publish exact artifacts and remove obsolete local build outputs
+- [ ] Finish Android foreground UI/index acceptance after unlock; ROG first-run Vault choice remains with the user
 
 ## Continuous document navigation and titles (PRD 1.38)
 - [x] Keep chapter-start navigation stable when scrolling upward through asynchronous predecessor layouts
@@ -23,7 +24,7 @@ Cập nhật lần cuối: 2026-11-08 (device deployment and Apple Silicon deliv
 ## Android 0.1.63 delivery
 - [x] Build the current shared renderer/server for Android with the tablet's existing package identity and signer
 - [x] Verify the APK and update Xiaomi Pad 6 Pro in place
-- [ ] Finish installed startup/UI acceptance after the tablet is unlocked and kept foreground
+- [ ] Finish installed Android 0.1.65 startup/UI acceptance after devices are unlocked and kept foreground (supersedes the 0.1.63 check)
 - [x] Keep large STEM indexing inside the Android heap; avoid full desktop-cache serialization
 
 ## Cross-platform shortcuts and known test failures (PRD 1.37)
@@ -645,6 +646,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-08 (PRD 1.39): 0.1.65已部署Mac/OMEN/ROG/平板/RedmiK70，Mac/OMEN真实STEM健康，ROG保留原生选库流程，Android保留原签名/UID/首次安装时间但锁屏UI验收待解锁。Mac后续仅arm64；桌面Latest 7资产与Android独立预发布2APK的大小/tag源一致。旧Mac Intel输入、Android旧APK与临时源码/密钥、Windows旧release及临时构建已清理；详见tests/reports/device-deployment-20261108.md。
 - 2026-11-06 (PRD 1.38): 连续文档0.1.64已发布Latest；统一原生文件标题/H1/正文，标题改名同步JSON；目录大纲入口/逐文件与标题折叠、共享MD/PDF缩略图及不可绘制块留白。修复公式status误判、空编辑器高度污染、导航换窗/程序位移及CM/PDF双补偿。553项单元、三端类型/构建、聚合浏览器多轮与真实25章原生副本验收通过，Mac双架构签名和7资产大小/tag源一致。安装版未替换。
 - 2026-11-06 (Android 0.1.63): 共享0.1.62渲染器/服务的安卓构建；Node堆上限改为1024MiB，Android跳过全文索引JSON缓存的读写，避免大型STEM库冷建/序列化内存不足。22项索引/搜索/目录回归、生产构建、APK/lint/签名/16KB对齐通过；平板原包名/签名覆盖安装，实际启动检查进行中。
 - 2026-11-06 (PRD 1.37): 修复 16 个已复现失败，Ctrl→Control、Alt→Option；修复短笔记异步公式行高与字体完成后的列表前缀测量，处理 Mac Control 主键链接点击及 APFS 大小写改名恢复。160 个浏览器/集成、546 个单元全部通过；类型、构建、打包入口与 Mac 双架构签名通过。见 tests/reports/macos-test-fixes-20261106.md。
