@@ -4,7 +4,13 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-06 (continuous document navigation and titles)
+Cập nhật lần cuối: 2026-11-08 (device deployment and Apple Silicon delivery)
+
+## Device deployment and build retention (PRD 1.39)
+- [x] Restrict future local/CI Mac packages to Apple Silicon arm64 and document cleanup boundaries
+- [~] Build 0.1.65 desktop and Android deliveries from the current shared source
+- [~] Upgrade every reachable Mac, Windows and Android device in place, preserving identity and data
+- [ ] Verify installed versions/startup, publish exact artifacts and remove obsolete local build outputs
 
 ## Continuous document navigation and titles (PRD 1.38)
 - [x] Keep chapter-start navigation stable when scrolling upward through asynchronous predecessor layouts

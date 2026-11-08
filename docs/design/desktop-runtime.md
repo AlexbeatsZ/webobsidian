@@ -164,7 +164,9 @@ now use the x64 NSIS target, producing
 `WebObsidian-<version>-win-x64-setup.exe`. Local npm packaging and release CI use
 the same desktop/package.json configuration. The installer permits a custom
 directory, does not elevate or auto-launch, creates only a Start menu shortcut,
-and retains user data when uninstalled. macOS/Linux targets are unchanged.
+and retains user data when uninstalled. macOS delivers Apple Silicon arm64 DMG/ZIP only from0.1.65 onward; Intel/x64
+and universal packages are no longer part of local or CI delivery. Linux targets
+remain unchanged.
 Packaging itself never installs or launches the generated application.
 The user's explicit Desktop shortcut request is maintained by copying the generated
 Start menu shortcut after installation and verifying its installed EXE target.
@@ -190,6 +192,9 @@ and `dist:publish` commands run `clean:release` first, deleting the entire fixed
 refuses a redirected release directory. `scripts/build.mjs` also clears desktop
 `dist/` and `.gen/server/` before generating their replacements. Vaults, user
 configuration, app data and dependencies are outside the cleanup scope.
+After verified upgrades, remove obsolete unpacked apps/installers and disposable
+packaging checkouts as well as obsolete Mac x64 tunnel inputs. Preserve signing
+keys, SDK/dependency caches, historical GitHub Releases and acceptance records.
 
 For isolated packaging that invokes electron-builder directly, explicitly run
 `npm --workspace desktop run clean:release` before the packaging step. Build web

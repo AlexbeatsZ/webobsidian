@@ -1,6 +1,6 @@
 {
   "name": "@webobsidian/desktop",
-  "version": "0.1.64",
+  "version": "0.1.65",
   "private": true,
   "description": "WebObsidian native desktop application",
   "author": "xnohat <xnohat@gmail.com>",
@@ -62,15 +62,13 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64",
-            "x64"
+            "arm64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "arm64",
-            "x64"
+            "arm64"
           ]
         }
       ],

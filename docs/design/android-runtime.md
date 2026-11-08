@@ -134,12 +134,15 @@ Release key/properties remain in ignored `android/.signing` and must be retained
 for future updates. `io.github.alexbeatsz.webobsidian` is the signed personal
 release; `.debug` is a distinct application identity and data directory for
 acceptance. Neither build command installs, starts, uninstalls or clears an app.
-Android version.properties owns Android0.1.63/versionCode63 independently. This
+Android version.properties owns Android0.1.65/versionCode65 independently. This
 Android delivery bundles the current shared renderer and server from desktop
-0.1.62, plus the Android heap/cache correction above. The existing tablet uses
+0.1.65, including continuous documents and the Android heap/cache correction above. The existing tablet uses
 the `.debug` identity and its original Windows
 debug signing key; preserve that identity and signer for in-place updates.
-Desktop packages are not rebuilt for this Android delivery.
+The Redmi K70 uses the release application identity and its existing release key.
+Deploy each device with its current identity; never uninstall or clear app data
+to work around a signing mismatch. Keep only the latest local APK for each
+required identity after successful upgrades.
 
 Runtime is pinned to [fogtape/nodejs-mobile v24.22.1-0](https://github.com/fogtape/nodejs-mobile/releases/tag/v24.22.1-0),
 full ICU, based on Node24 LTS, distributed as a **prerelease** by that project.
