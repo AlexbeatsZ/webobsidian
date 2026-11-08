@@ -5,6 +5,9 @@ rootProject.file('version.properties').withInputStream { androidVersion.load(it)
 def signingFile = rootProject.file('.signing/release.properties')
 def signing = new Properties()
 if (signingFile.exists()) signingFile.withInputStream { signing.load(it) }
+def tabletSigningFile = rootProject.file('.signing/tablet.properties')
+def tabletSigning = new Properties()
+if (tabletSigningFile.exists()) tabletSigningFile.withInputStream { tabletSigning.load(it) }
 
 android {
     namespace 'io.github.alexbeatsz.webobsidian'
@@ -29,10 +32,31 @@ android {
                 keyPassword signing.keyPassword
             }
         }
+        tablet {
+            if (tabletSigningFile.exists()) {
+                storeFile rootProject.file(tabletSigning.storeFile)
+                storePassword tabletSigning.storePassword
+                keyAlias tabletSigning.keyAlias
+                keyPassword tabletSigning.keyPassword
+            }
+        }
     }
     buildTypes {
         debug { applicationIdSuffix '.debug'; versionNameSuffix '-debug'; debuggable true }
-        release { signingConfig signingConfigs.release; minifyEnabled false }
+        release {
+            signingConfig signingConfigs.release
+            debuggable false
+            jniDebuggable false
+            minifyEnabled false
+        }
+        // Keep the tablet's installed package/certificate without enabling debugging.
+        tabletRelease {
+            initWith release
+            applicationIdSuffix '.debug'
+            signingConfig signingConfigs.tablet
+            debuggable false
+            jniDebuggable false
+        }
     }
     sourceSets.main { assets.srcDirs = ['../.gen']; jniLibs.srcDirs = ['../.runtime/bin'] }
     externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
@@ -41,6 +65,12 @@ android {
 }
 
 tasks.register('requireReleaseKey') {
-    doLast { if (!signingFile.exists()) throw new GradleException('Generate project-local signing material with node scripts/signing.mjs first.') }
+    doLast { if (!signingFile.exists()) throw new GradleException('Restore the original phone certificate through .signing/release.properties before release builds.') }
 }
-tasks.configureEach { if (it.name == 'preReleaseBuild') it.dependsOn 'requireReleaseKey' }
+tasks.register('requireTabletKey') {
+    doLast { if (!tabletSigningFile.exists()) throw new GradleException('Restore the existing tablet certificate through .signing/tablet.properties; do not generate a replacement key.') }
+}
+tasks.configureEach {
+    if (it.name == 'preReleaseBuild') it.dependsOn 'requireReleaseKey'
+    if (it.name == 'preTabletReleaseBuild') it.dependsOn 'requireTabletKey'
+}

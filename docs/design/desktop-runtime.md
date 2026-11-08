@@ -201,6 +201,14 @@ For isolated packaging that invokes electron-builder directly, explicitly run
 and server in `Temp/.agents/` when the existing app and `server/public` must be
 preserved; cleaning release outputs does not authorize replacing a live runtime.
 
+## Daily launch without debugging
+
+Packaged desktop apps use the production renderer and normal per-user launch.
+Do not add --inspect, --inspect-brk, --remote-debugging-port or
+--remote-debugging-pipe, or attach DevTools/CDP for daily deployment. The mere
+presence of a developer-tools menu entry does not mean a debugger is running.
+Diagnostics require an explicit task and must not become the normal launcher.
+
 ## Verification boundary
 
 Container health checks in both Compose and the Dockerfile read the container's

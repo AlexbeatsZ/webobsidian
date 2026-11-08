@@ -1,7 +1,8 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.39 · Cập nhật: 2026-11-08 · Trạng thái: Draft
+> Phiên bản: 1.40 · Cập nhật: 2026-11-08 · Trạng thái: Draft
+> Changelog 1.40 (日常构建关闭调试): 日常部署只使用不可调试的正式构建，关闭 Android debuggable、JNI 和 WebView 调试。平板保留原 `.debug` 应用 ID 与原证书以原位升级，不把历史包名/签名误当成构建类型；独立 tabletRelease 使用 release 配置并禁用调试。桌面不以 inspect/remote-debugging 参数启动。
 > Changelog 1.39 (设备部署与构建保留): 将当前连续文档功能原位部署到所有可连接的个人设备，保留各端包名、签名、Vault 与配置。后续 macOS 只提供 Apple Silicon arm64 包，不再构建 Intel/x64 或 universal；本地只保留各平台最新交付物，清理旧安装包、解包应用与临时构建副本，保留密钥、用户数据和历史 Release。
 > Changelog 1.38 (连续文档导航与标题): 大纲跳到章节开头后反向滚动，按实际滚动位移保持阅读位置，不受前章异步挂载和高度修正影响。首页复用普通文件标题、H1 与正文排版；章节交界复用可编辑文件标题，重命名同步更新描述文件的来源路径。大纲包含“目录”首页入口，并支持按文件与标题层级折叠。缩略图支持目录与各来源导航，复用当前章节的 Markdown/PDF 预览；公式等无法直接绘制的块留空白，不画彩色占位框。
 > Changelog 1.37 (跨平台快捷键与测试修复): macOS 的 Ctrl 快捷键使用 Control，Alt 使用 Option。编辑器中的撤销/重做、搜索、全文首尾与剪贴板操作须按此映射可用，测试保留真实 Control/Alt 输入。修复脚注导航、嵌入编辑与大小写改名的已知回归，隔离测试不触碰真实 Vault。

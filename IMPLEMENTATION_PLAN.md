@@ -4,7 +4,13 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-08 (device deployment and Apple Silicon delivery)
+Cập nhật lần cuối: 2026-11-08 (daily builds without debugging)
+
+## Daily builds without debugging (PRD 1.40)
+- [x] Add a non-debuggable tablet release variant preserving the installed package/certificate
+- [~] Build Android 0.1.66 and replace both installed Android deliveries in place
+- [ ] Verify application/BuildConfig/WebView debugging is off and desktop launch has no debugging arguments
+- [ ] Publish exact non-debuggable APKs and update delivery/acceptance documentation
 
 ## Device deployment and build retention (PRD 1.39)
 - [x] Restrict future local/CI Mac packages to Apple Silicon arm64 and document cleanup boundaries

@@ -127,14 +127,14 @@ node android/scripts/runtime.mjs
 node android/scripts/prepare.mjs
 node android/scripts/signing.mjs
 cd android
-./gradlew --no-daemon :app:assembleRelease :app:assembleDebug
+./gradlew --no-daemon :app:assembleRelease :app:assembleTabletRelease
 ```
 
 Release key/properties remain in ignored `android/.signing` and must be retained
 for future updates. `io.github.alexbeatsz.webobsidian` is the signed personal
 release; `.debug` is a distinct application identity and data directory for
 acceptance. Neither build command installs, starts, uninstalls or clears an app.
-Android version.properties owns Android0.1.65/versionCode65 independently. This
+Android version.properties owns Android0.1.66/versionCode66 independently. This
 Android delivery bundles the current shared renderer and server from desktop
 0.1.65, including continuous documents and the Android heap/cache correction above. The existing tablet uses
 the `.debug` identity and its original Windows
@@ -152,10 +152,47 @@ the distribution's [embedding contract](https://github.com/fogtape/nodejs-mobile
 explicit HOME/TMPDIR, writable cwd, private data and bounded V8 heap. Native
 library/license files are downloaded only into ignored project dependencies.
 
+## Daily builds and historical tablet identity (2026-11-08)
+
+Daily device deployments must be non-debuggable release builds. Never deploy
+assembleDebug merely to preserve the installed tablet identity. Android package
+ID and signing certificate are update/data identity; debuggable, BuildConfig.DEBUG
+and JNI/WebView debugging are separate build/runtime flags. Keeping a historical
+.debug package or a certificate originally called a debug key does not require
+a debuggable app.
+
+The ordinary release variant updates Redmi K70. tabletRelease initializes from
+release, retains applicationIdSuffix '.debug' and the tablet's existing signer,
+and explicitly sets debuggable=false and jniDebuggable=false. Both generate
+BuildConfig.DEBUG=false; MainActivity passes that flag to
+WebView.setWebContentsDebuggingEnabled, keeping WebView inspection off.
+The version name has no -debug suffix. This does not enable shrinking/obfuscation
+or claim a measured performance improvement; the shared production SPA is
+unchanged. Debug variants are for explicitly requested isolated diagnostics only.
+
+Tablet credentials are read from ignored android/.signing/tablet.properties
+with storeFile/storePassword/keyAlias/keyPassword (same format as release).
+Restore its existing certificate from OMEN C:/Users/Meta/.android/debug.keystore;
+restore the phone's release credentials from the existing Windows project's
+android/.signing/release.p12 and release.properties. Never commit these files,
+generate a replacement key, change package IDs, uninstall, clear data, or copy a
+Vault to migrate a daily device just to disable debugging. An explicit
+requireTabletKey task rejects missing credentials before tabletRelease builds.
+
+Before the existing debuggable tablet becomes non-debuggable, normally background
+the app so existing saves finish and retain a private-data backup in the task's
+restricted temporary directory. Afterwards run-as is expected to reject access;
+do not re-enable debugging to read private logs. Check APK manifest and generated
+BuildConfig, installed package flags/certificate/UID/firstInstallTime, and launch
+without attaching a debugger. Device ADB connectivity is a separate transport;
+this requirement does not change system USB/wireless debugging settings.
+
 ## Independent acceptance entry points
 
-Parent owns device tests. Install only the `.debug` variant when no such test
-app exists; do not replace an existing daily application. Its Vault is
+Parent owns device tests. A debuggable variant is only for explicitly requested
+isolated diagnostics when no such test app exists; do not replace a daily
+installation with it. Normal device delivery uses the release variants above.
+For a separately authorized isolated debug test installation, the disposable Vault is
 `/data/user/0/io.github.alexbeatsz.webobsidian.debug/files/Vault` (available with
 `adb shell run-as io.github.alexbeatsz.webobsidian.debug`); log is `files/logs/server.log`.
 Launch `.MainActivity`; WebView debugging is enabled only in that variant.
