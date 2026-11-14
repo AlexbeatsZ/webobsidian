@@ -37,6 +37,15 @@ and license/notices ship inside each server package; Node 22+ needs no runtime i
 or sibling source checkout. `core-source.json` and `BUILD-INFO.json` record provenance.
 Server releases never change desktop/mobile versions or the client's latest Release.
 
+## Personal deployment
+
+The user's deployment requires only
+`http://100.106.169.46:18744/webobsidian-sync/v1/` in each device's connection
+list as of 2026-11-14. The ROG service binds its Tailscale IPv4 address through its
+existing `server.json` and `WebObsidianNativeSync` task. The production workspace is
+`76fcca29-885b-4dd1-832e-cfac4f07cc09`. This deployment uses the existing
+endpoint model.
+
 ## Files and safety
 
 Reuse Mojian's immutable SHA-256 blobs, exact-version CAS, retained tombstones and

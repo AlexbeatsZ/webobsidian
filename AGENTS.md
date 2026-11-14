@@ -6,6 +6,7 @@
 个人使用的 WebObsidian 原生桌面/Android 应用(fork 自 xnohat/webobsidian,远程 `AlexbeatsZ/webobsidian`)。
 
 ## Current State
+- 2026-11-14 同步连接统一只用 `http://100.106.169.46:18744/webobsidian-sync/v1/`。ROG 的 WebObsidianNativeSync 已按原任务改用该 Tailscale IP 监听，活动 server.json 与 connection.json 已更新，workspaceId 沿用原库。Mac/OMEN 已实同步成功。K70 原 STEM sync.jsonc 已原子改写并回读，后台本地 API 超时，实际同步待应用恢复响应。平板离线待改。ROG 桌面端尚无活动 Vault。运行配置调整，无客户端发版。
 - 2026-11-08补正:Android已升级0.1.66/code66（源码3899d5f）；日常仅用不可调试release/tabletRelease，后者保留旧.debug包名与证书但debuggable/JNI/BuildConfig.DEBUG均false，WebView调试关闭。两实机无DEBUGGABLE、run-as拒绝，原UID/首次安装/权限保留。Mac/OMEN/ROG65正常启动无inspect或remote-debugging参数。Android独立android-v0.1.66预发布两非调试APK大小/tag源已核对，取代65Android日常交付。详见tests/reports/android-release-20261108.md。
 - 源码main，0.1.65构建源a3cd52d已推送。v0.1.65为Latest，7资产（Mac arm64 DMG/ZIP/blockmap/latest-mac + Windows x64 NSIS/blockmap/latest）；独立android-v0.1.65预发布含debug/release两APK。所有资产大小和tag源一致。后续Mac仅Apple Silicon arm64，不再构建Intel/x64或universal。
 - 2026-11-08已原位安装：Mac0.1.61→65、OMEN0.1.53→65、ROG0.1.28→65、Xiaomi Pad6Pro0.1.63-debug→65-debug、RedmiK70正式包0.1.37→65。Mac真实STEM服务1284ms健康/搜索2591ms，原生目录与大纲已目视确认；OMEN原STEM health200/16402ms、安装前后配置字节一致。ROG原先未配置Vault，保持选择流程，不创建新库。
