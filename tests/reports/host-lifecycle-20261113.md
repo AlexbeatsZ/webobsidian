@@ -2,7 +2,7 @@
 
 ## Source and scope
 
-Implementation a0e230a014714aa23f44480eff5b6b5d0462e862, desktop0.1.67 and Android0.1.67/code67. Requested follow-up to session mac:claude:5b01a0dd. The user narrowed installation to Redmi K70. macOS/Windows builds are release deliverables and were tested in isolated profiles/build directories. Existing installations on Mac/OMEN/ROG/tablet were not upgraded.
+Implementation a0e230a014714aa23f44480eff5b6b5d0462e862, desktop0.1.67 and Android0.1.67/code67. Requested follow-up to session mac:claude:5b01a0dd. The final requested installation scope is Mac, OMEN, ROG and Redmi K70. All four devices received 0.1.67. The tablet retains its previous version. The user requested immediate deployment and stopped additional checks.
 
 ## Verified
 
@@ -14,7 +14,7 @@ Implementation a0e230a014714aa23f44480eff5b6b5d0462e862, desktop0.1.67 and Andro
 - Full browser contracts finish396/402passed. The6failures are two narrow-embed metrics tests reading a disposed staged host, one font metrics test passing a non-Element to getComputedStyle, two tag-panel interactions timing out, and one palette expectation of Ctrl+L against the existing macOS Control+L label. Targeted original df1d08c source runs reproduce each failing group. Original navigation retry passes, and the current navigation and split-editing regressions pass after preserving operations-endpoint.json readiness semantics.
 - New host browser tests3/3pass for shared platform identity/actual Android version, port-backed clipboard/export cancellation and Back lifetime registration.
 - Mac arm64 DMG/ZIP/blockmap/update metadata built. codesign --verify --deep --strict passes.
-- Windows x64 NSIS built on OMEN from the exact archived implementation in an isolated TEMP directory using project Node22.23.4. Clean npm ci, production build, desktop types and standalone bundle pass. Installer129800416bytes, blockmap135343bytes, update metadata370bytes. No Windows device installation performed.
+- Windows x64 NSIS built on OMEN from the exact archived implementation in an isolated TEMP directory using project Node22.23.4. Clean npm ci, production build, desktop types and standalone bundle pass. Installer129800416bytes, blockmap135343bytes, update metadata370bytes. OMEN and ROG were subsequently upgraded using this installer in the interactive user session. Both installation jobs reported success and ProductVersion0.1.67.0, then launched the installed executable.
 
 ## Redmi K70 installation
 
@@ -30,4 +30,8 @@ All confirmed lifecycle/platform/export/path items have source changes. Duplicat
 
 ## Release and remaining work
 
-Desktop v0.1.67 and Android android-v0.1.67 use the exact implementation tag target. Final release asset verification/publication and local cleanup are recorded by the task runbook. 用户随后明确要求停止检查、直接部署。K70已完成部署，停止后续手机输入与测试。Android发布后进行桌面Release上传和临时源码/密钥清理。
+Desktop v0.1.67 and Android android-v0.1.67 use the exact implementation tag target. Final release asset verification/publication and local cleanup are recorded by the task runbook. 用户随后明确要求停止检查、直接部署。K70已完成部署，停止后续手机输入与测试。桌面v0.1.67和Android android-v0.1.67均已发布。用户随后要求Mac和Windows部署，Mac正常退出后替换应用并启动，OMEN和ROG正常退出后通过交互用户会话静默升级并启动，安装任务均成功返回0.1.67.0。部署后未追加功能测试。临时源码、密钥副本、Windows安装输入及一次性计划任务已清理。
+
+## Desktop deployment
+
+Mac installed /Applications/WebObsidian.app from the completed arm64 build after normal application quit, then launched it. The previous bundle was removed after the replacement succeeded. OMEN and ROG used the published x64 NSIS installer with /S in the logged-in interactive user session, after requesting normal window closure and allowing up to45seconds for saving. Each deployment job returned ok=true and ProductVersion0.1.67.0 at C:\Users\Meta\AppData\Local\Programs\WebObsidian\WebObsidian.exe and issued Start-Process. Further functional/UI acceptance was skipped at the user's request.
