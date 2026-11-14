@@ -1,3 +1,4 @@
+import { isMacOS } from '../lib/platform';
 import { useSearch, fileCandidates, matchName, remember, updateSearch, requestHotkeySettings } from '../lib/search';
 import MatchLabel from './MatchLabel';
 import { documents } from '../lib/documents';
@@ -308,7 +309,7 @@ export default function CommandPalette() {
                   {settings.pinnedCommands.includes(it.id) ? '★' : '☆'}
                 </button>
               )}
-              {it.shortcuts?.map((binding, index) => <kbd className="palette-shortcut" key={index}>{hotkeyLabel(binding, /Mac|iPhone|iPad/.test(navigator.platform))}</kbd>)}
+              {it.shortcuts?.map((binding, index) => <kbd className="palette-shortcut" key={index}>{hotkeyLabel(binding, isMacOS())}</kbd>)}
               {it.path && !q && recent.includes(it.path) && settings.historyKeys[i] &&
                 <kbd className="palette-history-key">{settings.historyKeys[i]}</kbd>}
             </div>

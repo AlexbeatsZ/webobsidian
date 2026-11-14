@@ -1,3 +1,4 @@
+import { registerBackHandler } from './host';
 /**
  * Full-screen image viewer (lightbox) — opens on image click in BOTH Live Preview
  * and Reading view. Wheel/pinch zoom toward the cursor/focal point, drag (or
@@ -9,11 +10,13 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 16;
 
+let stopBack: (() => void) | undefined;
 let overlay: HTMLDivElement | null = null;
 let keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
 export function closeLightbox(): void {
   if (!overlay) return;
+  stopBack?.(); stopBack = undefined;
   overlay.remove();
   overlay = null;
   if (keyHandler) {
@@ -28,6 +31,7 @@ export function openLightbox(src: string, alt = ''): void {
   const root = document.createElement('div');
   root.className = 'image-lightbox';
   overlay = root;
+  stopBack = registerBackHandler(closeLightbox);
 
   const img = document.createElement('img');
   img.className = 'image-lightbox-img';

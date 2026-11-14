@@ -134,9 +134,9 @@ Release key/properties remain in ignored `android/.signing` and must be retained
 for future updates. `io.github.alexbeatsz.webobsidian` is the signed personal
 release; `.debug` is a distinct application identity and data directory for
 acceptance. Neither build command installs, starts, uninstalls or clears an app.
-Android version.properties owns Android0.1.66/versionCode66 independently. This
+Android version.properties owns Android0.1.67/versionCode67 independently. This
 Android delivery bundles the current shared renderer and server from desktop
-0.1.65, including continuous documents and the Android heap/cache correction above. The existing tablet uses
+0.1.67, including continuous documents and the Android heap/cache correction above. The existing tablet uses
 the `.debug` identity and its original Windows
 debug signing key; preserve that identity and signer for in-place updates.
 The Redmi K70 uses the release application identity and its existing release key.
@@ -202,3 +202,7 @@ port forwarding. Test both edge opens and in-panel closes on phone/tablet,
 vertical scroll, text selection, pinch/cancel, horizontal table scrolling,
 keyboard Insets and Back. Native permission/shared-folder tests use a disposable
 shared-storage directory only. Build/static evidence is not device acceptance.
+
+## Host lifecycle update (2026-11-13)
+
+The current startup, readiness, shutdown, host capabilities and failure-recovery contract is defined in [host-lifecycle.md](host-lifecycle.md). This supersedes the older fixed-port reservation, fixed total startup timeout, DOM-based chrome/Back detection and desktop-specific plugin-request path described above.

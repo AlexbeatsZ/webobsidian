@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { writeJson } from './files';
 
 export interface McpConnectionInput { tunnelId: string; apiKey?: string }
 export interface McpLauncherState {
@@ -82,12 +82,7 @@ export class McpLauncher {
       }
       if (!encryptedKey) throw new Error('请填写 Tunnel 运行密钥');
       const connection = { tunnelId: input.tunnelId.trim(), encryptedKey };
-      await fs.mkdir(this.options.runtimeDir, { recursive: true });
-      const temporary = `${this.configFile}.${randomUUID()}.tmp`;
-      try {
-        await fs.writeFile(temporary, JSON.stringify(connection), { mode: 0o600 });
-        await fs.rename(temporary, this.configFile);
-      } finally { await fs.rm(temporary, { force: true }); }
+      await writeJson(this.configFile, connection);
       await this.stop();
       return await this.inspect();
     } finally { this.busy = false; }
@@ -148,16 +143,28 @@ export class McpLauncher {
     } finally { this.busy = false; }
   }
 
-  async stop(): Promise<void> {
+  private stopping?: Promise<void>;
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
     const child = this.child;
-    if (!child || child.exitCode !== null || !child.pid) { this.child = undefined; return; }
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('MCP 连接尚未停止')), 5000);
-      child.once('close', () => { clearTimeout(timer); if (this.child === child) this.child = undefined; resolve(); });
-      if (!child.kill()) {
-        clearTimeout(timer);
-        reject(new Error('无法停止 MCP 连接'));
-      }
-    });
+    if (!child || child.exitCode !== null || child.signalCode != null || !child.pid) {
+      this.child = undefined;
+      return Promise.resolve();
+    }
+    this.stopping = new Promise<void>((resolve, reject) => {
+      const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+      const timeout = setTimeout(() => finish(new Error('MCP 连接无法停止')), 10_000);
+      const finish = (error?: Error) => {
+        clearTimeout(force);
+        clearTimeout(timeout);
+        child.removeListener('close', closed);
+        if (error) reject(error);
+        else { if (this.child === child) this.child = undefined; resolve(); }
+      };
+      const closed = () => finish();
+      child.once('close', closed);
+      child.kill();
+    }).finally(() => { this.stopping = undefined; });
+    return this.stopping;
   }
 }

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import MiniSearch from 'minisearch';
 import { getSettings } from './settings.js';
-import { INDEX_FILE, config } from '../config.js';
+import { INDEX_FILE, config, runtimeCapabilities } from '../config.js';
 import { readFileText } from './vaultFile.js';
 import { catalog as activeCatalog, VaultCatalog, CORE_LIST_PROPS, CATALOG_SCHEMA_VERSION } from './catalog.js';
 import { matchesTagFilters } from '@webobsidian/search-core';
@@ -21,7 +21,7 @@ import type { SearchCache } from './vaultindex.js';
 export type { SearchHit, MatchContext, NoteMatches } from '../contracts.js';
 
 /** MiniSearch's full JSON export duplicates the index beyond Android's heap budget. */
-export const supportsSearchCache = () => process.env.WEBOBSIDIAN_PLATFORM !== 'android';
+export const supportsSearchCache = () => runtimeCapabilities.searchCache;
 
 /**
  * QMD — the WebObsidian search engine.
@@ -384,7 +384,14 @@ export class QmdEngine {
   }
 
   /** `root` is the Vault this engine was built from, not the current setting. */
-  async save(root: string): Promise<void> {
+  private cacheWrite: Promise<void> = Promise.resolve();
+  save(root: string): Promise<void> {
+    this.cacheWrite = this.cacheWrite.then(() => this.writeCache(root));
+    return this.cacheWrite;
+  }
+  async flushCache(): Promise<void> { await this.cacheWrite; }
+
+  private async writeCache(root: string): Promise<void> {
     if (!supportsSearchCache()) return;
     try {
       await this.loaded();

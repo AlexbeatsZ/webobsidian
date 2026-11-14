@@ -1,3 +1,5 @@
+import { host } from '../lib/host';
+import { isAndroid } from '../lib/platform';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type GraphSettings } from '../lib/store';
 import { api } from '../lib/api';
@@ -657,16 +659,16 @@ export default function GraphView() {
         ctx.drawImage(src, 0, 0);
         const blob = await new Promise<Blob | null>((res) => out.toBlob(res, 'image/png'));
         if (!blob) throw new Error('toBlob failed');
-        if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+        let copied = false;
+        if (!isAndroid() && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+          try {
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
           useStore.getState().notify("关系图截图已复制");
-        } else {
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = 'graph.png';
-          a.click();
-          URL.revokeObjectURL(a.href);
-          useStore.getState().notify("关系图截图已下载");
+          copied = true;
+          } catch { /* Offer the existing file export when clipboard access is denied. */ }
+        }
+        if (!copied) {
+          if (await host.download(blob, 'graph.png')) useStore.getState().notify("关系图截图已导出");
         }
       } catch {
         useStore.getState().notify("截图失败");

@@ -1,3 +1,5 @@
+import { host, handleBack } from './lib/host';
+import { desktopCommands } from '../../desktop/src/bridge';
 import { ensureWriting, writingFileChanged, watchExternalWritingSources } from './lib/writing/config';
 import { bindWritingNavigation } from './lib/writing/commands';
 import { refreshSearch, searchSettings } from './lib/search';
@@ -56,6 +58,10 @@ export default function App() {
     void api.getSettings().then(settings => { if (active && !changed) apply(settings); }).catch(() => {});
     return () => { active = false; window.removeEventListener('settings-changed', update); };
   }, []);
+
+  useEffect(() => { host.setChrome(theme === 'theme-dark', true);
+    return () => host.setChrome(theme === 'theme-dark', false);
+  }, [theme]);
 
   useEffect(() => { configureDebug(ui.debugRecording, ui.debugSource); }, [ui.debugRecording, ui.debugSource]);
 
@@ -187,13 +193,17 @@ export default function App() {
   useEffect(() => {
     const command = (event: Event) => {
       const id = (event as CustomEvent<unknown>).detail;
-      if (typeof id === 'string' && ['new', 'files', 'save', 'settings', 'vault-switch'].includes(id)) sharedApp.commands.executeCommandById(id);
+      if (typeof id === 'string' && (desktopCommands as readonly string[]).includes(id)) sharedApp.commands.executeCommandById(id);
     };
+    let backgroundSave: Promise<unknown> | undefined;
     const save = () => {
+      if (backgroundSave) return;
+      const saves: Promise<unknown>[] = [];
       for (const snapshot of documents.snapshots()) {
-        if (snapshot.dirty && !snapshot.conflict && !snapshot.locked) void documents.get(snapshot.id)?.save().catch(error => useStore.getState().notify(String(error)));
+        if (snapshot.dirty && !snapshot.conflict && !snapshot.locked) saves.push(documents.get(snapshot.id)!.save().catch(error => useStore.getState().notify(String(error))));
       }
-      void flushWorkspaceState().catch(() => {});
+      saves.push(flushWorkspaceState().catch(() => {}));
+      backgroundSave = Promise.all(saves).finally(() => { backgroundSave = undefined; });
     };
     const beforeUnload = (event: BeforeUnloadEvent) => {
       const state = useStore.getState();
@@ -206,7 +216,7 @@ export default function App() {
     let closeGeneration = 0;
     let releaseClose: (() => void) | undefined;
     const cancelClose = () => { closeGeneration++; releaseClose?.(); releaseClose = undefined; };
-    const stopClose = window.webobsidianDesktop?.onBeforeClose?.(async () => {
+    const stopClose = host.onBeforeClose(async () => {
       const generation = ++closeGeneration;
       const root = document.getElementById('root');
       const previousInert = root?.inert ?? false;
@@ -223,6 +233,20 @@ export default function App() {
         throw error;
       }
     });
+    const back = (event: Event) => {
+      const state = useStore.getState();
+      if (state.contextMenu) { state.closeContextMenu(); event.preventDefault(); return; }
+      if (state.paletteOpen) { state.setPalette(false); event.preventDefault(); return; }
+      if (handleBack()) { event.preventDefault(); return; }
+      if (state.movePath) state.setMovePath(null);
+
+      else if (state.mobileDrawer) state.setMobileDrawer(null);
+      else return;
+      event.preventDefault();
+    };
+    const serverStopped = () => useStore.getState().notify('本地服务已停止，请重新启动应用。当前未保存的编辑仍保留在页面中。', 0);
+    window.addEventListener('webobsidian-back', back);
+    window.addEventListener('webobsidian-server-stopped', serverStopped);
     const hidden = () => { if (document.visibilityState === 'hidden') save(); };
     window.addEventListener('desktop-command', command);
     window.addEventListener('webobsidian-background', save);
@@ -231,6 +255,8 @@ export default function App() {
     window.addEventListener('desktop-close-cancelled', cancelClose);
     document.addEventListener('visibilitychange', hidden);
     return () => {
+      window.removeEventListener('webobsidian-back', back);
+      window.removeEventListener('webobsidian-server-stopped', serverStopped);
       window.removeEventListener('desktop-command', command);
       window.removeEventListener('webobsidian-background', save);
       window.removeEventListener('pagehide', save);

@@ -2,16 +2,26 @@ import { promises as fs } from 'node:fs';
 
 /** Both CLI and MCP use this transport. It never reads notes or writes a Vault. */
 export async function operationBaseUrl(explicitUrl?: string): Promise<string> {
+  let expectedPid: number | undefined;
   let url = explicitUrl ?? process.env.WEBOBSIDIAN_URL ?? 'http://127.0.0.1:8787';
   if (!explicitUrl && process.env.WEBOBSIDIAN_ENDPOINT_FILE) {
     const endpoint = JSON.parse(await fs.readFile(process.env.WEBOBSIDIAN_ENDPOINT_FILE, 'utf8'));
     if (endpoint.protocol !== 1 || typeof endpoint.url !== 'string') throw new Error('无效本体端点文件');
+    if (!Number.isSafeInteger(endpoint.pid) || endpoint.pid <= 0) throw new Error('无效本体进程');
+    try { process.kill(endpoint.pid, 0); }
+    catch { throw new Error('本体服务已经退出，请启动 WebObsidian'); }
+    expectedPid = endpoint.pid;
     url = endpoint.url;
   }
   const parsed = new URL(url);
   if (parsed.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
       || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash)
     throw new Error('操作入口只支持本机 HTTP 根地址');
+  if (expectedPid !== undefined) {
+    const health = await fetch(new URL('/healthz', parsed), { signal: AbortSignal.timeout(3000) });
+    const state = await health.json() as { pid?: number };
+    if (!health.ok || state.pid !== expectedPid) throw new Error('本体服务尚未就绪或端点已失效');
+  }
   return parsed.origin;
 }
 export async function operationHttp(endpoint: string, body?: unknown, baseUrl?: string): Promise<unknown> {

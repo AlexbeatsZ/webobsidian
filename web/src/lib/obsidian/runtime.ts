@@ -1,3 +1,5 @@
+import { Platform } from '../platform';
+export { Platform } from '../platform';
 import { matchName, hotkeySettings } from '../search';
 import { diagramRenderer } from '../diagrams';
 import { nativeCommands, resolveNativeCommandId } from '../nativeCommands';
@@ -391,28 +393,10 @@ function debounce<T extends (...args: any[]) => any>(callback: T, delay = 0, res
   };
   return fn;
 }
-const androidApp = /\bWebObsidianAndroid\b/.test(navigator.userAgent);
-export const Platform = {
-  isDesktop: !!window.webobsidianDesktop,
-  isDesktopApp: !!window.webobsidianDesktop,
-  isMobile: androidApp,
-  isMobileApp: androidApp,
-  isPhone: false,
-  isTablet: false,
-  isWin: /Win/.test(navigator.platform),
-  isMacOS: /Mac/.test(navigator.platform),
-  isLinux: /Linux/.test(navigator.platform),
-  isAndroidApp: androidApp,
-  isIosApp: false,
-  isSafari: false,
-  resourcePathPrefix: '',
-};
 const nativeRequire = (window as any).webobsidianNativeRequire as ((name: string) => any) | undefined;
 export async function requestUrl(input: string | any) {
   const options = typeof input === 'string' ? { url: input } : input;
-  const result = nativeRequire
-    ? await nativeRequire('electron').ipcRenderer.invoke('desktop:plugin-request', options)
-    : await api.pluginRequest(options);
+  const result = await api.pluginRequest(options);
   const arrayBuffer = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0)).buffer;
   const text = new TextDecoder().decode(arrayBuffer);
   if (options.throw !== false && result.status >= 400)

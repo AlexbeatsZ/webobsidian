@@ -126,3 +126,7 @@ IME、移动手势、原生 TeX 和外部 MCP 审阅流程。
 - 自动迁移、写入或接管现用 Obsidian 会话，以及外部设备/登录站点验收。
 
 回滚用 `git revert` 回退交付提交，不重置或删除用户 vault。
+
+## Host lifecycle update (2026-11-13)
+
+The current startup, readiness, shutdown, host capabilities and failure-recovery contract is defined in [host-lifecycle.md](host-lifecycle.md). This supersedes the older fixed-port reservation, fixed total startup timeout, DOM-based chrome/Back detection and desktop-specific plugin-request path described above.

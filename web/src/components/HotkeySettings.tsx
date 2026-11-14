@@ -1,3 +1,4 @@
+import { isMacOS } from '../lib/platform';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { eventHotkey, hotkeyLabel, hotkeySignature, type Hotkey } from '@webobsidian/search-core';
 import { sharedApp, pluginRevision, subscribePlugins } from '../lib/plugins';
@@ -7,7 +8,7 @@ import Icon from './Icon';
 import '../styles/hotkeys.css';
 
 type Filter = 'all' | 'assigned' | 'unassigned' | 'custom' | 'conflicts' | 'unavailable';
-const mac = () => /Mac|iPhone|iPad/.test(navigator.platform);
+const mac = () => isMacOS();
 
 /** One live command catalog serves this page, the palette and key dispatch. */
 export default function HotkeySettings() {

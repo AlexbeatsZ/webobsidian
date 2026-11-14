@@ -1,12 +1,13 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, net, shell, safeStorage, clipboard, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
+import { app, BrowserWindow, Menu, dialog, ipcMain, shell, safeStorage, clipboard, type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { effectiveVaultPath, openExistingPath, revealVaultItem } from './paths';
 import { McpLauncher } from './mcpLauncher';
+import { writeJson } from './files';
+import { ServerProcess } from './serverProcess';
+import { type DesktopCommand } from './bridge';
 
 // ---------------------------------------------------------------------------
 // Paths & persisted desktop config
@@ -20,15 +21,15 @@ const DATA_DIR = () => path.join(app.getPath('userData'), 'server-data');
 const LOG_FILE = () => path.join(app.getPath('userData'), 'logs', 'server.log');
 const DEVELOPMENT_ICON = path.join(__dirname, '..', 'buildResources',
   process.platform === 'darwin' ? 'icon-macos.png' : process.platform === 'win32' ? 'icon-windows.ico' : 'icon.png');
-// Cold starts rebuild the Vault index before opening the HTTP listener.
-const SERVER_STARTUP_TIMEOUT_MS = 120_000;
 
 interface DesktopConfig {
   vaultPath?: string;
   trustedPlugins?: boolean;
 }
 
-let serverProc: ChildProcess | null = null;
+let serverProcess: ServerProcess | undefined;
+let serverReady = false;
+const rendererReady = new WeakSet<BrowserWindow>();
 let serverPort = 0;
 let mainWindow: BrowserWindow | null = null;
 let desktopConfig: DesktopConfig | undefined;
@@ -37,17 +38,21 @@ let initialVaultChoice: string | undefined;
 let finishingQuit = false;
 let quitRequest: Promise<void> | undefined;
 let quitRequested = false;
+const forcedClosures = new WeakSet<BrowserWindow>();
 const approvedClosures = new WeakSet<BrowserWindow>();
 let pendingClose: { window: BrowserWindow; token: string; resolve: () => void; reject: (error: Error) => void } | undefined;
 
 function prepareWindowClose(window: BrowserWindow): Promise<void> {
-  if (window.isDestroyed()) return Promise.resolve();
+  if (window.isDestroyed() || !rendererReady.has(window)) return Promise.resolve();
+  if (window.webContents.isCrashed()) return confirmUnresponsiveClose(window);
   try {
     if (new URL(window.webContents.getURL()).origin !== baseUrl(serverPort)) return Promise.resolve();
   } catch { return Promise.resolve(); }
   return new Promise<void>((resolve, reject) => {
     const token = randomUUID();
-    const timeout = setTimeout(() => finish(new Error('保存确认超时，窗口保持打开；请检查保存结果后再关闭')), 30_000);
+    const timeout = setTimeout(() => {
+      void confirmUnresponsiveClose(window).then(() => finish(), error => finish(error));
+    }, 30_000);
     const finish = (error?: Error) => {
       clearTimeout(timeout);
       if (pendingClose?.token === token) pendingClose = undefined;
@@ -69,6 +74,7 @@ function requestWindowClose(window: BrowserWindow, quit: boolean): Promise<void>
       await prepareWindowClose(window);
       if (quitRequested) {
         await mcpLauncher?.stop();
+        await serverProcess?.stop();
         finishingQuit = true;
         app.quit();
       } else if (!window.isDestroyed()) {
@@ -76,6 +82,7 @@ function requestWindowClose(window: BrowserWindow, quit: boolean): Promise<void>
         window.close();
       }
     } catch (error) {
+      approvedClosures.delete(window);
       if (!window.isDestroyed()) {
         window.webContents.send('desktop:close-cancelled');
         window.show();
@@ -84,6 +91,16 @@ function requestWindowClose(window: BrowserWindow, quit: boolean): Promise<void>
     } finally { quitRequested = false; quitRequest = undefined; }
   })();
   return quitRequest;
+}
+
+async function confirmUnresponsiveClose(window: BrowserWindow): Promise<void> {
+  const result = await dialog.showMessageBox(window, {
+    type: 'warning', title: '页面未响应',
+    message: '页面无法确认保存结果。关闭可能丢失尚未保存的编辑。',
+    buttons: ['继续编辑或等待', '关闭窗口'], defaultId: 0, cancelId: 0,
+  });
+  if (result.response !== 1) throw new Error('关闭已取消');
+  forcedClosures.add(window);
 }
 
 async function readConfig(): Promise<DesktopConfig> {
@@ -101,8 +118,7 @@ async function readConfig(): Promise<DesktopConfig> {
 }
 
 async function writeConfig(cfg: DesktopConfig): Promise<void> {
-  await fs.mkdir(path.dirname(CONFIG_FILE()), { recursive: true });
-  await fs.writeFile(CONFIG_FILE(), JSON.stringify(cfg, null, 2), 'utf8');
+  await writeJson(CONFIG_FILE(), cfg);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,18 +133,6 @@ function serverEntry(): string {
   return path.join(__dirname, '..', '.gen', 'server', 'dist', 'index.mjs');
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = createServer();
-    srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const addr = srv.address();
-      const port = typeof addr === 'object' && addr ? addr.port : 0;
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
 // GUI-launched apps (esp. macOS Finder) inherit a minimal PATH, so `git` (needed
 // by the optional vault-sync feature) is often not found. Prepend the usual spots.
 function augmentedPath(): string {
@@ -140,109 +144,28 @@ function augmentedPath(): string {
 }
 
 async function startServer(cfg: DesktopConfig): Promise<void> {
-  serverPort = await freePort();
-  await fs.mkdir(DATA_DIR(), { recursive: true });
-  await fs.mkdir(path.dirname(LOG_FILE()), { recursive: true });
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    ELECTRON_RUN_AS_NODE: '1',
-    NODE_ENV: 'production',
-    HOST: '127.0.0.1',
-    PORT: String(serverPort),
-    DATA_DIR: DATA_DIR(),
-    VAULT_PATH: cfg.vaultPath,
-    WEBOBSIDIAN_INITIAL_VAULT: initialVaultChoice,
-    // The native picker authorizes its selected root, including external disks.
-    ALLOWED_ROOTS: [os.homedir(), cfg.vaultPath].filter(Boolean).join(','),
-    PATH: augmentedPath(),
-  };
-
-  // Run the bundled server with Electron's own Node (no external node needed).
-  const log = (await fs.open(LOG_FILE(), 'a')).createWriteStream();
-  const startedAt = Date.now();
-  log.write(`\n[desktop] starting server at ${new Date(startedAt).toISOString()} (port=${serverPort}, timeout=${SERVER_STARTUP_TIMEOUT_MS}ms)\n`);
-  const child = spawn(process.execPath, [serverEntry()], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  serverProc = child;
-  let startupError: Error | undefined;
-
-  child.stdout?.pipe(log, { end: false });
-  child.stderr?.pipe(log, { end: false });
-  child.on('error', (err) => {
-    startupError = new Error(`Could not start the server: ${err.message}\nServer log: ${LOG_FILE()}`);
+  serverProcess = new ServerProcess({
+    executable: process.execPath, entry: serverEntry(), dataDir: DATA_DIR(), logFile: LOG_FILE(),
+    env: {
+      ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_ENV: 'production',
+      DATA_DIR: DATA_DIR(), VAULT_PATH: cfg.vaultPath,
+      WEBOBSIDIAN_INITIAL_VAULT: initialVaultChoice,
+      WEBOBSIDIAN_REQUIRE_VAULT: '1',
+      ALLOWED_ROOTS_JSON: JSON.stringify([os.homedir(), cfg.vaultPath].filter(Boolean)),
+      PATH: augmentedPath(),
+    },
+    onExit: error => {
+      serverReady = false;
+      dialog.showErrorBox('本地服务已停止', `${error.message}\n请重新启动 WebObsidian，当前页面的编辑仍保留在窗口中。`);
+      mainWindow?.webContents.send('desktop:server-stopped');
+    },
   });
-  child.on('exit', (code, signal) => {
-    if (!app.isPackaged) console.error(`[server] exited code=${code} signal=${signal}`);
-    if (serverProc === child) serverProc = null;
-  });
-  child.on('close', (code, signal) => {
-    // Finish both output streams before reporting a startup failure so the log
-    // is available even when the app immediately closes the error dialog.
-    log.end(() => {
-      startupError ??= new Error(`Server exited before becoming healthy (code=${code}, signal=${signal}).\nServer log: ${LOG_FILE()}`);
-    });
-  });
-
-  await waitForHealth(serverPort, () => startupError);
-  log.write(`[desktop] server healthy after ${Date.now() - startedAt}ms\n`);
+  serverPort = await serverProcess.start();
+  serverReady = true;
 }
 
 function baseUrl(port: number): string {
   return `http://127.0.0.1:${port}`;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function waitForHealth(port: number, failure: () => Error | undefined): Promise<void> {
-  const deadline = Date.now() + SERVER_STARTUP_TIMEOUT_MS;
-  for (;;) {
-    const startupError = failure();
-    if (startupError) throw startupError;
-    try {
-      const res = await apiRequest('GET', `${baseUrl(port)}/healthz`);
-      if (res.status === 200) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw failure() ?? new Error(`Server did not become healthy within ${SERVER_STARTUP_TIMEOUT_MS / 1000} seconds.\nServer log: ${LOG_FILE()}`);
-    await delay(250);
-  }
-}
-
-interface ApiResult {
-  status: number;
-  json: unknown;
-}
-
-function apiRequest(
-  method: string,
-  url: string,
-  body?: unknown,
-  headers?: Record<string, string>,
-): Promise<ApiResult> {
-  return new Promise((resolve, reject) => {
-    const req = net.request({ method, url });
-    if (body !== undefined) req.setHeader('Content-Type', 'application/json');
-    for (const [k, v] of Object.entries(headers ?? {})) req.setHeader(k, v);
-    let data = '';
-    req.on('response', (res) => {
-      res.on('data', (chunk) => (data += chunk.toString()));
-      res.on('end', () => {
-        let json: unknown = null;
-        try {
-          json = data ? JSON.parse(data) : null;
-        } catch {
-          json = null;
-        }
-        resolve({ status: res.statusCode ?? 0, json });
-      });
-    });
-    req.on('error', reject);
-    if (body !== undefined) req.write(JSON.stringify(body));
-    req.end();
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +228,7 @@ function createWindow(starting = false): void {
       contextIsolation: !desktopConfig?.trustedPlugins,
       nodeIntegration: !!desktopConfig?.trustedPlugins,
       sandbox: !desktopConfig?.trustedPlugins,
-      additionalArguments: desktopConfig?.trustedPlugins ? [`--webobsidian-native-vault=${encodeURIComponent(desktopConfig.vaultPath ?? '')}`] : [],
+      additionalArguments: [`--webobsidian-version=${app.getVersion()}`, ...(desktopConfig?.trustedPlugins ? [`--webobsidian-native-vault=${encodeURIComponent(desktopConfig.vaultPath ?? '')}`] : [])],
     },
   });
   mainWindow.webContents.setUserAgent(`${mainWindow.webContents.getUserAgent()} WebObsidianDesktop`);
@@ -345,7 +268,10 @@ function createWindow(starting = false): void {
     event.preventDefault();
     void requestWindowClose(window, process.platform !== 'darwin');
   });
-  window.webContents.on('will-prevent-unload', () => {
+  window.webContents.on('did-start-loading', () => rendererReady.delete(window));
+  window.webContents.on('render-process-gone', () => rendererReady.add(window));
+  window.webContents.on('will-prevent-unload', event => {
+    if (forcedClosures.has(window)) { event.preventDefault(); return; }
     approvedClosures.delete(window);
     finishingQuit = false;
     window.webContents.send('desktop:close-cancelled');
@@ -363,12 +289,12 @@ function createWindow(starting = false): void {
 function buildMenu(): void {
   const isMac = process.platform === 'darwin';
   // Native menus dispatch the same registered commands as the palette/hotkeys.
-  const command = (id: string) => () => mainWindow?.webContents.send('desktop:command', id);
+  const command = (id: DesktopCommand) => () => mainWindow?.webContents.send('desktop:command', id);
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{ label: 'WebObsidian', submenu: [
       { role: 'about' as const, label: '关于 WebObsidian' },
       { type: 'separator' as const },
-      { label: '设置…', accelerator: 'Command+,', click: command('settings') },
+      { label: '设置…', click: command('settings') },
       { type: 'separator' as const },
       { role: 'services' as const, label: '服务' },
       { type: 'separator' as const },
@@ -381,9 +307,9 @@ function buildMenu(): void {
     {
       label: "文件",
       submenu: [
-        { label: '新建笔记', accelerator: 'Control+N', click: command('new') },
-        { label: '打开笔记…', accelerator: 'Control+O', click: command('files') },
-        { label: '保存', accelerator: 'Control+S', click: command('save') },
+        { label: '新建笔记', click: command('new') },
+        { label: '打开笔记…', click: command('files') },
+        { label: '保存', click: command('save') },
         { type: 'separator' },
         { label: "信任原生插件 (下次启动生效)", type: 'checkbox', checked: !!desktopConfig?.trustedPlugins,
           click: async (item) => { const cfg = await readConfig(); cfg.trustedPlugins = item.checked; await writeConfig(cfg); } },
@@ -514,6 +440,11 @@ function registerDesktopRequests(): void {
     if (!desktopWindow(event)) throw new Error('Local application frame required');
     return mcp.connect();
   });
+  ipcMain.on('desktop:renderer-ready', (event, ready: unknown) => {
+    const window = desktopWindow(event);
+    if (!window) return;
+    if (ready === true) rendererReady.add(window); else rendererReady.delete(window);
+  });
   ipcMain.on('desktop:close-result', (event, token: unknown, result: unknown) => {
     const window = desktopWindow(event);
     if (!window || !pendingClose || pendingClose.window !== window || pendingClose.token !== token) return;
@@ -540,14 +471,7 @@ function registerDesktopRequests(): void {
     if (typeof requested !== 'string') throw new Error('文件路径无效');
     await revealVaultItem(DATA_DIR(), requested, desktopConfig?.vaultPath);
   });
-  ipcMain.handle('desktop:plugin-request', async (event, options) => {
-    if (!desktopWindow(event) || !desktopConfig?.trustedPlugins) throw new Error('Native plugins are disabled');
-    const url = new URL(options.url);
-    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('HTTP(S) URL required');
-    const response = await net.fetch(url.href, {method:options.method ?? 'GET',headers:options.headers,body:options.body,signal:AbortSignal.timeout(30000)});
-    const headers: Record<string,string> = {}; response.headers.forEach((value,key) => headers[key] = value);
-    return {status:response.status,headers,base64:Buffer.from(await response.arrayBuffer()).toString('base64')};
-  });
+
 }
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -559,6 +483,10 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0 && desktopConfig) createWindow(!serverReady);
+  });
+
   app.whenReady().then(async () => {
     try {
       if (!app.isPackaged && process.platform === 'darwin') app.dock?.setIcon(DEVELOPMENT_ICON);
@@ -566,21 +494,17 @@ if (!app.requestSingleInstanceLock()) {
       if (!cfg) { app.quit(); return; }
       desktopConfig = cfg;
       await writeConfig(cfg);
+      registerTitleBar();
       createWindow(true);
       await startServer(cfg);
-      if (!mainWindow || mainWindow.isDestroyed()) return;
       buildMenu();
-      registerTitleBar();
       registerDesktopRequests();
       if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(baseUrl(serverPort));
     } catch (err) {
-      dialog.showErrorBox('WebObsidian failed to start', String(err instanceof Error ? err.stack ?? err.message : err));
+      await serverProcess?.stop();
+      if (!quitRequested && !finishingQuit) dialog.showErrorBox('WebObsidian failed to start', String(err instanceof Error ? err.stack ?? err.message : err));
       app.quit();
     }
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0 && serverPort) createWindow();
-    });
   });
 
   app.on('window-all-closed', () => {
@@ -593,17 +517,11 @@ if (!app.requestSingleInstanceLock()) {
       void requestWindowClose(mainWindow, true);
       return;
     }
-    if (!finishingQuit && mcpLauncher) {
+    if (!finishingQuit && (mcpLauncher || serverProcess)) {
       event.preventDefault();
-      if (!quitRequest) quitRequest = mcpLauncher.stop().then(() => { finishingQuit = true; app.quit(); })
+      if (!quitRequest) quitRequest = Promise.resolve().then(async () => { await mcpLauncher?.stop(); await serverProcess?.stop(); finishingQuit = true; app.quit(); })
         .catch(error => dialog.showErrorBox('无法退出 WebObsidian', String(error))).finally(() => { quitRequest = undefined; });
       return;
-    }
-  });
-  app.on('will-quit', () => {
-    if (serverProc) {
-      serverProc.kill();
-      serverProc = null;
     }
   });
 }

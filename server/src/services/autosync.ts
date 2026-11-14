@@ -5,11 +5,18 @@ import { fileSyncPreferences } from './fileSyncPreferences.js';
 /** Periodic auto-sync when enabled in settings (PRD FR-4). */
 let timer: NodeJS.Timeout | null = null;
 let running = false;
+let active: Promise<void> | undefined;
+
+export async function stopAutoSync(): Promise<void> {
+  if (timer) clearInterval(timer);
+  timer = null;
+  await active;
+}
 
 export function startAutoSync(): void {
   if (timer) clearInterval(timer);
   // Re-evaluate settings each tick so toggling takes effect without restart.
-  timer = setInterval(tick, 30_000);
+  timer = setInterval(() => { active = tick(); }, 30_000);
 }
 
 async function tick(): Promise<void> {

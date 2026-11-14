@@ -105,3 +105,7 @@ user acceptance. The follow-up Windows x64 portable build 0.1.5 includes this UI
 packaged version, UI markers, 186 resources and standalone server checks pass.
 The former 0.1.4 artifacts were removed before packaging. Existing app, vault and
 server/public were preserved; the new portable was not launched or installed.
+
+## Host lifecycle update (2026-11-13)
+
+The current startup, readiness, shutdown, host capabilities and failure-recovery contract is defined in [host-lifecycle.md](host-lifecycle.md). This supersedes the older fixed-port reservation, fixed total startup timeout, DOM-based chrome/Back detection and desktop-specific plugin-request path described above.

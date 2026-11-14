@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getVaultRoot, readFileSnapshot } from './vaultFile.js';
-import { INDEX_FILE } from '../config.js';
+import { INDEX_FILE, runtimeCapabilities } from '../config.js';
 import { SEARCH_VERSION } from '@webobsidian/search-core';
 import { VaultCatalog, replaceCatalog, CATALOG_SCHEMA_VERSION } from './catalog.js';
 import { QmdEngine, qmd, replaceSearch, supportsSearchCache } from './search.js';
@@ -70,11 +70,17 @@ async function applyChanges(engine: QmdEngine, live: VaultCatalog): Promise<bool
 }
 
 let pendingSave: NodeJS.Timeout | undefined;
+let pendingCache: { engine: QmdEngine; root: string } | undefined;
+export async function flushSearchCache(): Promise<void> {
+  clearTimeout(pendingSave);
+  const pending = pendingCache;
+  pendingCache = undefined;
+  if (pending && qmd === pending.engine) await pending.engine.save(pending.root);
+}
 function scheduleSave(engine: QmdEngine, root: string) {
   clearTimeout(pendingSave);
-  pendingSave = setTimeout(() => {
-    if (qmd === engine) void engine.save(root);
-  }, SAVE_DELAY_MS);
+  pendingCache = { engine, root };
+  pendingSave = setTimeout(() => { void flushSearchCache(); }, SAVE_DELAY_MS);
   pendingSave.unref();
 }
 
@@ -105,7 +111,7 @@ export async function rebuildVaultIndex(restore: boolean | Promise<SearchCache |
     }
   }
   await walk(root);
-  if (process.env.WEBOBSIDIAN_PLATFORM === 'android') console.log(`[vault index] scanned ${next.entries.size} paths`);
+  if (runtimeCapabilities.indexProgress) console.log(`[vault index] scanned ${next.entries.size} paths`);
   const saved = await cache;
   let engine: QmdEngine | undefined,
     changed = true;
@@ -124,7 +130,7 @@ export async function rebuildVaultIndex(restore: boolean | Promise<SearchCache |
       try {
         const snapshot = await readFileSnapshot(rel);
         engine.upsertNote(rel, parseNote(rel, snapshot.content));
-        if (++indexedNotes % 50 === 0 && process.env.WEBOBSIDIAN_PLATFORM === 'android')
+        if (++indexedNotes % 50 === 0 && runtimeCapabilities.indexProgress)
           console.log(`[vault index] parsed ${indexedNotes} notes`);
       } catch (error) {
         console.warn('[vault index] unreadable note', rel, error);

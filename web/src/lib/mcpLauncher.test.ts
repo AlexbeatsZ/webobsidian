@@ -9,7 +9,7 @@ import { McpLauncher } from '../../../desktop/src/mcpLauncher';
 vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
 const fixtures: string[] = [];
 afterEach(async () => {
-  vi.clearAllMocks(); vi.unstubAllGlobals();
+  vi.clearAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers();
   await Promise.all(fixtures.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true })));
 });
 async function fixture() {
@@ -28,7 +28,7 @@ function child() {
   const value = Object.assign(new EventEmitter(), {
     pid: 123, exitCode: null as number | null, killed: false,
     stdout: new EventEmitter(), stderr: new EventEmitter(),
-    kill() { this.killed = true; this.exitCode = 0; queueMicrotask(() => value.emit('close', 0)); return true; },
+    kill(): boolean { this.killed = true; this.exitCode = 0; queueMicrotask(() => value.emit('close', 0)); return true; },
   });
   return value;
 }
@@ -84,6 +84,29 @@ describe('bundled MCP connection owner', () => {
     expect(spawn).toHaveBeenCalledOnce();
     await launcher.stop();
     expect(runtime.killed).toBe(true);
+    expect((await launcher.inspect()).connected).toBe(false);
+  });
+  it('escalates an owned child that ignores graceful stop', async () => {
+    const { launcher, options } = await fixture();
+    await launcher.configure({ tunnelId: 'tunnel_fixture123', apiKey: 'fixture-secret' });
+    const runtime = child();
+    const kill = vi.fn((signal?: string) => {
+      runtime.killed = true;
+      if (signal === 'SIGKILL') { runtime.exitCode = 0; queueMicrotask(() => runtime.emit('close', 0)); }
+      return true;
+    });
+    runtime.kill = kill;
+    vi.mocked(spawn).mockImplementationOnce((() => {
+      void fs.writeFile(path.join(options.runtimeDir, 'health.url'), 'http://127.0.0.1:19999');
+      return runtime;
+    }) as any);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')));
+    expect((await launcher.connect()).ok).toBe(true);
+    vi.useFakeTimers();
+    const stopping = launcher.stop();
+    await vi.advanceTimersByTimeAsync(5000);
+    await stopping;
+    expect(kill).toHaveBeenLastCalledWith('SIGKILL');
     expect((await launcher.inspect()).connected).toBe(false);
   });
   it('reports child failure with bounded redacted output and permits a manual retry', async () => {

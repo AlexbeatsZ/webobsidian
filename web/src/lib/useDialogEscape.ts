@@ -1,3 +1,4 @@
+import { registerBackHandler } from './host';
 import { useEffect, useRef } from 'react';
 
 /** Closes an open modal on Escape unless an inner control already handled the key. */
@@ -9,7 +10,8 @@ export function useDialogEscape(open: boolean, close: () => void): void {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) latest.current();
     };
+    const stopBack = registerBackHandler(() => latest.current());
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => { stopBack(); window.removeEventListener('keydown', onKey); };
   }, [open]);
 }

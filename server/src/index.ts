@@ -35,7 +35,7 @@ import { guardVaultMutations, bindMaintenanceClients, maintenanceClientConnected
   maintenanceClientMessage, vaultGeneration, inspectMaintenanceWorkspace,
   assertMaintenanceWorkspaceSafe, withVaultMaintenance, noteVaultMutation } from './services/vaultMaintenance.js';
 import { initSearch, qmd } from './services/search.js';
-import { loadSearchCache } from './services/vaultindex.js';
+import { loadSearchCache, flushSearchCache } from './services/vaultindex.js';
 import { setBroadcaster, broadcast } from './services/realtime.js';
 import { isVaultConfigurationPath } from './services/vaultConfiguration.js';
 import { ensureVault } from './services/vault.js';
@@ -43,9 +43,9 @@ import { getVaultRoot, clearVaultStats } from './services/vaultFile.js';
 import { vaultConfigurationIdentity } from './services/vaultConfiguration.js';
 import { asyncHandler } from './middleware/error.js';
 import { enableFileUpdates, queueFileUpdate, drainFileUpdates, rebuildFileIndexes } from './services/fileupdates.js';
-import { startAutoSync } from './services/autosync.js';
+import { startAutoSync, stopAutoSync } from './services/autosync.js';
 import { fileSyncRouter } from './routes/fileSync.js';
-import { startFileSync, recoverFileSync, noteFileSyncChange } from './services/fileSync.js';
+import { startFileSync, stopFileSync, recoverFileSync, noteFileSyncChange } from './services/fileSync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -57,6 +57,46 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
 });
+
+let ready = false;
+let stopping = false;
+let listener: http.Server | undefined;
+let sockets: WebSocketServer | undefined;
+const endpointFile = path.join(config.dataDir, 'operations-endpoint.json');
+const startingEndpoint = path.join(config.dataDir, 'operations-endpoint.starting.json');
+
+async function shutdown(): Promise<void> {
+  if (stopping) return;
+  stopping = true;
+  ready = false;
+  const deadline = setTimeout(() => { console.error('[shutdown] deadline exceeded'); process.exit(1); }, 12_000);
+  try {
+    const closed = new Promise<void>(resolve => { if (listener) listener.close(() => resolve()); else resolve(); });
+    listener?.closeIdleConnections();
+    sockets?.clients.forEach(client => client.close(1001, 'Application closing'));
+    await closed;
+    await vaultWatcher?.close();
+    await drainFileUpdates();
+    await Promise.all([stopAutoSync(), stopFileSync(), flushSearchCache()]);
+    await qmd.flushCache();
+  } catch (error) { console.error('[shutdown]', error); }
+  finally {
+    for (const filename of [startingEndpoint, endpointFile]) {
+      try {
+        const endpoint = JSON.parse(await fs.readFile(filename, 'utf8'));
+        if (endpoint.pid === process.pid) await fs.rm(filename, { force: true });
+      } catch { /* Startup may not have published an endpoint. */ }
+    }
+    clearTimeout(deadline);
+    process.exit(0);
+  }
+}
+process.on('SIGTERM', () => { void shutdown(); });
+process.on('SIGINT', () => { void shutdown(); });
+process.on('message', message => {
+  if ((message as { type?: string })?.type === 'shutdown') void shutdown();
+});
+if (process.connected) process.on('disconnect', () => { void shutdown(); });
 
 async function main() {
   await loadSettings();
@@ -72,6 +112,11 @@ async function main() {
       ensureVaultBrowsable(draft);
     });
     if (path.resolve(previous) !== path.resolve(initialVault)) await selectVaultWorkspace(previous, initialVault);
+  }
+  if (process.env.WEBOBSIDIAN_REQUIRE_VAULT === '1') {
+    const vault = (await getSettings()).vault.path;
+    await assertVaultPathAllowed({ path: vault, allowedRoots: config.allowedRoots });
+    await fs.access(vault, fs.constants.R_OK | fs.constants.W_OK);
   }
   await ensureVault();
   await recoverFileSync();
@@ -108,7 +153,11 @@ async function main() {
   );
 
   // Local readiness endpoint for the desktop launcher.
-  app.get('/healthz', (_req, res) => res.json({ ok: true }));
+  app.get('/healthz', (_req, res) => res.status(ready ? 200 : 503).json({ ok: ready, pid: process.pid }));
+  app.use((_req, res, next) => {
+    if (ready) next();
+    else res.status(503).json({ error: stopping ? '本地服务正在关闭' : '正在准备笔记库索引' });
+  });
   app.get('/api/vault-identity', asyncHandler(async (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({ vault: (await vaultConfigurationIdentity()).vault });
@@ -152,6 +201,19 @@ async function main() {
 
   app.use(errorHandler);
 
+  // Bind first so hosts can distinguish a responsive cold index from a hung process.
+  const server = listener = http.createServer(app);
+  setupWebsocket(server);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(config.port, config.host, resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing local listener');
+  const temporary = endpointFile + `.${process.pid}.tmp`;
+  await fs.writeFile(temporary, JSON.stringify({ protocol: 1, pid: process.pid, url: `http://127.0.0.1:${address.port}` }), { mode: 0o600 });
+  await fs.rename(temporary, startingEndpoint);
+
   // Build search index + link graph
   const indexStarted = Date.now();
   console.log('[boot] indexing vault...');
@@ -168,8 +230,6 @@ async function main() {
   console.log(`[boot] index ready after ${Date.now() - indexStarted}ms`);
   void qmd.loaded().then(() => console.log(`[boot] search index loaded after ${Date.now() - indexStarted}ms`));
 
-  const server = http.createServer(app);
-  setupWebsocket(server);
   configureVaultSwitch(async commit => {
     const previousWatcher = vaultWatcher;
     vaultWatcher = undefined;
@@ -187,24 +247,17 @@ async function main() {
   startAutoSync();
   startFileSync();
 
-  server.listen(config.port, config.host, () => {
-    const address = server.address();
-    const port = typeof address === 'object' && address ? address.port : config.port;
-    void fs.writeFile(path.join(config.dataDir, 'operations-endpoint.json'), JSON.stringify({
-      protocol: 1, pid: process.pid, url: `http://127.0.0.1:${port}`,
-    }), { mode: 0o600 }).catch(error => console.warn('[operations endpoint]', error));
-    void getVaultRoot().then(vault => {
-      console.log(`\n  WebObsidian server → http://${config.host}:${port}`);
-      console.log(`  Vault: ${vault}`);
-      console.log(`  Data:  ${config.dataDir}\n`);
-    });
-  });
+  ready = true;
+  await fs.rename(startingEndpoint, endpointFile);
+  console.log(`\n  WebObsidian server → http://${config.host}:${address.port}`);
+  console.log(`  Vault: ${await getVaultRoot()}`);
+  console.log(`  Data:  ${config.dataDir}\n`);
 }
 
 // --- WebSocket: broadcast filesystem & UI-state events to connected clients ----
 // HTTP and WebSocket use the same local-request check.
 function setupWebsocket(server: http.Server) {
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = sockets = new WebSocketServer({ noServer: true });
   bindMaintenanceClients(() => wss.clients);
 
   server.on('upgrade', (req, socket, head) => {
@@ -214,7 +267,7 @@ function setupWebsocket(server: http.Server) {
     } catch {
       pathname = '';
     }
-    if (pathname !== '/ws') {
+    if (!ready || pathname !== '/ws') {
       socket.destroy();
       return;
     }
@@ -336,7 +389,17 @@ async function dirExists(p: string): Promise<boolean> {
   }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error('Fatal:', err);
+  if (process.env.WEBOBSIDIAN_EMBEDDED === '1') {
+    // process.exit would also end the Android Activity that must offer recovery.
+    await fs.mkdir(config.dataDir, { recursive: true });
+    const temporary = startingEndpoint + `.${process.pid}.tmp`;
+    await fs.writeFile(temporary, JSON.stringify({ protocol: 1, pid: process.pid,
+      failure: String(err instanceof Error ? err.message : err).slice(0, 4096) }), { mode: 0o600 });
+    await fs.rename(temporary, startingEndpoint);
+    setInterval(() => {}, 60_000);
+    return;
+  }
   process.exit(1);
 });

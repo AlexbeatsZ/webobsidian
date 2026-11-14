@@ -1,3 +1,4 @@
+import { useDialogEscape } from '../lib/useDialogEscape';
 import { useEffect, useRef, useState } from 'react';
 import { OPEN_ATTACHMENT_CLEANUP } from '../lib/attachments/commands';
 import type { CleanupDialogHost, CleanupOptions, CleanupPreview, CleanupResult } from '../lib/attachments/types';
@@ -62,6 +63,7 @@ export default function AttachmentCleanupDialog({ host }: { host: CleanupDialogH
     const timer = window.setTimeout(expire, Math.max(0, preview.expiresAt - Date.now()));
     return () => window.clearTimeout(timer);
   }, [preview, open]);
+  useDialogEscape(open, () => close());
   const close = () => {
     if (busyRef.current) return;
     sequence.current++; abort.current?.abort(); setOpen(false); setConfirming(false);

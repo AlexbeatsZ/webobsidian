@@ -4,7 +4,13 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-08 (daily builds without debugging)
+Cập nhật lần cuối: 2026-11-13 (native host lifecycle)
+
+## Native host lifecycle (PRD 1.41)
+- [x] Share native identity, desktop bridge types, exports/back dispatch and server-side plugin requests
+- [x] Repair startup discovery, close/quit coordination, persistence and stale endpoint handling
+- [x] Repair Android recovery, runtime extraction, UTF-8 paths, clipboard and export integration
+- [~] Verify regression suites and native packages, publish native packages and deploy Redmi K70 only
 
 ## Daily builds without debugging (PRD 1.40)
 - [x] Add a non-debuggable tablet release variant preserving the installed package/certificate
@@ -652,6 +658,7 @@ boundary requested by the owner. Loaded plugins are not a claim of complete pari
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-11-13 (PRD 1.41) 开始按三端审查逐项核实和修复，使用现有 DocumentSession、VaultCatalog、插件请求和保存退出链路，处理宿主启动/关闭及 Android 恢复。
 - 2026-11-08 (PRD 1.40): Android66已原位部署，tabletRelease保留旧.debug身份但manifest/BuildConfig/JNI/WebView调试均关闭；两机无DEBUGGABLE、run-as拒绝，原签名/UID/首次安装/权限保留。Mac/OMEN/ROG65均正常启动无调试参数。Android66两APK大小/标签源核对通过，旧65发布说明标记替代；详见tests/reports/android-release-20261108.md。
 - 2026-11-08 (PRD 1.39): 0.1.65已部署Mac/OMEN/ROG/平板/RedmiK70，Mac/OMEN真实STEM健康，ROG保留原生选库流程，Android保留原签名/UID/首次安装时间但锁屏UI验收待解锁。Mac后续仅arm64；桌面Latest 7资产与Android独立预发布2APK的大小/tag源一致。旧Mac Intel输入、Android旧APK与临时源码/密钥、Windows旧release及临时构建已清理；详见tests/reports/device-deployment-20261108.md。
 - 2026-11-06 (PRD 1.38): 连续文档0.1.64已发布Latest；统一原生文件标题/H1/正文，标题改名同步JSON；目录大纲入口/逐文件与标题折叠、共享MD/PDF缩略图及不可绘制块留白。修复公式status误判、空编辑器高度污染、导航换窗/程序位移及CM/PDF双补偿。553项单元、三端类型/构建、聚合浏览器多轮与真实25章原生副本验收通过，Mac双架构签名和7资产大小/tag源一致。安装版未替换。

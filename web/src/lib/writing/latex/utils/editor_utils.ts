@@ -1,5 +1,5 @@
 // @ts-nocheck -- adapted upstream rule implementation; native boundaries are type checked.
-const Platform = {isIosApp: false, isAndroidApp: false, isMobileApp: false, isDesktopApp: true};
+import { Platform } from '../../../platform';
 import { EditorView } from "@codemirror/view";
 import { type NodeIterator, type SyntaxNode, Tree, TreeCursor } from "@lezer/common";
 import { EditorState } from "@codemirror/state";

@@ -1,3 +1,4 @@
+import { isMacOS } from './platform';
 import type { EditorState } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { App } from './obsidian/runtime';
@@ -95,7 +96,7 @@ export class CommandManager extends Events {
     const config = hotkeySettings(), revision = this.getRevision(), native = this.getNative();
     if (this.keyCache?.config === config && this.keyCache.revision === revision && this.keyCache.native === native) return this.keyCache;
     const bindings = new Map<string, { command: Command; custom: boolean }[]>(), blocked = new Set<string>();
-    const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+    const mac = isMacOS();
     for (const command of this.listCommands()) {
       const custom = Object.hasOwn(config.bindings, command.id);
       for (const binding of this.getHotkeys(command.id)) {
@@ -113,7 +114,7 @@ export class CommandManager extends Events {
     if (target?.closest('[data-hotkey-recorder], [role="dialog"], .modal-container, .settings-overlay, .palette-backdrop')) return false;
     const binding = eventHotkey(event);
     if (!binding) return false;
-    const index = this.keyIndex(), signature = hotkeySignature(binding, /Mac|iPhone|iPad/.test(navigator.platform));
+    const index = this.keyIndex(), signature = hotkeySignature(binding, isMacOS());
     const inEditor = !!target?.closest('.cm-editor'), typing = !!target?.closest('input, textarea, [contenteditable="true"]');
     let candidates = (index.bindings.get(signature) ?? []).filter(({ command }) => !command.hotkeyScope || inEditor);
     if (typing && !inEditor && !event.ctrlKey && !event.metaKey && !event.altKey) return false;

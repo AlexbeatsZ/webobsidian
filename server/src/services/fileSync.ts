@@ -16,6 +16,7 @@ let recovering = false;
 let timer: NodeJS.Timeout | undefined;
 let debounce: NodeJS.Timeout | undefined;
 let lastAttempt = 0;
+let stopping = false;
 
 export { fileSyncPreferences } from './fileSyncPreferences.js';
 
@@ -74,13 +75,18 @@ export async function recoverFileSync(): Promise<void> {
 export function noteFileSyncChange(relative: string): void {
   if (!current) return;
   current.engine.noteChanged(relative);
+  if (stopping) return;
   if (!current.engine.preferences.enabled) return;
   if (debounce) clearTimeout(debounce);
-  debounce = setTimeout(() => { void runFileSync().catch(error => console.warn('[file-sync]', error.message)); }, 1500);
+  debounce = setTimeout(() => {
+    debounce = undefined;
+    void runFileSync().catch(error => console.warn('[file-sync]', error.message));
+  }, 1500);
   debounce.unref();
 }
 
 export function startFileSync(): void {
+  stopping = false;
   setFileSyncNotifier(noteFileSyncChange);
   if (timer) clearInterval(timer);
   timer = setInterval(() => {
@@ -90,4 +96,13 @@ export function startFileSync(): void {
     })().catch(error => console.warn('[file-sync]', error.message));
   }, 5000);
   timer.unref();
+}
+
+export async function stopFileSync(): Promise<void> {
+  stopping = true;
+  clearInterval(timer);
+  const pending = Boolean(debounce);
+  clearTimeout(debounce);
+  debounce = undefined;
+  if (current && (pending || current.engine.busy)) await runFileSync();
 }

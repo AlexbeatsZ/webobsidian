@@ -26,27 +26,15 @@ export function installTitleBar(): void {
   fallback.setAttribute('aria-hidden', 'true');
   root.before(fallback);
 
-  // Observe the theme wrapper's class/direct children, never the editor subtree.
-  let lastDark: boolean | undefined;
   const syncChrome = () => {
-    const wrapper = root.firstElementChild;
-    fallback.hidden = !!wrapper?.querySelector(':scope > .app');
-    const dark = wrapper?.classList.contains('theme-dark') ?? false;
-    if (dark === lastDark) return;
-    lastDark = dark;
+    const dark = document.documentElement.dataset.nativeDark === 'true';
+    const workspace = document.documentElement.dataset.nativeWorkspace === 'true';
+    fallback.hidden = workspace;
     fallback.dataset.dark = String(dark);
     if (process.platform !== 'darwin') ipcRenderer.send('desktop:titlebar-theme', dark);
   };
-  const themeObserver = new MutationObserver(syncChrome);
-  const watchTheme = () => {
-    themeObserver.disconnect();
-    if (root.firstElementChild) themeObserver.observe(root.firstElementChild, {
-      attributes: true, attributeFilter: ['class'], childList: true,
-    });
-    syncChrome();
-  };
-  new MutationObserver(watchTheme).observe(root, { childList: true });
-  watchTheme();
+  window.addEventListener('desktop:chrome', syncChrome);
+  syncChrome();
 
   // Preserve access to vault/window actions without displaying File/Edit labels.
   let opening = false;

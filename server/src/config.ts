@@ -10,6 +10,11 @@ export interface RuntimeConfig {
 }
 
 function resolveRoots(): string[] {
+  if (process.env.ALLOWED_ROOTS_JSON) {
+    const roots: unknown = JSON.parse(process.env.ALLOWED_ROOTS_JSON);
+    if (!Array.isArray(roots) || roots.some(root => typeof root !== 'string')) throw new Error('Invalid allowed roots');
+    return roots.map(root => path.resolve(root));
+  }
   const raw = process.env.ALLOWED_ROOTS?.trim();
   if (raw) {
     return raw.split(',').map((p) => path.resolve(p.trim())).filter(Boolean);
@@ -27,3 +32,11 @@ export const config: RuntimeConfig = {
 
 export const SETTINGS_FILE = path.join(config.dataDir, 'settings.json');
 export const INDEX_FILE = path.join(config.dataDir, 'qmd-index.json');
+
+// Legacy platform environment remains accepted for old development launchers.
+export const runtimeCapabilities = {
+  get searchCache() { return process.env.WEBOBSIDIAN_SEARCH_CACHE !== undefined
+    ? process.env.WEBOBSIDIAN_SEARCH_CACHE !== '0' : process.env.WEBOBSIDIAN_PLATFORM !== 'android'; },
+  get indexProgress() { return process.env.WEBOBSIDIAN_INDEX_PROGRESS !== undefined
+    ? process.env.WEBOBSIDIAN_INDEX_PROGRESS === '1' : process.env.WEBOBSIDIAN_PLATFORM === 'android'; },
+};

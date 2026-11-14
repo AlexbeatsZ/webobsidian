@@ -1,14 +1,10 @@
+import { host } from '../host';
 import { getMenuConfigurationController } from './controller';
 
-export function downloadMenuConfiguration(): void {
+export async function downloadMenuConfiguration(): Promise<void> {
   const controller = getMenuConfigurationController();
   if (!controller) throw new Error('菜单配置尚未初始化');
-  const url = URL.createObjectURL(new Blob([controller.exportSources()], { type: 'application/json;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'webobsidian-menu-config.json';
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await host.download(new Blob([controller.exportSources()], { type: 'application/json;charset=utf-8' }), 'webobsidian-menu-config.json');
 }
 
 /** Aggregate into nativeCommands; no parallel command registry is installed. */

@@ -18,6 +18,21 @@ public final class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private boolean storagePending;
     private boolean opening;
+    private NativeBridge bridge;
+    private Thread readiness;
+    private String pendingVault;
+    private boolean runtimeFailureShown;
+    private final Runnable checkRuntime = new Runnable() {
+        @Override public void run() {
+            if (web != null && RuntimeHost.getFailure() != null && !runtimeFailureShown) {
+                runtimeFailureShown = true;
+                new AlertDialog.Builder(MainActivity.this).setTitle("本地服务已停止")
+                    .setMessage("当前页面的编辑仍保留。重新启动会关闭页面，尚未保存的编辑请先复制。")
+                    .setNegativeButton("保留页面", null).setPositiveButton("重新启动", (dialog, which) -> restartRuntime(null)).show();
+            }
+            handler.postDelayed(this, 2000);
+        }
+    };
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override public void onCreate(Bundle state) {
@@ -44,25 +59,41 @@ public final class MainActivity extends Activity {
         });
         setContentView(content);
         content.requestApplyInsets();
+        bridge = new NativeBridge(this);
+        if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+            android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
+        java.io.File restart = new java.io.File(getFilesDir(), "restart-vault.json");
+        if (restart.isFile()) {
+            try {
+                String chosen = new org.json.JSONObject(new String(java.nio.file.Files.readAllBytes(restart.toPath()), java.nio.charset.StandardCharsets.UTF_8)).getString("path");
+                java.nio.file.Files.delete(restart.toPath());
+                startWorkspace(chosen);
+                return;
+            } catch (Exception error) { showVaultChoice(error.toString()); return; }
+        }
         if (RuntimeHost.isStarted() || getPreferences(MODE_PRIVATE).getBoolean("vaultChosen", false)) startWorkspace(null);
         else showVaultChoice(null);
     }
 
     private void startWorkspace(String initialVault) {
         if (opening) return;
+        if (RuntimeHost.needsRestart() || (RuntimeHost.isStarted() && initialVault != null)) { restartRuntime(initialVault); return; }
+        pendingVault = initialVault;
         opening = true;
         showLoading("正在打开所选笔记库…");
         RuntimeHost.start(this, initialVault);
-        new Thread(() -> {
+        readiness = new Thread(() -> {
             try {
-                String origin = RuntimeHost.awaitReady();
+                String origin = RuntimeHost.awaitReady(getApplicationContext());
                 handler.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
                     getPreferences(MODE_PRIVATE).edit().putBoolean("vaultChosen", true).apply();
+                    opening = false;
                     openWorkspace(origin);
                 });
             } catch (Exception error) { handler.post(() -> showFailure(error.toString())); }
-        }, "WebObsidian-Ready").start();
+        }, "WebObsidian-Ready");
+        readiness.start();
     }
 
     private void showLoading(String text) {
@@ -73,10 +104,27 @@ public final class MainActivity extends Activity {
 
     private void showFailure(String message) {
         if (isFinishing() || isDestroyed()) return;
-        showLoading("本地笔记库无法启动\n\n" + message + "\n\n请关闭应用后重新打开。");
+        opening = false;
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL); panel.setGravity(Gravity.CENTER);
+        TextView label = new TextView(this); label.setText("本地笔记库无法启动\n\n" + message); panel.addView(label);
+        Button retry = new Button(this); retry.setText("重试");
+        retry.setOnClickListener(view -> {
+            if (RuntimeHost.getFailure() == null && localOrigin != null) openWorkspace(localOrigin);
+            else startWorkspace(pendingVault);
+        }); panel.addView(retry);
+        Button choose = new Button(this); choose.setText("重新选择笔记库"); choose.setOnClickListener(view -> showVaultChoice(null)); panel.addView(choose);
+        content.removeAllViews(); content.addView(panel, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    private void restartRuntime(String vault) {
+        Intent recovery = new Intent(this, RecoveryActivity.class).putExtra("pid", android.os.Process.myPid());
+        if (vault != null) recovery.putExtra("vault", vault);
+        startActivity(recovery);
     }
 
     private void showVaultChoice(String error) {
+        opening = false;
         LinearLayout choices = new LinearLayout(this); choices.setOrientation(LinearLayout.VERTICAL);
         choices.setGravity(Gravity.CENTER); int gap = Math.round(20 * getResources().getDisplayMetrics().density);
         choices.setPadding(gap, gap, gap, gap);
@@ -125,10 +173,11 @@ public final class MainActivity extends Activity {
 
     private void openWorkspace(String origin) {
         localOrigin = origin;
+        if (web != null) { bridge.close(); content.removeView(web); web.destroy(); }
         web = new WebView(this);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         WebSettings settings = web.getSettings();
-        settings.setUserAgentString(settings.getUserAgentString() + " WebObsidianAndroid");
+        settings.setUserAgentString(settings.getUserAgentString() + " WebObsidianAndroid/" + BuildConfig.VERSION_NAME);
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -148,9 +197,10 @@ public final class MainActivity extends Activity {
             }
             @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                 // Activity recreation reconnects the existing runtime; persisted files stay intact.
-                content.removeView(view); view.destroy(); web = null; showFailure("页面进程已退出，请重新打开应用。"); return true;
+                bridge.close(); content.removeView(view); view.destroy(); web = null; showFailure("页面进程已退出，请重新打开应用。"); return true;
             }
             @Override public void onPageFinished(WebView view, String url) {
+                if (view == web && isLocal(Uri.parse(url))) bridge.connect(view, localOrigin);
                 content.requestApplyInsets();
             }
         });
@@ -180,6 +230,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (web != null) web.onResume();
+        handler.removeCallbacks(checkRuntime); handler.post(checkRuntime);
         if (storagePending) {
             storagePending = false;
             if (Environment.isExternalStorageManager()) pickExistingVault();
@@ -192,17 +243,21 @@ public final class MainActivity extends Activity {
             web.evaluateJavascript("window.dispatchEvent(new Event('webobsidian-background'))", null);
             web.onPause();
         }
+        handler.removeCallbacks(checkRuntime);
         super.onPause();
     }
 
-    @Override public void onBackPressed() {
+    @Override public void onBackPressed() { handleBack(); }
+
+    private void handleBack() {
         if (web == null) { moveTaskToBack(true); return; }
-        web.evaluateJavascript("(()=>{const drawer=document.querySelector('.drawer-backdrop'); if(drawer){drawer.click();return true;}return false;})()",
+        web.evaluateJavascript("!window.dispatchEvent(new Event('webobsidian-back',{cancelable:true}))",
             result -> { if (!"true".equals(result)) moveTaskToBack(true); });
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == 23) bridge.completeExport(result, data);
         if (request == 20 && fileCallback != null) {
             fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data)); fileCallback = null;
         }
@@ -213,6 +268,7 @@ public final class MainActivity extends Activity {
                 String[] parts = DocumentsContract.getTreeDocumentId(uri).split(":", 2);
                 java.io.File root = "primary".equalsIgnoreCase(parts[0]) ? Environment.getExternalStorageDirectory() : new java.io.File("/storage", parts[0]);
                 java.io.File vault = new java.io.File(root, parts.length > 1 ? parts[1] : "").getCanonicalFile();
+                if (vault.equals(root.getCanonicalFile())) throw new java.io.IOException("请选择存储根目录中的一个笔记库子文件夹。");
                 if (!vault.getPath().startsWith(root.getCanonicalPath() + "/") || !vault.isDirectory() || !vault.canRead() || !vault.canWrite()) throw new java.io.IOException("无法读写此本地文件夹，请选择可访问的笔记库目录。");
                 confirmVault(vault);
             } catch (Exception error) { showVaultChoice(error.getMessage()); }
@@ -221,6 +277,8 @@ public final class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        if (readiness != null) readiness.interrupt();
+        if (bridge != null) bridge.close();
         if (fileCallback != null) { fileCallback.onReceiveValue(null); fileCallback = null; }
         if (web != null) {
             content.removeView(web); web.stopLoading(); web.loadUrl("about:blank"); web.destroy(); web = null;

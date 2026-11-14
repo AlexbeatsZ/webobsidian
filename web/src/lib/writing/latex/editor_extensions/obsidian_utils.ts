@@ -2,7 +2,7 @@ import { EditorState, Facet, StateField } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { renderContext } from '../../../renderContext';
 export const createElement = (name: keyof HTMLElementTagNameMap) => document.createElement(name);
-export const isMacOS = () => /Mac|iPhone|iPad/.test(navigator.platform);
+export { isMacOS } from '../../../platform';
 export const cmDarkClass = '.theme-dark & ';
 export const cmLightClass = '.theme-light & ';
 export const notice = StateField.define<(message: string | DocumentFragment, timeout: number) => void>({

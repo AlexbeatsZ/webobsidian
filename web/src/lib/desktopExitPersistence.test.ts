@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { transpileModule, ModuleKind, ScriptTarget } from 'typescript';
+import { writeJson } from '../../../desktop/src/files';
 import { McpLauncher } from '../../../desktop/src/mcpLauncher';
 
 const sourceFile = fileURLToPath(new URL('../../../desktop/src/main.ts', import.meta.url));
@@ -21,11 +22,13 @@ function fixture(platform = 'win32') {
     quit: vi.fn(),
     isPackaged: false,
     getPath: () => 'C:/fixture/profile',
+    getVersion: () => '0.1.67',
   });
   const ipc = Object.assign(new EventEmitter(), { handle: vi.fn() });
   const launcher = { stop: vi.fn().mockResolvedValue(undefined) };
-  const server = { kill: vi.fn() };
+  const server = { stop: vi.fn().mockResolvedValue(undefined) };
   const showErrorBox = vi.fn();
+  const showMessageBox = vi.fn().mockResolvedValue({ response: 0 });
   const openExternal = vi.fn().mockResolvedValue(undefined);
   let window!: FakeWindow;
   class FakeWindow extends EventEmitter {
@@ -35,6 +38,7 @@ function fixture(platform = 'win32') {
     webContents = Object.assign(new EventEmitter(), {
       mainFrame: { url: this.url },
       getURL: () => this.url,
+      isCrashed: vi.fn(() => false),
       getUserAgent: () => 'Electron',
       setUserAgent: vi.fn(),
       send: vi.fn(),
@@ -56,22 +60,24 @@ function fixture(platform = 'win32') {
     loadURL(url: string) { this.url = url; this.webContents.mainFrame.url = url; return Promise.resolve(); }
   }
   const moduleExports: Record<string, any> = {};
-  const electron = { app: application, BrowserWindow: FakeWindow, ipcMain: ipc, dialog: { showErrorBox }, shell: { openExternal } };
-  runInNewContext(compiled + '\nexports.fixture = { createWindow, requestWindowClose, initialize: (launcher, server) => { serverPort = 8787; serverProc = server; registerDesktopRequests(); mcpLauncher = launcher; } };', {
+  const electron = { app: application, BrowserWindow: FakeWindow, ipcMain: ipc, dialog: { showErrorBox, showMessageBox }, shell: { openExternal } };
+  runInNewContext(compiled + '\nexports.fixture = { createWindow, requestWindowClose, initialize: (launcher, server) => { serverPort = 8787; serverProcess = server; registerDesktopRequests(); mcpLauncher = launcher; } };', {
     exports: moduleExports,
-    require: (id: string) => id === 'electron' ? electron : id === './mcpLauncher' ? { McpLauncher } : id === './paths' ? {} : nativeRequire(id),
+    require: (id: string) => id === 'electron' ? electron : id === './mcpLauncher' ? { McpLauncher } : id === './paths' ? {} : id === './files' ? { writeJson } : id === './serverProcess' ? {} : nativeRequire(id),
     process: { platform, arch: 'x64', execPath: 'WebObsidian' },
     __dirname: fileURLToPath(new URL('../../../desktop/src', import.meta.url)),
     URL, Buffer, setTimeout, clearTimeout, console,
   });
   moduleExports.fixture.initialize(launcher, server);
   moduleExports.fixture.createWindow();
+  ipc.emit('desktop:renderer-ready', { sender: window.webContents, senderFrame: window.webContents.mainFrame }, true);
   const token = () => window.webContents.send.mock.calls.filter(call => call[0] === 'desktop:prepare-close').at(-1)![1];
   const reply = (result: { ok: boolean; error?: string }, requestedToken = token(), guest = false) => {
     const sender = guest ? { mainFrame: window.webContents.mainFrame } : window.webContents;
     ipc.emit('desktop:close-result', { sender, senderFrame: window.webContents.mainFrame }, requestedToken, result);
   };
-  return { application, window, launcher, server, showErrorBox, openExternal, token, reply,
+  return { application, window, launcher, server, showErrorBox, showMessageBox,
+    markReady: (ready: boolean) => ipc.emit('desktop:renderer-ready', { sender: window.webContents, senderFrame: window.webContents.mainFrame }, ready), openExternal, token, reply,
     invoke: (channel: string, event: unknown, ...args: unknown[]) => ipc.handle.mock.calls.find(call => call[0] === channel)![1](event, ...args),
     close: (quit: boolean) => moduleExports.fixture.requestWindowClose(window, quit) as Promise<void> };
 }
@@ -79,6 +85,21 @@ function fixture(platform = 'win32') {
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
 describe('desktop close coordinator against the production main implementation', () => {
+  it('closes a page without a mounted renderer immediately', async () => {
+    const host = fixture('darwin');
+    host.markReady(false);
+    await host.close(false);
+    expect(host.window.destroyed).toBe(true);
+    expect(host.window.webContents.send.mock.calls.some(call => call[0] === 'desktop:prepare-close')).toBe(false);
+  });
+  it('lets the user close a crashed renderer explicitly', async () => {
+    const host = fixture('darwin');
+    host.window.webContents.isCrashed.mockReturnValue(true);
+    host.showMessageBox.mockResolvedValueOnce({ response: 1 });
+    await host.close(false);
+    expect(host.window.destroyed).toBe(true);
+    expect(host.showMessageBox).toHaveBeenCalledOnce();
+  });
   it('keeps application URLs out of the system browser while delegating external note hyperlinks', () => {
     const host = fixture();
     const open = host.window.webContents.setWindowOpenHandler.mock.calls[0]![0] as unknown as (details: { url: string }) => { action: string };
@@ -102,7 +123,7 @@ describe('desktop close coordinator against the production main implementation',
     frame.url = 'https://untrusted.example/';
     await expect(host.invoke('desktop:mcp-connect', { sender: host.window.webContents, senderFrame: frame })).rejects.toThrow('Local application frame');
   });
-  it('intercepts the native close, ignores stale or guest replies and keeps the server until will-quit', async () => {
+  it('intercepts the native close, ignores stale or guest replies and stops the server after renderer and Tunnel acknowledgements', async () => {
     const host = fixture();
     let finishLauncher!: () => void;
     host.launcher.stop.mockReturnValueOnce(new Promise<void>(resolve => { finishLauncher = resolve; }));
@@ -121,9 +142,7 @@ describe('desktop close coordinator against the production main implementation',
     finishLauncher();
     await closing;
     expect(host.application.quit).toHaveBeenCalledOnce();
-    expect(host.server.kill).not.toHaveBeenCalled();
-    host.application.emit('will-quit');
-    expect(host.server.kill).toHaveBeenCalledOnce();
+    expect(host.server.stop).toHaveBeenCalledOnce();
   });
 
   it('retains the window and service on a failed save, then accepts a fresh close attempt', async () => {
@@ -164,7 +183,7 @@ describe('desktop close coordinator against the production main implementation',
     host.application.emit('before-quit', event);
     expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(host.window.destroyed).toBe(false);
-    expect(host.server.kill).not.toHaveBeenCalled();
+    expect(host.server.stop).not.toHaveBeenCalled();
     const closing = host.close(true);
     host.reply({ ok: true });
     await closing;
@@ -180,7 +199,7 @@ describe('desktop close coordinator against the production main implementation',
     expect(host.window.destroyed).toBe(true);
     expect(host.launcher.stop).not.toHaveBeenCalled();
     expect(host.application.quit).not.toHaveBeenCalled();
-    expect(host.server.kill).not.toHaveBeenCalled();
+    expect(host.server.stop).not.toHaveBeenCalled();
   });
 
   it('keeps a normal unload veto effective and requires another acknowledgement next time', async () => {
@@ -208,7 +227,7 @@ describe('desktop close coordinator against the production main implementation',
     expect(host.application.quit).not.toHaveBeenCalled();
     expect(host.window.destroyed).toBe(false);
     expect(host.window.webContents.send.mock.calls.some(call => call[0] === 'desktop:close-cancelled')).toBe(true);
-    expect(host.server.kill).not.toHaveBeenCalled();
+    expect(host.server.stop).not.toHaveBeenCalled();
   });
 
   it('upgrades a pending macOS window close to Cmd-Q without starting a second save request', async () => {

@@ -1,3 +1,4 @@
+import { host } from './host';
 import { EditorSelection, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { analyzeMarkdown, contentTargets, extractMetadata, isGlobalContentTarget, parseLinkTarget, type MarkdownModel, type SourceSpan } from '@webobsidian/markdown-core';
@@ -216,7 +217,7 @@ export function contentClipboard(options: ClipboardOptions) {
             }
           } catch { }
         }
-        content ??= { text: await navigator.clipboard.readText() };
+        content ??= { text: await host.readClipboardText() };
         if (view.state === before && writable(view)) { apply(view, content); view.focus(); }
       } catch (error) { options.reportError(error); }
     },

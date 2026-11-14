@@ -1,3 +1,5 @@
+import { host } from './host';
+import { appVersion } from './platform';
 import { api } from './api';
 
 export interface DebugEvent { session: string; sequence: number; time: string; elapsed: number; type: string; data: unknown }
@@ -105,7 +107,7 @@ export function configureDebug(enabled: boolean, source = true) {
     };
     timer = setInterval(() => { void flushDebug(); publish(); }, 2000);
     recordDebug('recording.start', { userAgent: navigator.userAgent, origin: location.origin, pixelRatio: devicePixelRatio,
-      viewport: [innerWidth, innerHeight], source, version: __APP_VERSION__, mathjax: __MATHJAX_VERSION__ });
+      viewport: [innerWidth, innerHeight], source, version: appVersion(), mathjax: __MATHJAX_VERSION__ });
   } else recordDebug('recording.options', { source });
   captureDebug(wasEnabled ? 'options' : 'enabled'); publish();
 }
@@ -134,7 +136,6 @@ export async function exportDebug() {
   catch (error) { status.error = String(error); publish(); }
   const header = JSON.stringify({ type: 'export', time: new Date().toISOString(), session, dropped: status.dropped, unsaved: buffer.length, error: status.error }) + '\n';
   const tail = buffer.map(row => JSON.stringify(row.event) + '\n').join('');
-  const url = URL.createObjectURL(new Blob([header, text, tail], { type: 'application/x-ndjson;charset=utf-8' }));
-  const link = document.createElement('a'); link.href = url; link.download = `webobsidian-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`;
-  link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await host.download(new Blob([header, text, tail], { type: 'application/x-ndjson;charset=utf-8' }),
+    `webobsidian-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
 }

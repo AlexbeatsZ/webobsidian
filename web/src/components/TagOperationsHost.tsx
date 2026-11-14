@@ -1,3 +1,4 @@
+import { useDialogEscape } from '../lib/useDialogEscape';
 import { useEffect, useRef, useState } from 'react';
 import { SourceDocument } from '@webobsidian/markdown-core';
 import { documents } from '../lib/documents';
@@ -121,6 +122,7 @@ function TagOperationDialog({ request }: { request: TagOperationRequest }) {
       if (alive.current) { setBusy(false); setRunning(false); setPreview(null); }
     }
   }
+  useDialogEscape(true, () => cancel());
   function cancel() {
     cancelled.current = true; controller.current?.abort();
     if (token.current) void tagsApi.cancel(token.current).catch((error) => { if (alive.current) setError(String(error)); });
@@ -189,6 +191,7 @@ function TagPageDialog({ request }: { request: Extract<TagDialogRequest, { kind:
   const [path, setPath] = useState(request.suggestedPath);
   const [createdPath, setCreatedPath] = useState<string>();
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  useDialogEscape(true, () => { if (!busy) closeTagDialog(); });
   async function open(path: string) {
     assertTagVaultCurrent();
     const s = useStore.getState(); await (request.toSide ? s.openToSide(path) : s.openFile(path)); closeTagDialog();

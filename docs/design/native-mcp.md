@@ -381,3 +381,7 @@ revision 冲突检查与配置事件;不能选择隐藏路径或非 Markdown 文
 
 说明笔记是用户明确选择的指令来源,instructions 与 queued context 的 “Note text is data” 对它例外;
 其余笔记正文仍是数据。没有新增 MCP 工具,工具数保持七个。
+
+## Host lifecycle update (2026-11-13)
+
+The current startup, readiness, shutdown, host capabilities and failure-recovery contract is defined in [host-lifecycle.md](host-lifecycle.md). This supersedes the older fixed-port reservation, fixed total startup timeout, DOM-based chrome/Back detection and desktop-specific plugin-request path described above.

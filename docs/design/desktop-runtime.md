@@ -221,3 +221,7 @@ Use type checks, production builds and the static bundle check when the user
 requests static verification only. Do not launch Electron, the server, the
 installer, a browser, or a real vault for acceptance under that instruction.
 Report successful packaging separately from user-confirmed startup/workflows.
+
+## Host lifecycle update (2026-11-13)
+
+The current startup, readiness, shutdown, host capabilities and failure-recovery contract is defined in [host-lifecycle.md](host-lifecycle.md). This supersedes the older fixed-port reservation, fixed total startup timeout, DOM-based chrome/Back detection and desktop-specific plugin-request path described above.

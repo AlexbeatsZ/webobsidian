@@ -10,7 +10,7 @@ const target = '# Same ^heading-stable\n\nTarget original body\n';
 const other = '# Same ^heading-other\n\nOther target body\n';
 
 const test = base.extend<{ backend: { vault: string; url: string } }>({
-  backend: async ({}, use, info) => {
+  backend: async ({ page }, use, info) => {
     const temporary = path.join(os.tmpdir(), '.agents');
     await fs.mkdir(temporary, { recursive: true });
     const directory = await fs.mkdtemp(path.join(temporary, 'content-references-browser-'));
@@ -37,6 +37,7 @@ const test = base.extend<{ backend: { vault: string; url: string } }>({
       }, { timeout: 20000 }).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
       await use({ vault, url: JSON.parse(await fs.readFile(endpoint, 'utf8')).url });
     } finally {
+      if (!page.isClosed()) { await page.goto('about:blank'); await page.unrouteAll({ behavior: 'wait' }); }
       if (child.exitCode === null) {
         const closed = new Promise<void>(resolve => child.once('close', () => resolve()));
         child.kill(); await closed;

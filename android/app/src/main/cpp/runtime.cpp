@@ -5,11 +5,34 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <thread>
+#include <sys/stat.h>
 
 static std::string utf8(JNIEnv* env, jstring value) {
-    const char* chars = env->GetStringUTFChars(value, nullptr);
-    std::string result(chars);
-    env->ReleaseStringUTFChars(value, chars);
+    const jchar* chars = env->GetStringChars(value, nullptr);
+    const jsize length = env->GetStringLength(value);
+    std::string result;
+    for (jsize i = 0; i < length; ++i) {
+        unsigned int cp = chars[i];
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < length && chars[i + 1] >= 0xDC00 && chars[i + 1] <= 0xDFFF) {
+            cp = 0x10000 + ((cp - 0xD800) << 10) + (chars[++i] - 0xDC00);
+        } else if (cp >= 0xD800 && cp <= 0xDFFF) cp = 0xFFFD;
+        if (cp < 0x80) result.push_back(static_cast<char>(cp));
+        else if (cp < 0x800) {
+            result.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+            result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        } else if (cp < 0x10000) {
+            result.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+            result.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+            result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        } else {
+            result.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+            result.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+            result.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+            result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        }
+    }
+    env->ReleaseStringChars(value, chars);
     return result;
 }
 
@@ -24,8 +47,34 @@ Java_io_github_alexbeatsz_webobsidian_RuntimeHost_startNode(JNIEnv* env, jclass,
     }
     if (chdir(utf8(env, directory).c_str()) != 0) return -1;
     const auto log = utf8(env, logPath);
-    freopen(log.c_str(), "a", stdout);
-    freopen(log.c_str(), "a", stderr);
+    int descriptors[2];
+    if (pipe(descriptors) != 0) return -2;
+    if (dup2(descriptors[1], STDOUT_FILENO) < 0 || dup2(descriptors[1], STDERR_FILENO) < 0) {
+        close(descriptors[0]); close(descriptors[1]); return -2;
+    }
+    close(descriptors[1]);
+    std::thread([log, input = descriptors[0]] {
+        FILE* output = fopen(log.c_str(), "ab");
+        struct stat state{};
+        size_t size = stat(log.c_str(), &state) == 0 ? static_cast<size_t>(state.st_size) : 0;
+        constexpr size_t limit = 4 * 1024 * 1024;
+        char buffer[16384];
+        ssize_t count;
+        while ((count = read(input, buffer, sizeof(buffer))) > 0) {
+            if (!output) continue;
+            if (size + static_cast<size_t>(count) > limit) {
+                fclose(output);
+                const auto previous = log + ".1";
+                remove(previous.c_str());
+                rename(log.c_str(), previous.c_str());
+                output = fopen(log.c_str(), "wb");
+                size = 0;
+            }
+            if (output) { size += fwrite(buffer, 1, static_cast<size_t>(count), output); fflush(output); }
+        }
+        if (output) fclose(output);
+        close(input);
+    }).detach();
     setvbuf(stdout, nullptr, _IOLBF, 0);
     setvbuf(stderr, nullptr, _IOLBF, 0);
     // libuv rewrites argv: own one contiguous, writable buffer for its lifetime.

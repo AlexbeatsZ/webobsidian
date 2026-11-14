@@ -1,3 +1,5 @@
+import { isMacOS } from '../platform';
+import { registerBackHandler } from '../host';
 import { matchName } from '../search';
 import { Component } from './events';
 import { createDiv, createEl } from './dom';
@@ -43,7 +45,7 @@ export class Scope {
   }
 }
 export function matchesModifiers(e: KeyboardEvent, mods: string[]) {
-  const mac = /Mac/.test(navigator.platform),
+  const mac = isMacOS(),
     mod = mods.includes('Mod');
   return (
     e.ctrlKey === (mods.includes('Ctrl') || (mod && !mac)) &&
@@ -53,7 +55,7 @@ export function matchesModifiers(e: KeyboardEvent, mods: string[]) {
   );
 }
 export const Keymap = {
-  isModEvent: (e: MouseEvent | KeyboardEvent) => (/Mac/.test(navigator.platform) ? e.metaKey : e.ctrlKey),
+  isModEvent: (e: MouseEvent | KeyboardEvent) => (isMacOS() ? e.metaKey : e.ctrlKey),
   isModifier: (e: KeyboardEvent, name: string) => matchesModifiers(e, [name]),
 };
 export class Modal {
@@ -68,6 +70,7 @@ export class Modal {
   });
   scope = new Scope();
   private opened = false;
+  private stopBack?: () => void;
   constructor(public app: any) {
     this.containerEl.addEventListener('click', (e) => {
       if (e.target === this.containerEl) this.close();
@@ -84,6 +87,7 @@ export class Modal {
   open() {
     if (this.opened) return;
     this.opened = true;
+    this.stopBack = registerBackHandler(() => this.close());
     document.body.appendChild(this.containerEl);
     this.onOpen();
     this.contentEl.querySelector<HTMLElement>('input,button,textarea')?.focus();
@@ -91,6 +95,7 @@ export class Modal {
   close() {
     if (!this.opened) return;
     this.opened = false;
+    this.stopBack?.(); this.stopBack = undefined;
     try {
       this.onClose();
     } finally {

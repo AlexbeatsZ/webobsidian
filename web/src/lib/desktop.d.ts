@@ -1,21 +1,5 @@
-import type { McpLauncherState, McpConnectionInput } from '../../../desktop/src/mcpLauncher';
+import type { DesktopBridge } from '../../../desktop/src/bridge';
 
 declare global {
-  interface Window {
-    webobsidianDesktop?: {
-      isDesktop: boolean;
-      platform: string;
-      nativePlugins: boolean;
-      mcp?: {
-        inspect(): Promise<McpLauncherState>;
-        configure(input: McpConnectionInput): Promise<McpLauncherState>;
-        copyConfig(): Promise<void>;
-        connect(): Promise<McpLauncherState>;
-      };
-      vaultPath?: string;
-      openVaultPath(path: string): Promise<void>;
-      revealVaultPath?(path: string): Promise<void>;
-      onBeforeClose(listener: () => Promise<void>): () => void;
-    };
-  }
+  interface Window { webobsidianDesktop?: DesktopBridge }
 }

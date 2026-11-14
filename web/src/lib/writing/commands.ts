@@ -1,3 +1,4 @@
+import { host } from '../host';
 import { getActiveEditor } from '../activeEditor';
 import { useStore } from '../store';
 import { documents } from '../documents';
@@ -129,7 +130,7 @@ export const writingCommands = [
       const view = getActiveEditor();
       if (!view || view.state.readOnly) return;
       const state = view.state;
-      const text = await navigator.clipboard.readText();
+      const text = await host.readClipboardText();
       if (view.state !== state) throw new Error('粘贴前选区已变化');
       const { formatPaste } = await import('./format');
       const s = state.selection.main;
