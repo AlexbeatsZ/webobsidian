@@ -17,7 +17,8 @@
 
 ## Active Work
 - 2026-11-13 正在实施 PRD1.41 三端宿主整理，用户最终要求部署 Mac、OMEN、ROG 和 K70，均已完成0.1.67升级和启动，桌面/Android Release已发布。用户要求停止进一步检查。实现a0e230a已推送；558单元/类型/生产和原生生命周期通过，浏览器396/402且6失败原提交复现；K70正式67原位升级/签名UID配置和原STEM健康通过，Back/剪贴板/导出UI待用户空闲。设计 docs/design/host-lifecycle.md，验收 tests/reports/host-lifecycle-20261113.md。
-- 当前 Mac/OMEN/ROG/K70为0.1.67，平板维持0.1.66。桌面部署仅确认升级任务成功和启动命令，未追加功能验收。K70返回键/剪贴板/导出交互未验收，用户已停止进一步检查。
+- 2026-11-14 标签页统一宽度0.1.68已部署Mac/OMEN/ROG/K70并发布v0.1.68与android-v0.1.68；平板维持0.1.66。
+- 此前 Mac/OMEN/ROG/K70为0.1.67。桌面部署仅确认升级任务成功和启动命令，未追加功能验收。K70返回键/剪贴板/导出交互未验收，用户已停止进一步检查。
 - MCP 说明笔记已交付源码与本机安装;用户尚未在 设置 › MCP 中选择笔记,真实 MCP 客户端的遵守情况未验收。
 - 待做:格式化全文的 MCP 工具(格式化器 `web/src/lib/writing/format.ts` 在渲染器侧，需接通;结果走审阅)。
 
@@ -44,6 +45,8 @@
 - zsh 默认 noclobber,`>` 覆盖已有日志会失败导致命令未执行;构建链放进 `bash -c` 或用 `>|`。
 
 - 跑浏览器套件期间不要改源码：Vite HMR 带 `?t=` 的导入可能与测试里动态导入的无版本模块各生成一份 store/StateField，造成错误的状态身份或空分栏。若发生，废弃该轮并重启 Vite 后从干净服务复验。
+
+- Android 构建前先 `node android/scripts/prepare.mjs` 刷新 `.gen`，否则 APK 用旧前端；仅手机包时 `./gradlew :app:assembleRelease -x requireTabletKey`。
 
 ## Docs Index
 - `docs/design/`:模块设计文档。Callout 颜色/图标 → `callout-styles.md`;Callout 布局 → `callout-lists.md`;源码展开语法灰色 → `source-reveal.md`;`\\( \\)`/`\\[ \\]` 公式 → `native-math.md`;内容引用与嵌入控件 → `content-references.md`;公式编号、嵌入实例与引用编号解析 → `native-equations.md`。
