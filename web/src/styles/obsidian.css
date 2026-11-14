@@ -434,7 +434,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .tab-scroll::-webkit-scrollbar { display: none; }
 .tab {
   display: flex; align-items: center; gap: 5px; padding: 0 6px 0 9px; cursor: pointer;
-  color: var(--text-faint); font-size: 12px; min-width: 64px; max-width: 180px; flex: 0 0 auto; white-space: nowrap;
+  color: var(--text-faint); font-size: 12px; width: 180px; min-width: 64px; flex: 0 1 180px; white-space: nowrap;
   position: relative; border-radius: 8px 8px 0 0;
 }
 .tab:not(.active):hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
@@ -442,7 +442,7 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .tab.active::before, .tab.active::after { content: ''; pointer-events: none; position: absolute; bottom: 0; width: 8px; height: 8px; }
 .tab.active::before { right: 100%; border-radius: 0 0 8px 0; box-shadow: 4px 0 0 var(--tab-active-bg); }
 .tab.active::after { left: 100%; border-radius: 0 0 0 8px; box-shadow: -4px 0 0 var(--tab-active-bg); }
-.tab .title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tab .title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tab > svg { flex-shrink: 0; }
 .tab .close { opacity: 0; border-radius: var(--radius-s); width: 18px; height: 18px; flex-shrink: 0;
   display: grid; place-items: center; color: var(--text-faint); padding: 0; border: 0; background: transparent; cursor: pointer; }
@@ -451,13 +451,13 @@ html[data-desktop-titlebar][data-desktop-fullscreen] .tab-bar { padding-left: 0;
 .tab .dot { color: var(--text-muted); font-size: 9px; }
 /* Split group: the main tab and the side pane share one active tab shell; the
    focused pane is the raised segment, like a browser split-screen tab group. */
-.tab-split-group { display: flex; align-items: stretch; gap: 2px; flex: 0 0 auto; position: relative; min-width: 0;
+.tab-split-group { display: flex; align-items: stretch; gap: 2px; flex: 0 1 auto; position: relative; min-width: 0;
   padding: 3px 3px 3px 6px; background: var(--tab-active-bg); border-radius: 8px 8px 0 0; }
 .tab-split-group::before, .tab-split-group::after { content: ''; pointer-events: none; position: absolute; bottom: 0; width: 8px; height: 8px; }
 .tab-split-group::before { right: 100%; border-radius: 0 0 8px 0; box-shadow: 4px 0 0 var(--tab-active-bg); }
 .tab-split-group::after { left: 100%; border-radius: 0 0 0 8px; box-shadow: -4px 0 0 var(--tab-active-bg); }
 .tab-split-group > .split-icon { flex-shrink: 0; align-self: center; margin-right: 2px; color: var(--text-faint); }
-.tab-split-group > .tab { border-radius: var(--radius-s); background: transparent; color: var(--text-muted); max-width: 160px; }
+.tab-split-group > .tab { border-radius: var(--radius-s); background: transparent; color: var(--text-muted); width: 160px; flex: 0 1 160px; }
 .tab-split-group > .tab::before, .tab-split-group > .tab::after { content: none; }
 .tab-split-group > .tab:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
 .tab-split-group > .tab.is-focused { background: var(--bg-modifier-hover); color: var(--text-normal); }
@@ -1443,7 +1443,7 @@ div.section-head { cursor: default; }
     height: var(--tabbar-height);
     padding-top: env(safe-area-inset-top);
   }
-  .tab { max-width: 56vw; font-size: 14px; padding: 0 8px 0 12px; }
+  .tab { width: min(180px, 56vw); flex-basis: min(180px, 56vw); font-size: 14px; padding: 0 8px 0 12px; }
   .tab .close { opacity: 1; width: 30px; height: 30px; }  /* no hover on touch */
   .tab .title { font-size: 14px; }
   .tab-new { width: 46px; }
